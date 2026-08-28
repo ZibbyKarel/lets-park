@@ -3,10 +3,18 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/web",
   "projectType": "application",
-  "tags": [
-    "type:app",
-    "scope:web"
-  ],
+  "tags": ["type:app", "scope:web"],
   "// targets": "to see all targets run: nx show project web --web",
-  "targets": {}
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p apps/web/tsconfig.json",
+          "tsc --noEmit -p apps/web/tsconfig.spec.json"
+        ],
+        "parallel": false
+      }
+    }
+  }
 }

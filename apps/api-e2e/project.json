@@ -1,0 +1,23 @@
+{
+  "name": "api-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "implicitDependencies": ["api"],
+  "targets": {
+    "e2e": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["api:build", "api:serve"],
+      "options": {
+        "cwd": "apps/api-e2e",
+        "command": "jest --runInBand --passWithNoTests"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/api-e2e/tsconfig.spec.json"
+      }
+    }
+  },
+  "tags": ["type:app", "scope:api"]
+}

@@ -1,5 +1,13 @@
-# Add files here to ignore them from prettier formatting
+# Build output and caches
 /dist
 /coverage
 /.nx/cache
 /.nx/workspace-data
+/apps/web/.next
+**/*.tsbuildinfo
+
+# Not workspace source: hand-written Czech docs, exported design assets, tool config
+/doc
+/plan.md
+/.claude
+**/package-lock.json

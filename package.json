@@ -2,10 +2,20 @@
   "name": "@lets-park/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint",
+    "typecheck": "nx run-many -t typecheck",
+    "affected": "nx affected -t lint,test,build",
+    "format": "nx format:write",
+    "format:check": "nx format:check"
+  },
   "private": true,
   "devDependencies": {
     "@eslint/js": "^9.8.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
     "@next/eslint-plugin-next": "^16.1.6",
     "@nx/devkit": "23.1.2",
     "@nx/eslint": "^23.1.2",
@@ -14,7 +24,10 @@
     "@nx/js": "23.1.2",
     "@nx/nest": "^23.1.2",
     "@nx/next": "^23.1.2",
+    "@nx/node": "23.1.2",
     "@nx/playwright": "^23.1.2",
+    "@nx/web": "23.1.2",
+    "@nx/webpack": "23.1.2",
     "@nx/workspace": "23.1.2",
     "@playwright/test": "^1.37.0",
     "@swc-node/register": "~1.11.1",
@@ -38,6 +51,7 @@
     "eslint-plugin-react-hooks": "5.0.0",
     "jest": "~30.3.0",
     "jest-environment-jsdom": "~30.3.0",
+    "jest-environment-node": "~30.3.0",
     "jest-util": "~30.3.0",
     "nx": "23.1.2",
     "prettier": "~3.6.2",
@@ -45,15 +59,28 @@
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.58.0"
+    "typescript-eslint": "^8.58.0",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^7.0.0",
+    "webpack-dev-server": "^5.2.1"
   },
   "allowScripts": {
     "nx": true,
-    "unrs-resolver": true
+    "unrs-resolver": true,
+    "@swc/core": true,
+    "fsevents": true,
+    "sharp": true,
+    "@parcel/watcher": true
   },
   "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "axios": "^1.6.0",
     "next": "~16.1.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0"
   }
 }

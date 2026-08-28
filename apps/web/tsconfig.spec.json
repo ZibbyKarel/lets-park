@@ -4,13 +4,12 @@
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
     "moduleResolution": "bundler",
-    "jsx": "react",
-    "types": [
-      "jest",
-      "node"
-    ]
+    "jsx": "react-jsx",
+    "types": ["jest", "node"]
   },
   "include": [
+    "index.d.ts",
+    "next-env.d.ts",
     "jest.config.ts",
     "jest.config.cts",
     "src/**/*.test.ts",
@@ -21,6 +20,11 @@
     "src/**/*.spec.js",
     "src/**/*.test.jsx",
     "src/**/*.spec.jsx",
-    "src/**/*.d.ts"
+    "src/**/*.d.ts",
+    "specs/**/*.test.ts",
+    "specs/**/*.spec.ts",
+    "specs/**/*.test.tsx",
+    "specs/**/*.spec.tsx",
+    "specs/**/*.d.ts"
   ]
 }
