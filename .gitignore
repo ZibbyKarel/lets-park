@@ -70,3 +70,6 @@ out
 next-env.d.ts
 
 graphify-out
+
+# Session handoff notes — intentionally not committed
+handoff.md
