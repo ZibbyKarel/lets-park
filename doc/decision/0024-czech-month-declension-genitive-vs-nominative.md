@@ -1,52 +1,60 @@
-# 0024 – České sklonování měsíců: genitiv vs. nominativ v `libs/i18n`
+# 0024 – Czech month declension: genitive vs. nominative in `libs/i18n`
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-Formátovací funkce `libs/i18n` (`formatFullDate`, `formatDayAndMonth`, `formatMonthAndYear`,
-`formatMonthName`) nepoužívají jedno společné volání `Intl.DateTimeFormat`, ale dvě různé
-kombinace opcí, protože čeština skloňuje názvy měsíců a design (`doc/design/screens/07-lot.png`,
-`05-admin-window.png`) používá oba tvary vedle sebe:
+The `libs/i18n` formatting functions (`formatFullDate`, `formatDayAndMonth`,
+`formatMonthAndYear`, `formatMonthName`) don't share a single
+`Intl.DateTimeFormat` call — they use two different option combinations,
+because Czech declines month names, and the design
+(`doc/design/screens/07-lot.png`, `05-admin-window.png`) uses both forms side
+by side:
 
-| forma | příklad | kdy |
+| form | example | when |
 | --- | --- | --- |
-| genitiv | `25. srpna`, `pondělí 28. září 2026` | den je součástí stejného volání formátování |
-| nominativ | `srpen`, `srpen 2026` | den součástí volání **není** |
+| genitive | `25. srpna` ("the 25th of August"), `pondělí 28. září 2026` ("Monday, September 28, 2026") | the day is part of the same formatting call |
+| nominative | `srpen` ("August"), `srpen 2026` ("August 2026") | the day is **not** part of the call |
 
-## Proč
+## Why
 
-`Intl.DateTimeFormat('cs-CZ', …)` sám o sobě nedává jeden tvar — dává ten, který ICU data pro
-`cs-CZ` přiřadí dané kombinaci polí. Ověřeno v Node (viz komentář v `dates.ts` a testy
-v `dates.spec.ts`):
+`Intl.DateTimeFormat('cs-CZ', …)` doesn't by itself produce one fixed form — it
+produces whatever ICU's `cs-CZ` data assigns to that specific combination of
+fields. Verified in Node (see the comment in `dates.ts` and the tests in
+`dates.spec.ts`):
 
 ```
-{ month: 'long' }                                    -> "srpen"       (nominativ)
-{ month: 'long', year: 'numeric' }                   -> "srpen 2026"  (nominativ)
-{ day: 'numeric', month: 'long' }                     -> "25. srpna"   (genitiv)
-{ weekday: 'long', day: 'numeric', month: 'long', … } -> "pondělí 28. září 2026" (genitiv)
+{ month: 'long' }                                    -> "srpen"       (nominative)
+{ month: 'long', year: 'numeric' }                   -> "srpen 2026"  (nominative)
+{ day: 'numeric', month: 'long' }                     -> "25. srpna"   (genitive)
+{ weekday: 'long', day: 'numeric', month: 'long', … } -> "pondělí 28. září 2026" (genitive)
 ```
 
-Pro září je genitiv shodný s nominativem ("září" v obou), takže naivní test na jediném měsíci
-by tenhle rozdíl neodhalil — proto testy v `dates.spec.ts` záměrně pokrývají i srpen (`srpen` /
-`srpna`) a říjen (`říjen` / `října`), kde se oba tvary liší.
+For September the genitive coincides with the nominative ("září" in both),
+so a naive test on a single month wouldn't reveal the difference — which is
+why `dates.spec.ts` deliberately also covers August (`srpen` / `srpna`) and
+October (`říjen` / `října`), where the two forms differ.
 
-## Jak
+## How
 
-- `formatFullDate` a `formatDayAndMonth` vždy formátují datum s `day` v opcích → genitiv.
-- `formatMonthAndYear` a `formatMonthName` datum s `day` nikdy nekombinují → nominativ.
-- Všechny čtyři jdou přes next-intl (`createFormatter({ locale: 'cs', timeZone: 'UTC' })`), ne
-  přes syrové `Intl.DateTimeFormat` — next-intl je tu jen tenká vrstva nad týmž ICU chováním,
-  ale `libs/i18n` je jediné místo, které smí `next-intl` importovat (`eslint.config.mjs`), takže
-  formátovací kód musí jít skrz něj i tady.
-- `timeZone: 'UTC'` v obou formatterech je nezávislé na `PRAGUE_TIME_ZONE`, který používá
-  `IntlProvider` — vstupem těchto funkcí je vždy `DateOnly` (kalendářní den bez časového pásma,
-  `doc/decision/0014-*`), převedený na UTC půlnoc, takže žádný posun podle Europe/Prague nesmí
-  nastat.
+- `formatFullDate` and `formatDayAndMonth` always format the date with `day`
+  in the options → genitive.
+- `formatMonthAndYear` and `formatMonthName` never combine the date with
+  `day` → nominative.
+- All four go through next-intl (`createFormatter({ locale: 'cs', timeZone: 'UTC'
+  })`), not through raw `Intl.DateTimeFormat` — next-intl is only a thin layer
+  over the same ICU behavior here, but `libs/i18n` is the only place allowed
+  to import `next-intl` (`eslint.config.mjs`), so the formatting code has to go
+  through it here too.
+- `timeZone: 'UTC'` in both formatters is independent of `PRAGUE_TIME_ZONE`,
+  which `IntlProvider` uses — the input to these functions is always a
+  `DateOnly` (a calendar day with no timezone, `doc/decision/0014-*`), converted
+  to UTC midnight, so no Europe/Prague shift is allowed to occur.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Kdyby se ICU data pro `cs-CZ` mezi verzemi Node/ICU změnila (např. přestala genitiv nabízet),
-`dates.spec.ts` na to spadne okamžitě — testy assertují přesný řetězec, ne jen "nějaký měsíc".
-Oprava by pak byla v `dates.ts` samotném (explicitní tabulka skloňovaných tvarů), ne v API,
-které `libs/i18n` exportuje ven.
+If the ICU data for `cs-CZ` changed between Node/ICU versions (e.g. stopped
+offering the genitive), `dates.spec.ts` would fail immediately — the tests
+assert an exact string, not just "some month". The fix would then live in
+`dates.ts` itself (an explicit table of declined forms), not in the API that
+`libs/i18n` exports outward.

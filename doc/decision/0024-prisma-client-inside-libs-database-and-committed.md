@@ -1,11 +1,11 @@
-# 0024 – Prisma klient se generuje dovnitř `libs/database` a je commitnutý
+# 0024 – The Prisma client is generated inside `libs/database` and committed
 
-**Datum:** 2026-08-28 · **Stav:** přijato · **Týká se:** Tasků 9–13, 30 a CI
+**Date:** 2026-08-28 · **Status:** accepted · **Affects:** Tasks 9–13, 30, and CI
 
-## Co
+## What
 
-Prisma 7 vyžaduje u generátoru `prisma-client` explicitní `output` – do `node_modules`
-už negeneruje. Volba je:
+Prisma 7 requires an explicit `output` for the `prisma-client` generator – it no
+longer generates into `node_modules`. The choice made:
 
 ```prisma
 generator client {
@@ -16,58 +16,65 @@ generator client {
 }
 ```
 
-Vygenerovaný klient (14 souborů, ~500 kB TypeScriptu) je **commitnutý v repu**
-a je vyloučený z Prettieru (`.prettierignore`). Importuje se výhradně přes
-`@lets-park/database`; do `src/generated/**` nesahá žádný jiný projekt.
+The generated client (14 files, ~500 kB of TypeScript) is **committed to the
+repo** and excluded from Prettier (`.prettierignore`). It is imported
+exclusively via `@lets-park/database`; no other project reaches into
+`src/generated/**`.
 
-## Proč
+## Why
 
-**Output uvnitř libs.** Klient je odvozený artefakt schématu, které leží v téhle libce.
-Kdyby ležel v `node_modules` (Prisma 6) nebo v rootu, byl by mimo dosah tagů
-`type:data`/`scope:api` a Nx by o závislosti nevěděl. Takhle platí normální hranice
-modulů a `@lets-park/database` je jediný vstup.
+**Output inside `libs`.** The client is a derived artifact of the schema that
+lives in this lib. If it lived in `node_modules` (Prisma 6) or at the repo
+root, it would sit outside the reach of the `type:data`/`scope:api` tags, and
+Nx wouldn't know about the dependency. This way, normal module boundaries
+apply, and `@lets-park/database` is the sole entry point.
 
-**`moduleFormat = "cjs"`.** Default je ESM. Celý backend je ale CommonJS
-(`apps/api/tsconfig.app.json` → `"module": "commonjs"`, Jest přes ts-jest taky), takže
-ESM klient by skončil na `ERR_REQUIRE_ESM`. Přechod celého workspace na ESM není
-rozhodnutí, které patří Tasku 9.
+**`moduleFormat = "cjs"`.** The default is ESM. The whole backend, however, is
+CommonJS (`apps/api/tsconfig.app.json` → `"module": "commonjs"`, and Jest via
+ts-jest too), so an ESM client would end in `ERR_REQUIRE_ESM`. Moving the whole
+workspace to ESM is not a decision that belongs to Task 9.
 
-**Proč commitnout, a ne generovat při buildu.** Zvažované byly obě varianty:
+**Why commit it, instead of generating at build time.** Both options were
+weighed:
 
-| | commit | `prisma generate` jako `dependsOn` |
+| | commit | `prisma generate` as a `dependsOn` |
 | --- | --- | --- |
-| `npm ci && npm run build` na čistém stroji | funguje | vyžaduje krok navíc |
-| bez `.env` | funguje | **spadne** – `prisma.config.ts` volá `env('DATABASE_URL')` a ta při chybějící proměnné vyhodí výjimku ještě před generováním |
-| review diffu | vidí i vygenerovaný kód (šum) | čistý diff |
-| riziko rozejití se schématem | reálné, hlídá ho test | žádné |
+| `npm ci && npm run build` on a clean machine | works | needs an extra step |
+| without `.env` | works | **fails** – `prisma.config.ts` calls `env('DATABASE_URL')`, which throws before generation even if the variable is missing |
+| reviewing a diff | also shows generated code (noise) | clean diff |
+| risk of drifting from the schema | real, but guarded by a test | none |
 
-Rozhodl druhý řádek: generování bez databáze funguje, ale **ne bez `.env`**, a lint /
-typecheck / test / build musí jít pustit na stroji, který databázi ani `.env` nemá.
-Precedens v repu už je – `libs/design-system/tokens/assets/tokens.css` je taky
-generovaný a commitnutý (`doc/decision/0010-*`).
+The second row decided it: generation works without a database, but **not**
+without `.env`, and lint / typecheck / test / build must be runnable on a
+machine that has neither the database nor `.env`. There's already a precedent
+in the repo — `libs/design-system/tokens/assets/tokens.css` is also generated
+and committed (`doc/decision/0010-*`).
 
-Riziko rozejití se schématem je pokryté testem: `schema-contract-parity.spec.ts` čte
-metadata z **vygenerovaného klienta** a porovnává je s kontraktem, takže zastaralý
-klient shodí testy dřív, než se dostane do produkce.
+The risk of drifting from the schema is covered by a test:
+`schema-contract-parity.spec.ts` reads metadata from the **generated client**
+and compares it against the contract, so a stale client fails tests before it
+ever reaches production.
 
-## Jak
+## How
 
-- `npx prisma generate` (z rootu) přegeneruje klienta; **výstup se commituje spolu se
-  změnou schématu**, jinak testy spadnou.
-- Cíl `database:prisma-generate` v `libs/database/project.json` je tam pro pohodlí
-  a pro budoucí CI kontrolu „je klient aktuální"; není v `dependsOn` žádného cíle,
-  právě proto, že by vyžadoval `.env`.
-- `.prettierignore` obsahuje `/libs/database/src/generated`. ESLint a `tsc` řešit
-  nemusíme – generované soubory mají `/* eslint-disable */` a `// @ts-nocheck`
-  přímo v hlavičce.
-- V `NPM_ALLOWLIST` pro tag `type:data` už `@prisma/*` bylo; `@prisma/adapter-pg` se
-  tím pádem doplňovat nemusel.
+- `npx prisma generate` (from the root) regenerates the client; **the output
+  is committed together with any schema change**, or tests fail.
+- The target `database:prisma-generate` in `libs/database/project.json` exists
+  for convenience and for a future CI check of "is the client up to date"; it
+  is not in any target's `dependsOn`, precisely because that would require
+  `.env`.
+- `.prettierignore` includes `/libs/database/src/generated`. ESLint and `tsc`
+  don't need special handling – the generated files carry
+  `/* eslint-disable */` and `// @ts-nocheck` right in their header.
+- `@prisma/*` was already present in `NPM_ALLOWLIST` for the `type:data` tag;
+  `@prisma/adapter-pg` therefore didn't need adding.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Někdo změní `schema.prisma` a zapomene commitnout klienta → `database:test` spadne
-na neshodě polí. To je hlučné selhání, ne tiché.
+Someone changes `schema.prisma` and forgets to commit the client →
+`database:test` fails on a field mismatch. That's a loud failure, not a silent
+one.
 
-Horší varianta je opačná: někdo vygenerovaného klienta ručně upraví. Proti tomu stojí
-jen hlavička „Do not edit directly" v každém souboru; kdyby se to stalo, přepíše se to
-při dalším `prisma generate` bez varování.
+The worse case runs the other way: someone hand-edits the generated client.
+The only defense is the "Do not edit directly" header in every file; if it
+happens anyway, the next `prisma generate` overwrites it without warning.
