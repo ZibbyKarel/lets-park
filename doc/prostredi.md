@@ -41,10 +41,36 @@ issuer. Nikde v kódu není `if (isTest)` ani jiná testovací zkratka pro auth.
 | `AUTH_OKTA_ISSUER` | absolutní URL | OIDC issuer, jehož JWKS API používá k validaci příchozích JWT |
 | `AUTH_OKTA_AUDIENCE` | neprázdný string | očekávaný `aud` claim v JWT |
 | `CORS_ALLOWED_ORIGINS` | čárkou oddělený seznam absolutních URL | CORS allow-list; žádný wildcard |
-| `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | úroveň logování pro `nestjs-pino` (přijde v pozdější fázi) |
+| `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | úroveň logování pro `nestjs-pino` |
 
-Schéma je psáno tak, aby šlo v dalších fázích **jen přidávat** klíče (Slack, ICS,
-throttler) – žádný stávající klíč se nesmí rozvolnit.
+Schéma je psáno tak, aby šlo v dalších fázích **jen přidávat** klíče (Slack, ICS) – žádný
+stávající klíč se nesmí rozvolnit.
+
+#### Provozní základ – klíče s výchozí hodnotou
+
+Tyhle proměnné **nejsou povinné**; když chybí, použije se výchozí hodnota z tabulky. Všechny
+patří k provoznímu základu popsanému v `doc/provoz-api.md`.
+
+| proměnná | tvar | výchozí | k čemu je |
+| --- | --- | --- | --- |
+| `THROTTLE_TTL_MS` | kladné celé číslo (ms) | `60000` | okno globálního rate-limitu |
+| `THROTTLE_LIMIT` | kladné celé číslo | `300` | počet requestů na okno, na každé routě |
+| `THROTTLE_STRICT_TTL_MS` | kladné celé číslo (ms) | `60000` | okno přísnějšího tieru (`StrictThrottle()`) |
+| `THROTTLE_STRICT_LIMIT` | kladné celé číslo | `20` | počet requestů na okno u přísnějšího tieru |
+| `BODY_LIMIT` | velikost **s jednotkou**, např. `100kb` | `100kb` | maximální velikost těla requestu |
+| `HEALTH_DB_TIMEOUT_MS` | kladné celé číslo (ms) | `3000` | jak dlouho `/health/ready` čeká na `SELECT 1` |
+
+Dvě poznámky, které se snadno přehlédnou:
+
+- `BODY_LIMIT` **musí mít jednotku**. Schéma odmítne holé `100`, protože pro Express
+  body-parser to znamená *sto bajtů* – což skoro nikdy není, co člověk psal.
+- Časy jsou v **milisekundách** (odtud sufix `_MS`). `@nestjs/throttler` v5 bral sekundy,
+  v6 milisekundy; sufix je tam proto, aby se to nedalo splést při čtení `.env`.
+
+**Proč mají výchozí hodnotu, a nejsou povinné.** `.env.example` patří do sady souborů jiného
+tasku, takže by povinný klíč rozbil každý existující `.env` bez možnosti example doplnit.
+Výchozí hodnoty v `apps/api/src/env.ts` (`ENV_DEFAULTS`) jsou zároveň hodnoty produkční – je
+tedy legitimní tyhle klíče v `.env` vůbec nemít.
 
 ### `apps/web` (`apps/web/src/env.ts`)
 
@@ -159,7 +185,9 @@ node dist/apps/api/main.js
 ```
 
 Proces skončí s `exit code 1` a chybou `ExceptionHandler`, která jmenuje `DATABASE_URL` a
-nikdy nevypisuje žádnou hodnotu.
+nikdy nevypisuje žádnou hodnotu. Vypíšou se **všechny** vadné proměnné najednou, ne jen
+první. Doslovný výstup je v `doc/provoz-api.md`, sekce „Chování při chybějící nebo špatné env
+proměnné" – včetně upozornění, že tenhle konkrétní výstup ještě není JSON.
 
 ### Web
 
