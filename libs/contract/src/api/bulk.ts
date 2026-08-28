@@ -1,6 +1,6 @@
 /**
  * Bulk booking — the two-step flow from
- * `doc/decision/0004-mvp-scope-includes-design-features.md` §Hromadná rezervace.
+ * `doc/decision/0004-mvp-scope-includes-design-features.md` §Bulk reservation.
  *
  * 1. `previewBulk` proposes a schedule for the selected days. It writes nothing.
  * 2. `confirmBulk` takes **the same day list** and performs the writes, then

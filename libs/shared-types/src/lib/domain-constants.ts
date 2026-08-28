@@ -50,7 +50,7 @@ export const DEFAULT_RESERVATION_LOCK_MODE: ReservationLockMode = 'AUTO';
 
 /**
  * What the bulk-booking allocator managed to do with one selected day
- * (`doc/decision/0004-*`, §Hromadná rezervace). The same three outcomes describe
+ * (`doc/decision/0004-*`, §Bulk reservation). The same three outcomes describe
  * the read-only proposal (`previewBulk`) and the real result (`confirmBulk`), so
  * the UI can lay the two side by side and show where reality differed.
  *

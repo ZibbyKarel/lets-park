@@ -37,7 +37,7 @@ export const updateMySettingsInputSchema = z.object({
   licensePlate: z.string().min(1).max(16).nullable().optional(),
   /**
    * First choice for bulk booking. Never applied to a single-day reservation
-   * (`doc/decision/0004-*` §Preferované parkovací místo).
+   * (`doc/decision/0004-*` §Preferred parking spot).
    */
   preferredParkingSpotId: idSchema.nullable().optional(),
 });

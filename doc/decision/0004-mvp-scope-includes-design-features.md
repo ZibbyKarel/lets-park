@@ -1,6 +1,6 @@
 # 0004 – MVP scope also includes features that exist only in the design
 
-**Date:** 2026-08-28 · **Status:** accepted (decided by the user) · **Amends:** `plan.md` §Domain model, §Business rules
+**Date:** 2026-08-28 · **Status:** accepted (decided by the user) · **Amends:** `plan.md` §Doménový model, §Byznys pravidla
 
 ## What
 

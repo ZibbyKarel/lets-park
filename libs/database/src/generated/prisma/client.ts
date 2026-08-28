@@ -83,6 +83,6 @@ export type AuditLog = Prisma.AuditLogModel
  * contract's `reservationWindowSettingsSchema` has no `id` field at all. The
  * single-row property is enforced by `CHECK ("id" = 1)`, added by hand to the
  * init migration — Prisma's schema language cannot express a CHECK constraint.
- * See `doc/database.md` and `doc/decision/0022-*`.
+ * See `doc/database.md` and `doc/decision/0026-*`.
  */
 export type ReservationWindowSettings = Prisma.ReservationWindowSettingsModel

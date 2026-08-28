@@ -4,7 +4,7 @@
 // (`libs/contract/src/schemas/entities.ts`) field for field: same names, same
 // nullability, same enum members. The contract is the single source of truth for
 // data shapes; where storage has to differ, the difference is deliberate and
-// documented in `doc/database.md` (§"Kde se úložiště liší od kontraktu").
+// documented in `doc/database.md` (§"Where storage differs from the contract").
 //
 // Connection URLs live in `prisma.config.ts` at the repo root — Prisma 7
 // deprecated `url` in the datasource block.

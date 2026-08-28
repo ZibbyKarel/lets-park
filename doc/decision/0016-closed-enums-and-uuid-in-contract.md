@@ -7,8 +7,8 @@
 Two things `plan.md` leaves open, the contract closes:
 
 1. **`AuditLog.action` is a closed enum** (`auditLogActionSchema`), not a free
-   `string`. The starting list is exactly the six actions `plan.md` §Domain
-   model names: `RESERVATION_CREATED`, `RESERVATION_CANCELLED`,
+   `string`. The starting list is exactly the six actions `plan.md`
+   §Doménový model names: `RESERVATION_CREATED`, `RESERVATION_CANCELLED`,
    `RESERVATION_CANCELLED_BY_ADMIN`, `WAITLIST_PROMOTED`, `USER_UPDATED`,
    `SPOT_UPDATED`.
 2. **Entity identifiers are UUIDs** (`idSchema = z.uuid()`), including

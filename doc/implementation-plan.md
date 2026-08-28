@@ -404,7 +404,7 @@ Extend `doc/design-system.md`.
 1. Prisma 7: `prisma.config.ts`, the `prisma-client` generator with its
    **output inside the lib** (not into `node_modules`), the required driver
    adapter `@prisma/adapter-pg`.
-2. A schema exactly per `plan.md` §Domain model – `User`, `ParkingSpot`,
+2. A schema exactly per `plan.md` §Doménový model – `User`, `ParkingSpot`,
    `Reservation`, `WaitlistEntry`, `AuditLog` – **including every unique
    constraint and index**:
    - `Reservation` unique `(parkingSpotId, date)`
@@ -519,7 +519,7 @@ Documentation: `doc/api-modules.md`.
 **Phase 5, points 4 (reservations/waitlist) and 8.** Follows on from Task 12.
 **The highest-risk task.**
 
-Business rules exactly per `plan.md` §Business rules:
+Business rules exactly per `plan.md` §Byznys pravidla:
 
 - only today and the future can be reserved (Europe/Prague),
 - **the reservation window** (replaces the rule "at most until the end of the
