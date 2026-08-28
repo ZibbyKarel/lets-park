@@ -88,6 +88,7 @@
     "@prisma/engines": true
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^12.0.0",
     "@nestjs/core": "^11.0.0",
@@ -102,6 +103,7 @@
     "pg": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.86.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "zod": "^4.4.3"

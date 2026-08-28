@@ -1,0 +1,20 @@
+{
+  "name": "form",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/form/src",
+  "projectType": "library",
+  "tags": ["type:util", "scope:web"],
+  "// targets": "to see all targets run: nx show project form --web",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/form/tsconfig.lib.json",
+          "tsc --noEmit -p libs/form/tsconfig.spec.json"
+        ],
+        "parallel": false
+      }
+    }
+  }
+}
