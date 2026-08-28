@@ -15,6 +15,17 @@ export const CONTROL_HEIGHT: Record<ControlSize, string> = {
   xl: 'h-[var(--control-h-xl)]',
 };
 
+/**
+ * Track width for square controls (an icon button whose box matches the row
+ * height). Same token as the height, so the two can never drift apart.
+ */
+export const CONTROL_SQUARE_WIDTH: Record<ControlSize, string> = {
+  sm: 'w-[var(--control-h-sm)]',
+  md: 'w-[var(--control-h-md)]',
+  lg: 'w-[var(--control-h-lg)]',
+  xl: 'w-[var(--control-h-xl)]',
+};
+
 /** Type size per step. */
 export const CONTROL_TEXT: Record<ControlSize, string> = {
   sm: 'text-sm',

@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "build": "nx run-many -t build",
+    "build": "nx run-many -t build,build-storybook",
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "typecheck": "nx run-many -t typecheck",
-    "affected": "nx affected -t lint,test,build",
+    "affected": "nx affected -t lint,test,build,build-storybook",
     "format": "nx format:write",
     "format:check": "nx format:check"
   },

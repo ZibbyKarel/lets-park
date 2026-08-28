@@ -60,9 +60,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           CONTROL_TEXT[size],
           CONTROL_TRANSITION,
           FOCUS_RING,
-          ids.invalid ? 'border-danger' : 'border-border focus-visible:border-brand-blue',
           // Swapped, never layered: same-property utilities resolve by
-          // stylesheet order, not className order (see `button.tsx`).
+          // stylesheet order, not className order (see `button.tsx`). Disabled
+          // wins over invalid — a field the user cannot edit should not also
+          // be shouting an error at them through a red border.
+          disabled
+            ? 'border-border'
+            : ids.invalid
+              ? 'border-danger'
+              : 'border-border focus-visible:border-brand-blue',
           disabled ? 'cursor-not-allowed bg-bg-muted text-fg-3' : 'bg-bg text-fg',
           fullWidth && 'w-full',
           className

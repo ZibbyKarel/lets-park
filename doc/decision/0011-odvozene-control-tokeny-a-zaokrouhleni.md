@@ -67,8 +67,9 @@ pozná okamžitě.
 
 ## Riziko
 
-- **Odchylka od designu.** Tlačítka v modálech jsou 48 px místo návrhových 48 px
-  (sedí), ale např. „Přidat místo" bude 40 nebo 48 místo 44. Rozdíl je do 4 px.
+- **Odchylka od designu.** Tlačítka v modálech vycházejí na 48 px, což designu
+  přesně odpovídá; ale např. „Přidat místo" bude 40 nebo 48 místo 44. Rozdíl je
+  do 4 px.
   Kdyby si to vizuální review vyžádalo, přidat pátý krok je jeden řádek
   v `controls.ts` + přegenerování CSS.
 - **Dvojí povaha tokenů.** V jedné libce jsou teď dvě skupiny tokenů s různým

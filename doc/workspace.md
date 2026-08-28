@@ -66,9 +66,9 @@ npx nx run web-e2e:e2e      # Playwright; dev server si nastartuje sám
 npx nx run api-e2e:e2e      # Jest; nastartuje si api:serve
 ```
 
-Stejně tak **Storybook není součástí `npm run build`** – do CI se musí přidat
-zvlášť (`nx run-many -t build-storybook`), jinak se rozbitá story pozná až
-ručně:
+**Storybook je součástí `npm run build`** (`nx run-many -t build,build-storybook`)
+i `npm run affected`, aby se rozbitá story poznala v CI, ne až ručně. Jednotlivé
+cíle pro práci na design systému:
 
 ```bash
 npx nx run design-system-primitives:storybook         # dev server, port 4400
@@ -139,14 +139,25 @@ do backendu nedostane `next-intl`.
 
 ### Dimenze `ds:` – vrstvy design systému
 
-| tag | smí záviset na |
-| --- | --- |
-| `ds:tokens` | `type:util` |
-| `ds:primitives` | `ds:tokens`, `type:util` |
-| `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` |
+| tag | smí záviset na (workspace libky) | smí importovat z npm |
+| --- | --- | --- |
+| `ds:tokens` | `type:util` | `tslib`, `node:fs`, `node:path` |
+| `ds:primitives` | `ds:tokens`, `type:util` | `react`, `react-dom`, `tslib` + dev-time `@testing-library/*`, `@storybook/*`, `storybook/*`, `@tailwindcss/vite` |
+| `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` | zatím neomezeno (doplní task, který libku zakládá) |
 
-Vynucuje směr tokens → primitives → compounds. Samotné `type:ui` na to nestačí, protože
-všechny tři vrstvy ho nesou – podrobnosti v `doc/decision/0007-*`.
+První sloupec vynucuje směr tokens → primitives → compounds. Samotné `type:ui`
+na to nestačí, protože všechny tři vrstvy ho nesou – podrobnosti
+v `doc/decision/0007-*`.
+
+Druhý sloupec (`allowedExternalImports`) je druhá polovina pravidla a
+**bez něj tag npm balíčky vůbec neomezoval** – prošel by jakýkoli balíček, který
+zrovna není na ručně udržovaném seznamu obalených knihoven (`axios` prošel
+tiše). Design systém má být uzavřená vrstva s téměř nulovou runtime závislostí –
+právě proto existuje `cx.ts` místo `clsx`. Seznam pokrývá i dev-time importy
+(specs, stories, `.storybook/*`), protože pravidlo vidí všechny soubory projektu
+a flat config neumí jeden `depConstraint` zúžit na část souborů; runtime a
+dev-time část jsou proto v `eslint.config.mjs` oddělené komentářem, aby přidání
+runtime závislosti zůstalo viditelným rozhodnutím.
 
 ---
 

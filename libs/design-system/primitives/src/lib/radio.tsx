@@ -93,6 +93,11 @@ export interface RadioGroupProps extends FieldOwnProps {
 /**
  * `<fieldset>` around a set of radios, so the group has one accessible name
  * instead of each option standing alone.
+ *
+ * The fieldset carries an explicit `role="radiogroup"`, which is both the more
+ * accurate mapping for a set of radios than the default `group`, and the role
+ * that actually supports `aria-invalid` — a bare `group` does not, which is the
+ * same reasoning `radio.spec.tsx` applies to the individual inputs.
  */
 export function RadioGroup({
   legend,
@@ -106,6 +111,7 @@ export function RadioGroup({
 
   return (
     <fieldset
+      role="radiogroup"
       className={cx('flex flex-col gap-3 border-0 p-0', className)}
       aria-describedby={ids.describedBy}
       aria-invalid={ids.invalid || undefined}

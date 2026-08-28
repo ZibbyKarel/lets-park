@@ -225,10 +225,18 @@ libs/design-system/primitives/
   přebije obě prosté utility, takže vypnutý zaškrtnutý Checkbox si musí
   přebarvit i `checked:` výplň, jinak svítí značkovou modrou.
   Jsdom žádný stylesheet neaplikuje, takže tohle žádný render test nechytí –
-  invariant hlídá `disabled-styling.spec.tsx`.
+  invariant hlídá `disabled-styling.spec.tsx`. Ten netestuje seznam známých
+  špatných dvojic, ale samotné pravidlo: **žádný prvek nesmí nést dvě
+  nepodmíněné barevné utility, které nastavují stejnou vlastnost**
+  (`bg-*` / `text-*` / `border-*`). Klasifikuje se podle *jména tokenu*, ne
+  podle prefixu, aby `text-sm` (velikost písma) nebo `border-2` (šířka)
+  nespadly do barevné skupiny. Stejný problém mají i **varianty** – aktivní vs.
+  neaktivní tab, otevřený vs. zavřený trigger – ne jen `disabled`.
 - **Chybový stav je zpráva.** Prop `error` neexistuje jako boolean: text chyby
   *je* stav. Nastaví `aria-invalid`, červený rámeček i `role="alert"` naráz,
-  takže se nemůžou rozejít.
+  takže se nemůžou rozejít. Když je prvek zároveň `disabled`, **vyhrává
+  vypnutý stav**: pole, které uživatel nemůže editovat, na něj nemá zároveň
+  křičet červeným rámečkem.
 - **UI copy česky** (např. výchozí názvy tlačítek Stepperu), **identifikátory a
   komentáře anglicky.**
 
@@ -278,8 +286,10 @@ existuje jen na DOM uzlu, ne jako HTML atribut.
 **`aria-invalid` na něm záměrně není** – `role="radio"` ho nepodporuje, validitu
 nese skupina.
 
-`RadioGroup` (`<fieldset>`): `legend` (povinné, přístupné jméno skupiny),
-`hint`, `error`, `horizontal`.
+`RadioGroup` je `<fieldset role="radiogroup">`: `legend` (povinné, přístupné
+jméno skupiny), `hint`, `error`, `horizontal`. Explicitní `role="radiogroup"`
+je jak přesnější mapování než výchozí `group`, tak jediná role z těch dvou,
+která `aria-invalid` na skupině vůbec podporuje.
 
 ### `Badge`
 
@@ -316,6 +326,7 @@ z podstaty prvku a nikdy neodešle formulář.
 | `label` | `string` | – (povinné) |
 | `formatValue` | `(v: number) => string` | – |
 | `decrementLabel` / `incrementLabel` | `string` | `'Snížit'` / `'Zvýšit'` |
+| `size` | `ControlSize` | `'lg'` |
 
 Hodnota je `role="spinbutton"`, takže je dosažitelná Tabem a ovladatelná
 šipkami, Home a End – tlačítka jsou pohodlí pro myš, ne jediná cesta.
@@ -329,8 +340,9 @@ npx nx run design-system-primitives:build-storybook   # statický build do dist/
 ```
 
 Konfigurace je psaná ručně, bez `@nx/storybook` a bez addonů – proč, je
-v `doc/decision/0013-*`. Pozor: `build-storybook` **není** součástí
-`npm run build`, do CI se musí přidat zvlášť.
+v `doc/decision/0013-*`. `build-storybook` **je** součástí `npm run build`
+(`nx run-many -t build,build-storybook`) i `npm run affected`, takže rozbitá
+story spadne v CI, ne až při ručním spuštění.
 
 `preview.css` importuje `theme.css` (ne `tokens.css` – ten sám o sobě dá
 proměnné, ale žádné Tailwind utility) a přidává `@source '../src'`, aby Tailwind

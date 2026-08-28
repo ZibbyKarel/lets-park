@@ -134,8 +134,8 @@ export function generateTokensCss(tokens: DesignTokens): string {
   --danger-100: ${status.danger100};
 
   /* --- Car color palette ---
-     Scoped ONLY to car icons on occupied parking spots — see car-palette.ts.
-     Deliberately namespaced away from the general palette above. */
+     Scoped ONLY to the vehicle glyphs on the app's map surface — see
+     car-palette.ts. Deliberately namespaced away from the general palette. */
   --palette-car-1: ${carColorPalette[0]};
   --palette-car-2: ${carColorPalette[1]};
   --palette-car-3: ${carColorPalette[2]};

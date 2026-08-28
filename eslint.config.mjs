@@ -175,13 +175,49 @@ export default [
             // tokens -> primitives -> compounds, one direction only.
             // `type:ui` alone cannot express this because all three layers
             // carry that tag.
+            //
+            // `allowedExternalImports` is the second half of the rule: without
+            // it the tag constrains only *workspace* dependencies, and a
+            // primitive could pull in any npm package that is not on the
+            // hand-maintained `WRAPPED_LIBRARIES` blacklist (`axios` used to
+            // pass silently). The design system is meant to be a closed layer
+            // with a near-zero runtime dependency surface — `cx.ts` exists
+            // precisely so that no class-name helper has to be installed — so
+            // the allow-list states that intent as a rule.
+            //
+            // The lists cover *runtime* and *dev-time* imports alike, because
+            // the rule sees every file in the project (specs, stories and the
+            // Storybook config included) and flat config offers no per-file
+            // narrowing of a single depConstraint. The runtime half is the
+            // short one; the test/story toolchain is called out separately so
+            // that adding a runtime dependency stays a visible decision.
             {
               sourceTag: 'ds:tokens',
               onlyDependOnLibsWithTags: ['type:util'],
+              allowedExternalImports: [
+                'tslib',
+                // Build script + golden-file drift test read from disk.
+                'node:fs',
+                'node:path',
+              ],
             },
             {
               sourceTag: 'ds:primitives',
               onlyDependOnLibsWithTags: ['ds:tokens', 'type:util'],
+              allowedExternalImports: [
+                // Runtime.
+                'react',
+                'react/*',
+                'react-dom',
+                'react-dom/*',
+                'tslib',
+                // Dev-time only: specs and stories.
+                '@testing-library/*',
+                '@storybook/*',
+                'storybook',
+                'storybook/*',
+                '@tailwindcss/vite',
+              ],
             },
             {
               sourceTag: 'ds:compounds',

@@ -125,8 +125,8 @@
   --danger-100: #FCE5E5;
 
   /* --- Car color palette ---
-     Scoped ONLY to car icons on occupied parking spots — see car-palette.ts.
-     Deliberately namespaced away from the general palette above. */
+     Scoped ONLY to the vehicle glyphs on the app's map surface — see
+     car-palette.ts. Deliberately namespaced away from the general palette. */
   --palette-car-1: #fcaf00;
   --palette-car-2: #00e25a;
   --palette-car-3: #3b88ff;

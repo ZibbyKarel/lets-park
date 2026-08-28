@@ -1,6 +1,13 @@
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 
-import { CONTROL_HEIGHT, CONTROL_TEXT, CONTROL_TRANSITION, FOCUS_RING } from './control-size';
+import {
+  CONTROL_HEIGHT,
+  CONTROL_SQUARE_WIDTH,
+  CONTROL_TEXT,
+  CONTROL_TRANSITION,
+  FOCUS_RING,
+  type ControlSize,
+} from './control-size';
 import { cx } from './cx';
 
 export interface StepperProps {
@@ -26,6 +33,11 @@ export interface StepperProps {
   decrementLabel?: string | undefined;
   /** Accessible name of the plus button. */
   incrementLabel?: string | undefined;
+  /**
+   * Height step, shared with every other control on the form row. Defaults to
+   * `lg`, which is the only size the design draws.
+   */
+  size?: ControlSize | undefined;
   disabled?: boolean | undefined;
   className?: string | undefined;
 }
@@ -59,6 +71,7 @@ export function Stepper({
   formatValue,
   decrementLabel = 'Snížit',
   incrementLabel = 'Zvýšit',
+  size = 'lg',
   disabled = false,
   className,
 }: StepperProps) {
@@ -105,6 +118,7 @@ export function Stepper({
       </span>
       <StepButton
         label={decrementLabel}
+        size={size}
         disabled={disabled || atMin}
         onClick={() => commit(current - step)}
       >
@@ -122,8 +136,8 @@ export function Stepper({
         onKeyDown={onKeyDown}
         className={cx(
           'inline-flex min-w-24 items-center justify-center rounded-md border border-border font-bold',
-          CONTROL_HEIGHT.lg,
-          CONTROL_TEXT.lg,
+          CONTROL_HEIGHT[size],
+          CONTROL_TEXT[size],
           CONTROL_TRANSITION,
           FOCUS_RING,
           disabled ? 'bg-bg-muted text-fg-3' : 'bg-bg text-fg'
@@ -133,6 +147,7 @@ export function Stepper({
       </div>
       <StepButton
         label={incrementLabel}
+        size={size}
         disabled={disabled || atMax}
         onClick={() => commit(current + step)}
       >
@@ -144,12 +159,13 @@ export function Stepper({
 
 interface StepButtonProps {
   label: string;
+  size: ControlSize;
   disabled: boolean;
   onClick: () => void;
   children: ReactNode;
 }
 
-function StepButton({ label, disabled, onClick, children }: StepButtonProps) {
+function StepButton({ label, size, disabled, onClick, children }: StepButtonProps) {
   return (
     <button
       type="button"
@@ -158,8 +174,8 @@ function StepButton({ label, disabled, onClick, children }: StepButtonProps) {
       onClick={onClick}
       className={cx(
         STEP_BUTTON_CLASSES,
-        CONTROL_HEIGHT.lg,
-        'w-[var(--control-h-lg)]',
+        CONTROL_HEIGHT[size],
+        CONTROL_SQUARE_WIDTH[size],
         CONTROL_TRANSITION,
         FOCUS_RING,
         disabled
