@@ -1,23 +1,26 @@
-# Implementační plán – Let's Park
+# Implementation plan – Let's Park
 
-Rozpad `plan.md` (závazná specifikace) na úkoly pro subagenty. **`plan.md` je autorita** –
-tento dokument je jen jeho rozpad do dispatchovatelných kusů. Při rozporu vyhrává `plan.md`.
+A breakdown of `plan.md` (the binding specification) into tasks for subagents.
+**`plan.md` is the authority** – this document is only its breakdown into
+dispatchable pieces. Where they disagree, `plan.md` wins.
 
-- Vizuální zdroj pravdy: `doc/design/` (viz `doc/design/README.md`)
-- Rozhodnutí: `doc/decision/`
-- Dokumentace k jednotlivým oblastem: `doc/<oblast>.md`
+- Visual source of truth: `doc/design/` (see `doc/design/README.md`)
+- Decisions: `doc/decision/`
+- Documentation per area: `doc/<area>.md`
 
-> **Dvě rozhodnutí uživatele mění `plan.md` a platí pro celý projekt:**
-> `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md` (rezervační okno se zámkem,
-> hromadná rezervace a preferované místo **patří do MVP**; v konfliktu s `plan.md` vyhrává
-> design) a `doc/decision/0005-npm-scope-lets-park.md` (scope je `@lets-park/*`; kdekoliv
-> `plan.md` píše `@myorg/…`, čti `@lets-park/…`). Přečti obě, než začneš.
+> **Two user decisions amend `plan.md` and apply to the whole project:**
+> `doc/decision/0004-mvp-scope-includes-design-features.md` (the reservation
+> window with a lock, bulk reservation, and the preferred spot **are part of
+> the MVP**; where they conflict with `plan.md`, the design wins) and
+> `doc/decision/0005-npm-scope-lets-park.md` (the scope is `@lets-park/*`;
+> wherever `plan.md` writes `@myorg/…`, read `@lets-park/…`). Read both before
+> starting.
 
-### Pořadí provádění
+### Execution order
 
-Task čísla nejsou pořadí. Skutečné pořadí a paralelní větve:
+Task numbers are not the order. The actual order and parallel branches:
 
-| Vlna | Větev A (hlavní strom) | Větev B (worktree) |
+| Wave | Branch A (main tree) | Branch B (worktree) |
 | --- | --- | --- |
 | 1 | 1 → 2 | – |
 | 2 | 3 → 4 → 5 | 6 → 7 → 8 |
@@ -27,796 +30,954 @@ Task čísla nejsou pořadí. Skutečné pořadí a paralelní větve:
 
 ## Global Constraints
 
-Platí pro **každý** úkol; reviewer je dostává v každém dispatchi.
+Apply to **every** task; the reviewer receives them with every dispatch.
 
-1. **Contract-first.** Žádný endpoint, DTO ani realtime event nesmí existovat v kódu dřív,
-   než existuje v `libs/contract`. Zod schémata jsou jediný zdroj pravdy; TS typy vždy
-   `z.infer<...>`, nikdy ručně duplikované na FE i BE.
-2. **Zod v4 only.** `class-validator` / `class-transformer` se v NestJS nepoužívají.
-3. **Typované chyby.** Jednotný error shape (`code`, `message`, volitelně `details`)
-   a uzavřený výčet doménových kódů. Backend nikdy nevrací ad-hoc tvar chyby.
-4. **Date-only sémantika.** Rezervační den je `z.iso.date()` (`YYYY-MM-DD`) v kontraktu
-   a `DATE` v Postgresu. Nikdy timestamp. „Dnešek" a hranice dne vždy v `Europe/Prague`,
-   jediná implementace v `libs/shared-types` (viz `doc/decision/0003-*`).
-5. **Design-system-first.** tokens → primitives → compounds → doménová kompozice (jen
-   v `apps/web`). Design systém je domain-free: žádné „ParkingSpot"/„Reservation"
-   v `libs/design-system/*`. Compounds smí importovat primitives, nikdy naopak.
-   Ručně psané hodnoty barev/spacingu mimo tokeny jsou zakázané.
-6. **Wrapper vrstvy jsou povinné.** Aplikační/feature kód nikdy neimportuje přímo:
-   `react-hook-form` (→ `libs/form`), `@tanstack/react-table` (→ `libs/design-system/compounds`),
-   `@tanstack/react-query` (→ `libs/query`), `@orpc/client` (→ `libs/api-client`),
-   `socket.io-client` (→ `libs/realtime-client`), `next-auth` (→ `libs/auth`),
-   `ical-generator` (→ `libs/calendar-export`), `next-intl` (→ `libs/i18n`).
-   Vynuceno ESLintem (Nx `enforce-module-boundaries` + `no-restricted-imports`).
-7. **Provozní základ patří do MVP** (není to „monitoring"): fail-fast Zod validace env,
-   `nestjs-pino` (žádný `console.log`), `@nestjs/terminus` health endpointy, graceful
-   shutdown, helmet + CORS allow-list + `@nestjs/throttler`, globální exception filter,
-   secrets jen z env.
-8. **Co NEDĚLAT:** Sentry / metriky / APM / alerting; Slack slash commands ani interaktivní
-   Block Kit (jen odchozí `chat.postMessage`); Redis / BullMQ / message brokery (jen
-   abstrakce + zdokumentovaná upgrade cesta); testovací backdoory v auth (dev i e2e jde
-   přes `mock-oauth2-server` stejným kódem jako produkce).
-9. **Verze jsou závazné:** Nx 23, Next.js 16 (App Router, React 19), NestJS 11, Prisma 7
-   (`prisma-client` generator, `@prisma/adapter-pg`, `prisma.config.ts`), Tailwind CSS v4
-   (CSS-first), Storybook 10, TanStack Query v5, Socket.io v4, oRPC + Zod v4,
-   next-auth v5, PostgreSQL 17. Minor verze ověř při instalaci; majory neměň.
-10. **Nepiš API těchto knihoven z hlavy.** oRPC ↔ NestJS, Prisma 7, Tailwind v4 CSS-first
-    a Auth.js v5 jsou čerstvé – ověř aktuální API přes context7 / oficiální dokumentaci
-    (skilly `prisma:*`, `zod:use-zod`, `tanstack-query`, `tanstack-table` jsou k dispozici).
-11. **Testy píšeš souběžně** s kódem dané fáze, ne zpětně. Výstup testů musí být čistý
-    (žádné varování a šum).
-12. **Jazyk:** kód, identifikátory a komentáře anglicky; UI copy a `doc/` česky.
-13. **Dokumentace je součást úkolu.** Každý úkol dopíše/aktualizuje svůj `doc/*.md`.
-    Každé netriviální rozhodnutí → nový soubor v `doc/decision/` ve formátu
-    „co / proč / jak / riziko" (viz existující).
+1. **Contract-first.** No endpoint, DTO, or realtime event may exist in code
+   before it exists in `libs/contract`. Zod schemas are the single source of
+   truth; TS types are always `z.infer<...>`, never hand-duplicated on FE and
+   BE.
+2. **Zod v4 only.** `class-validator` / `class-transformer` are not used in
+   NestJS.
+3. **Typed errors.** A uniform error shape (`code`, `message`, optionally
+   `details`) and a closed enum of domain codes. The backend never returns an
+   ad-hoc error shape.
+4. **Date-only semantics.** The reservation day is `z.iso.date()`
+   (`YYYY-MM-DD`) in the contract and `DATE` in Postgres. Never a timestamp.
+   "Today" and day boundaries are always in `Europe/Prague`, with a single
+   implementation in `libs/shared-types` (see `doc/decision/0003-*`).
+5. **Design-system-first.** tokens → primitives → compounds → domain
+   composition (only in `apps/web`). The design system is domain-free: no
+   "ParkingSpot"/"Reservation" in `libs/design-system/*`. Compounds may import
+   primitives, never the reverse. Hand-written color/spacing values outside
+   the tokens are forbidden.
+6. **Wrapper layers are mandatory.** Application/feature code never imports
+   directly: `react-hook-form` (→ `libs/form`), `@tanstack/react-table`
+   (→ `libs/design-system/compounds`), `@tanstack/react-query`
+   (→ `libs/query`), `@orpc/client` (→ `libs/api-client`), `socket.io-client`
+   (→ `libs/realtime-client`), `next-auth` (→ `libs/auth`), `ical-generator`
+   (→ `libs/calendar-export`), `next-intl` (→ `libs/i18n`). Enforced by ESLint
+   (Nx `enforce-module-boundaries` + `no-restricted-imports`).
+7. **Operational baseline is part of the MVP** (it is not "monitoring"):
+   fail-fast Zod validation of env, `nestjs-pino` (no `console.log`),
+   `@nestjs/terminus` health endpoints, graceful shutdown, helmet + a CORS
+   allow-list + `@nestjs/throttler`, a global exception filter, secrets only
+   from env.
+8. **What NOT to do:** Sentry / metrics / APM / alerting; Slack slash commands
+   or interactive Block Kit (only outbound `chat.postMessage`); Redis /
+   BullMQ / message brokers (only the abstraction + a documented upgrade
+   path); test backdoors in auth (both dev and e2e go through
+   `mock-oauth2-server` using the same code as production).
+9. **Versions are binding:** Nx 23, Next.js 16 (App Router, React 19),
+   NestJS 11, Prisma 7 (`prisma-client` generator, `@prisma/adapter-pg`,
+   `prisma.config.ts`), Tailwind CSS v4 (CSS-first), Storybook 10,
+   TanStack Query v5, Socket.io v4, oRPC + Zod v4, next-auth v5,
+   PostgreSQL 17. Verify minor versions at install time; do not change majors.
+10. **Don't write these libraries' APIs from memory.** oRPC ↔ NestJS,
+    Prisma 7, Tailwind v4 CSS-first, and Auth.js v5 are recent – verify the
+    current API via context7 / the official documentation (the `prisma:*`,
+    `zod:use-zod`, `tanstack-query`, `tanstack-table` skills are available).
+11. **Write tests alongside** the code for that phase, not retroactively. Test
+    output must be clean (no warnings or noise).
+12. **Language:** code, identifiers, and comments in English; documentation
+    (`doc/`) in English. **UI copy stays in Czech** — this is a Czech
+    company's internal app, and the interface language is a deliberate
+    product decision, not a documentation one. Do not translate UI strings
+    into English.
+13. **Documentation is part of the task.** Every task writes/updates its
+    `doc/*.md`. Every non-trivial decision → a new file in `doc/decision/` in
+    the "what / why / how / risk" format (see the existing ones).
 
 ---
 
-## Task 1 — Nx 23 workspace, aplikace, lint, formát, skripty
+## Task 1 — Nx 23 workspace, applications, lint, format, scripts
 
-**Fáze 0, body 1 a 4.** Hlavní strom, žádná paralelní větev.
+**Phase 0, points 1 and 4.** Main tree, no parallel branch.
 
-Vytvoř Nx 23 monorepo **v existujícím repozitáři** (`/Users/zibar/Workspace/lets-park`,
-větev `feat/lets-park-mvp`). Repozitář už obsahuje `plan.md` (gitignorovaný),
-`CLAUDE.md`, `README.md`, `doc/` – nic z toho nesmíš smazat ani přepsat.
+Create an Nx 23 monorepo **in the existing repository**
+(`/Users/zibar/Workspace/lets-park`, branch `feat/lets-park-mvp`). The
+repository already contains `plan.md` (gitignored), `CLAUDE.md`, `README.md`,
+`doc/` – delete or overwrite none of it.
 
-1. Inicializace Nx 23 workspace s npm jako package managerem, `nx.json` s cache
-   a `targetDefaults` pro `build`, `lint`, `test`.
-2. `apps/web` – Next.js 16 aplikace (App Router, React 19, TypeScript).
-3. `apps/api` – NestJS 11 aplikace.
-4. `apps/web-e2e` – Playwright projekt (zatím jen scaffolding + jeden smoke test, který
-   projde bez běžícího stacku nebo je označen jako skipped s komentářem proč).
-5. `apps/api-e2e` – projekt pro Jest integrační testy proti reálné Postgres (zatím jen
-   scaffolding + config; testy přijdou v Tasku 13).
-6. TypeScript **strict** napříč workspace (`strict: true`, `noUncheckedIndexedAccess`,
-   `noImplicitOverride`, `exactOptionalPropertyTypes` pokud nekoliduje s Nx generátory —
-   pokud koliduje, zapni jen ty, co projdou, a rozdíl zdůvodni v reportu).
-7. ESLint flat config s:
-   - Nx `@nx/enforce-module-boundaries` a **tagy** připravenými pro cílovou strukturu:
-     `type:app`, `type:feature`, `type:ui`, `type:util`, `type:contract`, `type:data`
-     a scope tagy `scope:web`, `scope:api`, `scope:shared`.
-     Pravidla: `type:app` smí na cokoliv; `type:ui` (design systém) nesmí na `type:feature`
-     ani `type:app`; `libs/design-system/primitives` nesmí importovat
-     `libs/design-system/compounds`; `type:contract` nesmí importovat nic kromě `zod`
-     a `type:util`.
-   - `no-restricted-imports` zakazující v `apps/**` a ve feature kódu přímé importy:
-     `react-hook-form`, `@tanstack/react-table`, `@tanstack/react-query`, `@orpc/client`,
-     `socket.io-client`, `next-auth`, `ical-generator`, `next-intl`
-     (s výjimkou příslušné wrapper lib, která je importovat smí).
-     Chybová hláška musí říct, kterou wrapper lib má vývojář použít.
-   - Zákaz `console.log` v `apps/api/**` a `libs/**` (povol `console` jen v skriptech).
-8. Prettier + `.editorconfig`, jednotný formát pro TS/TSX/JSON/MD.
-9. Skripty v `package.json`: `lint`, `test`, `build`, `typecheck`,
+1. Initialize an Nx 23 workspace with npm as the package manager, `nx.json`
+   with caching and `targetDefaults` for `build`, `lint`, `test`.
+2. `apps/web` – a Next.js 16 application (App Router, React 19, TypeScript).
+3. `apps/api` – a NestJS 11 application.
+4. `apps/web-e2e` – a Playwright project (scaffolding only for now + one smoke
+   test that either passes without the stack running or is marked skipped
+   with a comment explaining why).
+5. `apps/api-e2e` – a project for Jest integration tests against a real
+   Postgres (scaffolding + config only for now; tests arrive in Task 13).
+6. TypeScript **strict** across the workspace (`strict: true`,
+   `noUncheckedIndexedAccess`, `noImplicitOverride`,
+   `exactOptionalPropertyTypes` if it doesn't conflict with Nx generators —
+   if it does, enable only the ones that pass and explain the gap in the
+   report).
+7. ESLint flat config with:
+   - Nx `@nx/enforce-module-boundaries` and **tags** prepared for the target
+     structure: `type:app`, `type:feature`, `type:ui`, `type:util`,
+     `type:contract`, `type:data` and scope tags `scope:web`, `scope:api`,
+     `scope:shared`.
+     Rules: `type:app` may depend on anything; `type:ui` (the design system)
+     may not depend on `type:feature` or `type:app`;
+     `libs/design-system/primitives` must not import
+     `libs/design-system/compounds`; `type:contract` must not import
+     anything besides `zod` and `type:util`.
+   - `no-restricted-imports` forbidding direct imports in `apps/**` and in
+     feature code of: `react-hook-form`, `@tanstack/react-table`,
+     `@tanstack/react-query`, `@orpc/client`, `socket.io-client`,
+     `next-auth`, `ical-generator`, `next-intl` (except from the
+     corresponding wrapper lib, which is allowed to import them). The error
+     message must state which wrapper lib the developer should use.
+   - Forbid `console.log` in `apps/api/**` and `libs/**` (allow `console`
+     only in scripts).
+8. Prettier + `.editorconfig`, a uniform format for TS/TSX/JSON/MD.
+9. Scripts in `package.json`: `lint`, `test`, `build`, `typecheck`,
    `affected` (`nx affected -t lint,test,build`), `format`, `format:check`.
-   Připraveno pro CI, ale **žádný pipeline soubor nevytvářej**.
-10. Dokumentace: `doc/workspace.md` – struktura repa, jak spustit lint/test/build,
-    co znamenají Nx tagy a jak se přidává nová lib se správnými tagy.
+   Ready for CI, but **do not create a pipeline file**.
+10. Documentation: `doc/workspace.md` – the repo structure, how to run
+    lint/test/build, what the Nx tags mean, and how to add a new lib with the
+    right tags.
 
-**Ověření (musí projít a doložit v reportu):** `npm run lint`, `npm run typecheck`,
-`npm run build` na čistém workspace, plus ukázka, že ESLint skutečně odmítne
-zakázaný import (přidej dočasný soubor, ukaž chybu, soubor smaž).
+**Verification (must pass and be documented in the report):** `npm run lint`,
+`npm run typecheck`, `npm run build` on a clean workspace, plus a
+demonstration that ESLint actually rejects a forbidden import (add a
+temporary file, show the error, delete the file).
 
-**Rozsah – co NEdělat:** žádné doménové libs, žádný Docker (Task 2), žádné Prisma,
-žádný Tailwind config nad rámec toho, co Nx generátor pro Next vytvoří.
+**Scope – what NOT to do:** no domain libs, no Docker (Task 2), no Prisma, no
+Tailwind config beyond what the Nx generator for Next creates.
 
 ---
 
-## Task 2 — Validace env (Zod), `.env.example`, Docker Compose skeleton
+## Task 2 — Env validation (Zod), `.env.example`, Docker Compose skeleton
 
-**Fáze 0, body 2 a 3.** Navazuje na Task 1 (hlavní strom).
+**Phase 0, points 2 and 3.** Follows on from Task 1 (main tree).
 
-1. `apps/api/src/env.ts` a `apps/web/src/env.ts` – Zod v4 schéma env proměnných,
-   fail-fast při startu se **srozumitelnou** chybou (vypiš, které proměnné chybí/jsou
-   nevalidní, nikdy nevypisuj jejich hodnoty).
-   - API (minimální schéma pro tuto fázi): `NODE_ENV`, `PORT`, `DATABASE_URL`,
-     `AUTH_OKTA_ISSUER`, `AUTH_OKTA_AUDIENCE`, `CORS_ALLOWED_ORIGINS`, `LOG_LEVEL`.
-   - Web: `NODE_ENV`, `NEXT_PUBLIC_API_URL`, `AUTH_SECRET`, `AUTH_OKTA_ISSUER`,
-     `AUTH_OKTA_CLIENT_ID`, `AUTH_OKTA_CLIENT_SECRET`.
-   - V NestJS napojeno přes `ConfigModule.forRoot({ validate })`; v Next.js validace při
-     buildu/bootu.
-   - Schéma je připravené na rozšíření v pozdějších fázích (Slack, ICS, throttler).
-2. `.env.example` v repu se všemi proměnnými, komentáři a dev hodnotami mířícími na
-   `mock-oauth2-server` a lokální Postgres. Žádné skutečné secrets.
+1. `apps/api/src/env.ts` and `apps/web/src/env.ts` – a Zod v4 schema for env
+   variables, fail-fast at startup with a **readable** error (print which
+   variables are missing/invalid, never print their values).
+   - API (minimal schema for this phase): `NODE_ENV`, `PORT`, `DATABASE_URL`,
+     `AUTH_OKTA_ISSUER`, `AUTH_OKTA_AUDIENCE`, `CORS_ALLOWED_ORIGINS`,
+     `LOG_LEVEL`.
+   - Web: `NODE_ENV`, `NEXT_PUBLIC_API_URL`, `AUTH_SECRET`,
+     `AUTH_OKTA_ISSUER`, `AUTH_OKTA_CLIENT_ID`, `AUTH_OKTA_CLIENT_SECRET`.
+   - In NestJS wired through `ConfigModule.forRoot({ validate })`; in Next.js
+     validated at build/boot.
+   - The schema is prepared to be extended in later phases (Slack, ICS,
+     throttler).
+2. `.env.example` in the repo with every variable, comments, and dev values
+   pointing at `mock-oauth2-server` and a local Postgres. No real secrets.
 3. `docker-compose.yml`:
-   - `postgres:17` s healthcheckem (`pg_isready`), pojmenovaným volume, dev credentials
-     z `.env`.
-   - `ghcr.io/navikt/mock-oauth2-server` nakonfigurovaný jako OIDC issuer pro dev/e2e.
-   - `adminer` pouze v dev profilu (`profiles: [dev]`).
-   - **placeholder služby** `web` a `api` (build context připravený, ale skutečné
-     produkční Dockerfiles vzniknou až v Tasku 29 – uveď to komentářem).
-4. Dokumentace: `doc/prostredi.md` – seznam env proměnných a co dělají, jak spustit
-   stack (`docker compose up`), jak se dev/e2e liší od produkce jen hodnotami env
-   (žádné testovací větve v kódu), jak ověřit, že mock OIDC běží.
+   - `postgres:17` with a healthcheck (`pg_isready`), a named volume, dev
+     credentials from `.env`.
+   - `ghcr.io/navikt/mock-oauth2-server` configured as the OIDC issuer for
+     dev/e2e.
+   - `adminer` only in the dev profile (`profiles: [dev]`).
+   - **placeholder services** `web` and `api` (build context ready, but the
+     real production Dockerfiles only arrive in Task 29 – note this with a
+     comment).
+4. Documentation: `doc/environment.md` – the list of env variables and what
+   they do, how to start the stack (`docker compose up`), how dev/e2e differ
+   from production only by env values (no test-only branches in code), how to
+   verify the mock OIDC is running.
 
-**Ověření:** `npm run build` prochází; spuštění app s chybějící povinnou proměnnou
-skončí okamžitým pádem se srozumitelnou hláškou (dolož výstupem).
-`docker compose config` validuje soubor **bez potřeby běžícího démona** – Docker démon na
-tomto stroji neběží, takže `docker compose up` neověřuj; napiš to do reportu.
+**Verification:** `npm run build` passes; starting the app with a required
+variable missing ends in an immediate crash with a readable message (document
+it with output).
+`docker compose config` validates the file **with no daemon needed to be
+running** – the Docker daemon isn't running on this machine, so don't verify
+`docker compose up`; write that in the report.
 
 ---
 
-## Task 3 — `libs/shared-types` + entity schémata a error kontrakt v `libs/contract`
+## Task 3 — `libs/shared-types` + entity schemas and the error contract in `libs/contract`
 
-**Fáze 1, body 1 (část) a 2–3.** Hlavní strom, běží paralelně s Taskem 6.
+**Phase 1, point 1 (part) and 2–3.** Main tree, runs in parallel with Task 6.
 
-1. `libs/shared-types` (tag `type:util`, `scope:shared`, **žádná** závislost na Zodu ani
-   next-intl):
-   - date-only typ `DateOnly` (`YYYY-MM-DD` string) + parser/serializer,
-   - `todayInPrague()`, `startOfDayInPrague()`, porovnání a posun dní v Europe/Prague,
-   - české státní svátky (pohyblivé i pevné) pro daný rok – čistá funkce,
-   - konstanty domény: `ParkingGroup` (`IT` | `SHARED`), `UserRole` (`USER` | `ADMIN`).
-   - **`isMonthOpen(targetDate, openDaysBefore, lockMode, today)`** – čistá funkce
-     rezervačního okna, přesně dle `doc/decision/0004-*` (`FORCE_OPEN` → true,
-     `FORCE_LOCKED` → false, `AUTO` → `today >= prvníDenMěsíce - openDaysBefore && today <
-     prvníDenMěsíce`), a `monthLockState(...)` vracející
-     `NOT_YET_OPEN` | `OPEN` | `LOCKED`. Vše v Europe/Prague.
-   - Unit testy včetně přechodu letního času, přelomu roku a přelomu měsíce
-     (den před oknem, první den okna, poslední den okna, první den měsíce).
+1. `libs/shared-types` (tag `type:util`, `scope:shared`, **no** dependency on
+   Zod or next-intl):
+   - a date-only type `DateOnly` (a `YYYY-MM-DD` string) + a parser/serializer,
+   - `todayInPrague()`, `startOfDayInPrague()`, comparing and shifting days in
+     Europe/Prague,
+   - Czech public holidays (movable and fixed) for a given year – a pure
+     function,
+   - domain constants: `ParkingGroup` (`IT` | `SHARED`), `UserRole` (`USER` |
+     `ADMIN`).
+   - **`isMonthOpen(targetDate, openDaysBefore, lockMode, today)`** – a pure
+     function for the reservation window, exactly per `doc/decision/0004-*`
+     (`FORCE_OPEN` → true, `FORCE_LOCKED` → false, `AUTO` →
+     `today >= firstDayOfMonth - openDaysBefore && today < firstDayOfMonth`),
+     and `monthLockState(...)` returning `NOT_YET_OPEN` | `OPEN` | `LOCKED`.
+     All in Europe/Prague.
+   - Unit tests including the daylight-saving transition, the year boundary,
+     and the month boundary (the day before the window, the first day of the
+     window, the last day of the window, the first day of the month).
 2. `libs/contract/src/schemas` (tag `type:contract`):
-   - Zod v4 schémata entit: `User`, `ParkingSpot`, `Reservation`, `WaitlistEntry`,
-     `AuditLog` – přesně dle doménového modelu v `plan.md`, **plus rozšíření
-     z `doc/decision/0004-*`**:
+   - Zod v4 entity schemas: `User`, `ParkingSpot`, `Reservation`,
+     `WaitlistEntry`, `AuditLog` – exactly per the domain model in `plan.md`,
+     **plus the additions from `doc/decision/0004-*`**:
      - `User.preferredParkingSpotId` (nullable),
      - `ReservationWindowSettings` = `{ openDaysBefore: int 1–31 (default 7),
        lockMode: 'AUTO' | 'FORCE_OPEN' | 'FORCE_LOCKED' (default 'AUTO') }`,
-     - `MonthLockState` = `'NOT_YET_OPEN' | 'OPEN' | 'LOCKED'` + schéma přehledu měsíce
-       (měsíc, rozsah okna od–do, stav).
-   - `dateOnlySchema` = `z.iso.date()`, tj. **jen formát** `YYYY-MM-DD`. Schéma **nesmí**
-     validovat rezervační horizont (ruling `window-2`): starý horizont z `plan.md`
-     („do konce následujícího měsíce") zrušilo rozhodnutí `0004`, a nový horizont závisí na
-     `ReservationWindowSettings` čtených z DB, což statické Zod schéma vidět nemůže.
-     Kontrola „není v minulosti" a kontrola okna jsou **service-level** (Task 13) nad
-     `isMonthOpen` / `monthLockState` z `libs/shared-types`.
-   - Error kontrakt: schéma error shapu (`code`, `message`, `details?`) a **uzavřený výčet**
-     doménových error kódů: `SPOT_ALREADY_RESERVED`, `RESERVATION_LIMIT_REACHED`,
-     `PAST_DATE`, `OUT_OF_HORIZON`, `NOT_FOUND`, `FORBIDDEN`, `ALREADY_IN_WAITLIST`,
-     `CANNOT_WAITLIST_OWN_SPOT`, `SPOT_NOT_OCCUPIED`, `VALIDATION_FAILED`, `CONFLICT`,
-     **`RESERVATIONS_LOCKED`**.
-     Rozdělení obou „okenních" kódů (ruling `window-3`): `OUT_OF_HORIZON` = cílový měsíc je
-     `NOT_YET_OPEN` (rezervace se teprve otevře), `RESERVATIONS_LOCKED` = cílový měsíc je
-     `LOCKED` (okno se už zavřelo). Oba vrací service vrstva, ne schéma.
-   - Typy odvozené výhradně přes `z.infer`.
-3. Unit testy schémat: validní vstupy, nevalidní vstupy, hraniční data (dnešek,
-   včerejšek, přestupný rok, přelom roku). **Horizont se v těchto testech netestuje** —
-   patří k `isMonthOpen` (bod 1) a k service testům v Tasku 13.
-4. Dokumentace: `doc/kontrakt.md` (zakládá se zde, doplní ho Task 4 a 5) – jak je kontrakt
-   strukturovaný, jak se přidává nové schéma, proč jsou typy odvozené.
+     - `MonthLockState` = `'NOT_YET_OPEN' | 'OPEN' | 'LOCKED'` + a month
+       overview schema (month, window range from–to, state).
+   - `dateOnlySchema` = `z.iso.date()`, i.e. **format only**, `YYYY-MM-DD`.
+     The schema **must not** validate the reservation horizon (ruling
+     `window-2`): the old horizon from `plan.md` ("until the end of the
+     following month") was replaced by decision `0004`, and the new horizon
+     depends on `ReservationWindowSettings` read from the DB, which a static
+     Zod schema can't see. Checking "not in the past" and checking the
+     window are **service-level** (Task 13), on top of `isMonthOpen` /
+     `monthLockState` from `libs/shared-types`.
+   - The error contract: an error shape schema (`code`, `message`,
+     `details?`) and a **closed enum** of domain error codes:
+     `SPOT_ALREADY_RESERVED`, `RESERVATION_LIMIT_REACHED`, `PAST_DATE`,
+     `OUT_OF_HORIZON`, `NOT_FOUND`, `FORBIDDEN`, `ALREADY_IN_WAITLIST`,
+     `CANNOT_WAITLIST_OWN_SPOT`, `SPOT_NOT_OCCUPIED`, `VALIDATION_FAILED`,
+     `CONFLICT`, **`RESERVATIONS_LOCKED`**.
+     Splitting the two "window" codes (ruling `window-3`): `OUT_OF_HORIZON` =
+     the target month is `NOT_YET_OPEN` (reservations aren't open yet),
+     `RESERVATIONS_LOCKED` = the target month is `LOCKED` (the window has
+     already closed). Both are returned by the service layer, never by the
+     schema.
+   - Types derived exclusively via `z.infer`.
+3. Schema unit tests: valid inputs, invalid inputs, edge dates (today,
+   yesterday, a leap year, the year boundary). **The horizon is not tested
+   here** — it belongs to `isMonthOpen` (point 1) and to the service tests in
+   Task 13.
+4. Documentation: `doc/contract.md` (established here, extended by Tasks 4
+   and 5) – how the contract is structured, how to add a new schema, why
+   types are derived.
 
-**Rozsah:** žádné oRPC procedury (Task 4), žádné realtime schéma (Task 5), žádná
-implementace endpointů.
+**Scope:** no oRPC procedures (Task 4), no realtime schema (Task 5), no
+endpoint implementation.
 
 ---
 
-## Task 4 — oRPC API kontrakt v `libs/contract`
+## Task 4 — oRPC API contract in `libs/contract`
 
-**Fáze 1, bod 1 (procedury).** Navazuje na Task 3.
+**Phase 1, point 1 (procedures).** Follows on from Task 3.
 
-Entry point `@lets-park/contract` (`libs/contract/src/api`). Definuj oRPC kontrakt
-(`@orpc/contract`) se všemi doménovými procedurami a typovanými chybami:
+Entry point `@lets-park/contract` (`libs/contract/src/api`). Define the oRPC
+contract (`@orpc/contract`) with every domain procedure and typed errors:
 
-- **Přehled dne** – jedním dotazem: spoty + rezervace + počty ve waitlistu pro daný den.
-- **Rezervace** – create, cancel.
+- **Day overview** – in one query: spots + reservations + waitlist counts for
+  a given day.
+- **Reservations** – create, cancel.
 - **Waitlist** – join, leave.
-- **Správa míst (admin)** – list, create, update, deactivate.
-- **Správa uživatelů (admin)** – list, update (role, aktivita).
-- **Nastavení uživatele** – čtení a změna SPZ **a preferovaného parkovacího místa**.
-- **ICS token** – regenerace + helper/konstanta pro sestavení ICS URL
-  (ICS feed samotný je mimo oRPC, viz `plan.md` §Contract-first, výjimka).
-- **Rezervační okno** (viz `doc/decision/0004-*`):
-  - čtení a změna nastavení (`openDaysBefore`, `lockMode`) – jen admin,
-  - přehled stavů měsíců (měsíc, rozsah okna, `MonthLockState`) pro admin záložku,
-  - stav okna pro konkrétní den je součástí odpovědi **přehledu dne**, aby FE nemusel
-    dělat druhý dotaz.
-- **Hromadná rezervace** – dvě procedury:
-  - `previewBulk` (vstup: seznam dnů v jednom měsíci) → **read-only návrh**: pro každý den
-    buď přidělené místo (a příznak, zda jde o preferované), nebo pozice ve frontě.
-    Nic nezapisuje.
-  - `confirmBulk` (vstup: tentýž seznam dnů) → provede zápis a vrátí **skutečný** výsledek
-    (může se lišit od návrhu, pokud mezitím někdo místo obsadil).
+- **Spot management (admin)** – list, create, update, deactivate.
+- **User management (admin)** – list, update (role, active status).
+- **User settings** – reading and changing the license plate **and the
+  preferred parking spot**.
+- **ICS token** – regeneration + a helper/constant for building the ICS URL
+  (the ICS feed itself is outside oRPC, see `plan.md` §Contract-first, an
+  exception).
+- **Reservation window** (see `doc/decision/0004-*`):
+  - reading and changing the settings (`openDaysBefore`, `lockMode`) – admin
+    only,
+  - an overview of month states (month, window range, `MonthLockState`) for
+    the admin tab,
+  - the window state for a specific day is part of the **day overview**
+    response, so the FE doesn't need a second query.
+- **Bulk reservation** – two procedures:
+  - `previewBulk` (input: a list of days in a single month) → a **read-only
+    proposal**: for each day, either an assigned spot (and a flag for whether
+    it's the preferred one), or a waitlist position. Writes nothing.
+  - `confirmBulk` (input: the same list of days) → performs the write and
+    returns the **actual** result (which may differ from the proposal if
+    someone took a spot in the meantime).
 
-Každá procedura má vstupní i výstupní schéma a deklarované chybové kódy z Tasku 3.
-Vše přes `z.infer`, nic ručně.
+Every procedure has an input and output schema and declared error codes from
+Task 3. Everything via `z.infer`, nothing hand-written.
 
-Unit testy: pro každou proceduru validní i nevalidní vstup; test, že ICS URL helper
-sestaví správný tvar.
+Unit tests: valid and invalid input for every procedure; a test that the ICS
+URL helper builds the correct shape.
 
-Doplň `doc/kontrakt.md` o seznam procedur a jejich sémantiku.
+Extend `doc/contract.md` with the list of procedures and their semantics.
 
-**Rozsah:** čistě kontrakt a typy – **žádná implementace**.
+**Scope:** purely the contract and types – **no implementation**.
 
 ---
 
-## Task 5 — Realtime kontrakt (`@lets-park/contract/realtime`)
+## Task 5 — Realtime contract (`@lets-park/contract/realtime`)
 
-**Fáze 1, bod 4.** Navazuje na Task 3 (může běžet po Tasku 4).
+**Phase 1, point 4.** Follows on from Task 3 (may run after Task 4).
 
-Samostatný entry point `@lets-park/contract/realtime` (`libs/contract/src/realtime`), který
-**netahá oRPC závislosti**:
+A separate entry point, `@lets-park/contract/realtime`
+(`libs/contract/src/realtime`), which **pulls in no oRPC dependency**:
 
-- Zod schémata payloadů eventů: `cell:locked`, `cell:unlocked`,
+- Zod schemas for event payloads: `cell:locked`, `cell:unlocked`,
   `reservation:created`, `reservation:cancelled`, `reservation:reassigned`,
-  `waitlist:updated` (přesná jména sjednoť a zdůvodni).
-- Z nich odvozené `ServerToClientEvents` / `ClientToServerEvents`.
-- Helper pro název roomu per den (`roomForDate(date: DateOnly)`).
-- Payloady **referencují sdílená entity schémata** ze `src/schemas` – nic se neduplikuje.
+  `waitlist:updated` (settle on and justify the exact names).
+- `ServerToClientEvents` / `ClientToServerEvents` derived from them.
+- A helper for the per-day room name (`roomForDate(date: DateOnly)`).
+- Payloads **reference the shared entity schemas** from `src/schemas` –
+  nothing is duplicated.
 
-Unit testy schémat + testu, že import `@lets-park/contract/realtime` nezavleče `@orpc/*`
-(např. kontrolou závislostí v build outputu nebo explicitním test-casem na module graph).
+Schema unit tests + a test that importing `@lets-park/contract/realtime`
+doesn't drag in `@orpc/*` (e.g. by checking dependencies in the build output,
+or an explicit test case on the module graph).
 
-Doplň `doc/kontrakt.md` o realtime část a o pravidlo „server vždy validuje příchozí
-client→server eventy".
-
----
-
-## Task 6 — Design tokeny (`libs/design-system/tokens`)
-
-**Fáze 2.** Paralelní větev (worktree), běží současně s Tasky 3–5.
-
-Zdroj pravdy: **`doc/design/ds/colors_and_type.css`** (viz `doc/design/README.md`).
-
-1. TS objekty/konstanty s celou paletou, spacing scale, typografií, radii, stíny, motion
-   a breakpointy – 1:1 podle `colors_and_type.css` (barvy, `--fs-*`, `--lh-*`,
-   `--tracking-*`, `--space-*`, `--radius-*`, `--shadow-*`, `--dur-*`, `--ease-*`,
-   `--container*`). Breakpointy, které v CSS nejsou explicitně, odvoď z designu a označ
-   komentářem.
-2. Build skript generující `tokens.css` s CSS custom properties z TS zdroje.
-3. Tailwind v4 setup: `@import "tailwindcss"` + `@theme inline` mapující custom properties
-   na Tailwind theme. Žádné ručně psané duplicity hodnot.
-4. `@font-face` deklarace pro NHaasGroteskDS s fallback stackem; fonty zkopíruj
-   z `doc/design/ds/fonts/` do assetů lib.
-5. **Snapshot test**, který hlídá, že vygenerovaný `tokens.css` odpovídá TS tokenům
-   (běží v CI a spadne, když někdo změní jedno bez druhého).
-6. Dokumentace: `doc/design-system.md` – jak tokeny fungují, jak se přidává nový token,
-   proč je generovaný CSS commitnutý (nebo proč není), jak se to napojuje na Tailwind v4.
+Extend `doc/contract.md` with the realtime section and the rule "the server
+always validates incoming client→server events".
 
 ---
 
-## Task 7 — Storybook 10 + primitivy, dávka 1
+## Task 6 — Design tokens (`libs/design-system/tokens`)
 
-**Fáze 3, body 1–3 (část).** Navazuje na Task 6 ve stejné paralelní větvi.
+**Phase 2.** Parallel branch (worktree), runs alongside Tasks 3–5.
 
-1. Storybook 10 pro `libs/design-system/primitives`: `@tailwindcss/vite` ve `viteFinal`,
-   import `tokens.css` v `preview.ts`, light theme dle designu.
-2. Primitivy: **Button, Input, Select, Checkbox, Radio, Badge, Avatar, Switch, Stepper**.
-   Vzhled a varianty odvoď z `doc/design/lets-park-design.dc.html` a screenshotů
-   (`doc/design/screens/`) – např. pill radius u CTA (`--radius-cta`), primární modrá
-   `#008FFF`, sekundární „outline" tlačítko, danger varianta („Zrušit rezervaci").
-3. Ke každému primitivu **story souběžně** s komponentou (varianty a stavy: default,
-   hover, focus, disabled, error, loading).
-4. Unit testy (Jest + Testing Library): interakce, `role`/aria, focus management,
-   klávesnice.
-5. Doplň `doc/design-system.md` o soupis primitivů a jejich API.
+Source of truth: **`doc/design/ds/colors_and_type.css`** (see
+`doc/design/README.md`).
 
-**Připomínka:** primitivy jsou **domain-free** – žádná zmínka o parkovacím místě
-ani rezervaci.
-
----
-
-## Task 8 — Primitivy, dávka 2 (overlay a navigace)
-
-**Fáze 3, dokončení.** Navazuje na Task 7 ve stejné paralelní větvi.
-
-Primitivy: **Modal/Dialog, Dropdown/Menu, Tabs, Tooltip, Toast/Notification**.
-Stejná pravidla jako Task 7 (story + testy souběžně, domain-free).
-
-Zvláštní důraz na přístupnost, protože tyhle komponenty jsou nejrizikovější:
-focus trap a návrat focusu u Modalu, `Escape`, `aria-modal`, klávesová navigace
-v Dropdownu a Tabs (šipky, Home/End), `aria-describedby` u Tooltipu, `role="status"`
-u Toastu.
-
-Vizuál modálu ověř proti `doc/design/screens/08-modal-reserve.png`,
-`09-modal-queue.png`, `11-settings.png`; dropdown proti `02-avatar-menu.png`;
-tabs proti `05-admin-window.png`.
-
-Doplň `doc/design-system.md`.
+1. TS objects/constants with the whole palette, spacing scale, typography,
+   radii, shadows, motion, and breakpoints – 1:1 per `colors_and_type.css`
+   (colors, `--fs-*`, `--lh-*`, `--tracking-*`, `--space-*`, `--radius-*`,
+   `--shadow-*`, `--dur-*`, `--ease-*`, `--container*`). Breakpoints not
+   explicit in the CSS should be derived from the design and marked with a
+   comment.
+2. A build script generating `tokens.css` with CSS custom properties from
+   the TS source.
+3. Tailwind v4 setup: `@import "tailwindcss"` + `@theme inline` mapping
+   custom properties onto the Tailwind theme. No hand-written duplicates of
+   values.
+4. `@font-face` declarations for NHaasGroteskDS with a fallback stack; copy
+   the fonts from `doc/design/ds/fonts/` into the lib's assets.
+5. A **snapshot test** that guards against the generated `tokens.css`
+   drifting from the TS tokens (runs in CI and fails if someone changes one
+   without the other).
+6. Documentation: `doc/design-system.md` – how the tokens work, how to add a
+   new token, why the generated CSS is committed (or why it isn't), how it
+   wires into Tailwind v4.
 
 ---
 
-## Task 9 — `libs/database`: Prisma 7 schéma, migrace, seed
+## Task 7 — Storybook 10 + primitives, batch 1
 
-**Fáze 5, bod 1.** Hlavní strom, začátek backend větve.
+**Phase 3, points 1–3 (part).** Follows on from Task 6 in the same parallel
+branch.
 
-1. Prisma 7: `prisma.config.ts`, `prisma-client` generator s **outputem uvnitř lib**
-   (ne do `node_modules`), povinný driver adapter `@prisma/adapter-pg`.
-2. Schéma přesně dle `plan.md` §Doménový model – `User`, `ParkingSpot`, `Reservation`,
-   `WaitlistEntry`, `AuditLog` – **včetně všech unique constraintů a indexů**:
+1. Storybook 10 for `libs/design-system/primitives`: `@tailwindcss/vite` in
+   `viteFinal`, importing `tokens.css` in `preview.ts`, a light theme per the
+   design.
+2. Primitives: **Button, Input, Select, Checkbox, Radio, Badge, Avatar,
+   Switch, Stepper**. Derive appearance and variants from
+   `doc/design/lets-park-design.dc.html` and the screenshots
+   (`doc/design/screens/`) – e.g. the pill radius on the CTA (`--radius-cta`),
+   the primary blue `#008FFF`, the secondary "outline" button, the danger
+   variant ("Zrušit rezervaci" – "Cancel reservation").
+3. Every primitive gets a **story alongside** the component (variants and
+   states: default, hover, focus, disabled, error, loading).
+4. Unit tests (Jest + Testing Library): interaction, `role`/aria, focus
+   management, keyboard.
+5. Extend `doc/design-system.md` with the inventory of primitives and their
+   API.
+
+**Reminder:** the primitives are **domain-free** – no mention of a parking
+spot or a reservation.
+
+---
+
+## Task 8 — Primitives, batch 2 (overlay and navigation)
+
+**Phase 3, completion.** Follows on from Task 7 in the same parallel branch.
+
+Primitives: **Modal/Dialog, Dropdown/Menu, Tabs, Tooltip, Toast/Notification**.
+Same rules as Task 7 (story + tests alongside, domain-free).
+
+Special emphasis on accessibility, since these components carry the most
+risk: a focus trap and focus return for Modal, `Escape`, `aria-modal`,
+keyboard navigation in Dropdown and Tabs (arrows, Home/End),
+`aria-describedby` for Tooltip, `role="status"` for Toast.
+
+Verify the modal's visuals against `doc/design/screens/08-modal-reserve.png`,
+`09-modal-queue.png`, `11-settings.png`; the dropdown against
+`02-avatar-menu.png`; tabs against `05-admin-window.png`.
+
+Extend `doc/design-system.md`.
+
+---
+
+## Task 9 — `libs/database`: Prisma 7 schema, migrations, seed
+
+**Phase 5, point 1.** Main tree, the start of the backend branch.
+
+1. Prisma 7: `prisma.config.ts`, the `prisma-client` generator with its
+   **output inside the lib** (not into `node_modules`), the required driver
+   adapter `@prisma/adapter-pg`.
+2. A schema exactly per `plan.md` §Domain model – `User`, `ParkingSpot`,
+   `Reservation`, `WaitlistEntry`, `AuditLog` – **including every unique
+   constraint and index**:
    - `Reservation` unique `(parkingSpotId, date)`
    - `Reservation` unique `(userId, date)`
    - `WaitlistEntry` unique `(parkingSpotId, userId, date)`
-   - indexy na `date`
-   - `date` je sloupec typu `DATE` (`@db.Date`), nikdy timestamp
-   - `AuditLog.payload` je `Json` (JSONB), tabulka append-only
-   - **`User.preferredParkingSpotId`** – nullable FK na `ParkingSpot`, `onDelete: SetNull`
-   - **`ReservationWindowSettings`** – singleton tabulka (jeden řádek, vynucený
-     constraintem – zdůvodni zvolený způsob v `doc/databaze.md`) s `openDaysBefore`
-     a `lockMode`; seed vytvoří default `7` / `AUTO`
-3. Migrace + seed skript: parkovací místa dle reálného layoutu
-   (IT: `E2.92`–`E2.95`; Shared: `E2.96`, `E2.65`, `E2.66`, `E2.61`, `E2.62`) a dev
-   uživatelé odpovídající mock OIDC.
-4. Exportovaný `PrismaService`-friendly klient (samotný Nest modul až v Tasku 10/12).
-5. Dokumentace: `doc/databaze.md` – ERD (textově nebo mermaid), proč hard delete + AuditLog
-   místo soft delete, jak spustit migraci a seed, jak zálohovat (`pg_dump`, pár řádků).
+   - indexes on `date`
+   - `date` is a `DATE`-typed column (`@db.Date`), never a timestamp
+   - `AuditLog.payload` is `Json` (JSONB), the table is append-only
+   - **`User.preferredParkingSpotId`** – a nullable FK to `ParkingSpot`,
+     `onDelete: SetNull`
+   - **`ReservationWindowSettings`** – a singleton table (one row, enforced
+     by a constraint – justify the chosen approach in `doc/database.md`)
+     with `openDaysBefore` and `lockMode`; the seed creates the default `7` /
+     `AUTO`
+3. Migration + seed script: parking spots per the real layout (IT:
+   `E2.92`–`E2.95`; Shared: `E2.96`, `E2.65`, `E2.66`, `E2.61`, `E2.62`) and
+   dev users matching the mock OIDC.
+4. An exported `PrismaService`-friendly client (the actual Nest module isn't
+   until Task 10/12).
+5. Documentation: `doc/database.md` – an ERD (text or mermaid), why hard
+   delete + AuditLog instead of soft delete, how to run a migration and seed,
+   how to back up (`pg_dump`, a few lines).
 
 ---
 
-## Task 10 — `apps/api`: provozní základ
+## Task 10 — `apps/api`: operational baseline
 
-**Fáze 5, bod 2.** Navazuje na Task 9.
+**Phase 5, point 2.** Follows on from Task 9.
 
-Implementuj celý princip 4 z `plan.md`:
+Implement the whole of principle 4 from `plan.md`:
 
-- rozšíření env schématu z Tasku 2 o vše, co API potřebuje,
-- `nestjs-pino` (JSON logy, request-id korelace, log level z env, žádný `console.log`),
-- `@nestjs/terminus`: `/health/live` a `/health/ready` (readiness kontroluje DB),
-- `app.enableShutdownHooks()` + graceful shutdown (přestat přijímat spojení, dokončit
-  requesty, zavřít DB pool; zavření Socket.io doplní Task 15 – nech tam připravený hook),
-- `helmet`, CORS s allow-listem originů z env, `@nestjs/throttler` (globální limit +
-  připravená přísnější varianta pro endpointy bez session),
-- limity velikosti payloadu,
-- **globální exception filter** mapující doménové výjimky a Prisma chyby (`P2002` →
-  `SPOT_ALREADY_RESERVED` / 409, `P2025` → `NOT_FOUND`) na kontraktové error kódy z Tasku 3;
-  stack trace se loguje, klientovi nikdy neposílá.
+- extend the env schema from Task 2 with everything the API needs,
+- `nestjs-pino` (JSON logs, request-id correlation, log level from env, no
+  `console.log`),
+- `@nestjs/terminus`: `/health/live` and `/health/ready` (readiness checks the
+  DB),
+- `app.enableShutdownHooks()` + graceful shutdown (stop accepting
+  connections, finish in-flight requests, close the DB pool; Task 15 will add
+  closing Socket.io – leave a hook ready for it),
+- `helmet`, CORS with an allow-list of origins from env, `@nestjs/throttler`
+  (a global limit + a stricter variant ready for endpoints without a
+  session),
+- payload size limits,
+- a **global exception filter** mapping domain exceptions and Prisma errors
+  (`P2002` → `SPOT_ALREADY_RESERVED` / 409, `P2025` → `NOT_FOUND`) onto the
+  contract error codes from Task 3; the stack trace is logged, never sent to
+  the client.
 
-Unit testy exception filteru (mapování Prisma chyb) a health endpointů.
+Unit tests for the exception filter (Prisma error mapping) and the health
+endpoints.
 
-Dokumentace: `doc/provoz-api.md` – co všechno je v provozním základu, jak se chová při
-chybějící env, jak vypadá log record, co dělá readiness.
-
----
-
-## Task 11 — Auth: JWKS validace Okta tokenů, guards, JIT provisioning
-
-**Fáze 5, bod 3.** Navazuje na Task 10.
-
-- `passport-jwt` + `jwks-rsa`: validace issuer/audience/expiry, dynamické klíče z JWKS URL
-  (konfigurace z env → v dev míří na `mock-oauth2-server`, v produkci na Oktu, **beze změny
-  kódu**).
-- `AuthGuard` (výchozí pro celé API) a `RolesGuard` pro `ADMIN`.
-- JIT provisioning: při prvním requestu se uživatel založí/spáruje podle `oktaId`,
-  fallback podle emailu; deaktivovaný uživatel (`active: false`) dostane `FORBIDDEN`.
-- Vygenerování `icsToken` (`crypto.randomBytes`) při provisioningu.
-- Znovupoužitelná JWKS validační služba, kterou ve Tasku 15 použije i Socket.io gateway.
-
-Testy: platný token, expirovaný token, špatný issuer, špatná audience, neznámý uživatel
-(JIT), deaktivovaný uživatel, role guard.
-
-**Zákaz:** žádný credentials provider ani testovací větev v kódu.
-
-Dokumentace: `doc/auth.md` – celý flow FE→BE→JWKS, jak se to testuje proti mock OIDC,
-co se stane při rotaci klíčů.
+Documentation: `doc/api-operations.md` – everything that's part of the
+operational baseline, how it behaves with a missing env variable, what a log
+record looks like, what readiness checks.
 
 ---
 
-## Task 12 — Doménové moduly: spoty, uživatelé, nastavení, AuditLog
+## Task 11 — Auth: JWKS validation of Okta tokens, guards, JIT provisioning
 
-**Fáze 5, bod 4 (část).** Navazuje na Task 11.
+**Phase 5, point 3.** Follows on from Task 10.
 
-Implementace kontraktu z Tasku 4 přes `@orpc/nest` (`@Implement`):
+- `passport-jwt` + `jwks-rsa`: validating issuer/audience/expiry, dynamic
+  keys from a JWKS URL (configured from env → in dev it points at
+  `mock-oauth2-server`, in production at Okta, **with no code change**).
+- An `AuthGuard` (the default across the whole API) and a `RolesGuard` for
+  `ADMIN`.
+- JIT provisioning: on the first request, a user is created/matched by
+  `oktaId`, falling back to email; a deactivated user (`active: false`) gets
+  `FORBIDDEN`.
+- Generating `icsToken` (`crypto.randomBytes`) during provisioning.
+- A reusable JWKS validation service, which the Socket.io gateway in Task 15
+  reuses too.
+
+Tests: a valid token, an expired token, a wrong issuer, a wrong audience, an
+unknown user (JIT), a deactivated user, the role guard.
+
+**Forbidden:** any credentials provider or test-only branch in the code.
+
+Documentation: `doc/auth.md` – the full FE→BE→JWKS flow, how it's tested
+against the mock OIDC, what happens on key rotation.
+
+---
+
+## Task 12 — Domain modules: spots, users, settings, AuditLog
+
+**Phase 5, point 4 (part).** Follows on from Task 11.
+
+Implementing the contract from Task 4 via `@orpc/nest` (`@Implement`):
 
 - **ParkingSpots** – admin CRUD (list, create, update, deactivate).
-- **Users (admin)** – list, změna role, deaktivace (nikdy hard delete).
-- **User settings** – čtení/změna SPZ a preferovaného místa, regenerace ICS tokenu.
-- **Rezervační okno (admin)** – čtení/změna `openDaysBefore` a `lockMode`, přehled stavů
-  měsíců; změna nastavení jde do AuditLogu. Stav se počítá funkcí `isMonthOpen`
-  z `libs/shared-types` (Task 3), **nikdy se needuplikuje**.
-- **Přehled dne** – jeden dotaz vracející spoty + rezervace + počty ve waitlistu
-  **+ stav rezervačního okna pro daný den**.
-- **AuditLog service** – append-only zápis u všech admin zásahů a mutací; použije ho
-  i Task 13.
+- **Users (admin)** – list, role change, deactivation (never hard delete).
+- **User settings** – reading/changing the license plate and preferred spot,
+  regenerating the ICS token.
+- **Reservation window (admin)** – reading/changing `openDaysBefore` and
+  `lockMode`, an overview of month states; a settings change goes into the
+  AuditLog. The state is computed by the `isMonthOpen` function from
+  `libs/shared-types` (Task 3), **never re-implemented**.
+- **Day overview** – one query returning spots + reservations + waitlist
+  counts **+ the reservation-window state for that day**.
+- **AuditLog service** – an append-only write for every admin action and
+  mutation; Task 13 uses it too.
 
-Unit testy služeb (Jest), včetně toho, že se AuditLog opravdu zapisuje.
+Unit tests for the services (Jest), including that the AuditLog is actually
+written.
 
-Dokumentace: `doc/api-moduly.md`.
+Documentation: `doc/api-modules.md`.
 
 ---
 
-## Task 13 — Rezervace, waitlist a auto-promote v transakci
+## Task 13 — Reservations, waitlist, and auto-promote in a transaction
 
-**Fáze 5, body 4 (rezervace/waitlist) a 8.** Navazuje na Task 12. **Nejrizikovější úkol.**
+**Phase 5, points 4 (reservations/waitlist) and 8.** Follows on from Task 12.
+**The highest-risk task.**
 
-Byznys pravidla přesně dle `plan.md` §Byznys pravidla:
+Business rules exactly per `plan.md` §Business rules:
 
-- rezervovat lze jen dnešek a budoucnost (Europe/Prague),
-- **rezervační okno** (nahrazuje pravidlo „max do konce následujícího měsíce", viz
-  `doc/decision/0004-*`): pro běžného uživatele je create rezervace, waitlist join
-  i waitlist leave povolený **jen když je měsíc cílového dne otevřený**
-  (`isMonthOpen` z `libs/shared-types`); jinak kontraktová chyba `RESERVATIONS_LOCKED`.
-  **Zrušení vlastní rezervace je povolené vždy.** Admin není oknem omezen vůbec.
-  Kontrola je na backendu, ne jen v UI.
-- max 1 rezervace na uživatele a den, max 1 rezervace na místo a den,
-- admin ruší cizí rezervace (→ AuditLog s actorem), uživatel jen svoji,
-- zrušení = hard delete + AuditLog,
-- **auto-promote**: jedna Prisma interaktivní transakce, `SELECT ... FOR UPDATE`
-  přes `$queryRaw` na waitlist řádky daného místa+dne řazené `createdAt, id`;
-  promotuje se první čekající **bez jiné rezervace týž den**; ostatní jeho waitlist
-  zápisy na tentýž den se smažou; prázdný waitlist → místo zůstane volné,
-- transakce je minimální – **žádné Slack volání ani broadcast uvnitř**; notifikace
-  a realtime se spouští až **po commitu** (připrav rozhraní, které Task 15 a 16 naplní),
-- `P2002` → retry / konzistentní kontraktová chyba,
-- waitlist join jen na obsazené místo; vlastník rezervace se nemůže zapsat na své místo.
+- only today and the future can be reserved (Europe/Prague),
+- **the reservation window** (replaces the rule "at most until the end of the
+  following month", see `doc/decision/0004-*`): for a regular user, creating
+  a reservation, joining the waitlist, and leaving the waitlist are allowed
+  **only when the target day's month is open** (`isMonthOpen` from
+  `libs/shared-types`); otherwise the contract error `RESERVATIONS_LOCKED`.
+  **Cancelling one's own reservation is always allowed.** The admin is not
+  constrained by the window at all. The check happens on the backend, not
+  only in the UI.
+- max 1 reservation per user per day, max 1 reservation per spot per day,
+- an admin cancels other people's reservations (→ an AuditLog entry with an
+  actor); a user only their own,
+- cancellation = hard delete + an AuditLog entry,
+- **auto-promote**: a single Prisma interactive transaction, `SELECT ... FOR
+  UPDATE` via `$queryRaw` on the waitlist rows for that spot+day ordered by
+  `createdAt, id`; the first person waiting **with no other reservation that
+  same day** is promoted; their other waitlist entries for the same day are
+  deleted; an empty waitlist → the spot stays free,
+- the transaction is minimal – **no Slack call or broadcast inside it**;
+  notifications and realtime fire only **after the commit** (prepare an
+  interface that Tasks 15 and 16 will fill in),
+- `P2002` → retry / a consistent contract error,
+- joining the waitlist only for an occupied spot; the reservation's owner
+  cannot join the waitlist for their own spot.
 
-**Integrační testy proti reálné Postgres** (`apps/api-e2e`, Docker):
-souběžné zrušení (paralelní transakce), prázdný waitlist, více čekajících,
-čekající s kolizní rezervací týž den, promote + konflikt unique constraintu,
-**rezervace v uzamčeném měsíci (user → `RESERVATIONS_LOCKED`, admin → projde),
-zrušení vlastní rezervace v uzamčeném měsíci (projde)**.
+**Integration tests against a real Postgres** (`apps/api-e2e`, Docker):
+concurrent cancellation (parallel transactions), an empty waitlist, multiple
+people waiting, someone waiting who has a colliding reservation the same day,
+promote + a unique-constraint conflict, **a reservation in a locked month
+(user → `RESERVATIONS_LOCKED`, admin → succeeds), cancelling one's own
+reservation in a locked month (succeeds)**.
 
-> Docker démon na tomto stroji **neběží**. Testy napiš tak, aby se spouštěly proti
-> `docker compose up postgres`, a v reportu jasně napiš, že je nebylo možné lokálně
-> spustit, pokud to tak bude. Nesnaž se je obejít mockem – to je proti `plan.md`.
+> The Docker daemon on this machine **is not running**. Write the tests so
+> they run against `docker compose up postgres`, and state clearly in the
+> report that they could not be run locally, if that's the case. Do not try
+> to work around it with a mock – that goes against `plan.md`.
 
-Dokumentace: `doc/waitlist.md` – sekvenční diagram zrušení + promote, proč row-lock,
-co se děje při souběhu, co se stane po commitu.
+Documentation: `doc/waitlist.md` – a sequence diagram of cancel + promote, why
+a row lock, what happens under concurrency, what happens after the commit.
 
 ---
 
 ## Task 14 — ICS feed (`libs/calendar-export` + controller)
 
-**Fáze 5, bod 5.** Navazuje na Task 12.
+**Phase 5, point 5.** Follows on from Task 12.
 
-- `libs/calendar-export` – service generující ICS z doménových dat přes `ical-generator`
-  (jediné místo, kde se `ical-generator` importuje).
-- Nest controller **mimo oRPC kontrakt**: `GET /calendar/:icsToken.ics`,
-  auth per-user náhodným tokenem z URL, `Content-Type: text/calendar`, cache headers,
-  **přísnější rate limit** (`@nestjs/throttler`).
-- Regenerace tokenu už existuje z Tasku 12 – ověř, že stará URL přestane fungovat.
+- `libs/calendar-export` – a service generating ICS from domain data via
+  `ical-generator` (the only place `ical-generator` is imported).
+- A Nest controller **outside the oRPC contract**:
+  `GET /calendar/:icsToken.ics`, per-user auth via a random token in the URL,
+  `Content-Type: text/calendar`, cache headers, a **stricter rate limit**
+  (`@nestjs/throttler`).
+- Token regeneration already exists from Task 12 – verify that the old URL
+  stops working.
 
-Testy: validní token vrátí validní ICS s očekávanými událostmi; neplatný token → 404
-(ne 401, aby se nedaly tokeny enumerovat – zdůvodni v `doc/decision/`);
-regenerovaný token zneplatní starý.
+Tests: a valid token returns valid ICS with the expected events; an invalid
+token → 404 (not 401, so tokens can't be enumerated – justify this in
+`doc/decision/`); a regenerated token invalidates the old one.
 
-Dokumentace: `doc/ics.md`.
-
----
-
-## Task 15 — Socket.io gateway, `LockService`, broadcasty po commitu
-
-**Fáze 5, bod 6.** Navazuje na Task 13.
-
-- Nativní NestJS `@WebSocketGateway` (Socket.io v4), handshake auth: token
-  v `socket.handshake.auth.token` (**nikdy v query stringu**), validace stejnou JWKS
-  logikou jako REST guard (služba z Tasku 11), nevalidní → disconnect; při reconnectu
-  se validuje znovu.
-- Server **validuje příchozí client→server eventy** proti Zod schématům z Tasku 5.
-- Roomy per den (`roomForDate`).
-- `LockService`: interface + **in-memory implementace** s TTL ~30 s a prodlužováním
-  (heartbeat). Redis implementace se **neimplementuje** – jen zdokumentuj upgrade cestu.
-- Vlastní `IoAdapter` abstrakce, aby šel `@socket.io/redis-adapter` doplnit bez zásahu
-  do gateway kódu.
-- Broadcast změn rezervací/waitlistu **až po commitu** transakce (napoj na hook z Tasku 13).
-- Doplň graceful shutdown z Tasku 10 o korektní zavření Socket.io.
-
-Testy: TTL a prodloužení zámku, konflikt dvou zámků, odmítnutí nevalidního handshake,
-odmítnutí nevalidního payloadu, broadcast až po commitu.
-
-Dokumentace: `doc/realtime.md` – včetně explicitní upgrade cesty na Redis adapter a Redis
-`SET NX PX` locky.
+Documentation: `doc/ics.md`.
 
 ---
 
-## Task 16 — Slack integrace a plánované joby
+## Task 15 — Socket.io gateway, `LockService`, broadcasts after commit
 
-**Fáze 5, bod 7.** Navazuje na Task 13.
+**Phase 5, point 6.** Follows on from Task 13.
 
-- Izolovaná service nad `@slack/web-api`: notifikace o uvolnění místa, DM při přeobsazení
-  z waitlistu (mapování uživatele přes `users.lookupByEmail`), denní souhrn.
-- Denní souhrn přes `@nestjs/schedule`, cron v **Europe/Prague**. U jobu **komentářem**
-  zdokumentuj omezení při 2+ replikách a upgrade cestu (BullMQ repeatable jobs / leader
-  election).
-- **Selhání Slacku nikdy neshodí doménovou operaci**: timeout, jednoduchý retry s backoffem,
-  chyby se logují. Celé vypínatelné přes `SLACK_ENABLED`.
+- A native NestJS `@WebSocketGateway` (Socket.io v4), handshake auth: a token
+  in `socket.handshake.auth.token` (**never in the query string**), validated
+  with the same JWKS logic as the REST guard (the service from Task 11); an
+  invalid one → disconnect; re-validated on reconnect.
+- The server **validates incoming client→server events** against the Zod
+  schemas from Task 5.
+- Rooms per day (`roomForDate`).
+- `LockService`: an interface + an **in-memory implementation** with a TTL of
+  ~30s and extension (a heartbeat). A Redis implementation is **not
+  implemented** – only document the upgrade path.
+- A custom `IoAdapter` abstraction, so `@socket.io/redis-adapter` can be added
+  later without touching the gateway code.
+- Broadcasting reservation/waitlist changes **only after** the transaction
+  commits (hook into Task 13's hook).
+- Extend the graceful shutdown from Task 10 with properly closing Socket.io.
 
-**Zákaz:** žádné slash commands, žádný interaktivní Block Kit – jen odchozí
+Tests: the lock's TTL and extension, a conflict between two locks, rejecting
+an invalid handshake, rejecting an invalid payload, broadcasting only after
+commit.
+
+Documentation: `doc/realtime.md` – including an explicit upgrade path to the
+Redis adapter and Redis `SET NX PX` locks.
+
+---
+
+## Task 16 — Slack integration and scheduled jobs
+
+**Phase 5, point 7.** Follows on from Task 13.
+
+- An isolated service over `@slack/web-api`: a notification when a spot frees
+  up, a DM on a waitlist promotion (matching the user via
+  `users.lookupByEmail`), a daily summary.
+- The daily summary via `@nestjs/schedule`, a cron in **Europe/Prague**.
+  Document the job's limitation with 2+ replicas and the upgrade path
+  (BullMQ repeatable jobs / leader election) **in a comment**.
+- **A Slack failure never breaks a domain operation**: a timeout, a simple
+  retry with backoff, errors are logged. Everything toggleable via
+  `SLACK_ENABLED`.
+
+**Forbidden:** any slash commands, any interactive Block Kit – only outbound
 `chat.postMessage`.
 
-Testy: Slack selže → doménová operace projde; `SLACK_ENABLED=false` → žádné volání;
-retry/backoff; cron se plánuje ve správné zóně.
+Tests: Slack fails → the domain operation still succeeds; `SLACK_ENABLED=false`
+→ no call is made; retry/backoff; the cron is scheduled in the correct zone.
 
-Dokumentace: `doc/slack.md`.
+Documentation: `doc/slack.md`.
 
 ---
 
 ## Task 17 — `libs/i18n`
 
-**Fáze 4, bod 6.** Paralelní větev (worktree), běží současně s backendem.
+**Phase 4, point 6.** Parallel branch (worktree), runs alongside the backend.
 
-- Wrapper nad next-intl (jediné místo, kde se next-intl importuje).
-- **Re-export** date logiky z `libs/shared-types` (viz `doc/decision/0003-*`) pod stabilním
-  API, aby feature kód importoval jen `@lets-park/i18n`.
-- České svátky + víkendy pro zvýraznění v date liště.
-- Formátování dat v češtině (`pondělí 28. září 2026`, `září`, `2026`) – přesně podle
-  `doc/design/screens/07-lot.png` a `05-admin-window.png`.
-- Překladové klíče pro kontraktové error kódy → srozumitelné české hlášky.
+- A wrapper over next-intl (the only place next-intl is imported).
+- **Re-export** the date logic from `libs/shared-types` (see
+  `doc/decision/0003-*`) under a stable API, so feature code imports only
+  `@lets-park/i18n`.
+- Czech public holidays + weekends, for highlighting in the date bar.
+- Formatting dates in Czech (`pondělí 28. září 2026`, `září`, `2026`) –
+  exactly per `doc/design/screens/07-lot.png` and `05-admin-window.png`.
+- Translation keys for the contract error codes → readable Czech messages.
 
-Testy: formátování, svátky (pevné i pohyblivé), víkendy, mapování error kódů.
+Tests: formatting, holidays (both fixed and movable), weekends, error-code
+mapping.
 
-Dokumentace: `doc/i18n.md`.
+Documentation: `doc/i18n.md`.
 
 ---
 
 ## Task 18 — `libs/form`
 
-**Fáze 4, bod 1.** Navazuje na Task 17 (a na primitivy z Tasků 7–8).
+**Phase 4, point 1.** Follows on from Task 17 (and the primitives from
+Tasks 7–8).
 
-Wrapper nad React Hook Form + Zod resolver (jediné místo, kde se `react-hook-form`
-importuje): `useAppForm`, `FormProvider`, `FormField` renderující DS primitivy
-(`Input`, `Select`, `Checkbox`) s napojenou validací a error stavem.
+A wrapper over React Hook Form + a Zod resolver (the only place
+`react-hook-form` is imported): `useAppForm`, `FormProvider`, `FormField`
+rendering DS primitives (`Input`, `Select`, `Checkbox`) with wired-up
+validation and error state.
 
-Testy: validace ze Zod schématu se promítne do error stavu primitivu; submit;
-že se dá formulář postavit **bez** přímého importu `react-hook-form`.
+Tests: validation from a Zod schema is reflected in the primitive's error
+state; submit; that a form can be built **without** a direct import of
+`react-hook-form`.
 
-Dokumentace: `doc/wrappery.md` (zakládá se zde, doplní Tasky 19–22).
+Documentation: `doc/wrappers.md` (established here, extended by Tasks 19–22).
 
 ---
 
 ## Task 19 — `libs/api-client` + `libs/query`
 
-**Fáze 4, body 2–3.** Navazuje na Task 18.
+**Phase 4, points 2–3.** Follows on from Task 18.
 
-- `libs/api-client`: instance oRPC klienta napojená na `@lets-park/contract`, auth header
-  (access token dodá `libs/auth`, Task 20 – zatím přes injektovatelný provider),
-  mapování kontraktových chyb na typované error kódy.
-- `libs/query`: konfigurace TanStack Query v5 clienta (retry, staleTime, error handling
-  nad kontraktovými kódy), wrapper hooky napojené na oRPC klient
-  (`@orpc/tanstack-query`).
+- `libs/api-client`: an oRPC client instance wired to `@lets-park/contract`,
+  the auth header (the access token comes from `libs/auth`, Task 20 – for now
+  via an injectable provider), mapping contract errors onto typed error
+  codes.
+- `libs/query`: TanStack Query v5 client configuration (retry, staleTime,
+  error handling on top of the contract codes), wrapper hooks wired to the
+  oRPC client (`@orpc/tanstack-query`).
 
-Testy: wrapper korektně deleguje; chybová odpověď se mapuje na kontraktový kód;
-retry se **neopakuje** u 4xx doménových chyb.
+Tests: the wrapper correctly delegates; an error response maps onto a
+contract code; retry does **not** repeat for 4xx domain errors.
 
-Doplň `doc/wrappery.md`.
+Extend `doc/wrappers.md`.
 
 ---
 
 ## Task 20 — `libs/auth`
 
-**Fáze 4, bod 5.** Navazuje na Task 19.
+**Phase 4, point 5.** Follows on from Task 19.
 
-Wrapper nad next-auth v5 / Auth.js (jediné místo, kde se `next-auth` importuje):
+A wrapper over next-auth v5 / Auth.js (the only place `next-auth` is
+imported):
 
-- Okta OIDC provider, konfigurace z env,
-- **refresh token rotation v `jwt` callbacku** – access token se obnovuje před expirací,
-- expose access tokenu pro `libs/api-client` a `libs/realtime-client` **server-safe cestou**
-  (nikdy localStorage),
-- hooky `useSession`, `useRequireAuth` a server-side helpery.
+- an Okta OIDC provider, configured from env,
+- **refresh token rotation in the `jwt` callback** – the access token is
+  refreshed before it expires,
+- exposing the access token to `libs/api-client` and `libs/realtime-client`
+  in a **server-safe way** (never localStorage),
+- hooks `useSession`, `useRequireAuth`, and server-side helpers.
 
-Testy: refresh se spustí před expirací; selhání refreshe vede k odhlášení, ne k tichému
-401; token se nikdy nedostane do localStorage.
+Tests: the refresh runs before expiry; a failed refresh leads to sign-out,
+not a silent 401; the token never ends up in localStorage.
 
-Doplň `doc/wrappery.md` a `doc/auth.md` o frontendovou část.
+Extend `doc/wrappers.md` and `doc/auth.md` with the frontend part.
 
 ---
 
 ## Task 21 — `libs/realtime-client`
 
-**Fáze 4, bod 4.** Navazuje na Task 20.
+**Phase 4, point 4.** Follows on from Task 20.
 
-Wrapper nad `socket.io-client` s typy z `@lets-park/contract/realtime`:
-`useRealtimeConnection` (handshake auth token z `libs/auth`, reconnect logika),
-`useCellLock` (heartbeat prodlužování zámku, uvolnění při unmountu/odpojení).
+A wrapper over `socket.io-client` with types from
+`@lets-park/contract/realtime`: `useRealtimeConnection` (the handshake auth
+token from `libs/auth`, reconnect logic), `useCellLock` (heartbeat lock
+extension, releasing it on unmount/disconnect).
 
-Testy: reconnect znovu posílá token; heartbeat prodlužuje zámek; unmount uvolní zámek;
-příchozí event se validuje proti schématu.
+Tests: reconnect resends the token; the heartbeat extends the lock; unmount
+releases the lock; an incoming event is validated against its schema.
 
-Doplň `doc/wrappery.md` a `doc/realtime.md` o klientskou část.
+Extend `doc/wrappers.md` and `doc/realtime.md` with the client-side part.
 
 ---
 
 ## Task 22 — `libs/design-system/compounds`
 
-**Fáze 4, bod 7.** Navazuje na Task 8 (může běžet paralelně s 18–21 v téže větvi).
+**Phase 4, point 7.** Follows on from Task 8 (may run in parallel with 18–21
+in the same branch).
 
-- `DataTable` – wrapper nad TanStack Table (jediné místo, kde se `@tanstack/react-table`
-  importuje), stylovaný DS tokeny; řazení a prázdný stav dle
-  `doc/design/screens/03-admin-users.png` a `04-admin-spots.png`.
+- `DataTable` – a wrapper over TanStack Table (the only place
+  `@tanstack/react-table` is imported), styled with DS tokens; sorting and
+  the empty state per `doc/design/screens/03-admin-users.png` and
+  `04-admin-spots.png`.
 - `EmptyState`, `ConfirmDialog`.
-- Story + testy souběžně; **stále domain-free**.
+- A story + tests alongside them; **still domain-free**.
 
-Doplň `doc/design-system.md`.
+Extend `doc/design-system.md`.
 
 ---
 
 ## Task 23 — `apps/web`: shell, routing, login, health
 
-**Fáze 6, bod 1.** Hlavní strom, po mergi obou větví.
+**Phase 6, point 1.** Main tree, after both branches merge.
 
-- Next.js 16 App Router struktura, root layout s DS tokeny a fonty,
-- providery: `libs/query`, `libs/auth`, `libs/i18n`, `libs/realtime-client`,
-- login stránka pro nepřihlášené: prázdná stránka s jedním centrálním tlačítkem
-  „Login přes OKTA Verify" – vizuál dle `doc/design/screens/canvas-default.png`,
-- horní lišta: logo vlevo, avatar + dropdown vpravo (Nastavení, u admina i Správa,
-  Odhlásit se) – dle `02-avatar-menu.png`,
-- `/api/health` route handler,
-- definované loading / empty / error stavy jako sdílené kusy pro další obrazovky.
+- Next.js 16 App Router structure, a root layout with the DS tokens and
+  fonts,
+- providers: `libs/query`, `libs/auth`, `libs/i18n`, `libs/realtime-client`,
+- a login page for signed-out users: a blank page with one central
+  `Login přes OKTA Verify` ("Log in with OKTA Verify") button – visuals per
+  `doc/design/screens/canvas-default.png`,
+- a top bar: a logo on the left, avatar + dropdown on the right (`Nastavení`
+  – "Settings", plus `Správa` – "Administration" for an admin, `Odhlásit se`
+  – "Log out") – per `02-avatar-menu.png`,
+- an `/api/health` route handler,
+- defined loading / empty / error states as shared pieces for later screens.
 
-Dokumentace: `doc/frontend.md`.
-
----
-
-## Task 24 — Hlavní obrazovka parkoviště + realtime
-
-**Fáze 6, body 2–3.** Navazuje na Task 23. **Nejnáročnější FE úkol.**
-
-- Layout parkoviště dle `doc/design/screens/07-lot.png` a `01-lot-admin.png`:
-  asfaltový podklad, bílé dělicí linky, skupiny `IT` a `SHARED` vizuálně oddělené
-  s počtem volných míst vpravo.
-- Volné místo = prázdný box s `+`; obsazené = stylizované auto shora v brand barvě
-  se jménem uživatele a SPZ; waitlist badge s počtem čekajících; cell-lock stav
-  (šrafování + ikonka + „právě upravuje …") dle designu.
-- Modály: „Rezervovat místo" (`08-modal-reserve.png`), „Přidat se do fronty"
-  (`09-modal-queue.png` – držitel + pořadí ve frontě + „Zrušit rezervaci" pro oprávněné).
-- **Stav rezervačního okna** (viz `doc/decision/0004-*`), přesně dle designu:
-  - banner nad parkovištěm – zelený „Rezervace na … jsou otevřené — zapisovat lze do …",
-    žlutý při uzamčeno; skrytý, když to design skrývá (`14-lot-user-lockstate-off.png`),
-  - v uzamčeném měsíci se volná místa běžnému uživateli zobrazí jako „rezervace uzamčeny"
-    (symbol `⊘`) a **nejsou klikatelná pro rezervaci**; kliknutí otevře vysvětlující modal,
-  - ve frontovém modalu se v uzamčeném měsíci zobrazí žlutá poznámka a akce „Přidat se do
-    fronty" je skrytá; „Zrušit rezervaci" (vlastní) zůstává dostupné,
-  - admin má i po uzamčení plný přístup, včetně `⋯` menu na dlaždici místa
-    (úprava/zrušení cizí rezervace).
-- Tlačítko **„Hromadná rezervace"** v hlavičce – pro běžného uživatele v uzamčeném měsíci
-  skryté a zablokované i na úrovni akce; modal implementuje Task 31.
-- Data přes `libs/query` + `libs/api-client`; realtime přes `libs/realtime-client`.
-  **Realtime eventy invalidují/patchují query cache – jeden konzistentní mechanismus,
-  žádné ad-hoc lokální stavy.**
-- Loading / empty / error stav; kontraktové error kódy → české hlášky přes `libs/i18n`.
-
-Dokumentace: doplň `doc/frontend.md` o realtime strategii (kdy invalidace, kdy patch).
+Documentation: `doc/frontend.md`.
 
 ---
 
-## Task 25 — Spodní date-navigační lišta
+## Task 24 — The main parking-lot screen + realtime
 
-**Fáze 6, bod 4.** Navazuje na Task 24.
+**Phase 6, points 2–3.** Follows on from Task 23. **The most demanding FE
+task.**
 
-Fixní spodní lišta dle `doc/design/screens/07-lot.png`: prev/next šipky, aktuální datum
-uprostřed, selektor měsíce a roku, tlačítko „Dnes". Zvýraznění českých svátků
-(„STÁTNÍ SVÁTEK · DEN ČESKÉ STÁTNOSTI", žluté pozadí lišty) a víkendů přes `libs/i18n`.
+- The parking-lot layout per `doc/design/screens/07-lot.png` and
+  `01-lot-admin.png`: an asphalt background, white dividing lines, the `IT`
+  and `SHARED` groups visually separated with the count of free spots on the
+  right.
+- A free spot = an empty box with a `+`; an occupied one = a stylized car
+  seen from above in the brand color, with the user's name and license
+  plate; a waitlist badge with the count of people waiting; a cell-lock state
+  (hatching + an icon + "právě upravuje …" – "currently editing …") per the
+  design.
+- Modals: `Rezervovat místo` ("Reserve a spot", `08-modal-reserve.png`),
+  `Přidat se do fronty` ("Join the waitlist", `09-modal-queue.png` – the
+  current holder + waitlist position + `Zrušit rezervaci` – "Cancel
+  reservation" – for those authorized).
+- **The reservation-window state** (see `doc/decision/0004-*`), exactly per
+  the design:
+  - a banner above the lot – green, "Rezervace na … jsou otevřené — zapisovat
+    lze do …" ("Reservations for … are open — you can book until …"), yellow
+    when locked; hidden when the design hides it
+    (`14-lot-user-lockstate-off.png`),
+  - in a locked month, free spots are shown to a regular user as
+    "rezervace uzamčeny" ("reservations locked", the `⊘` symbol) and **are not
+    clickable to reserve**; clicking opens an explanatory modal,
+  - in the waitlist modal, a locked month shows a yellow note and the
+    `Přidat se do fronty` ("Join the waitlist") action is hidden;
+    `Zrušit rezervaci` ("Cancel reservation", one's own) stays available,
+  - an admin retains full access even after locking, including the `⋯` menu
+    on a spot tile (editing/cancelling someone else's reservation).
+- A **`Hromadná rezervace`** ("Bulk reservation") button in the header – for
+  a regular user in a locked month, hidden and blocked at the action level
+  too; the modal is implemented by Task 31.
+- Data via `libs/query` + `libs/api-client`; realtime via
+  `libs/realtime-client`. **Realtime events invalidate/patch the query
+  cache – one consistent mechanism, no ad-hoc local state.**
+- Loading / empty / error states; contract error codes → Czech messages via
+  `libs/i18n`.
 
-Změna dne mění realtime room i query klíč – ověř testem, že se odhlásí ze starého roomu.
+Documentation: extend `doc/frontend.md` with the realtime strategy (when to
+invalidate, when to patch).
 
 ---
 
-## Task 26 — Nastavení profilu (SPZ + ICS)
+## Task 25 — Bottom date-navigation bar
 
-**Fáze 6, bod 5.** Navazuje na Task 23.
+**Phase 6, point 4.** Follows on from Task 24.
 
-Modal „Nastavení" dle `doc/design/screens/11-settings.png`:
+A fixed bottom bar per `doc/design/screens/07-lot.png`: prev/next arrows, the
+current date in the center, a month and year selector, a `Dnes` ("Today")
+button. Highlighting Czech public holidays (`STÁTNÍ SVÁTEK · DEN ČESKÉ
+STÁTNOSTI` – "PUBLIC HOLIDAY · CZECH STATEHOOD DAY", a yellow bar background)
+and weekends via `libs/i18n`.
 
-- formulář přes `libs/form` – SPZ **a preferované parkovací místo** (select nad aktivními
-  místy, prázdná volba povolena); popisek dle designu: „SPZ se předplní při každé rezervaci
-  místa. Preferované místo použijeme přednostně u hromadné rezervace.",
-- **sekce ICS** (v designu chybí, ale `plan.md` ji vyžaduje): zobrazení a zkopírování
-  subscription URL + tlačítko regenerace tokenu s potvrzením (`ConfirmDialog`).
-  Vizuálně drž styl designu; zdůvodni umístění v `doc/decision/`.
+Changing the day changes both the realtime room and the query key – verify
+with a test that it unsubscribes from the old room.
 
 ---
 
-## Task 27 — Admin sekce
+## Task 26 — Profile settings (license plate + ICS)
 
-**Fáze 6, bod 6.** Navazuje na Task 25 a 26.
+**Phase 6, point 5.** Follows on from Task 23.
 
-Stránka „Správa" se záložkami dle `doc/design/screens/03-admin-users.png`,
+The `Nastavení` ("Settings") modal per `doc/design/screens/11-settings.png`:
+
+- a form via `libs/form` – license plate **and preferred parking spot** (a
+  select over active spots, an empty choice allowed); a label per the
+  design: "SPZ se předplní při každé rezervaci místa. Preferované místo
+  použijeme přednostně u hromadné rezervace." ("The license plate is
+  pre-filled for every spot reservation. The preferred spot is used first for
+  a bulk reservation."),
+- an **ICS section** (missing from the design, but required by `plan.md`):
+  displaying and copying the subscription URL + a token-regeneration button
+  with confirmation (`ConfirmDialog`). Keep the design's visual style;
+  justify the placement in `doc/decision/`.
+
+---
+
+## Task 27 — Admin section
+
+**Phase 6, point 6.** Follows on from Tasks 25 and 26.
+
+An "Administration" page with tabs per `doc/design/screens/03-admin-users.png`,
 `04-admin-spots.png`, `06-admin-overview.png`:
 
-- **Přehled parkoviště** – admin pohled na den,
-- **Uživatelé** – `DataTable`, deaktivace, změna role,
-- **Parkovací místa** – `DataTable`, CRUD,
-- **Rezervační okno** – dle `doc/design/screens/05-admin-window.png`:
-  vlevo karta „Otevření nového měsíce" (stepper „Otevřít X dní předem" + režim zámku
-  Automaticky / Vynutit otevřeno / Vynutit uzamčeno), vpravo karta „Stav měsíců"
-  se seznamem nejbližších měsíců, rozsahem okna a badge
-  Otevřeno / Uzamčeno / Zatím neotevřeno.
+- **Parking lot overview** – an admin's view of the day,
+- **Users** – a `DataTable`, deactivation, role change,
+- **Parking spots** – a `DataTable`, CRUD,
+- **Reservation window** – per `doc/design/screens/05-admin-window.png`: a
+  card on the left, "Otevření nového měsíce" ("Opening a new month" – a
+  stepper "Otevřít X dní předem" – "Open X days ahead" – + a lock mode
+  Automaticky / Vynutit otevřeno / Vynutit uzamčeno – Automatic / Force open
+  / Force locked); a card on the right, "Stav měsíců" ("Month states") with a
+  list of upcoming months, their window range, and a badge Otevřeno / Uzamčeno
+  / Zatím neotevřeno (Open / Locked / Not yet open).
 
-Vizuální identita stejná jako zbytek appky.
+Same visual identity as the rest of the app.
 
 ---
 
 ## Task 28 — Playwright e2e
 
-**Fáze 7, body 1–3.**
+**Phase 7, points 1–3.**
 
-- Login flow proti `mock-oauth2-server` (reálný OIDC redirect flow), session cachovaná
-  přes `storageState` (gitignored).
-- Scénáře: login; vytvoření rezervace; zrušení rezervace a auto-promote z waitlistu;
-  realtime cell lock mezi dvěma uživateli (dva browser konteksty); admin úprava cizí
-  rezervace; ICS export (stažení feedu přes token URL a validace obsahu).
-- Doplnění chybějících unit testů dle coverage.
+- Login flow against `mock-oauth2-server` (a real OIDC redirect flow), the
+  session cached via `storageState` (gitignored).
+- Scenarios: login; creating a reservation; cancelling a reservation and
+  auto-promote from the waitlist; a realtime cell lock between two users (two
+  browser contexts); an admin editing someone else's reservation; ICS export
+  (downloading the feed via the token URL and validating its contents).
+- Filling in missing unit tests per coverage.
 
-Dokumentace: `doc/testovani.md` – jaké vrstvy testů existují, jak je spustit,
-co potřebuje běžící Docker.
+Documentation: `doc/testing.md` – what test layers exist, how to run them,
+what needs Docker running.
 
 ---
 
-## Task 29 — Docker produkce, runbook, finalizace dokumentace
+## Task 29 — Production Docker, runbook, finalizing the documentation
 
-**Fáze 7, body 4–5.**
+**Phase 7, points 4–5.**
 
-- Finalizace `docker-compose.yml` – plně funkční `docker compose up` spouštějící celý
-  stack včetně mock OIDC.
-- Produkční Dockerfiles pro `web` i `api`: multi-stage, non-root user, `HEALTHCHECK`.
-- Aktualizace `CLAUDE.md` o **reálné** příkazy (build, lint, test, e2e).
-- `README.md` – krátký provozní runbook (pár řádků, ne esej): start stacku, migrace, seed,
-  regenerace ICS tokenu, zálohy Postgres (`pg_dump`), upgrade cesty (Redis adapter a locky,
+- Finalize `docker-compose.yml` – a fully functional `docker compose up`
+  starting the entire stack, including the mock OIDC.
+- Production Dockerfiles for both `web` and `api`: multi-stage, a non-root
+  user, `HEALTHCHECK`.
+- Update `CLAUDE.md` with the **actual** commands (build, lint, test, e2e).
+- `README.md` – a short operational runbook (a few lines, not an essay):
+  starting the stack, migrations, seeding, regenerating the ICS token,
+  Postgres backups (`pg_dump`), upgrade paths (the Redis adapter and locks,
   BullMQ).
-- Kontrola, že `doc/` je kompletní a konzistentní; index `doc/README.md`.
+- Verify that `doc/` is complete and consistent; an index, `doc/README.md`.
 
 ---
 
-## Task 30 — Hromadná rezervace: backend alokátor a transakce
+## Task 30 — Bulk reservation: backend allocator and transaction
 
-**Rozšíření dle `doc/decision/0004-*`.** Běží mezi Taskem 13 a 14 (hlavní strom).
+**An extension per `doc/decision/0004-*`.** Runs between Tasks 13 and 14
+(main tree).
 
-Implementace procedur `previewBulk` a `confirmBulk` z Tasku 4.
+Implementing the `previewBulk` and `confirmBulk` procedures from Task 4.
 
-**Alokátor** (pro každý vybraný den, dny se zpracovávají vzestupně):
+**The allocator** (for each selected day, days are processed in ascending
+order):
 
-1. Pokud má uživatel `preferredParkingSpotId` a to místo je ten den volné → přiděl ho
-   a označ výsledek jako `preferred`.
-2. Jinak vezmi první volné aktivní místo podle deterministického pořadí
-   (skupina `IT` před `SHARED`, uvnitř skupiny podle `label`) – **žádná náhoda**,
-   aby byl náhled a potvrzení konzistentní.
-3. Pokud ten den není volné žádné místo → zařaď do fronty na místo s **nejkratší frontou**
-   (tiebreak podle `label`) a vrať výslednou pozici.
-4. Den, kdy už uživatel rezervaci má, se přeskočí s vysvětlením (pravidlo 1 rezervace
-   na uživatele a den).
-5. Víkendy a české svátky se odmítnou už validací vstupu.
+1. If the user has a `preferredParkingSpotId` and that spot is free that day
+   → assign it and mark the result as `preferred`.
+2. Otherwise take the first free active spot by a deterministic ordering
+   (group `IT` before `SHARED`, within a group by `label`) – **no
+   randomness**, so the preview and the confirmation stay consistent.
+3. If no spot is free that day → place it on the waitlist for the spot with
+   the **shortest waitlist** (a tiebreak by `label`) and return the resulting
+   position.
+4. A day the user already has a reservation on is skipped with an
+   explanation (the rule of 1 reservation per user per day).
+5. Weekends and Czech public holidays are rejected already by input
+   validation.
 
-**Rozdíl mezi preview a confirm:**
+**The difference between preview and confirm:**
 
-- `previewBulk` je **read-only** – nesmí nic zapsat ani zamknout.
-- `confirmBulk` běží v **jedné interaktivní transakci** a musí být odolný proti tomu, že se
-  stav mezi náhledem a potvrzením změnil: kolize (`P2002`) neshodí celou dávku, ale ten den
-  spadne do fronty. Výsledek se vrací uživateli, aby viděl, co se skutečně stalo.
-- Rezervační okno se kontroluje pro celý cílový měsíc; běžný uživatel v uzamčeném měsíci
-  dostane `RESERVATIONS_LOCKED` (admin projde).
-- AuditLog zápis za každou vytvořenou rezervaci i waitlist zápis.
-- Broadcasty a Slack notifikace **až po commitu** (stejný hook jako Task 13).
+- `previewBulk` is **read-only** – it must write and lock nothing.
+- `confirmBulk` runs in **a single interactive transaction** and must be
+  resilient to the state having changed between the preview and the
+  confirmation: a collision (`P2002`) doesn't fail the whole batch, but that
+  day falls onto the waitlist instead. The result is returned to the user, so
+  they see what actually happened.
+- The reservation window is checked for the whole target month; a regular
+  user in a locked month gets `RESERVATIONS_LOCKED` (an admin succeeds).
+- An AuditLog entry for every reservation created and every waitlist entry
+  created.
+- Broadcasts and Slack notifications **only after the commit** (the same hook
+  as Task 13).
 
-Testy: preview nic nezapíše; deterministické pořadí (dvakrát stejný vstup → stejný výstup);
-preferované místo má přednost; plný den → fronta s korektní pozicí; den s existující
-rezervací se přeskočí; **integrační test proti reálné Postgres**: souběžné `confirmBulk`
-dvou uživatelů na stejné dny neporuší unique constrainty a oba dostanou konzistentní výsledek.
+Tests: preview writes nothing; deterministic ordering (the same input twice →
+the same output); the preferred spot takes priority; a full day → the
+waitlist with the correct position; a day with an existing reservation is
+skipped; **an integration test against a real Postgres**: two users running
+`confirmBulk` concurrently for the same days doesn't violate the unique
+constraints, and both get a consistent result.
 
-Dokumentace: doplň `doc/waitlist.md` (nebo nový `doc/hromadna-rezervace.md`) o strategii
-alokátoru a o to, proč je preview read-only.
+Documentation: extend `doc/waitlist.md` (or a new
+`doc/bulk-reservation.md`) with the allocator's strategy and why the preview
+is read-only.
 
 ---
 
-## Task 31 — Hromadná rezervace: FE modal
+## Task 31 — Bulk reservation: FE modal
 
-**Rozšíření dle `doc/decision/0004-*`.** Běží po Tasku 24 (hlavní strom).
+**An extension per `doc/decision/0004-*`.** Runs after Task 24 (main tree).
 
-Modal dle `doc/design/screens/10-modal-bulk.png`, dva kroky:
+A modal per `doc/design/screens/10-modal-bulk.png`, two steps:
 
-1. **Výběr dní** – kalendářní mřížka měsíce, sloupce `PO ÚT ST ČT PÁ SO NE`
-   (víkendy vizuálně v zákrytu vpravo). Víkendy a české svátky jsou **nevybratelné**
-   (`libs/i18n`). Pod mřížkou text „Víkendy a svátky nelze vybrat." a „Preferované místo:
-   `<label>`". CTA: „Vyberte dny" → „Vygenerovat rozvrh (N dní)".
-2. **Návrh rozvrhu** – seznam řádků `datum · den v týdnu` + přidělené místo + badge
-   `Rezervováno · preferované` (zelená), `Rezervováno` (modrá) nebo `N. ve frontě` (žlutá).
-   Souhrn „X dní s místem, Y dní ve frontě." CTA „Potvrdit rozvrh", zpět na výběr.
+1. **Day selection** – a calendar grid for the month, columns
+   `PO ÚT ST ČT PÁ SO NE` (Mon Tue Wed Thu Fri Sat Sun; weekends visually set
+   back on the right). Weekends and Czech public holidays are
+   **unselectable** (`libs/i18n`). Below the grid, the text
+   "Víkendy a svátky nelze vybrat." ("Weekends and holidays cannot be
+   selected.") and "Preferované místo: `<label>`" ("Preferred spot:
+   `<label>`"). CTA: "Vyberte dny" ("Select days") → "Vygenerovat rozvrh (N
+   dní)" ("Generate a schedule (N days)").
+2. **Schedule proposal** – a list of rows `date · day of week` + the
+   assigned spot + a badge `Rezervováno · preferované` ("Reserved ·
+   preferred", green), `Rezervováno` ("Reserved", blue), or `N. ve frontě`
+   ("Nth in the waitlist", yellow). A summary, "X dní s místem, Y dní ve
+   frontě." ("X days with a spot, Y days on the waitlist."). CTA
+   "Potvrdit rozvrh" ("Confirm schedule"), or back to selection.
 
-Po potvrzení se výsledek porovná s návrhem – pokud se liší, uživatel to musí vidět
-(ne tichý rozdíl). Invalidace query cache pro dotčené dny.
+After confirmation, the result is compared against the proposal – if they
+differ, the user must see it (not a silent difference). Invalidate the query
+cache for the affected days.
 
-Pro běžného uživatele v uzamčeném měsíci je vstup do modalu skrytý i zablokovaný.
+For a regular user in a locked month, entry into the modal is both hidden
+and blocked.
