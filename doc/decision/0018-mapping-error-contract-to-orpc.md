@@ -1,30 +1,34 @@
-# 0018 – Error kontrakt se na oRPC mapuje 1:1, `details` = `data`
+# 0018 – The error contract maps onto oRPC 1:1, `details` = `data`
 
-**Datum:** 2026-08-28 · **Stav:** přijato · **Navazuje na:** Task 3 (`errorShapeSchema`)
+**Date:** 2026-08-28 · **Status:** accepted · **Follows on from:** Task 3 (`errorShapeSchema`)
 
-## Co
+## What
 
-Task 3 zavedl jednotný tvar chyby `{ code, message, details? }` a uzavřený výčet dvanácti
-`ERROR_CODES`. oRPC má vlastní mechanismus typovaných chyb, kde se chyba deklaruje jako
-`.errors({ KOD: { status, message, data } })` a na drátě má tvar `{ code, message, data }`.
+Task 3 introduced a uniform error shape, `{ code, message, details? }`, and a
+closed enum of twelve `ERROR_CODES`. oRPC has its own typed-error mechanism,
+where an error is declared as `.errors({ CODE: { status, message, data } })`
+and has the wire shape `{ code, message, data }`.
 
-Rozhodnutí: **nezavádí se žádná další vrstva.** Náš výčet je přímo klíčem oRPC error mapy,
-`errorShapeSchema.details` a oRPC `data` jsou **totéž pole pod dvěma jmény**.
+Decision: **no extra layer is introduced.** Our enum is directly the key of
+oRPC's error map; `errorShapeSchema.details` and oRPC's `data` are **the same
+field under two names**.
 
-Konkrétně:
+Specifically:
 
-- `libs/contract/src/api/errors.ts` drží `ERROR_DEFINITIONS` — jednu definici na každý kód,
-  s HTTP statusem a defaultní (vývojářskou, anglickou) zprávou. `satisfies Record<ErrorCode, …>`
-  hlídá, že seznamy nemůžou utéct od sebe; test to navíc ověřuje za běhu.
-- `contractErrors('NOT_FOUND', 'CONFLICT')` je typovaný `Pick` — procedura deklaruje jen kódy,
-  které opravdu umí vrátit, a klient jiné nevidí.
-- `FORBIDDEN` je deklarovaný **jednou** na sdíleném builderu `authed`, protože je dosažitelný
-  úplně všude: deaktivovaný uživatel (`active: false`, tak funguje offboarding) je odmítnutý
-  dřív, než se spustí jakýkoliv handler.
+- `libs/contract/src/api/errors.ts` holds `ERROR_DEFINITIONS` — one definition
+  per code, with an HTTP status and a default (developer-facing, English)
+  message. `satisfies Record<ErrorCode, …>` guards against the two lists
+  drifting apart; a test also verifies it at runtime.
+- `contractErrors('NOT_FOUND', 'CONFLICT')` is a typed `Pick` — a procedure only
+  declares the codes it can actually return, and the client never sees the
+  others.
+- `FORBIDDEN` is declared **once**, on the shared `authed` builder, because
+  it's reachable literally everywhere: a deactivated user (`active: false`,
+  which is how offboarding works) is rejected before any handler runs.
 
-Mapování statusů:
+Status mapping:
 
-| kód | status | | kód | status |
+| code | status | | code | status |
 | --- | --- | --- | --- | --- |
 | `SPOT_ALREADY_RESERVED` | 409 | | `ALREADY_IN_WAITLIST` | 409 |
 | `RESERVATION_LIMIT_REACHED` | 409 | | `CANNOT_WAITLIST_OWN_SPOT` | 422 |
@@ -33,50 +37,62 @@ Mapování statusů:
 | `NOT_FOUND` | 404 | | `CONFLICT` | 409 |
 | `FORBIDDEN` | 403 | | `RESERVATIONS_LOCKED` | **423** |
 
-## Proč
+## Why
 
-**Proč nepřejmenovat `details` na `data`.** `errorShapeSchema` prošlo review Tasku 3 a používá
-ho i popis chyb v `doc/kontrakt.md`. Přejmenování by byl churn bez užitku: pole je stejné,
-jméno se liší jen tím, odkud se na ně díváš. Frontend ho nikdy nečte přes
-`errorShapeSchema` — čte typovanou chybu z oRPC klienta, kde se jmenuje `data`.
+**Why not rename `details` to `data`.** `errorShapeSchema` went through the
+Task 3 review, and the error documentation in `doc/contract.md` uses it too.
+Renaming would be churn with no benefit: the field is the same, only the name
+differs depending on which side you're looking from. The frontend never reads
+it through `errorShapeSchema` — it reads the typed error off the oRPC client,
+where it's called `data`.
 
-**Proč nevlastní obálka.** Alternativou bylo vracet `errorShapeSchema` jako *úspěšný* výsledek
-(styl `{ ok: false, error }`). To by zahodilo celý smysl oRPC typovaných chyb: klient by musel
-větvit ručně, TypeScript by nehlídal, že procedura vrací jen deklarované kódy, a HTTP status by
-byl vždy 200. Contract-first znamená využít mechanismus, který kontrakt nabízí.
+**Why no custom envelope.** The alternative was to return `errorShapeSchema` as
+a *successful* result (the `{ ok: false, error }` style). That would throw away
+the entire point of oRPC's typed errors: the client would have to branch
+manually, TypeScript wouldn't verify that a procedure returns only its
+declared codes, and the HTTP status would always be 200. Contract-first means
+using the mechanism the contract already offers.
 
-**Proč 423 pro `RESERVATIONS_LOCKED`.** Oba „okenní" kódy musí být na první pohled rozlišitelné
-i v logu a v proxy, kde `code` nikdo nečte. `OUT_OF_HORIZON` (měsíc se teprve otevře) je
-422 — požadavek dává smysl, jen ne teď. `RESERVATIONS_LOCKED` je 423 Locked, což je přesně
-sémantika zavřeného okna.
+**Why 423 for `RESERVATIONS_LOCKED`.** Both "window" codes must be
+distinguishable at a glance, even in a log or a proxy where nobody reads
+`code`. `OUT_OF_HORIZON` (the month isn't open yet) is 422 — the request makes
+sense, just not now. `RESERVATIONS_LOCKED` is 423 Locked, which is exactly the
+semantics of a closed window.
 
-**Proč `data` volitelné.** Většina chyb nepotřebuje nic navíc; těch pár, které ano (id kolidující
-rezervace, který měsíc je zamčený), ho pošle. Povinné `data` by nutilo posílat `{}`.
+**Why `data` is optional.** Most errors need nothing extra; the few that do
+(the id of the colliding reservation, which month is locked) send it. Making
+`data` mandatory would force sending `{}` everywhere.
 
-## Jak
+## How
 
 ```ts
-export const createReservationContract = authed          // deklaruje FORBIDDEN
+export const createReservationContract = authed          // declares FORBIDDEN
   .input(createReservationInputSchema)
   .output(createReservationOutputSchema)
   .errors(contractErrors('NOT_FOUND', 'SPOT_ALREADY_RESERVED', /* … */));
 ```
 
-Backend (Task 12/13) chybu hází přes `errors.SPOT_ALREADY_RESERVED({ data: { … } })`. Globální
-exception filter v `apps/api` je poslední pojistka pro cokoliv netypovaného.
+The backend (Task 12/13) throws the error via
+`errors.SPOT_ALREADY_RESERVED({ data: { … } })`. The global exception filter in
+`apps/api` is the last safeguard for anything untyped.
 
-Nový kód se přidává **ve třech krocích a v tomhle pořadí**: `ERROR_CODES` (Task 3 soubor) →
-`ERROR_DEFINITIONS` (status + zpráva) → `contractErrors(...)` na konkrétních procedurách.
-Test `errors.spec.ts` spadne, když se vynechá druhý krok, `router.spec.ts` když třetí.
+A new code is added in **three steps, in this order**: `ERROR_CODES` (the Task
+3 file) → `ERROR_DEFINITIONS` (status + message) → `contractErrors(...)` on
+the specific procedures. `errors.spec.ts` fails if the second step is skipped,
+`router.spec.ts` if the third is.
 
-Ve stejném souboru bydlí i `noInputSchema` — schéma pro procedury bez argumentů. Není to chyba,
-ale patří k `authed`: je to druhá věc, kterou staví **každá** procedura, a rozdělit dva sdílené
-stavební kameny do dvou souborů by znamenalo, že se na jeden zapomene. Proč se `.input()`
-nevynechává a proč schéma bere `undefined` i `{}`, je u něj v komentáři.
+`noInputSchema` — the schema for argument-less procedures — lives in the same
+file. It isn't an error, but it belongs with `authed`: it's the second thing
+**every** procedure builds on, and splitting two shared building blocks across
+two files would mean one of them gets forgotten. Why `.input()` isn't skipped,
+and why the schema accepts both `undefined` and `{}`, is explained in a
+comment next to it.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Špatně zvolený status je kosmetika — frontend větví na `code`, ne na statusu. Skutečné riziko je
-opačné: procedura, která deklaruje kód, jaký nikdy nevrací (šum v typech klienta), nebo naopak
-vrací nedeklarovaný (skončí jako „unknown error" a UI ukáže obecnou hlášku). Proto je seznam
-kódů na proceduru zapsaný explicitně v `router.spec.ts` — každá změna je vidět v diffu.
+A wrongly chosen status is cosmetic — the frontend branches on `code`, not on
+the status. The real risk runs the other way: a procedure that declares a code
+it never returns (noise in the client's types), or the reverse, one that
+returns an undeclared code (it ends up as an "unknown error" and the UI shows
+a generic message). That's why the list of codes per procedure is written out
+explicitly in `router.spec.ts` — every change shows up in the diff.
