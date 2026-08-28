@@ -4,7 +4,7 @@
  * Prisma 7 moved connection URLs out of `schema.prisma` and stopped loading
  * `.env` on its own, so both live here. The file sits at the repo root because
  * that is where the Prisma CLI looks for it and where the root `.env` lives
- * (see `doc/decision/0009-env-file-topologie-a-compose-profily.md`); the schema
+ * (see `doc/decision/0009-env-file-topology-and-compose-profiles.md`); the schema
  * itself stays inside `libs/database`.
  *
  * Everything database-related is run from the repo root:
@@ -14,7 +14,7 @@
  *   npx prisma db seed
  *   npx prisma generate
  *
- * See `doc/databaze.md`.
+ * See `doc/database.md`.
  */
 
 import 'dotenv/config';

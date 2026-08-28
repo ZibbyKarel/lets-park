@@ -16,7 +16,7 @@ Contents:
 - `reservation-window.ts` — `isMonthOpen` / `monthLockState`, pure and
   parameterised; they report state and never enforce it.
 
-Documentation: `doc/kontrakt.md`, `doc/decision/0003-*`, `0004-*`, `0013-*`,
+Documentation: `doc/contract.md`, `doc/decision/0003-*`, `0004-*`, `0013-*`,
 `0014-*`.
 
 ## Tests

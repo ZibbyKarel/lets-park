@@ -16,7 +16,7 @@ import * as z from 'zod';
  * they travel in URLs and realtime payloads and must not leak row counts or
  * ordering. Which UUID version Prisma generates is Task 9's call.
  *
- * See `doc/decision/0016-uzavrene-vycty-a-uuid-v-kontraktu.md`.
+ * See `doc/decision/0016-closed-enums-and-uuid-in-contract.md`.
  */
 export const idSchema = z.uuid();
 export type Id = z.infer<typeof idSchema>;
@@ -30,7 +30,7 @@ export type Id = z.infer<typeof idSchema>;
  * window depends on `ReservationWindowSettings` read from the database, which
  * a static schema cannot see. Both checks belong to the service layer, on top
  * of `isMonthOpen` / `monthLockState` from `@lets-park/shared-types`
- * (see `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md`).
+ * (see `doc/decision/0004-mvp-scope-includes-design-features.md`).
  *
  * Note that `z.iso.date()` does validate the calendar: `2023-02-29` and
  * `2026-04-31` are rejected.
@@ -47,6 +47,6 @@ export const yearMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, {
  *
  * Timestamps travel as strings rather than as `Date` instances so the contract
  * stays transport-neutral — see
- * `doc/decision/0015-casova-razitka-v-kontraktu-jsou-iso-retezce.md`.
+ * `doc/decision/0015-timestamps-in-contract-are-iso-strings.md`.
  */
 export const timestampSchema = z.iso.datetime();

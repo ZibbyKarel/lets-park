@@ -1,5 +1,5 @@
 // Two independent ESM-only-package problems land in this one project, both
-// shaped like `doc/decision/0020-orpc-je-esm-only-jest-ho-musi-transpilovat.md`:
+// shaped like `doc/decision/0020-orpc-is-esm-only-jest-must-transpile-it.md`:
 //
 // - `@orpc/contract` (a single `.mjs` build), pulled in transitively because
 //   `errors.spec.ts` imports `ERROR_CODES` from `@lets-park/contract` at

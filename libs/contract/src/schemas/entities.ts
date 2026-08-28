@@ -1,7 +1,7 @@
 /**
  * Entity schemas — the single source of truth for every shape that crosses the
  * FE ↔ BE boundary, per `plan.md` §"Doménový model" plus the extensions from
- * `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md`.
+ * `doc/decision/0004-mvp-scope-includes-design-features.md`.
  *
  * These describe entities as the API *returns* them. Request payloads (create,
  * update, filter) are derived from them in Task 4 with `.pick()`, `.omit()` and

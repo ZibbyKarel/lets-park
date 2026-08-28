@@ -10,7 +10,7 @@
  * primitives — is what lets `libs/design-system/primitives` stay free of
  * hand-written pixel values.
  *
- * See `doc/decision/0011-odvozene-control-tokeny-a-zaokrouhleni.md` for why the
+ * See `doc/decision/0011-derived-control-tokens-and-rounding.md` for why the
  * design's seven distinct heights collapse to four steps.
  */
 

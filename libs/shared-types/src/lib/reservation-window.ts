@@ -1,7 +1,7 @@
 /**
  * The reservation window — pure, parameterised, side-effect free.
  *
- * The algorithm is fixed by `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md`,
+ * The algorithm is fixed by `doc/decision/0004-mvp-scope-includes-design-features.md`,
  * which in turn transcribes the `monthOpen` function from the approved visual
  * design (`doc/design/lets-park-design.dc.html`):
  *

@@ -18,7 +18,7 @@ export type UserRole = (typeof USER_ROLES)[number];
 
 /**
  * Admin override of the reservation window
- * (see `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md`).
+ * (see `doc/decision/0004-mvp-scope-includes-design-features.md`).
  *
  * - `AUTO`         — the window is derived from `openDaysBefore`.
  * - `FORCE_OPEN`   — reservations are open regardless of the date.

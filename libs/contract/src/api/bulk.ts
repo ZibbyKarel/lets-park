@@ -1,6 +1,6 @@
 /**
  * Bulk booking — the two-step flow from
- * `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md` §Hromadná rezervace.
+ * `doc/decision/0004-mvp-scope-includes-design-features.md` §Hromadná rezervace.
  *
  * 1. `previewBulk` proposes a schedule for the selected days. It writes nothing.
  * 2. `confirmBulk` takes **the same day list** and performs the writes, then
@@ -11,7 +11,7 @@
  * is what makes the difference legible: the client keeps the preview it showed
  * the user, zips it with the result by `date` and can say "we proposed E2.92,
  * you ended up third in the queue" — see
- * `doc/decision/0019-navrh-a-potvrzeni-hromadne-rezervace.md` for why the
+ * `doc/decision/0019-draft-and-confirm-bulk-reservation.md` for why the
  * server cannot compute that diff itself.
  */
 

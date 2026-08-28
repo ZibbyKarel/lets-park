@@ -46,7 +46,7 @@ export type ErrorCode = z.infer<typeof errorCodeSchema>;
  * conflicting reservation. Free-form on purpose: its keys depend on `code`.
  *
  * On the wire this is oRPC's `data` field — see
- * `doc/decision/0018-mapovani-error-kontraktu-na-orpc.md`.
+ * `doc/decision/0018-mapping-error-contract-to-orpc.md`.
  */
 export const errorDetailsSchema = z.record(z.string(), z.unknown());
 export type ErrorDetails = z.infer<typeof errorDetailsSchema>;

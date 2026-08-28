@@ -4,7 +4,7 @@
 // (`libs/contract/src/schemas/entities.ts`) field for field: same names, same
 // nullability, same enum members. The contract is the single source of truth for
 // data shapes; where storage has to differ, the difference is deliberate and
-// documented in `doc/databaze.md` (§"Kde se úložiště liší od kontraktu").
+// documented in `doc/database.md` (§"Kde se úložiště liší od kontraktu").
 //
 // Connection URLs live in `prisma.config.ts` at the repo root — Prisma 7
 // deprecated `url` in the datasource block.
@@ -180,7 +180,7 @@ model AuditLog {
 /// contract's `reservationWindowSettingsSchema` has no `id` field at all. The
 /// single-row property is enforced by `CHECK ("id" = 1)`, added by hand to the
 /// init migration — Prisma's schema language cannot express a CHECK constraint.
-/// See `doc/databaze.md` and `doc/decision/0026-*`.
+/// See `doc/database.md` and `doc/decision/0026-*`.
 model ReservationWindowSettings {
   id Int @id @default(1)
 

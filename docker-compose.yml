@@ -1,4 +1,4 @@
-# Local dev/e2e infrastructure for Let's Park. See doc/prostredi.md for how
+# Local dev/e2e infrastructure for Let's Park. See doc/environment.md for how
 # to run this and how it relates to running apps/api and apps/web directly
 # via `nx serve`/`nx dev` (not through Docker, for this phase).
 #

@@ -44,7 +44,7 @@ export const FIELD_PADDING_X: Record<ControlSize, string> = {
  * brand blue), which is too weak to be the sole focus affordance and says
  * nothing about buttons — so every focusable primitive additionally gets this
  * one consistent, high-contrast ring. See
- * `doc/decision/0012-focus-ring-primitivu.md`.
+ * `doc/decision/0012-focus-ring-and-native-elements-in-primitives.md`.
  */
 export const FOCUS_RING =
   'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue';

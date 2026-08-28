@@ -1,7 +1,7 @@
 /**
  * The reservation window: the singleton settings entity and the per-month
  * overview the UI renders from it
- * (`doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md`).
+ * (`doc/decision/0004-mvp-scope-includes-design-features.md`).
  *
  * The state itself is never computed by a schema — it comes from
  * `monthLockState()` in `@lets-park/shared-types`, which the service layer

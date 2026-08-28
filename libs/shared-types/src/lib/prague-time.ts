@@ -1,6 +1,6 @@
 /**
  * The only place in the workspace that maps between instants and calendar days
- * in Europe/Prague (see `doc/decision/0003-date-helpery-v-shared-types.md`).
+ * in Europe/Prague (see `doc/decision/0003-date-helpers-in-shared-types.md`).
  *
  * Europe/Prague is UTC+1 in winter and UTC+2 in summer, so "what day is it"
  * cannot be answered by reading a `Date` in the process' local time zone, nor

@@ -4,7 +4,7 @@ Prisma 7 schema, migrations, seed and the generated Prisma Client — the only w
 the backend reaches Postgres. No NestJS here: the module and `PrismaService` that
 wrap this live in `apps/api` (Tasks 10 and 12).
 
-Full documentation, in Czech, is `doc/databaze.md`: ERD, every constraint and why
+Full documentation is `doc/database.md`: ERD, every constraint and why
 it exists, how to run migrations and the seed, and how to take a backup.
 
 ## Layout
@@ -31,5 +31,5 @@ npx prisma db seed             # dev data
 nx test database               # unit tests (no database needed)
 ```
 
-Changing the schema? Read the `--create-only` note in `doc/databaze.md` first — a
+Changing the schema? Read the `--create-only` note in `doc/database.md` first — a
 plain `prisma migrate dev` will try to drop the hand-written constraints.

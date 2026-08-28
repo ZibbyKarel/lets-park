@@ -1,6 +1,6 @@
 /**
  * Czech UI copy for the contract's closed error-code enum
- * (`libs/contract/src/schemas/errors.ts`, `doc/kontrakt.md`).
+ * (`libs/contract/src/schemas/errors.ts`, `doc/contract.md`).
  *
  * Both entry points below read the very same `csMessages.errors` object (see
  * `./messages.ts`), so a plain lookup outside React and a next-intl

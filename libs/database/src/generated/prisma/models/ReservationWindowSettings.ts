@@ -20,7 +20,7 @@ import type * as Prisma from "../internal/prismaNamespace"
  * contract's `reservationWindowSettingsSchema` has no `id` field at all. The
  * single-row property is enforced by `CHECK ("id" = 1)`, added by hand to the
  * init migration — Prisma's schema language cannot express a CHECK constraint.
- * See `doc/databaze.md` and `doc/decision/0022-*`.
+ * See `doc/database.md` and `doc/decision/0022-*`.
  */
 export type ReservationWindowSettingsModel = runtime.Types.Result.DefaultSelection<Prisma.$ReservationWindowSettingsPayload>
 

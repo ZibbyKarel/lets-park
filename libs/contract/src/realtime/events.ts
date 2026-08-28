@@ -19,7 +19,7 @@
  * **`locked` here has nothing to do with `MonthLockState.LOCKED`.** That is the
  * reservation window closing for a whole month; this is one user editing one
  * cell for the next ~30 seconds. No payload below carries a window state, and
- * no window state is ever broadcast — see `doc/kontrakt.md`, §Realtime.
+ * no window state is ever broadcast — see `doc/contract.md`, §Realtime.
  *
  * Every payload repeats `date` even though the room already implies it: a
  * client is typically joined to several day rooms, and Socket.io does not tell

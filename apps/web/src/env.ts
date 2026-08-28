@@ -7,11 +7,11 @@
  * server instance boots (`next dev` / `next start`) — so a missing or
  * malformed variable crashes the process immediately with a readable error
  * instead of failing later inside a React component or a route handler. See
- * `doc/decision/0008-web-env-validace-instrumentation-hook.md` for why
+ * `doc/decision/0008-web-env-validation-instrumentation-hook.md` for why
  * this is not done from `next.config.ts` instead.
  *
  * Dev, e2e and production all run this exact same validation; only the
- * values differ (see `.env.example` and `doc/prostredi.md`).
+ * values differ (see `.env.example` and `doc/environment.md`).
  *
  * The schema is deliberately minimal for this phase (Fáze 0) and is designed
  * to grow additively: later phases add variables as new keys on this object,

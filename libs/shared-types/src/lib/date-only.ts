@@ -15,7 +15,7 @@
  * based on adding 86_400_000 ms to a local timestamp.
  *
  * `DateOnly` is deliberately an unbranded alias of `string` — see
- * `doc/decision/0014-dateonly-je-nebrandovany-string.md`.
+ * `doc/decision/0014-dateonly-is-an-unbranded-string.md`.
  */
 
 /** ISO 8601 calendar date, `YYYY-MM-DD`. */

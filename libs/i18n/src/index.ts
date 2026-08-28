@@ -4,7 +4,7 @@
  *
  * Re-exports `libs/shared-types`' Europe/Prague date logic (holidays,
  * weekends, `DateOnly` arithmetic) under the same names, per
- * `doc/decision/0003-date-helpery-v-shared-types.md`, so feature code never
+ * `doc/decision/0003-date-helpers-in-shared-types.md`, so feature code never
  * has to import `@lets-park/shared-types` directly for that.
  */
 export * from '@lets-park/shared-types';

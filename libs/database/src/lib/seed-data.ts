@@ -23,7 +23,7 @@ export interface SeedUser {
   role: UserRole;
   /**
    * `sub` claim the mock OIDC server will issue for this person. See the note
-   * in `doc/databaze.md` — `mock-oauth2-server` runs without a `JSON_CONFIG`,
+   * in `doc/database.md` — `mock-oauth2-server` runs without a `JSON_CONFIG`,
    * so its login form accepts any subject; these are the values a developer is
    * expected to type in order to land on a seeded account.
    */
@@ -105,7 +105,7 @@ export const SEED_USERS: readonly SeedUser[] = [
 ];
 
 /**
- * Defaults from `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md`.
+ * Defaults from `doc/decision/0004-mvp-scope-includes-design-features.md`.
  * The init migration already inserts this row (the table must never be empty);
  * the seed re-asserts it so a hand-edited dev database returns to a known state.
  */
@@ -114,5 +114,5 @@ export const SEED_RESERVATION_WINDOW_SETTINGS: SeedReservationWindowSettings = {
   lockMode: 'AUTO',
 };
 
-/** Fixed primary key of the settings singleton — see `doc/databaze.md`. */
+/** Fixed primary key of the settings singleton — see `doc/database.md`. */
 export const RESERVATION_WINDOW_SETTINGS_ID = 1;

@@ -11,7 +11,7 @@
  * instrumentation code — it uses `process.exit`, which does not exist in the
  * Edge runtime, so it must not be statically bundled into the edge chunk.
  *
- * See `doc/decision/0008-web-env-validace-instrumentation-hook.md` for why
+ * See `doc/decision/0008-web-env-validation-instrumentation-hook.md` for why
  * this lives here rather than in `next.config.ts`.
  */
 export async function register(): Promise<void> {

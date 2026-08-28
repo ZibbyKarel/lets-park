@@ -13,7 +13,7 @@ Types are always derived with `z.infer`, never hand-written alongside a schema.
 Allowed npm dependencies are limited by ESLint to `zod`, `@orpc/contract` and
 `tslib` — the contract must never reach for a transport.
 
-Documentation: `doc/kontrakt.md`.
+Documentation: `doc/contract.md`.
 
 ## Tests
 

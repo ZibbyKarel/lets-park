@@ -160,7 +160,7 @@ ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorUserId_fkey" FOREIGN KEY ("
 -- Singleton: `ReservationWindowSettings` holds exactly one row, id 1.
 -- A CHECK on the primary key is what makes that a database fact rather than an
 -- application convention: the PK already forbids a second row with id 1, and
--- the CHECK forbids every other id. Rationale in `doc/databaze.md`.
+-- the CHECK forbids every other id. Rationale in `doc/database.md`.
 ALTER TABLE "ReservationWindowSettings"
   ADD CONSTRAINT "ReservationWindowSettings_singleton_check" CHECK ("id" = 1);
 
@@ -172,7 +172,7 @@ ALTER TABLE "ReservationWindowSettings"
   CHECK ("openDaysBefore" BETWEEN 1 AND 31);
 
 -- AuditLog is append-only. Hard delete + audit entry is this project's history
--- model (see `doc/databaze.md`), so the audit trail is the only record that a
+-- model (see `doc/database.md`), so the audit trail is the only record that a
 -- reservation ever existed — a stray UPDATE or DELETE would destroy evidence
 -- with nothing left to reconstruct it from. Enforced in the database, not by
 -- convention, because the application is not the only thing that can reach the

@@ -7,7 +7,7 @@ import type { NextConfig } from 'next';
 // Fail-fast validation instead lives in `src/instrumentation.ts`'s
 // `register()`, which Next.js calls only when an actual server instance
 // boots (`next dev` / `next start`) — see `doc/decision/0008-*` and
-// `doc/prostredi.md`.
+// `doc/environment.md`.
 
 const nextConfig: NextConfig = {
   // Next.js options go here

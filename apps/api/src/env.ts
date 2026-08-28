@@ -10,7 +10,7 @@
  * an arbitrary call site.
  *
  * Dev, e2e and production all run this exact same validation; only the
- * values differ (see `.env.example` and `doc/prostredi.md`).
+ * values differ (see `.env.example` and `doc/environment.md`).
  *
  * The schema is deliberately minimal for this phase (Fáze 0) and is designed
  * to grow additively: later phases add Slack, ICS and throttler variables as

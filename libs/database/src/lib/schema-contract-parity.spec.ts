@@ -18,7 +18,7 @@
  * What is deliberately *not* asserted is type equality of the fields
  * themselves: storage legitimately differs from the wire (`Date` vs ISO string,
  * `Date` vs `YYYY-MM-DD`, `JsonValue` vs `Record<string, unknown>`). Those
- * differences are listed in `doc/databaze.md`.
+ * differences are listed in `doc/database.md`.
  */
 
 import type {
@@ -144,7 +144,7 @@ describe('Prisma models mirror the contract entities', () => {
 describe('storage types that are deliberately not the wire types', () => {
   it('AuditLog.payload is JSON, not a structured column', () => {
     // `Prisma.JsonValue` on the storage side, `Record<string, unknown>` on the
-    // wire — the known, documented divergence (doc/databaze.md).
+    // wire — the known, documented divergence (doc/database.md).
     const payloadIsJson: Expect<Equal<PrismaAuditLog['payload'], Prisma.JsonValue>> = true;
     expect(payloadIsJson).toBe(true);
   });

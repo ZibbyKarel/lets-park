@@ -301,7 +301,7 @@ export default [
             // --- scope dimension ------------------------------------------
             // Keeps frontend-only libs (e.g. libs/i18n, next-intl) out of
             // apps/api, and backend-only libs out of apps/web.
-            // See doc/decision/0003-date-helpery-v-shared-types.md.
+            // See doc/decision/0003-date-helpers-in-shared-types.md.
             {
               sourceTag: 'scope:web',
               onlyDependOnLibsWithTags: ['scope:web', 'scope:shared'],
@@ -400,7 +400,7 @@ export default [
   // apps/api, libs/contract and libs/i18n alike. The Nx `type:util` constraint
   // cannot express this, because the same tag covers the wrapper libs, which
   // exist precisely to depend on third-party packages.
-  // See doc/decision/0003-date-helpery-v-shared-types.md.
+  // See doc/decision/0003-date-helpers-in-shared-types.md.
   {
     basePath: workspaceRoot,
     files: ['libs/shared-types/**/*.ts'],
