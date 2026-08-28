@@ -65,8 +65,17 @@ export const regenerateIcsTokenOutputSchema = z.object({
 });
 export type RegenerateIcsTokenOutput = z.infer<typeof regenerateIcsTokenOutputSchema>;
 
-/** Invalidate the current ICS feed URL and issue a new one. Takes no input. */
+/**
+ * Invalidate the current ICS feed URL and issue a new one. Takes no input.
+ *
+ * **Declares nothing beyond the inherited `FORBIDDEN`.** The only failure a
+ * caller could ever see here is a unique-constraint collision on a freshly
+ * generated random token — and that is not a failure mode the client can act
+ * on, it is a retry. Task 12 must therefore generate-and-retry inside the
+ * handler rather than surfacing a `CONFLICT` the UI would have no words for.
+ * Declaring a code no handler throws is the same mistake as throwing an
+ * undeclared one (`doc/decision/0018-*`, `doc/decision/0021-*`).
+ */
 export const regenerateIcsTokenContract = authed
   .input(noInputSchema)
-  .output(regenerateIcsTokenOutputSchema)
-  .errors(contractErrors('CONFLICT'));
+  .output(regenerateIcsTokenOutputSchema);

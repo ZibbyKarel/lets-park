@@ -1,4 +1,11 @@
-import { DATE_A, INVALID_DATE, NOT_A_UUID, TIMESTAMP, UUID_A, UUID_B } from './fixtures';
+import {
+  DATE_A,
+  INVALID_DATE,
+  NOT_A_UUID,
+  TIMESTAMP,
+  UUID_A,
+  UUID_B,
+} from '../__fixtures__/fixtures';
 import {
   cancelReservationInputSchema,
   cancelReservationOutputSchema,

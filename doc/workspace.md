@@ -20,7 +20,8 @@ apps/
 libs/
   shared-types/ doménové konstanty + Europe/Prague date logika
                                       tagy: type:util,     scope:shared
-  contract/     Zod schémata + (od Tasku 4) oRPC kontrakt
+  contract/     Zod schémata + oRPC kontrakt + realtime eventy
+                (dva vstupní body: @lets-park/contract a @lets-park/contract/realtime)
                                       tagy: type:contract, scope:shared
   design-system/
     tokens/     design tokeny + Tailwind v4 bridge   tagy: type:ui, scope:web, ds:tokens
@@ -39,6 +40,11 @@ Konfigurace, která platí pro celý workspace:
 | `.prettierrc`, `.editorconfig` | formát pro TS/TSX/JSON/MD |
 | `jest.preset.js`, `jest.config.ts` | společný Jest preset a agregace projektů |
 
+Lib může mít víc než jeden vstupní bod: `libs/contract` má vedle `@lets-park/contract` ještě
+`@lets-park/contract/realtime`, aby Socket.io půlka kontraktu netahala `@orpc/contract`. Druhý
+vstupní bod = druhý řádek v `paths` v `tsconfig.base.json` a **test, který izolaci dokazuje**
+(`libs/contract/src/realtime/no-orpc.spec.ts`) — viz `doc/decision/0023-*`.
+
 Balíčky se jmenují `@lets-park/<lib>` (viz `doc/decision/0005-npm-scope-lets-park.md`).
 Scope se odvozuje z názvu root `package.json` (`@lets-park/source`), takže generátory
 Nx ho doplní samy.
@@ -51,7 +57,7 @@ Všechno se pouští z rootu repa přes npm:
 
 | příkaz | co dělá |
 | --- | --- |
-| `npm run lint` | ESLint nad všemi projekty (`nx run-many -t lint`) |
+| `npm run lint` | ESLint nad všemi projekty (`nx run-many -t lint`), **`--max-warnings=0`** |
 | `npm run typecheck` | `tsc --noEmit` nad všemi tsconfigy každého projektu |
 | `npm run test` | Jest unit testy (`nx run-many -t test`) |
 | `npm run build` | produkční build `web` i `api` |
@@ -248,6 +254,11 @@ tomu, aby `apps/api` přes `shared-types` táhla Zod (viz `doc/decision/0003-*`)
    ```
 
 4. **Ověř**: `npm run lint && npm run typecheck && npm run test`.
+
+> **Lint padá i na varování.** `nx.json` přidává všem `lint` cílům `--max-warnings=0`. Bez toho
+> `nx run-many` skončí s kódem 0, i když ESLint varování vypsal, a souhrnná hláška
+> „Successfully ran targets" ho schová — přesně tak Task 4 propašoval varování do mainu.
+> Global constraint 11 chce čistý výstup, tak ať to hlídá build, ne pozornost recenzenta.
 
 ---
 

@@ -7,6 +7,7 @@
  */
 
 import * as z from 'zod';
+import { MAX_MONTH_WINDOW_SPAN } from '@lets-park/shared-types';
 import { yearMonthSchema } from '../schemas/primitives';
 import {
   monthWindowOverviewSchema,
@@ -41,9 +42,29 @@ export const updateReservationWindowSettingsContract = authed
   .errors(contractErrors('VALIDATION_FAILED', 'CONFLICT'));
 
 /**
+ * Number of months in the inclusive range `from`–`to`, both `YYYY-MM`.
+ *
+ * Kept local and deliberately tiny: this is the only place in the contract that
+ * needs month arithmetic, and `libs/shared-types` owns day-level Europe/Prague
+ * logic, not string-range counting. Assumes `from <= to`, which the refinement
+ * order below guarantees.
+ */
+function monthSpan(from: string, to: string): number {
+  const [fromYear, fromMonth] = from.split('-').map(Number) as [number, number];
+  const [toYear, toMonth] = to.split('-').map(Number) as [number, number];
+  return (toYear - fromYear) * 12 + (toMonth - fromMonth) + 1;
+}
+
+/**
  * Inclusive range of months to report on. Ordering is checked structurally —
  * `YYYY-MM` sorts lexicographically, so no date arithmetic is needed and the
  * check stays inside the schema.
+ *
+ * The maximum span is structural too (`MAX_MONTH_WINDOW_SPAN`), for the same
+ * reason `bulk` caps `dates` with `MAX_BULK_BOOKING_DAYS`: a limit the client
+ * can only learn by being rejected is not part of the contract. That is why
+ * this procedure declares no `VALIDATION_FAILED` — there is no domain rule left
+ * for it that a structurally valid input could break.
  */
 export const listMonthWindowsInputSchema = z
   .object({
@@ -53,7 +74,14 @@ export const listMonthWindowsInputSchema = z
   .refine((value) => value.from <= value.to, {
     error: 'from must not be after to',
     path: ['to'],
-  });
+  })
+  .refine(
+    (value) => value.from > value.to || monthSpan(value.from, value.to) <= MAX_MONTH_WINDOW_SPAN,
+    {
+      error: `The range must not span more than ${MAX_MONTH_WINDOW_SPAN} months`,
+      path: ['to'],
+    }
+  );
 export type ListMonthWindowsInput = z.infer<typeof listMonthWindowsInputSchema>;
 
 export const listMonthWindowsOutputSchema = z.object({
@@ -69,5 +97,4 @@ export type ListMonthWindowsOutput = z.infer<typeof listMonthWindowsOutputSchema
 
 export const listMonthWindowsContract = authed
   .input(listMonthWindowsInputSchema)
-  .output(listMonthWindowsOutputSchema)
-  .errors(contractErrors('VALIDATION_FAILED'));
+  .output(listMonthWindowsOutputSchema);

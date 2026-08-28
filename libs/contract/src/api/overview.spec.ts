@@ -1,38 +1,12 @@
 import {
   DATE_A,
   INVALID_DATE,
-  NOT_A_UUID,
   TIMESTAMP,
   UUID_A,
   parkingSpotFixture,
-  userFixture,
   userSummaryFixture,
-} from './fixtures';
-import {
-  dayOverviewInputSchema,
-  dayOverviewOutputSchema,
-  daySpotOverviewSchema,
-  userSummarySchema,
-} from './overview';
-
-describe('userSummarySchema', () => {
-  it('accepts the three public fields', () => {
-    expect(userSummarySchema.parse(userSummaryFixture)).toEqual(userSummaryFixture);
-  });
-
-  it('never leaks the ICS token, email or Okta id of another user', () => {
-    // The pick is the security boundary: parsing a whole user must strip them.
-    const parsed = userSummarySchema.parse(userFixture);
-    expect(parsed).toEqual(userSummaryFixture);
-    expect(Object.keys(parsed).sort()).toEqual(['id', 'licensePlate', 'name']);
-  });
-
-  it('rejects a summary with an invalid id', () => {
-    expect(userSummarySchema.safeParse({ ...userSummaryFixture, id: NOT_A_UUID }).success).toBe(
-      false
-    );
-  });
-});
+} from '../__fixtures__/fixtures';
+import { dayOverviewInputSchema, dayOverviewOutputSchema, daySpotOverviewSchema } from './overview';
 
 describe('dayOverviewInputSchema', () => {
   it('accepts a date-only day', () => {

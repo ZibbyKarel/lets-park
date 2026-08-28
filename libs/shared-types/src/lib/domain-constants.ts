@@ -90,3 +90,43 @@ export type BulkUnavailableReason = (typeof BULK_UNAVAILABLE_REASONS)[number];
  * reject days outside the open window.
  */
 export const MAX_BULK_BOOKING_DAYS = 31;
+
+/**
+ * Upper bound on the number of months `admin.window.months` may report on in
+ * one call, counting both endpoints of the inclusive `from`–`to` range.
+ *
+ * Two years is comfortably more than the admin table ever renders at once, and
+ * putting the cap in the contract means the client can *know* the limit instead
+ * of discovering it by being rejected — the same reasoning as
+ * {@link MAX_BULK_BOOKING_DAYS}.
+ */
+export const MAX_MONTH_WINDOW_SPAN = 24;
+
+/**
+ * Why a spot changed hands without the new holder asking for it, as announced
+ * by the `reservation:reassigned` realtime event.
+ *
+ * The enum exists — rather than a boolean, or nothing at all — because ruling
+ * `window-1` requires a client to be able to tell a **system** reassignment
+ * from a user action: auto-promotion out of a waitlist is exempt from the
+ * reservation-window lock precisely because no user performed it, and the UI
+ * must word it differently ("místo ti připadlo z fronty", not "rezervováno").
+ *
+ * There is exactly one member today, and that is deliberate: the API contract
+ * has no procedure that moves an existing reservation between users, so an
+ * `ADMIN_REASSIGNMENT` member would be a cause nothing can emit — the
+ * over-declaration `doc/decision/0021-*` forbids. Add the member in the same
+ * change that adds the procedure.
+ */
+export const RESERVATION_REASSIGN_CAUSES = ['WAITLIST_PROMOTION'] as const;
+export type ReservationReassignCause = (typeof RESERVATION_REASSIGN_CAUSES)[number];
+
+/**
+ * Outcome of a client's request for the short-lived editing hold on one cell of
+ * the parking grid (the `cell:lock` command's acknowledgement).
+ *
+ * - `ACQUIRED`      — the caller now holds the cell until `expiresAt`.
+ * - `HELD_BY_OTHER` — somebody else is editing it; the caller must not proceed.
+ */
+export const CELL_LOCK_RESULTS = ['ACQUIRED', 'HELD_BY_OTHER'] as const;
+export type CellLockResult = (typeof CELL_LOCK_RESULTS)[number];

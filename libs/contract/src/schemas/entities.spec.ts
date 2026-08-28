@@ -3,8 +3,10 @@ import {
   auditLogActionSchema,
   auditLogSchema,
   parkingSpotSchema,
+  publicReservationSchema,
   reservationSchema,
   userSchema,
+  userSummarySchema,
   waitlistEntrySchema,
 } from './entities';
 
@@ -66,6 +68,61 @@ describe('userSchema', () => {
     const result = userSchema.safeParse({ ...validUser, passwordHash: 'nope' });
     expect(result.success).toBe(true);
     expect(result.success && 'passwordHash' in result.data).toBe(false);
+  });
+});
+
+describe('userSummarySchema', () => {
+  const summary = { id: ID, name: 'Karel Zíbar', licensePlate: '1AB 2345' };
+
+  it('accepts the three public fields', () => {
+    expect(userSummarySchema.parse(summary)).toEqual(summary);
+  });
+
+  it('never leaks the ICS token, e-mail or Okta id of another user', () => {
+    // The pick is the security boundary: parsing a whole user must strip them.
+    // This matters more for the realtime events than for the day overview —
+    // they are broadcast into a room every member of the day can hear.
+    const parsed = userSummarySchema.parse(validUser);
+    expect(parsed).toEqual({ id: ID, name: validUser.name, licensePlate: validUser.licensePlate });
+    expect(Object.keys(parsed).sort()).toEqual(['id', 'licensePlate', 'name']);
+  });
+
+  it('rejects a summary with an invalid id', () => {
+    expect(userSummarySchema.safeParse({ ...summary, id: 'nope' }).success).toBe(false);
+  });
+});
+
+describe('publicReservationSchema', () => {
+  const publicReservation = {
+    id: ID,
+    createdAt: NOW,
+    user: { id: OTHER_ID, name: 'Jana Nováková', licensePlate: null },
+  };
+
+  it('accepts a reservation with its holder', () => {
+    expect(publicReservationSchema.parse(publicReservation)).toEqual(publicReservation);
+  });
+
+  it('carries no spot, user id or date of its own', () => {
+    // All three come from the context the payload travels in — the spot row of
+    // the day overview, or the event payload of a realtime broadcast.
+    expect(Object.keys(publicReservationSchema.parse(publicReservation)).sort()).toEqual([
+      'createdAt',
+      'id',
+      'user',
+    ]);
+  });
+
+  it('rejects a holder that is a full user rather than a summary', () => {
+    // Strictly: the extra keys are stripped, not rejected — assert the stripping
+    // so a widened `userSchema` can never smuggle `icsToken` into a broadcast.
+    const parsed = publicReservationSchema.parse({ ...publicReservation, user: validUser });
+    expect('icsToken' in parsed.user).toBe(false);
+    expect('email' in parsed.user).toBe(false);
+  });
+
+  it('rejects a missing holder', () => {
+    expect(publicReservationSchema.safeParse({ id: ID, createdAt: NOW }).success).toBe(false);
   });
 });
 

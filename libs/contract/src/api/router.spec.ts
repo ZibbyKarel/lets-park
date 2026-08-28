@@ -107,7 +107,7 @@ const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
   'spot.list': ['FORBIDDEN'],
   'me.get': ['FORBIDDEN'],
   'me.updateSettings': ['FORBIDDEN', 'NOT_FOUND', 'VALIDATION_FAILED'],
-  'me.regenerateIcsToken': ['FORBIDDEN', 'CONFLICT'],
+  'me.regenerateIcsToken': ['FORBIDDEN'],
   'admin.spot.list': ['FORBIDDEN'],
   'admin.spot.create': ['FORBIDDEN', 'CONFLICT', 'VALIDATION_FAILED'],
   'admin.spot.update': ['FORBIDDEN', 'NOT_FOUND', 'CONFLICT', 'VALIDATION_FAILED'],
@@ -116,7 +116,7 @@ const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
   'admin.user.update': ['FORBIDDEN', 'NOT_FOUND', 'CONFLICT', 'VALIDATION_FAILED'],
   'admin.window.get': ['FORBIDDEN'],
   'admin.window.update': ['FORBIDDEN', 'VALIDATION_FAILED', 'CONFLICT'],
-  'admin.window.months': ['FORBIDDEN', 'VALIDATION_FAILED'],
+  'admin.window.months': ['FORBIDDEN'],
 };
 
 describe('contract router', () => {

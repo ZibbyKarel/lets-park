@@ -342,7 +342,36 @@ export default [
       '**/*.cjs',
       '**/*.mjs',
     ],
-    rules: {},
+    rules: {
+      /**
+       * Severity stays at Nx's `warn`; the lint target runs with
+       * `--max-warnings=0` (see `nx.json`), so a warning still fails the build.
+       * Only the options are tuned here, and only for bindings that **cannot be
+       * deleted**:
+       *
+       * - `ignoreRestSiblings` — `const { icsToken: _token, ...rest } = user` is
+       *   the idiomatic way to assert a field is absent from a projection. The
+       *   named sibling exists solely so the rest element omits it; typescript-
+       *   eslint defaults this to `false`, unlike the core ESLint rule.
+       * - `argsIgnorePattern` / `caughtErrorsIgnorePattern` — a positional
+       *   parameter before a used one, and a `catch` binding, cannot simply be
+       *   removed. `_` marks the omission as deliberate.
+       *
+       * `varsIgnorePattern` is deliberately **not** set: an unused plain
+       * variable can always just be deleted, so there is no honest reason to
+       * silence it with a prefix.
+       */
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          args: 'after-used',
+          argsIgnorePattern: '^_',
+          caughtErrors: 'all',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
   // Wrapper layers are mandatory in application and library code.
   {
