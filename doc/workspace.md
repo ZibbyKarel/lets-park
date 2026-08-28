@@ -17,7 +17,11 @@ apps/
   web-e2e/      Playwright e2e pro web              tagy: type:app,  scope:web
   api/          NestJS 11 (API + Socket.io gateway) tagy: type:app,  scope:api
   api-e2e/      Jest integrační testy proti API     tagy: type:app,  scope:api
-libs/           (zatím prázdné – vzniká v dalších úkolech)
+libs/
+  shared-types/ doménové konstanty + Europe/Prague date logika
+                                      tagy: type:util,     scope:shared
+  contract/     Zod schémata + (od Tasku 4) oRPC kontrakt
+                                      tagy: type:contract, scope:shared
 doc/            dokumentace, rozhodnutí, export vizuálního designu
 ```
 
@@ -156,6 +160,11 @@ hláška vždy říká, kterou wrapper lib má vývojář použít.
 Dál platí `no-console: error` v `apps/api/**` a `libs/**` – backend loguje přes
 `nestjs-pino`. Console je povolená jen v `tools/**`, `scripts/**`, `**/scripts/**`
 a v konfiguračních souborech.
+
+Zvlášť je ošetřená `libs/shared-types`: má vlastní `no-restricted-imports` blok, který
+tam navíc zakazuje **`zod`**. Nx dimenze `type:util` to vyjádřit neumí – stejný tag nesou
+i wrapper libs, které na třetích stranách záviset musí. Bez tohohle bloku by nic nebránilo
+tomu, aby `apps/api` přes `shared-types` táhla Zod (viz `doc/decision/0003-*`).
 
 > **Past při úpravách `eslint.config.mjs`:** Nx spouští `eslint .` s **cwd nastaveným na
 > adresář projektu**, ne na root repa. Config objekt, jehož `files` jsou cesty od rootu

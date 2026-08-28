@@ -18,7 +18,10 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {}
+    "paths": {
+      "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"],
+      "@lets-park/contract": ["./libs/contract/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }
