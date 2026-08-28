@@ -77,10 +77,25 @@ export function easterSunday(year: number): DateOnly {
   return formatDateOnly({ year, month, day });
 }
 
-/** Good Friday — the Friday before Easter Sunday. */
+/**
+ * Good Friday — the Friday before Easter Sunday.
+ *
+ * This is the *calendar* date and is defined for every year. Whether it is a
+ * public holiday is a separate question — see {@link GOOD_FRIDAY_FIRST_YEAR}.
+ */
 export function goodFriday(year: number): DateOnly {
   return addDays(easterSunday(year), -2);
 }
+
+/**
+ * First year in which Good Friday was a Czech public holiday.
+ *
+ * It was added by the 2016 amendment of act 245/2000 Sb.; every other holiday in
+ * {@link FIXED_HOLIDAYS} predates the app. A reservation app never looks
+ * backwards, so this bound is documentation more than behaviour — but a pure
+ * function of the year should not claim something the law did not say.
+ */
+export const GOOD_FRIDAY_FIRST_YEAR = 2016;
 
 /** Easter Monday — the Monday after Easter Sunday. */
 export function easterMonday(year: number): DateOnly {
@@ -91,11 +106,15 @@ export function easterMonday(year: number): DateOnly {
  * All Czech public holidays of the given year, ordered by date.
  *
  * Note that Easter Sunday itself is *not* a public holiday in Czechia; only
- * Good Friday and Easter Monday are.
+ * Good Friday and Easter Monday are — and Good Friday only from
+ * {@link GOOD_FRIDAY_FIRST_YEAR} onwards, so years before that return one
+ * holiday fewer.
  */
 export function czechPublicHolidays(year: number): readonly CzechHoliday[] {
   const holidays: CzechHoliday[] = [
-    { id: 'GOOD_FRIDAY', date: goodFriday(year), name: 'Velký pátek' },
+    ...(year >= GOOD_FRIDAY_FIRST_YEAR
+      ? [{ id: 'GOOD_FRIDAY' as const, date: goodFriday(year), name: 'Velký pátek' }]
+      : []),
     { id: 'EASTER_MONDAY', date: easterMonday(year), name: 'Velikonoční pondělí' },
     ...FIXED_HOLIDAYS.map(([month, day, id, name]) => ({
       id,

@@ -76,6 +76,114 @@ function restrictWrappedLibraries(allowedPackages = []) {
   };
 }
 
+/**
+ * npm allow-lists per Nx `type:` tag (`allowedExternalImports`).
+ *
+ * ## Why the lists hang off `type:` and nowhere else
+ *
+ * `@nx/enforce-module-boundaries` collects **every** constraint whose source tag
+ * the project carries and reports a violation if *any* of them bans the import
+ * (`hasBannedImport` → `depConstraints.filter(...).find(...)` in
+ * `@nx/eslint-plugin/dist/src/utils/runtime-lint-utils.js`). Constraints are
+ * therefore ANDed, and a package must appear in the list of every matching
+ * dimension. Spreading npm allow-lists across `type:`, `scope:` and `ds:` would
+ * mean listing `react` in three places and getting an intersection nobody can
+ * predict.
+ *
+ * `type:` is used because it is the one dimension that **partitions** the
+ * workspace: every project carries exactly one `type:` tag, so a list here
+ * covers everything and leaves no project unconstrained. `scope:` and `ds:`
+ * stay purely about direction of dependency, which is what they model.
+ *
+ * ## Why a list is mandatory on every tag
+ *
+ * A tag with **no** `allowedExternalImports` constrains nothing at all — that is
+ * how `libs/shared-types` was free to import Zod despite decision 0003
+ * (Task 3 review, S3). An empty array (`[]`) is not the same thing: it bans
+ * every npm package. Omission is inert; `[]` is a rule.
+ *
+ * Lists are deliberately short. When a task needs a package that is not here,
+ * ESLint fails loudly with the package name and that task adds one line —
+ * which is the point, because the addition shows up in review.
+ */
+const NPM_ALLOWLIST = {
+  /**
+   * Applications compose the whole stack; constraining them would just mirror
+   * `package.json`. Spelled out rather than omitted so it reads as a decision.
+   */
+  app: ['*'],
+
+  /**
+   * Domain composition. No feature lib exists yet — extend when the first one
+   * lands. Feature code reaches third parties through wrapper libs anyway
+   * (see `WRAPPED_LIBRARIES`), so this list should stay near-empty.
+   */
+  feature: ['tslib'],
+
+  /**
+   * Design system (`libs/design-system/*`). React plus styling helpers and
+   * Storybook; TanStack Table is here because `ds:compounds` owns the DataTable
+   * wrapper. Never a backend package.
+   */
+  ui: [
+    'tslib',
+    'react',
+    'react/*',
+    'react-dom',
+    'react-dom/*',
+    'clsx',
+    'tailwind-merge',
+    'class-variance-authority',
+    '@tanstack/react-table',
+    '@tanstack/react-table/*',
+    'storybook',
+    'storybook/*',
+    '@storybook/*',
+  ],
+
+  /**
+   * Wrapper libs. Each one exists precisely to be the single importer of one
+   * third-party package, so this is the union of `WRAPPED_LIBRARIES` plus the
+   * React/Next peers those wrappers are built on. The union is intentionally
+   * coarse: *which* wrapper may import *which* package is enforced per-directory
+   * by `no-restricted-imports` below, which this list cannot express.
+   *
+   * `libs/shared-types` also carries `type:util`, but it additionally carries
+   * `layer:foundation`, whose empty list ANDs this one down to nothing.
+   */
+  util: [
+    'tslib',
+    'react',
+    'react/*',
+    'react-dom',
+    'react-dom/*',
+    'next',
+    'next/*',
+    ...Object.keys(WRAPPED_LIBRARIES).flatMap((pkg) => [pkg, `${pkg}/*`]),
+  ],
+
+  /**
+   * `libs/contract`. `@orpc/contract` only — never `@orpc/client` or
+   * `@orpc/server`, so the contract can not reach a transport
+   * (`doc/decision/0007-*`).
+   */
+  contract: ['tslib', 'zod', 'zod/*', '@orpc/contract', '@orpc/contract/*'],
+
+  /**
+   * Data access (`libs/database`, Task 9). Prisma and nothing else — no HTTP
+   * client, no frontend package.
+   */
+  data: ['tslib', 'prisma', 'prisma/*', '@prisma/client', '@prisma/*', '.prisma/*'],
+
+  /**
+   * `libs/shared-types`: zero npm dependencies, by decision 0003. It is imported
+   * by `apps/api`, `libs/contract` and `libs/i18n` alike, so anything it pulls
+   * in lands in all three. `[]` bans every package — Node builtins
+   * (`node:fs`, …) are not npm nodes and stay allowed.
+   */
+  foundation: [],
+};
+
 /** Source files of every wrapper lib get their own package unbanned. */
 const wrapperLibOverrides = Object.entries(WRAPPED_LIBRARIES).map(([pkg, { owner }]) => ({
   basePath: workspaceRoot,
@@ -111,10 +219,22 @@ export default [
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
           depConstraints: [
             // --- type dimension -------------------------------------------
+            // Every project carries exactly one `type:` tag, so this dimension
+            // is where the npm allow-lists live. See NPM_ALLOWLIST above for
+            // why they are not repeated on `scope:` / `ds:`.
+            //
+            // Layering, top to bottom, is acyclic:
+            //   app → feature → ui → util → contract → foundation
+            // `type:util` may depend on `type:contract` (that is what
+            // `libs/api-client` is for), and `type:contract` depends on
+            // `layer:foundation` — not on `type:util` — so the two directions
+            // no longer form a cycle at the tag level (Task 3 review, N3).
+            //
             // Applications compose everything; nothing may depend on them.
             {
               sourceTag: 'type:app',
               onlyDependOnLibsWithTags: ['*'],
+              allowedExternalImports: NPM_ALLOWLIST.app,
             },
             // Feature libs hold domain composition.
             {
@@ -126,32 +246,43 @@ export default [
                 'type:contract',
                 'type:data',
               ],
+              allowedExternalImports: NPM_ALLOWLIST.feature,
             },
             // The design system is domain-free: it must never reach into
             // feature or application code.
             {
               sourceTag: 'type:ui',
               onlyDependOnLibsWithTags: ['type:ui', 'type:util'],
+              allowedExternalImports: NPM_ALLOWLIST.ui,
             },
             {
               sourceTag: 'type:util',
               onlyDependOnLibsWithTags: ['type:util', 'type:contract'],
+              allowedExternalImports: NPM_ALLOWLIST.util,
             },
-            // The contract is the root of the dependency graph: schemas only.
+            // The contract sits below every wrapper and above the foundation:
+            // Zod schemas plus the oRPC contract builder, nothing else.
             {
               sourceTag: 'type:contract',
-              onlyDependOnLibsWithTags: ['type:util'],
-              allowedExternalImports: [
-                'zod',
-                'zod/*',
-                '@orpc/contract',
-                '@orpc/contract/*',
-                'tslib',
-              ],
+              onlyDependOnLibsWithTags: ['layer:foundation'],
+              allowedExternalImports: NPM_ALLOWLIST.contract,
             },
             {
               sourceTag: 'type:data',
               onlyDependOnLibsWithTags: ['type:data', 'type:util', 'type:contract'],
+              allowedExternalImports: NPM_ALLOWLIST.data,
+            },
+
+            // --- foundation ------------------------------------------------
+            // `libs/shared-types` is the bottom of the graph: it depends on no
+            // workspace lib and on no npm package. Both empty arrays are
+            // load-bearing — `onlyDependOnLibsWithTags: []` rejects every
+            // tagged target, `allowedExternalImports: []` rejects every
+            // package. See doc/decision/0003-* and doc/decision/0017-*.
+            {
+              sourceTag: 'layer:foundation',
+              onlyDependOnLibsWithTags: [],
+              allowedExternalImports: NPM_ALLOWLIST.foundation,
             },
 
             // --- scope dimension ------------------------------------------

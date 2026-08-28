@@ -93,6 +93,18 @@ describe('czechPublicHolidays', () => {
     expect(dates).toContain('2024-12-24');
   });
 
+  it('omits Good Friday before it became a public holiday in 2016', () => {
+    // Novela z. 245/2000 Sb. added Good Friday from 2016. The pure function had
+    // no lower bound, so czechPublicHolidays(2015) claimed a holiday that did
+    // not exist (Task 3 review, N1).
+    const ids2015 = czechPublicHolidays(2015).map((holiday) => holiday.id);
+    expect(ids2015).not.toContain('GOOD_FRIDAY');
+    expect(ids2015).toContain('EASTER_MONDAY');
+    expect(ids2015).toHaveLength(CZECH_HOLIDAY_IDS.length - 1);
+
+    expect(czechPublicHolidays(2016).map((holiday) => holiday.id)).toContain('GOOD_FRIDAY');
+  });
+
   it('names the movable holidays in Czech', () => {
     const holidays = czechPublicHolidays(2026);
     expect(holidays.find((holiday) => holiday.id === 'GOOD_FRIDAY')?.name).toBe('Velký pátek');

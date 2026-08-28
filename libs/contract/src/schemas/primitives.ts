@@ -6,8 +6,17 @@
 import * as z from 'zod';
 
 /**
- * Primary key of every entity. UUID v4 is the binding choice for the contract;
- * `libs/database` (Task 9) has to follow it, not the other way around.
+ * Primary key of every entity: an RFC 9562 UUID in canonical text form, of
+ * **any** version. `z.uuid()` accepts v1, v4, v7 and the nil UUID alike, and
+ * that is deliberate — the version is an implementation detail of `libs/database`
+ * (Task 9), not something a client may depend on. Ids are opaque strings on the
+ * wire; nothing in the contract reads a bit out of them.
+ *
+ * Binding on Task 9: ids are UUIDs (not cuid, not an autoincrement), because
+ * they travel in URLs and realtime payloads and must not leak row counts or
+ * ordering. Which UUID version Prisma generates is Task 9's call.
+ *
+ * See `doc/decision/0016-uzavrene-vycty-a-uuid-v-kontraktu.md`.
  */
 export const idSchema = z.uuid();
 export type Id = z.infer<typeof idSchema>;
