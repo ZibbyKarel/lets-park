@@ -61,7 +61,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           aria-invalid={ids.invalid || undefined}
           aria-describedby={ids.describedBy}
           className={cx(
-            'appearance-none rounded-md border bg-bg text-fg',
+            'appearance-none rounded-md border',
             // Room for the chevron: the normal field padding plus its box.
             'pr-10',
             CONTROL_HEIGHT[size],
@@ -70,7 +70,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
             CONTROL_TRANSITION,
             FOCUS_RING,
             ids.invalid ? 'border-danger' : 'border-border focus-visible:border-brand-blue',
-            disabled ? 'cursor-not-allowed bg-bg-muted text-fg-3' : 'cursor-pointer',
+            // Swapped, never layered: same-property utilities resolve by
+            // stylesheet order, not className order (see `button.tsx`).
+            disabled ? 'cursor-not-allowed bg-bg-muted text-fg-3' : 'cursor-pointer bg-bg text-fg',
             fullWidth && 'w-full',
             className
           )}

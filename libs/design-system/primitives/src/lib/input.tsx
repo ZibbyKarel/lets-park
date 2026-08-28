@@ -54,14 +54,16 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         aria-invalid={ids.invalid || undefined}
         aria-describedby={ids.describedBy}
         className={cx(
-          'rounded-md border bg-bg text-fg placeholder:text-fg-3',
+          'rounded-md border placeholder:text-fg-3',
           CONTROL_HEIGHT[size],
           FIELD_PADDING_X[size],
           CONTROL_TEXT[size],
           CONTROL_TRANSITION,
           FOCUS_RING,
           ids.invalid ? 'border-danger' : 'border-border focus-visible:border-brand-blue',
-          disabled && 'cursor-not-allowed bg-bg-muted text-fg-3',
+          // Swapped, never layered: same-property utilities resolve by
+          // stylesheet order, not className order (see `button.tsx`).
+          disabled ? 'cursor-not-allowed bg-bg-muted text-fg-3' : 'bg-bg text-fg',
           fullWidth && 'w-full',
           className
         )}

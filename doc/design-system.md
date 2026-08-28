@@ -215,10 +215,17 @@ libs/design-system/primitives/
 - **Jednotný focus ring** (`FOCUS_RING`) na každém fokusovatelném prvku –
   2px `--brand-blue` přes `:focus-visible`. Design ho nepředepisuje, viz
   `doc/decision/0012-*`.
-- **Vypnutý stav se nepřebíjí, ale nahrazuje.** `disabled` variantu úplně
-  vymění za vlastní sadu tříd v JS – Tailwind řadí utility po skupinách, takže
-  `disabled:` prefix by v kaskádě vyhrál nebo prohrál podle toho, o jakou
-  vlastnost jde.
+- **Vypnutý stav se nepřebíjí, ale nahrazuje.** Dvě utility, které nastavují
+  stejnou vlastnost (`bg-bg` a `bg-bg-muted`, `text-fg` a `text-fg-3`), mají
+  stejnou specificitu – vyhrává ta, kterou Tailwind vypíše ve stylesheetu
+  později, ne ta, která je později v `className`. Přidat vypnuté barvy *navrch*
+  k zapnutým proto u každé dvojice náhodně vyjde, nebo tiše nevyjde. Barvy pro
+  zapnutý stav proto patří do zapnuté větve ternárního výrazu, ať prvek nikdy
+  nenese obě poloviny dvojice zároveň. Totéž platí pro `checked:` – varianta
+  přebije obě prosté utility, takže vypnutý zaškrtnutý Checkbox si musí
+  přebarvit i `checked:` výplň, jinak svítí značkovou modrou.
+  Jsdom žádný stylesheet neaplikuje, takže tohle žádný render test nechytí –
+  invariant hlídá `disabled-styling.spec.tsx`.
 - **Chybový stav je zpráva.** Prop `error` neexistuje jako boolean: text chyby
   *je* stav. Nastaví `aria-invalid`, červený rámeček i `role="alert"` naráz,
   takže se nemůžou rozejít.

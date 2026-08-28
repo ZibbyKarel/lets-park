@@ -30,8 +30,12 @@ export interface StepperProps {
   className?: string | undefined;
 }
 
-const STEP_BUTTON_CLASSES =
-  'inline-flex items-center justify-center rounded-md border border-border bg-bg text-md text-fg';
+/**
+ * Structure only — no colors. Enabled and disabled each supply their own
+ * border/background/text, because two utilities setting the same property
+ * resolve by stylesheet order, not by className order (see `button.tsx`).
+ */
+const STEP_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-md border text-md';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -159,8 +163,8 @@ function StepButton({ label, disabled, onClick, children }: StepButtonProps) {
         CONTROL_TRANSITION,
         FOCUS_RING,
         disabled
-          ? 'cursor-not-allowed bg-bg-muted text-border-strong'
-          : 'cursor-pointer hover:border-brand-dark'
+          ? 'cursor-not-allowed border-border bg-bg-muted text-border-strong'
+          : 'cursor-pointer border-border bg-bg text-fg hover:border-brand-dark'
       )}
     >
       <span aria-hidden="true">{children}</span>

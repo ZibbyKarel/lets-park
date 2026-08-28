@@ -38,12 +38,15 @@ export const Radio = forwardRef<HTMLInputElement, RadioProps>(function Radio(
             // validity belongs to the group, so `RadioGroup` carries it.
             aria-describedby={ids.describedBy}
             className={cx(
-              'peer size-5 appearance-none rounded-cta border bg-bg',
-              'checked:border-brand-blue',
+              'peer size-5 appearance-none rounded-cta border',
               CONTROL_TRANSITION,
               FOCUS_RING,
               ids.invalid ? 'border-danger' : 'border-border-strong',
-              disabled ? 'cursor-not-allowed bg-bg-muted' : 'cursor-pointer',
+              // Swapped, never layered: same-property utilities resolve by
+              // stylesheet order, not className order (see `button.tsx`).
+              disabled
+                ? 'cursor-not-allowed bg-bg-muted checked:border-border-strong'
+                : 'cursor-pointer bg-bg checked:border-brand-blue',
               className
             )}
           />

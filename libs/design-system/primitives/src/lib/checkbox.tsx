@@ -66,13 +66,25 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
             aria-invalid={ids.invalid || undefined}
             aria-describedby={ids.describedBy}
             className={cx(
-              'peer size-5 appearance-none rounded-xs border bg-bg',
-              'checked:border-brand-blue checked:bg-brand-blue',
-              'indeterminate:border-brand-blue indeterminate:bg-brand-blue',
+              'peer size-5 appearance-none rounded-xs border',
               CONTROL_TRANSITION,
               FOCUS_RING,
               ids.invalid ? 'border-danger' : 'border-border-strong',
-              disabled ? 'cursor-not-allowed bg-bg-muted' : 'cursor-pointer',
+              // Swapped, never layered: same-property utilities resolve by
+              // stylesheet order, not className order (see `button.tsx`).
+              // Disabled also greys the checked fill — brand blue on a control
+              // the user cannot operate reads as actionable.
+              disabled
+                ? [
+                    'cursor-not-allowed bg-bg-muted',
+                    'checked:border-border-strong checked:bg-border-strong',
+                    'indeterminate:border-border-strong indeterminate:bg-border-strong',
+                  ].join(' ')
+                : [
+                    'cursor-pointer bg-bg',
+                    'checked:border-brand-blue checked:bg-brand-blue',
+                    'indeterminate:border-brand-blue indeterminate:bg-brand-blue',
+                  ].join(' '),
               className
             )}
           />
