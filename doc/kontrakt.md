@@ -459,6 +459,12 @@ zamčené každý den", což je něco jiného a neexistujícího. `plan.md` i za
 `reservation:reassigned` **místo** `reservation:cancelled`, nikdy oba. Dvojice cancel + create
 by u všech klientů buňku nejdřív probliknula prázdnou.
 
+Plyne z toho jeden důsledek, na který se dá snadno zapomenout: **povýšení zkrátilo frontu, ale
+`waitlist:updated` se k němu neposílá** — to by byl druhý event z téže transakce. Nenulové
+`fromWaitlistEntryId` znamená „fronta téhle buňky je o jednoho kratší"; klient si `waitlistCount`
+buď lokálně dekrementuje, nebo si den načte znovu. Task 15 tedy po povýšení **neemituje**
+`waitlist:updated`.
+
 **`reservation:reassigned` je vlastní event schválně** (ruling `window-1`): automatické povýšení
 je systémová akce a zámek okna na ni neplatí, takže `reservation:created` v zamčeném měsíci by
 vypadal jako porušení okna. Že to nebyla akce uživatele, říká jméno; **která** systémová akce to

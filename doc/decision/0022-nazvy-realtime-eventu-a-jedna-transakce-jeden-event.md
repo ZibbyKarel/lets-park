@@ -38,6 +38,12 @@ skutečné a řeší se dokumentací na obou místech, ne přejmenováním — v
 klientů v roomu buňku nejdřív probliknulo prázdnou a pak ji přemalovalo; kromě blikání by to
 znamenalo, že mezi dvěma pakety existuje stav, který v databázi nikdy nebyl.
 
+Pravidlo má důsledek, který je potřeba říct nahlas: povýšení frontu zkrátilo, ale
+`waitlist:updated` se k němu **neposílá** — byl by to druhý event z téže transakce. Nenulové
+`fromWaitlistEntryId` je ta informace; klient si počet dekrementuje sám, nebo si den načte znovu.
+Alternativa (poslat oba) by pravidlo porušila a přinesla by stejné blikání o úroveň níž, na
+badge fronty.
+
 **`reservation:reassigned` je vlastní event** kvůli rulingu `window-1`: automatické povýšení je
 systémová akce a zámek rezervačního okna na ni neplatí. Kdyby přišlo jako `reservation:created`,
 klient v zamčeném měsíci by musel usoudit, že okno někdo obešel. Jméno říká, že to nebyla akce
