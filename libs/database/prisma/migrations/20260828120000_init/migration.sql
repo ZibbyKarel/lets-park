@@ -189,6 +189,14 @@ CREATE TRIGGER "AuditLog_append_only"
   BEFORE UPDATE OR DELETE ON "AuditLog"
   FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"();
 
+-- TRUNCATE does not fire row-level triggers, so the trigger above would let a
+-- single `TRUNCATE "AuditLog";` erase the whole trail it is meant to protect.
+-- A statement-level BEFORE TRUNCATE trigger is the only way to seal that hole;
+-- it reuses the same function, whose message interpolates TG_OP ('TRUNCATE').
+CREATE TRIGGER "AuditLog_append_only_truncate"
+  BEFORE TRUNCATE ON "AuditLog"
+  FOR EACH STATEMENT EXECUTE FUNCTION "auditlog_reject_mutation"();
+
 -- Seed the singleton with the defaults from decision 0004 (7 days, AUTO).
 -- It lives in the migration rather than in `seed.ts` because the table must
 -- never be empty: every reservation path reads it, and `prisma db seed` is not

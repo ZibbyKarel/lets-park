@@ -20,7 +20,15 @@
   CREATE TRIGGER "AuditLog_append_only"
     BEFORE UPDATE OR DELETE ON "AuditLog"
     FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"();
+
+  CREATE TRIGGER "AuditLog_append_only_truncate"
+    BEFORE TRUNCATE ON "AuditLog"
+    FOR EACH STATEMENT EXECUTE FUNCTION "auditlog_reject_mutation"();
   ```
+
+  Statement-level trigger na `TRUNCATE` je nutný: row-level triggery se při
+  `TRUNCATE` nespouštějí, takže bez něj by jediný `TRUNCATE "AuditLog";` obešel
+  celou append-only ochranu.
 
 - Všechny ostatní cizí klíče mají `ON DELETE RESTRICT`; jediný `SET NULL` je
   `User.preferredParkingSpotId`.

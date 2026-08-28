@@ -118,6 +118,7 @@ kód jakkoliv opatrný.
 | `ReservationWindowSettings` `CHECK (id = 1)` | singleton – viz níže |
 | `ReservationWindowSettings` `CHECK (openDaysBefore BETWEEN 1 AND 31)` | zrcadlí `MIN_OPEN_DAYS_BEFORE`/`MAX_OPEN_DAYS_BEFORE` z kontraktu |
 | trigger `AuditLog_append_only` | `UPDATE`/`DELETE` nad `AuditLog` skončí výjimkou |
+| trigger `AuditLog_append_only_truncate` | `TRUNCATE "AuditLog"` skončí výjimkou (row-level trigger ho nevidí) |
 
 Indexy navíc: `Reservation(date)` a `WaitlistEntry(date)` (denní přehled parkoviště),
 `WaitlistEntry(parkingSpotId, date, createdAt, id)` (kdo je další ve frontě),
@@ -217,7 +218,15 @@ Zrušení rezervace **maže řádek** a zapisuje záznam do `AuditLog`. Soft del
 CREATE TRIGGER "AuditLog_append_only"
   BEFORE UPDATE OR DELETE ON "AuditLog"
   FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"();
+
+CREATE TRIGGER "AuditLog_append_only_truncate"
+  BEFORE TRUNCATE ON "AuditLog"
+  FOR EACH STATEMENT EXECUTE FUNCTION "auditlog_reject_mutation"();
 ```
+
+Triggery jsou dva schválně: `TRUNCATE` **nespouští** row-level triggery, takže samotný
+první trigger by `TRUNCATE "AuditLog";` propustil a jediný příkaz by smazal celou
+historii. Statement-level trigger je jediný způsob, jak tuhle díru zavřít.
 
 Funkce vyhodí výjimku s `ERRCODE = 'restrict_violation'`. Konvence by tady nestačila:
 audit je jediný záznam o tom, že rezervace vůbec existovala, takže omylem spuštěný
@@ -340,8 +349,14 @@ pg_dump "$DATABASE_URL" --format=custom --file=lets-park-$(date +%F).dump
 # jen data, bez schématu (schéma umí obnovit migrace)
 pg_dump "$DATABASE_URL" --format=custom --data-only --file=lets-park-data-$(date +%F).dump
 
-# obnova do prázdné databáze
+# obnova do prázdné databáze (plný dump včetně schématu)
 pg_restore --dbname="$DATABASE_URL" --clean --if-exists lets-park-2026-08-28.dump
+
+# obnova dat do databáze, kde už proběhlo `prisma migrate deploy`.
+# Init migrace tam sama vložila `ReservationWindowSettings (id = 1)`, takže se
+# ten řádek musí nejdřív smazat – jinak se záloha nastavení tiše zahodí (viz níže).
+psql "$DATABASE_URL" -c 'DELETE FROM "ReservationWindowSettings";'
+pg_restore --dbname="$DATABASE_URL" --data-only lets-park-data-2026-08-28.dump
 ```
 
 Z běžícího kontejneru bez lokálního `pg_dump`:
@@ -355,7 +370,17 @@ Poznámky:
 
 - Obnovujte do databáze, kde už proběhlo `prisma migrate deploy`, a použijte
   `--data-only`; jinak se `pg_restore` pere s existujícím schématem.
+- **`ReservationWindowSettings` se před `--data-only` obnovou musí vyprázdnit.** Init
+  migrace do ní vkládá singleton `id = 1` a `--data-only` obnova jede přes `COPY`, které
+  nemá `ON CONFLICT`. `pg_restore` konflikt na primárním klíči jen ohlásí, pokračuje dál
+  a skončí s exit code 0 – zálohované `openDaysBefore` a `lockMode` se tím **tiše
+  zahodí** a v databázi zůstanou defaulty z migrace. Proto to `DELETE` výše.
+  Zkontrolujte po obnově: `psql "$DATABASE_URL" -c 'TABLE "ReservationWindowSettings";'`.
 - Trigger `AuditLog_append_only` **nebrání** obnově: `pg_restore` dělá `INSERT`/`COPY`,
-  ne `UPDATE`.
+  ne `UPDATE`. Pozor ale na `AuditLog_append_only_truncate`: `pg_restore --data-only
+  --clean` tabulky před naplněním `TRUNCATE`uje a na tomhle triggeru spadne. Buď
+  obnovujte `--data-only` **bez** `--clean` do prázdné tabulky, nebo trigger na dobu
+  obnovy vypněte (`ALTER TABLE "AuditLog" DISABLE TRIGGER "AuditLog_append_only_truncate";`
+  a po dokončení zase `ENABLE`).
 - Tabulka `_prisma_migrations` je součástí dumpu. Při plné obnově se tím přenese
   i historie migrací, což je žádoucí.

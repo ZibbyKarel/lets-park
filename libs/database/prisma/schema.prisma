@@ -30,8 +30,8 @@ datasource db {
 // --- Enumerations ----------------------------------------------------------
 // Members must stay identical to the tuples in
 // `libs/shared-types/src/lib/domain-constants.ts`, which the contract's Zod
-// enums are built from. `libs/database/src/lib/enum-parity.spec.ts` fails if
-// they drift.
+// enums are built from. `libs/database/src/lib/schema-contract-parity.spec.ts`
+// (describe: "Prisma enums mirror the domain enumerations") fails if they drift.
 
 /// Parking spot group. IT spots are reserved for the IT department.
 enum ParkingGroup {
