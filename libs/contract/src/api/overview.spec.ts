@@ -1,0 +1,147 @@
+import {
+  DATE_A,
+  INVALID_DATE,
+  NOT_A_UUID,
+  TIMESTAMP,
+  UUID_A,
+  parkingSpotFixture,
+  userFixture,
+  userSummaryFixture,
+} from './fixtures';
+import {
+  dayOverviewInputSchema,
+  dayOverviewOutputSchema,
+  daySpotOverviewSchema,
+  userSummarySchema,
+} from './overview';
+
+describe('userSummarySchema', () => {
+  it('accepts the three public fields', () => {
+    expect(userSummarySchema.parse(userSummaryFixture)).toEqual(userSummaryFixture);
+  });
+
+  it('never leaks the ICS token, email or Okta id of another user', () => {
+    // The pick is the security boundary: parsing a whole user must strip them.
+    const parsed = userSummarySchema.parse(userFixture);
+    expect(parsed).toEqual(userSummaryFixture);
+    expect(Object.keys(parsed).sort()).toEqual(['id', 'licensePlate', 'name']);
+  });
+
+  it('rejects a summary with an invalid id', () => {
+    expect(userSummarySchema.safeParse({ ...userSummaryFixture, id: NOT_A_UUID }).success).toBe(
+      false
+    );
+  });
+});
+
+describe('dayOverviewInputSchema', () => {
+  it('accepts a date-only day', () => {
+    expect(dayOverviewInputSchema.parse({ date: DATE_A })).toEqual({ date: DATE_A });
+  });
+
+  it.each([INVALID_DATE, '2026-9-15', '2026-09-15T00:00:00Z', '', 20260915])(
+    'rejects %p as a date',
+    (date) => {
+      expect(dayOverviewInputSchema.safeParse({ date }).success).toBe(false);
+    }
+  );
+
+  it('rejects a missing date', () => {
+    expect(dayOverviewInputSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('daySpotOverviewSchema', () => {
+  const free = {
+    spot: parkingSpotFixture,
+    reservation: null,
+    waitlistCount: 0,
+    viewerWaitlistEntryId: null,
+    viewerWaitlistPosition: null,
+  };
+
+  it('accepts a free spot', () => {
+    expect(daySpotOverviewSchema.safeParse(free).success).toBe(true);
+  });
+
+  it('accepts an occupied spot with the caller queued behind it', () => {
+    expect(
+      daySpotOverviewSchema.safeParse({
+        ...free,
+        reservation: { id: UUID_A, createdAt: TIMESTAMP, user: userSummaryFixture },
+        waitlistCount: 2,
+        viewerWaitlistEntryId: UUID_A,
+        viewerWaitlistPosition: 2,
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects a negative queue count and a zero-based position', () => {
+    expect(daySpotOverviewSchema.safeParse({ ...free, waitlistCount: -1 }).success).toBe(false);
+    expect(daySpotOverviewSchema.safeParse({ ...free, viewerWaitlistPosition: 0 }).success).toBe(
+      false
+    );
+  });
+});
+
+describe('dayOverviewOutputSchema', () => {
+  const valid = {
+    date: DATE_A,
+    window: {
+      month: '2026-09',
+      windowFrom: '2026-08-25',
+      windowTo: '2026-08-31',
+      state: 'OPEN',
+      lockMode: 'AUTO',
+    },
+    canReserve: true,
+    spots: [
+      {
+        spot: parkingSpotFixture,
+        reservation: null,
+        waitlistCount: 0,
+        viewerWaitlistEntryId: null,
+        viewerWaitlistPosition: null,
+      },
+    ],
+    viewerReservationId: null,
+  };
+
+  it('accepts a full day overview', () => {
+    expect(dayOverviewOutputSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('carries the window state, so the frontend needs no second request', () => {
+    const parsed = dayOverviewOutputSchema.parse(valid);
+    expect(parsed.window.state).toBe('OPEN');
+    expect(parsed.window.lockMode).toBe('AUTO');
+    expect(parsed.canReserve).toBe(true);
+  });
+
+  it('requires the window — an overview without it is not renderable', () => {
+    const withoutWindow: Record<string, unknown> = { ...valid };
+    delete withoutWindow['window'];
+    expect(dayOverviewOutputSchema.safeParse(withoutWindow).success).toBe(false);
+  });
+
+  it('rejects an overview whose window state is not a MonthLockState', () => {
+    expect(
+      dayOverviewOutputSchema.safeParse({
+        ...valid,
+        window: { ...valid.window, state: 'CLOSED' },
+      }).success
+    ).toBe(false);
+  });
+
+  it('keeps canReserve separate from the window state', () => {
+    // An admin is not restricted by the window at all, so a LOCKED month with
+    // canReserve: true is a valid payload and the UI must not "correct" it.
+    expect(
+      dayOverviewOutputSchema.safeParse({
+        ...valid,
+        window: { ...valid.window, state: 'LOCKED', lockMode: 'FORCE_LOCKED' },
+        canReserve: true,
+      }).success
+    ).toBe(true);
+  });
+});

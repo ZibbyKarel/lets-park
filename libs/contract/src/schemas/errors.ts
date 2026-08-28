@@ -41,12 +41,22 @@ export const ERROR_CODES = [
 export const errorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
+/**
+ * Structured context carried alongside an error code, e.g. the id of the
+ * conflicting reservation. Free-form on purpose: its keys depend on `code`.
+ *
+ * On the wire this is oRPC's `data` field — see
+ * `doc/decision/0018-mapovani-error-kontraktu-na-orpc.md`.
+ */
+export const errorDetailsSchema = z.record(z.string(), z.unknown());
+export type ErrorDetails = z.infer<typeof errorDetailsSchema>;
+
 /** The single shape every domain error is serialized into. */
 export const errorShapeSchema = z.object({
   code: errorCodeSchema,
   /** Human-readable detail. Not the UI copy — the frontend keys off `code`. */
   message: z.string().min(1),
   /** Optional structured context, e.g. the conflicting reservation's id. */
-  details: z.record(z.string(), z.unknown()).optional(),
+  details: errorDetailsSchema.optional(),
 });
 export type ErrorShape = z.infer<typeof errorShapeSchema>;
