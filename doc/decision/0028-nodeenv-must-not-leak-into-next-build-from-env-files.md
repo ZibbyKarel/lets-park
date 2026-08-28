@@ -1,59 +1,68 @@
-# 0028 – `NODE_ENV` se do `next build` nesmí dostat z `.env` souborů
+# 0028 – `NODE_ENV` must not reach `next build` from `.env` files
 
-**Datum:** 2026-08-28 · **Stav:** přijato · **Navazuje na:** `doc/decision/0009-*`, `doc/decision/0008-*`
+**Date:** 2026-08-28 · **Status:** accepted · **Follows on from:** `doc/decision/0009-*`, `doc/decision/0008-*`
 
-## Co
+## What
 
-Target `web:build` má v `apps/web/project.json` napevno `options.env.NODE_ENV = "production"`.
-Je to jediná věc, kterou ten `build` blok v `project.json` dělá – zbytek (`command`, `cwd`,
-`cache`, `inputs`, `outputs`, `dependsOn`) zůstává inferovaný `@nx/next` pluginem a Nx ho
-s tímhle blokem slučuje.
+The `web:build` target has `options.env.NODE_ENV = "production"` hard-coded in
+`apps/web/project.json`. That's the only thing that `build` block in
+`project.json` does – everything else (`command`, `cwd`, `cache`, `inputs`,
+`outputs`, `dependsOn`) stays inferred by the `@nx/next` plugin, and Nx merges
+it with this block.
 
-Obecné pravidlo, které z toho plyne: **produkční build nesmí dědit `NODE_ENV` z lokálních
-`.env` souborů.** Kdyby přibyl další build target, který na `NODE_ENV` závisí, platí pro něj
-totéž.
+The general rule that follows from this: **a production build must not
+inherit `NODE_ENV` from local `.env` files.** If another build target that
+depends on `NODE_ENV` is ever added, the same applies to it.
 
-## Proč
+## Why
 
-Nx exekutor `nx:run-commands` načítá `.env` z rootu workspace **i** z rootu projektu a
-vkládá je do prostředí spouštěného procesu. Podle `doc/decision/0009-*` má vývojář obě kopie
-(`.env` a `apps/web/.env`) a obě obsahují `NODE_ENV=development` – jsou to dev env soubory,
-to je správně a nemá se to měnit.
+The Nx executor `nx:run-commands` loads `.env` from both the workspace root
+**and** the project root, and injects them into the spawned process's
+environment. Per `doc/decision/0009-*`, a developer has both copies (`.env`
+and `apps/web/.env`), and both contain `NODE_ENV=development` – they are dev
+env files, that's correct and shouldn't change.
 
-Next.js si při `next build` nastaví `NODE_ENV=production` **jen když ještě nastavené není**;
-hodnotu z `process.env` respektuje. Env soubory načítané samotným Next.js (`@next/env`)
-`NODE_ENV` nepřepisují, takže `cd apps/web && next build` projde – ale `nx run web:build`
-dostane `NODE_ENV=development` už zvenčí a Next si ho nechá.
+Next.js sets `NODE_ENV=production` during `next build` **only if it isn't
+already set**; it respects a value already present in `process.env`. Env files
+loaded by Next.js itself (`@next/env`) don't override `NODE_ENV`, so `cd
+apps/web && next build` works fine — but `nx run web:build` gets
+`NODE_ENV=development` injected from outside beforehand, and Next keeps it.
 
-Výsledek je build, který je zpola vývojový a zpola produkční. Konkrétně se rozejde
-resolvování Reactu: chunky se kompilují proti jedné variantě (`"production"` export
-condition), prerender worker si Reakt natáhne přes `"development"` condition – vzniknou dvě
-instance Reactu, interní dispatcher je `null` a prerender vlastních Next stránek
-`/_global-error` a `/_not-found` spadne na
+The result is a build that's half development and half production.
+Specifically, React resolution splits: chunks compile against one variant (the
+`"production"` export condition), while the prerender worker pulls in React
+via the `"development"` condition – producing two React instances, an internal
+dispatcher that's `null`, and Next's own `/_global-error` and `/_not-found`
+pages failing to prerender with
 
 ```
 TypeError: Cannot read properties of null (reading 'useContext')
 ```
 
-Doprovodným příznakem, podle kterého se to pozná, jsou dev-only varování
-`Each child in a list should have a unique "key" prop` na `<html>`/`<head>`/`<meta>`
-uprostřed produkčního buildu.
+A telltale accompanying symptom is dev-only warnings —
+`Each child in a list should have a unique "key" prop` on `<html>`/`<head>`/
+`<meta>` — showing up in the middle of a production build.
 
-**Proč to bylo těžké najít.** Root `.env` je v `.gitignore`, takže selhání je funkcí
-lokálního stavu stroje, ne commitnutého kódu. Vzniklo v okamžiku, kdy si vývojář kvůli
-`DATABASE_URL` pro Task 9 zkopíroval `.env.example` do rootu – tedy „přesně u Tasku 9",
-i když Task 9 nezměnil v `apps/web` ani řádku. Bisect proto nic neukázal a ukázat nemohl.
+**Why this was hard to find.** The root `.env` is gitignored, so the failure
+is a function of local machine state, not of committed code. It first
+appeared the moment a developer copied `.env.example` to the root to get
+`DATABASE_URL` for Task 9 – i.e. "right around Task 9", even though Task 9
+never changed a single line in `apps/web`. A bisect therefore showed nothing,
+and couldn't have.
 
-**Proč ne jiná řešení.**
+**Why not other fixes.**
 
-- *Vyndat `NODE_ENV` z `.env.example`* – env soubory nejsou verzované a musí zůstat čistě
-  vývojové; navíc by to nespravilo `apps/web/.env`, který si vývojář udělá stejně, a
-  `apps/api` na `NODE_ENV` v prostředí spoléhá (`apps/api/src/env.ts`).
-- *`NX_LOAD_DOT_ENV_FILES=false`* – globální vypínač, vypnul by načítání `.env` i tam, kde
-  je žádoucí (`api:serve`, `web:dev`).
-- *Vypnout prerender / smazat padající stránky* – zakrytí příznaku, ne oprava.
+- *Remove `NODE_ENV` from `.env.example`* – env files aren't version-controlled
+  and must stay purely development-oriented; it also wouldn't fix
+  `apps/web/.env`, which a developer creates the same way regardless, and
+  `apps/api` relies on `NODE_ENV` being present in the environment
+  (`apps/api/src/env.ts`).
+- *`NX_LOAD_DOT_ENV_FILES=false`* – a global switch that would also disable
+  loading `.env` where it's wanted (`api:serve`, `web:dev`).
+- *Disable prerendering / delete the failing pages* – papering over the
+  symptom, not a fix.
 
-## Jak
+## How
 
 ```jsonc
 // apps/web/project.json
@@ -64,14 +73,16 @@ i když Task 9 nezměnil v `apps/web` ani řádku. Bisect proto nic neukázal a 
 }
 ```
 
-Ověření, že sloučení s inferovaným targetem nic neshodilo:
-`nx show project web --json` musí u `build` pořád ukazovat `"command": "next build"`,
-`"cwd": "apps/web"`, `cache`, `inputs`, `outputs` i `dependsOn`.
+Verification that merging with the inferred target changed nothing else:
+`nx show project web --json` must still show `"command": "next build"`,
+`"cwd": "apps/web"`, `cache`, `inputs`, `outputs`, and `dependsOn` for `build`.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Když se ten řádek ztratí (například při refaktoru `project.json` nebo při upgradu `@nx/next`,
-kdy někdo `build` blok „uklidí" jako zbytečný), build se rozbije **jen na strojích, které mají
-root `.env`** – v CI, kde `.env` neexistuje, projde. To je nejhorší možná varianta: zelené CI
-a lokálně nefunkční build. Proto je tady sepsané pravidlo, a ne jen komentář v JSONu (ten
-tam je taky, ale komentáře se mažou snáz než decision recordy).
+If that line is ever lost (say, during a `project.json` refactor, or a
+`@nx/next` upgrade where someone "cleans up" the `build` block as
+unnecessary), the build only breaks **on machines that have a root `.env`** –
+in CI, where no `.env` exists, it passes. That's the worst possible outcome:
+green CI and a broken local build. That's why the rule is written up here, and
+not left as just a comment in the JSON (there is one there too, but comments
+get deleted more easily than decision records).

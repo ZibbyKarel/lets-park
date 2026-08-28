@@ -1,11 +1,11 @@
-# 0026 – Singleton `ReservationWindowSettings` je vynucený `CHECK` constraintem
+# 0026 – The `ReservationWindowSettings` singleton is enforced by a `CHECK` constraint
 
-**Datum:** 2026-08-28 · **Stav:** přijato · **Navazuje na:** `doc/decision/0004-*`, `doc/decision/0016-*`
+**Date:** 2026-08-28 · **Status:** accepted · **Follows on from:** `doc/decision/0004-*`, `doc/decision/0016-*`
 
-## Co
+## What
 
-Tabulka `ReservationWindowSettings` smí obsahovat **právě jeden řádek**. Vynucuje to
-kombinace primárního klíče a `CHECK`:
+The `ReservationWindowSettings` table may contain **exactly one row**. This is
+enforced by a combination of the primary key and a `CHECK`:
 
 ```prisma
 model ReservationWindowSettings {
@@ -25,63 +25,73 @@ ALTER TABLE "ReservationWindowSettings"
   CHECK ("openDaysBefore" BETWEEN 1 AND 31);
 ```
 
-Řádek zakládá **init migrace** (`INSERT … ON CONFLICT ("id") DO NOTHING`), ne seed.
+The row is created by the **init migration** (`INSERT … ON CONFLICT ("id") DO
+NOTHING`), not by a seed.
 
-## Proč
+## Why
 
-**Proč vůbec vynucovat.** „Aplikace zapisuje jen jeden řádek" není garance, je to
-zvyk. Kdyby v tabulce vznikl druhý řádek, čtení nastavení začne vracet nedeterministický
-výsledek a rezervační okno se bude chovat náhodně – což je přesně ta třída chyby, kterou
-nikdo nereprodukuje.
+**Why enforce it at all.** "The app only ever writes one row" is a habit, not
+a guarantee. If a second row appeared in the table, reading the settings would
+start returning a nondeterministic result and the reservation window would
+behave randomly — exactly the class of bug nobody can reproduce.
 
-**Proč `CHECK (id = 1)` na fixním primárním klíči.** Primární klíč zakazuje **druhý**
-řádek s `id = 1`, `CHECK` zakazuje **jakékoliv jiné** `id`. Dohromady: víc než jeden
-řádek v tabulce být nemůže, nezávisle na tom, kdo do ní píše – aplikace, `psql`,
-Adminer, budoucí migrace. Čtení je pak triviální (`findUnique({ where: { id: 1 } })`)
-a nepotřebuje `findFirst` ani `LIMIT 1`.
+**Why `CHECK (id = 1)` on top of a fixed primary key.** The primary key
+forbids a **second** row with `id = 1`; the `CHECK` forbids **any other**
+`id`. Together: the table can never hold more than one row, regardless of who
+writes to it — the application, `psql`, Adminer, a future migration. Reading
+is then trivial (`findUnique({ where: { id: 1 } })`) and needs neither
+`findFirst` nor `LIMIT 1`.
 
-Zvažované alternativy:
+Alternatives considered:
 
-- **Částečný unikátní index** (`CREATE UNIQUE INDEX … ON t ((true))`) funguje stejně
-  dobře, ale je to okluznější zápis téhož a při čtení stejně potřebujeme vědět, jak
-  ten jediný řádek adresovat.
-- **`@@unique` nad konstantním sloupcem** znamená sloupec navíc, který nic neznamená.
-- **Nastavení jako řádky v key-value tabulce** by zrušilo typovou kontrolu
-  (`openDaysBefore` je `int`, `lockMode` je výčet) a přesunulo validaci do aplikace.
+- **A partial unique index** (`CREATE UNIQUE INDEX … ON t ((true))`) works
+  just as well, but it's a more obscure way of writing the same thing, and
+  reading still needs to know how to address that one row.
+- **`@@unique` over a constant column** means an extra column that means
+  nothing.
+- **Settings as rows in a key-value table** would give up type checking
+  (`openDaysBefore` is an `int`, `lockMode` is an enum) and push validation
+  into the application.
 
-**Proč `id` není UUID.** `doc/decision/0016-*` říká, že identifikátory **entit** jsou
-UUID, protože chodí v URL a v realtime payloadech a nesmí prozrazovat pořadí ani počet.
-Tenhle `id` nikam nechodí: `reservationWindowSettingsSchema` v kontraktu žádné `id`
-nemá, API čte a zapisuje nastavení bez identifikátoru. Je to interní detail úložiště,
-takže 0016 se ho netýká – a jen s fixním malým číslem může být `CHECK` takhle triviální.
+**Why `id` isn't a UUID.** `doc/decision/0016-*` says **entity** identifiers
+are UUIDs, because they travel in URLs and realtime payloads and must not
+leak ordering or count. This `id` goes nowhere: the
+`reservationWindowSettingsSchema` in the contract has no `id` field at all —
+the API reads and writes the settings with no identifier. It's an internal
+storage detail, so 0016 doesn't apply to it — and only with a fixed small
+number can the `CHECK` be this trivial.
 
-**Proč řádek zakládá migrace, a ne seed.** Tabulka nesmí být nikdy prázdná (čte ji
-každá rezervační cesta) a `prisma db seed` se v produkci nepouští. Seed hodnoty pro
-jistotu ještě upsertuje, aby se ručně rozhrabaná dev databáze vrátila do známého stavu.
+**Why the row is created by a migration, not a seed.** The table must never
+be empty (every reservation path reads it), and `prisma db seed` doesn't run
+in production. The seed still upserts the values for good measure, so a
+manually messed-up dev database returns to a known state.
 
-**Rozsah `openDaysBefore`.** Kontrakt ho omezuje na 1–31
-(`MIN_OPEN_DAYS_BEFORE`/`MAX_OPEN_DAYS_BEFORE`). Stejný `CHECK` v databázi je levný
-a chrání před zápisem mimo API.
+**The `openDaysBefore` range.** The contract bounds it to 1–31
+(`MIN_OPEN_DAYS_BEFORE`/`MAX_OPEN_DAYS_BEFORE`). The same `CHECK` in the
+database is cheap and guards against writes that bypass the API.
 
-## Jak
+## How
 
-Oba `CHECK` constrainty i `INSERT` jsou **ručně dopsané na konec** vygenerovaného
-`migration.sql` – Prisma je ve schématu vyjádřit neumí. Test
-`libs/database/src/lib/migration-sql.spec.ts` na jejich přítomnost přímo tvrdí, takže
-se nemůžou ztratit při regeneraci migrace.
+Both `CHECK` constraints and the `INSERT` are **hand-appended to the end** of
+the generated `migration.sql` – Prisma's schema language can't express them.
+The test `libs/database/src/lib/migration-sql.spec.ts` asserts their presence
+directly, so they can't be lost when the migration is regenerated.
 
-**Past:** `prisma migrate dev` porovnává stav po migracích proti `schema.prisma`, takže
-tyhle objekty vidí jako drift a do další migrace navrhne jejich zrušení. Postup pro
-každou další změnu schématu je popsaný v `doc/databaze.md`
-(§„Past: ručně psané SQL a `migrate dev`"): `--create-only`, pak z vygenerovaného SQL
-smazat `DROP CONSTRAINT`/`DROP TRIGGER`, teprve pak aplikovat.
+**Trap:** `prisma migrate dev` compares the post-migration state against
+`schema.prisma`, so it sees these objects as drift and proposes dropping them
+in the next migration. The procedure for every subsequent schema change is
+documented in `doc/database.md` (§"Trap: hand-written SQL and `migrate dev`"):
+`--create-only`, then delete the `DROP CONSTRAINT`/`DROP TRIGGER` from the
+generated SQL, and only then apply it.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Hlavní riziko není samotný constraint, ale ta past výše: kdyby si jí někdo nevšiml,
-tichý `DROP CONSTRAINT` v nové migraci singleton zruší a nikdo si toho nevšimne, dokud
-se neobjeví druhý řádek. Proto na to tvrdí test a proto je to v `doc/databaze.md`
-napsané jako postup, ne jako poznámka.
+The main risk isn't the constraint itself, it's the trap above: if someone
+misses it, a silent `DROP CONSTRAINT` in a new migration removes the
+singleton guarantee, and nobody notices until a second row shows up. That's
+why a test asserts it, and why it's written up in `doc/database.md` as a
+procedure, not a footnote.
 
-Kdyby v budoucnu bylo potřeba víc než jedno nastavení (například per-lokalita), padá
-celý model – ale to už není „změna constraintu", to je nová entita s cizím klíčem.
+If more than one settings row is ever needed (e.g. per-location settings), the
+whole model falls apart — but that's no longer "changing a constraint", it's
+a new entity with a foreign key.
