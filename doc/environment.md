@@ -207,7 +207,7 @@ node dist/apps/api/main.js
 The process exits with `exit code 1` and an `ExceptionHandler` error that
 names `DATABASE_URL` and never prints any value. **All** invalid variables are
 listed at once, not just the first. The verbatim output is in
-`doc/api-operations.md`, section "Behaviour on a missing or invalid env
+`doc/api-operations.md`, section "Behavior on a missing or invalid env
 variable" – including the note that this particular output is not JSON yet.
 
 ### Web
