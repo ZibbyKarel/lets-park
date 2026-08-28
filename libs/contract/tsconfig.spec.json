@@ -4,7 +4,11 @@
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
     "moduleResolution": "bundler",
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    // ts-jest transpiles the ESM-only @orpc/contract build; see jest.config.cts.
+    // `include` below never picks up node_modules, so this does not widen the
+    // typecheck program.
+    "allowJs": true
   },
   "include": [
     "jest.config.ts",

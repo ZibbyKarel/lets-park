@@ -42,14 +42,25 @@ export type ReservationWindowSettingsInput = z.input<typeof reservationWindowSet
  * One month as shown in the admin overview and in the user-facing banner:
  * which month it is, when its window runs, and where it currently stands.
  *
- * `windowFrom` / `windowTo` are the inclusive bounds under `AUTO`; they are
- * reported even when `lockMode` overrides the state, so the UI can explain what
- * the automatic rule would have done.
+ * `windowFrom` / `windowTo` are always the inclusive bounds the **AUTO** rule
+ * would produce. They are reported even when `lockMode` overrides the state, so
+ * the UI can explain what the automatic rule would have done — but that only
+ * works if the UI can tell the two situations apart, which is why `lockMode`
+ * travels with them.
+ *
+ * Read the payload in this order:
+ *
+ * 1. `state` is the truth: `NOT_YET_OPEN` / `OPEN` / `LOCKED`.
+ * 2. `lockMode !== 'AUTO'` means `state` was **overridden by an admin**, and
+ *    `windowFrom`/`windowTo` are therefore hypothetical. Rendering
+ *    "otevře se 25. 12." from them in that case would be a false statement.
  */
 export const monthWindowOverviewSchema = z.object({
   month: yearMonthSchema,
   windowFrom: dateOnlySchema,
   windowTo: dateOnlySchema,
   state: monthLockStateSchema,
+  /** The setting `state` was derived under. `AUTO` ⇒ the window above applies. */
+  lockMode: reservationLockModeSchema,
 });
 export type MonthWindowOverview = z.infer<typeof monthWindowOverviewSchema>;

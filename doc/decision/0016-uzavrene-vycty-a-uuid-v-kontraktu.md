@@ -11,7 +11,8 @@ Dvě věci, které `plan.md` nechává otevřené, kontrakt zavírá:
    `RESERVATION_CREATED`, `RESERVATION_CANCELLED`, `RESERVATION_CANCELLED_BY_ADMIN`,
    `WAITLIST_PROMOTED`, `USER_UPDATED`, `SPOT_UPDATED`.
 2. **Identifikátory entit jsou UUID** (`idSchema = z.uuid()`), včetně
-   `User.preferredParkingSpotId`.
+   `User.preferredParkingSpotId`. **Verze UUID je záměrně nevázaná** — `z.uuid()`
+   propustí v1, v4, v7 i nil UUID a kontrakt to tak nechává.
 
 ## Proč
 
@@ -27,6 +28,19 @@ churn. **Task 12, 13 a 30 výčet rozšíří, až budou vědět, co přesně za
 datový model ho následuje — ne naopak. UUID je zvolené proto, že id chodí v URL
 (`/reservations/:id`) i v payloadech realtime eventů a nesmí prozrazovat počet záznamů ani
 pořadí. **Task 9 (Prisma schéma) musí použít UUID, ne cuid ani autoinkrement.**
+
+**Proč ne konkrétní verze.** Původní znění tohohle rozhodnutí i komentář v `primitives.ts`
+říkaly „UUID v4", ale `z.uuid()` to nevynucuje — projde v1, v7 i nil UUID (ověřeno v review
+Tasku 3). Rozpor je vyřešený **přeformulováním, ne zpřísněním na `z.uuidv4()`**:
+
+- Klient id nikdy nečte — je to neprůhledný řetězec. Kontrakt tedy na verzi nemá zájem.
+- `z.uuidv4()` by naopak Tasku 9 zavřel dveře k **UUIDv7**, který Postgres i Prisma umí
+  a který má na primárním klíči lepší lokalitu zápisu (monotónní prefix) než náhodná v4.
+  Tuhle volbu má dělat datová vrstva podle výkonu, ne kontrakt.
+- Nil UUID (`00000000-…`) projde, ale nic v systému ho negeneruje; jako cizí klíč
+  neexistuje a skončí na `NOT_FOUND`. Není to díra v autorizaci.
+
+Task 4 tedy jen srovnal prózu s chováním schématu, na obou místech.
 
 ## Jak
 

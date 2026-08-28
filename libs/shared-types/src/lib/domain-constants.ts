@@ -47,3 +47,46 @@ export const MAX_OPEN_DAYS_BEFORE = 31;
 
 /** Default admin override of the reservation window. */
 export const DEFAULT_RESERVATION_LOCK_MODE: ReservationLockMode = 'AUTO';
+
+/**
+ * What the bulk-booking allocator managed to do with one selected day
+ * (`doc/decision/0004-*`, §Hromadná rezervace). The same three outcomes describe
+ * the read-only proposal (`previewBulk`) and the real result (`confirmBulk`), so
+ * the UI can lay the two side by side and show where reality differed.
+ *
+ * - `SPOT_ASSIGNED` — a free spot was found (possibly the preferred one).
+ * - `QUEUED`        — every spot was taken, the user went into a waitlist.
+ * - `UNAVAILABLE`   — nothing could be done for that day; see
+ *   {@link BULK_UNAVAILABLE_REASONS}.
+ */
+export const BULK_DAY_OUTCOMES = ['SPOT_ASSIGNED', 'QUEUED', 'UNAVAILABLE'] as const;
+export type BulkDayOutcome = (typeof BULK_DAY_OUTCOMES)[number];
+
+/**
+ * Why a selected day produced no reservation and no queue position.
+ *
+ * These are *per-day* facts reported inside a successful response, not errors:
+ * one impossible day must not throw away the rest of the batch. Conditions that
+ * invalidate the whole request (locked month, day in the past) are contract
+ * errors on the procedure instead.
+ *
+ * - `ALREADY_HAS_RESERVATION` — the user already holds a reservation that day
+ *   (one reservation per user and day).
+ * - `NOT_A_BUSINESS_DAY`      — weekend or Czech public holiday.
+ * - `NO_SPOTS_AVAILABLE`      — no active spot exists to reserve or queue for.
+ */
+export const BULK_UNAVAILABLE_REASONS = [
+  'ALREADY_HAS_RESERVATION',
+  'NOT_A_BUSINESS_DAY',
+  'NO_SPOTS_AVAILABLE',
+] as const;
+export type BulkUnavailableReason = (typeof BULK_UNAVAILABLE_REASONS)[number];
+
+/**
+ * Upper bound on the number of days one bulk booking may carry.
+ *
+ * A bulk selection is made inside a single calendar month, so 31 is the natural
+ * ceiling. The contract enforces it structurally; the service layer still has to
+ * reject days outside the open window.
+ */
+export const MAX_BULK_BOOKING_DAYS = 31;

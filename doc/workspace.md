@@ -111,19 +111,38 @@ Každý projekt má vlastní cíl `typecheck` (`nx:run-commands` + `tsc --noEmit
 ## Nx tagy a hranice modulů
 
 Tagy se píší do `project.json` (`"tags": [...]`) a vynucuje je ESLint pravidlo
-`@nx/enforce-module-boundaries`. Používají se tři nezávislé dimenze; **pravidla ze všech
-dimenzí musí platit současně**.
+`@nx/enforce-module-boundaries`. Používají se čtyři nezávislé dimenze; **pravidla ze všech
+dimenzí musí platit současně** (Nx je ANDuje – viz `doc/decision/0017-*`).
 
 ### Dimenze `type:` – jakou roli lib hraje
 
-| tag | význam | smí záviset na |
+Tahle dimenze workspace **rozděluje beze zbytku** (každý projekt nese právě jeden `type:`
+tag), a proto na ní visí i seznam povolených npm balíčků (`allowedExternalImports`).
+
+| tag | význam | smí záviset na | z npm smí |
+| --- | --- | --- | --- |
+| `type:app` | aplikace (`apps/*`) | na čemkoliv; nikdo nesmí záviset na aplikaci | `*` |
+| `type:feature` | doménová kompozice | `feature`, `ui`, `util`, `contract`, `data` | `tslib` |
+| `type:ui` | design systém, bez domény | `ui`, `util` | React, `clsx`, `tailwind-merge`, `class-variance-authority`, TanStack Table, Storybook |
+| `type:util` | wrapper vrstvy a helpery | `util`, `contract` | React/Next + sjednocení balíčků z `WRAPPED_LIBRARIES` |
+| `type:contract` | `libs/contract` – Zod + oRPC | `layer:foundation` | `zod`, `@orpc/contract`, `tslib` |
+| `type:data` | přístup k datům (`libs/database`) | `data`, `util`, `contract` | Prisma |
+
+### Dimenze `layer:` – spodek grafu
+
+| tag | smí záviset na | z npm smí |
 | --- | --- | --- |
-| `type:app` | aplikace (`apps/*`) | na čemkoliv; nikdo nesmí záviset na aplikaci |
-| `type:feature` | doménová kompozice | `feature`, `ui`, `util`, `contract`, `data` |
-| `type:ui` | design systém, bez domény | `ui`, `util` |
-| `type:util` | wrapper vrstvy a helpery | `util`, `contract` |
-| `type:contract` | `libs/contract` – Zod + oRPC | `util`; z npm jen `zod`, `@orpc/contract`, `tslib` |
-| `type:data` | přístup k datům (`libs/database`) | `data`, `util`, `contract` |
+| `layer:foundation` | **na ničem** | **na ničem** |
+
+Nese ho jediný projekt, `libs/shared-types`. Odděluje ho od wrapperů, které mají stejný tag
+`type:util`, ale leží **nad** kontraktem, zatímco `shared-types` leží **pod** ním. Bez toho
+by `type:util → type:contract` a `type:contract → type:util` tvořily cyklus. Výsledné
+vrstvení je acyklické: `app → feature → ui → util → contract → foundation`.
+
+> **Pozor na rozdíl mezi „chybí" a „prázdné":** `allowedExternalImports` **bez uvedení**
+> neomezuje nic (projde libovolný balíček), kdežto `allowedExternalImports: []` zakáže
+> všechny. Právě proto má seznam každý `type:` tag, i kdyby byl jen `['tslib']`.
+> Podrobnosti a probe důkazy: `doc/decision/0017-*`.
 
 ### Dimenze `scope:` – na které straně lib žije
 
@@ -207,7 +226,7 @@ tomu, aby `apps/api` přes `shared-types` táhla Zod (viz `doc/decision/0003-*`)
    | lib | tagy |
    | --- | --- |
    | `libs/contract` | `type:contract`, `scope:shared` |
-   | `libs/shared-types` | `type:util`, `scope:shared` |
+   | `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` |
    | `libs/design-system/tokens` | `type:ui`, `scope:web`, `ds:tokens` |
    | `libs/design-system/primitives` | `type:ui`, `scope:web`, `ds:primitives` |
    | `libs/design-system/compounds` | `type:ui`, `scope:web`, `ds:compounds` |
@@ -216,6 +235,8 @@ tomu, aby `apps/api` přes `shared-types` táhla Zod (viz `doc/decision/0003-*`)
    | `libs/database` | `type:data`, `scope:api` |
 
    Projekt bez tagů žádná pravidla neomezují – **netagovaná lib je díra v hranicích.**
+   Když lib potřebuje npm balíček, který v `NPM_ALLOWLIST` pro její `type:` tag není,
+   lint spadne s jeho jménem; doplň ho tam jedním řádkem, ať je změna vidět v review.
 
 3. **Přidej cíl `typecheck`** do `project.json`:
 

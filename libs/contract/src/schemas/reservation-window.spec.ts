@@ -39,6 +39,7 @@ describe('monthWindowOverviewSchema', () => {
     windowFrom: '2026-08-25',
     windowTo: '2026-08-31',
     state: 'OPEN',
+    lockMode: 'AUTO',
   };
 
   it('accepts a valid overview', () => {
@@ -51,8 +52,30 @@ describe('monthWindowOverviewSchema', () => {
     ['windowFrom', '2026-02-30'],
     ['windowTo', ''],
     ['state', 'CLOSED'],
+    ['lockMode', 'FORCE_MAYBE'],
   ])('rejects an invalid %s (%p)', (field, value) => {
     expect(monthWindowOverviewSchema.safeParse({ ...valid, [field]: value }).success).toBe(false);
+  });
+
+  it('requires lockMode — a FORCE_LOCKED month must not look AUTO-derived', () => {
+    // Regression guard for the Task 3 review finding S2: without lockMode the
+    // UI could render "opens 25 Aug" for a month the admin has force-locked.
+    const withoutLockMode: Record<string, unknown> = { ...valid };
+    delete withoutLockMode['lockMode'];
+    expect(monthWindowOverviewSchema.safeParse(withoutLockMode).success).toBe(false);
+  });
+
+  it('reports the AUTO range next to the overriding mode under FORCE_LOCKED', () => {
+    const parsed = monthWindowOverviewSchema.parse({
+      ...valid,
+      state: 'LOCKED',
+      lockMode: 'FORCE_LOCKED',
+    });
+    // Both facts survive: the range the AUTO rule *would* have produced, and
+    // the fact that an admin overrode it.
+    expect(parsed.windowFrom).toBe('2026-08-25');
+    expect(parsed.lockMode).toBe('FORCE_LOCKED');
+    expect(parsed.state).toBe('LOCKED');
   });
 
   it('carries exactly what the shared-types window functions produce', () => {
@@ -66,12 +89,14 @@ describe('monthWindowOverviewSchema', () => {
       windowFrom: from,
       windowTo: to,
       state: monthLockState(target, 7, 'AUTO', today),
+      lockMode: 'AUTO',
     });
     expect(parsed).toEqual({
       month: '2026-09',
       windowFrom: '2026-08-25',
       windowTo: '2026-08-31',
       state: 'OPEN',
+      lockMode: 'AUTO',
     });
   });
 });

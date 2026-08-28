@@ -4,8 +4,8 @@
 frontend ↔ backend. Žádný endpoint, DTO ani realtime event nesmí existovat v kódu dřív,
 než existuje tady.
 
-Tenhle dokument zakládá Task 3 (entity, primitiva, error kontrakt). Task 4 ho doplní
-o oRPC procedury a Task 5 o realtime eventy.
+Tenhle dokument zakládá Task 3 (entity, primitiva, error kontrakt), Task 4 doplnil oRPC
+procedury. Task 5 doplní realtime eventy.
 
 ---
 
@@ -13,8 +13,8 @@ o oRPC procedury a Task 5 o realtime eventy.
 
 | lib | tagy | čím je | co v ní **nesmí** být |
 | --- | --- | --- | --- |
-| `libs/shared-types` | `type:util`, `scope:shared` | doménové konstanty a čistá date-only logika pro `Europe/Prague` | Zod, next-intl, jakákoliv runtime závislost |
-| `libs/contract` | `type:contract`, `scope:shared` | Zod schémata + (od Tasku 4) oRPC kontrakt | cokoliv z npm mimo `zod`, `@orpc/contract`, `tslib` |
+| `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` | doménové konstanty a čistá date-only logika pro `Europe/Prague` | Zod, next-intl, jakákoliv runtime závislost |
+| `libs/contract` | `type:contract`, `scope:shared` | Zod schémata + oRPC kontrakt | cokoliv z npm mimo `zod`, `@orpc/contract`, `tslib` |
 
 Rozdělení není kosmetické. `libs/shared-types` importuje `apps/api` i `libs/i18n`, takže
 nesmí táhnout Zod ani frontendové knihovny (viz `doc/decision/0003-*`). `libs/contract`
@@ -35,9 +35,21 @@ libs/contract/src/
     enums.ts                Zod obaly doménových výčtů ze shared-types
     entities.ts             User, ParkingSpot, Reservation, WaitlistEntry, AuditLog
     reservation-window.ts   ReservationWindowSettings, MonthWindowOverview
-    errors.ts               ERROR_CODES, errorCodeSchema, errorShapeSchema
+    errors.ts               ERROR_CODES, errorCodeSchema, errorDetailsSchema, errorShapeSchema
     index.ts                barrel
-  api/                      (Task 4)  oRPC procedury
+  api/                      oRPC procedury (Task 4)
+    errors.ts               ERROR_DEFINITIONS, contractErrors(), builder `authed`
+    overview.ts             přehled dne
+    reservations.ts         create, cancel
+    bulk.ts                 previewBulk, confirmBulk
+    waitlist.ts             join, leave
+    spots.ts, users.ts      správa míst a uživatelů
+    me.ts                   profil, nastavení, regenerace ICS tokenu
+    ics.ts                  konstanty a helper pro ICS URL (feed je mimo oRPC)
+    reservation-window.ts   admin správa rezervačního okna
+    router.ts               `contract` — celý router
+    fixtures.ts             fixtures pro testy, nereexportované
+    index.ts                barrel
   realtime/                 (Task 5)  Zod payloady Socket.io eventů,
                                       vstupní bod @lets-park/contract/realtime
 ```
@@ -121,6 +133,267 @@ Dva „okenní" kódy jsou rozlišené záměrně, protože uživateli říkají
 
 Oba vrací service vrstva na základě `monthLockState()`, nikdy schéma.
 
+Na oRPC se tenhle kontrakt mapuje 1:1 — `details` a oRPC `data` je totéž pole. Definice kódů
+(HTTP status, defaultní zpráva) jsou v `api/errors.ts`, podrobnosti v
+`doc/decision/0018-mapovani-error-kontraktu-na-orpc.md`.
+
+---
+
+## oRPC procedury
+
+Router je jeden objekt `contract` v `api/router.ts`. **Seskupení je autorizační hranice:**
+všechno pod `admin.` vyžaduje `role: 'ADMIN'`, všechno ostatní stačí aktivnímu uživateli.
+
+`FORBIDDEN` deklaruje **každá** procedura — sedí na sdíleném builderu `authed`, protože
+deaktivovaný uživatel (`active: false`, tak funguje offboarding) je odmítnutý dřív, než se
+spustí handler. V tabulkách níž se proto neopakuje; `—` ve sloupci chyb znamená „nic nad rámec
+`FORBIDDEN`".
+
+**Vstupní schéma má každá procedura, i ta bez argumentů.** oRPC dovoluje `.input()` vynechat,
+ale vynechané schéma znamená, že se omylem poslaný payload tiše zahodí. Čtyři procedury bez
+argumentů (`overview` je nemá, jde o `spot.list`, `me.get`, `me.regenerateIcsToken`,
+`admin.window.get`) proto deklarují sdílené `noInputSchema` z `api/errors.ts` — to bere
+`undefined` (jak přijde volání přes RPC) i `{}` (jak přijde GET bez parametrů přes OpenAPI),
+ale cokoliv s klíčem odmítne. V tabulkách je jejich vstup psaný jako `—`.
+
+**Kdy nastane `VALIDATION_FAILED`.** Znamená „požadavek je strukturálně v pořádku, ale porušuje
+doménové pravidlo, na které je potřeba sáhnout do databáze" — ne špatný formát, ten odchytí
+schéma a vrací ho oRPC vlastní chybou. Každá procedura, která ho deklaruje, má konkrétní spouštěč:
+
+| procedura | co ho vyvolá |
+| --- | --- |
+| `reservation.create`, `waitlist.join` | místo existuje, ale je deaktivované |
+| `reservation.previewBulk`, `reservation.confirmBulk` | totéž pro preferované místo uživatele |
+| `me.updateSettings` | preferované místo je deaktivované |
+| `admin.spot.create`, `admin.spot.update` | `group` mimo povolenou sadu skupin parkoviště |
+| `admin.user.update` | změna role, kterou nelze provést (poslední admin) |
+| `admin.window.update` | kombinace `openDaysBefore` a `lockMode`, kterou nelze uplatnit |
+| `admin.window.months` | rozsah `from`–`to` delší, než kolik měsíců lze spočítat najednou |
+
+`overview.day` ho **nedeklaruje** — je to čtení a žádné doménové pravidlo tam strukturálně
+platné datum porušit nemůže (den mimo všechna okna se vrátí s `canReserve: false`, ne chybou).
+Deklarovat kód, který procedura nikdy nevrátí, je podle `doc/decision/0018-*` stejná chyba jako
+vrátit nedeklarovaný.
+
+### Přehled dne
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `overview.day` | `{ date }` | `{ date, window, canReserve, spots[], viewerReservationId }` | — |
+
+Jedním dotazem všechno, co potřebuje obrazovka parkoviště: každé aktivní místo, kdo ho drží,
+kolik lidí je za ním ve frontě, kde stojí volající — **a stav rezervačního okna pro ten den**.
+Okno jede s odpovědí schválně, aby FE nemusel dělat druhý dotaz a nemohl vykreslit mřížku dne
+proti zastaralému oknu.
+
+Dvě pole, která se nesmí plést:
+
+- `window` — `MonthWindowOverview` měsíce, do kterého `date` spadá. Pravdu nese `state`;
+  `lockMode !== 'AUTO'` znamená, že stav **přepsal admin** a `windowFrom`/`windowTo` jsou jen
+  hypotetické (co by udělalo automatické pravidlo).
+- `canReserve` — jestli **tenhle** uživatel smí **tenhle** den rezervovat. Už v sobě má okno,
+  výjimku pro admina, minulost i pracovní den. **FE si to nesmí dopočítávat z `window`** —
+  admin oknem omezený není a to je fakt, který žije na backendu.
+
+Read-only: zamčený ani neotevřený den se nevyhazuje jako chyba, jen se ohlásí ve `window`.
+
+Uživatelé jiných lidí jdou ven jako `userSummarySchema` — `pick` tří polí (`id`, `name`,
+`licensePlate`). `email`, `oktaId` a hlavně `icsToken` se do cizího prohlížeče nikdy nedostanou.
+
+### Rezervace
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `reservation.create` | `{ parkingSpotId, date }` | `Reservation` | `NOT_FOUND`, `SPOT_ALREADY_RESERVED`, `RESERVATION_LIMIT_REACHED`, `PAST_DATE`, `OUT_OF_HORIZON`, `RESERVATIONS_LOCKED`, `VALIDATION_FAILED`, `CONFLICT` |
+| `reservation.cancel` | `{ reservationId }` | `{ reservationId, date, parkingSpotId, promoted }` | `NOT_FOUND`, `CONFLICT` |
+
+`reservation.cancel` **záměrně nedeklaruje žádnou okenní chybu.** Podle `doc/decision/0004-*`
+smí běžný uživatel zrušit svoji rezervaci kdykoliv, i v zamčeném měsíci — zámek brání v braní
+míst, ne v jejich vracení. Cizí rezervaci pokrývá `FORBIDDEN`; admin smí zrušit jakoukoliv.
+
+`promoted: true` znamená, že uvolněné místo rovnou dostal první ve frontě. Automatické povýšení
+je systémová akce a zámek na ni neplatí, takže může nastat i v zamčeném měsíci.
+
+`SPOT_ALREADY_RESERVED` je poctivá odpověď na obsazené místo; `CONFLICT` je užší případ prohraného
+závodu mezi kontrolou a insertem, který unique constraint na (místo, den) změní v chybu místo
+dvojité rezervace.
+
+### Waitlist
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `waitlist.join` | `{ parkingSpotId, date }` | `{ entry, position }` | `NOT_FOUND`, `ALREADY_IN_WAITLIST`, `CANNOT_WAITLIST_OWN_SPOT`, `SPOT_NOT_OCCUPIED`, `RESERVATION_LIMIT_REACHED`, `PAST_DATE`, `OUT_OF_HORIZON`, `RESERVATIONS_LOCKED`, `VALIDATION_FAILED`, `CONFLICT` |
+| `waitlist.leave` | `{ waitlistEntryId }` | `{ waitlistEntryId, parkingSpotId, date }` | `NOT_FOUND`, `OUT_OF_HORIZON`, `RESERVATIONS_LOCKED`, `CONFLICT` |
+
+Obě jsou zápisy, takže obě jsou zamčeným oknem blokované — `doc/decision/0004-*` jmenuje
+„odejít z fronty" výslovně, protože odchod přerovnává všechny za tebou.
+
+`RESERVATION_LIMIT_REACHED` u `join` není překlep: povýšení by uživateli dalo druhou rezervaci
+na den, kde už jednu má, takže ho fronta odmítne rovnou, místo aby ho nikdy nepovýšila.
+
+`OUT_OF_HORIZON` u `leave` vypadá nedosažitelně (do neotevřeného měsíce se nedalo přihlásit),
+ale dosažitelné je: admin sníží `openDaysBefore` a měsíc se vrátí do `NOT_YET_OPEN`, zatímco
+záznamy v něm už existují.
+
+Povýšení z fronty **není procedura** — děje se na backendu při zrušení a hlásí se realtime
+eventem (Task 5).
+
+### Hromadná rezervace
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `reservation.previewBulk` | `{ dates[] }` | `{ month, preferredParkingSpotId, days[], summary }` | `PAST_DATE`, `OUT_OF_HORIZON`, `RESERVATIONS_LOCKED`, `VALIDATION_FAILED` |
+| `reservation.confirmBulk` | `{ dates[] }` (tentýž) | totéž + id zapsaných řádků | navíc `CONFLICT` |
+
+`previewBulk` **nic nezapisuje** — žádnou rezervaci, žádnou frontu, žádný audit. Okenní chyby
+deklaruje stejně jako `confirmBulk`: navrhnout rozvrh na měsíc, který uživatel nesmí rezervovat,
+znamená ukázat mu plán, který nikdy nepotvrdí.
+
+Den je diskriminovaná unie na `outcome`:
+
+| outcome | nese |
+| --- | --- |
+| `SPOT_ASSIGNED` | `parkingSpotId`, `parkingSpotLabel`, `isPreferredSpot` |
+| `QUEUED` | `parkingSpotId`, `parkingSpotLabel`, `waitlistPosition` |
+| `UNAVAILABLE` | `reason` (`ALREADY_HAS_RESERVATION` / `NOT_A_BUSINESS_DAY` / `NO_SPOTS_AVAILABLE`) |
+
+Ve výsledku z `confirmBulk` má `SPOT_ASSIGNED` navíc `reservationId` a `QUEUED` navíc
+`waitlistEntryId` — každá varianta výsledku je nadmnožinou téže varianty návrhu.
+
+**Rozdíl mezi návrhem a skutečností počítá klient** spárováním obou polí podle `date`; server
+návrh nezná a znát nemá. Proč, a proč vstup zůstává jen seznamem dnů, je v
+`doc/decision/0019-navrh-a-potvrzeni-hromadne-rezervace.md`.
+
+Vstup validuje **jen strukturu**: neprázdný, max `MAX_BULK_BOOKING_DAYS` (31), bez duplicit,
+všechny dny v jednom měsíci. Víkendy, svátky ani minulost ne — to je den-eligibilita a patří
+do service vrstvy, stejně jako okno (ruling window-2).
+
+### Místa
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `spot.list` | — | `{ spots[] }` | — |
+| `admin.spot.list` | `{ includeInactive = false, group? }` | `{ spots[] }` | — |
+| `admin.spot.create` | `{ label, group }` | `ParkingSpot` | `CONFLICT`, `VALIDATION_FAILED` |
+| `admin.spot.update` | `{ id, label?, group?, active? }` | `ParkingSpot` | `NOT_FOUND`, `CONFLICT`, `VALIDATION_FAILED` |
+| `admin.spot.deactivate` | `{ id }` | `ParkingSpot` | `NOT_FOUND`, `CONFLICT` |
+
+`spot.list` existuje i pro běžného uživatele, protože nastavení potřebuje picker pro
+`preferredParkingSpotId`. Vrací jen aktivní místa a nebere filtry.
+
+`CONFLICT` u `create`/`update` je duplicitní `label` (unikátní v celém parkovišti), u
+`deactivate` místo, které má budoucí rezervace — admin je musí vyřešit dřív, než ho stáhne.
+Deaktivace je vždycky soft delete; řádek se nemaže kvůli cizím klíčům z rezervací a auditu.
+
+### Uživatelé
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `admin.user.list` | `{ role?, active?, search? }` | `{ users[] }` | — |
+| `admin.user.update` | `{ id, role?, active? }` | `AdminUser` | `NOT_FOUND`, `CONFLICT`, `VALIDATION_FAILED` |
+
+Uživatelé se přes API **nezakládají** (provisioning z Okta tokenu při prvním přihlášení) ani
+nemažou (offboarding = `active: false`).
+
+`adminUserSchema` je `userSchema.omit({ icsToken: true })` — token je jediné tajemství na entitě
+a admin nemá důvod držet cizí. `omit` je zvolený schválně: nové pole na entitě se v adminu
+objeví samo, což je u administrativního pohledu bezpečnější směr než `pick`.
+
+Admin smí měnit jen roli a aktivitu; jméno, e-mail a SPZ patří uživateli. `CONFLICT` hlídá dva
+způsoby, jak si systém zamknout: degradovat/deaktivovat posledního aktivního admina a
+deaktivovat sám sebe.
+
+### Nastavení uživatele
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `me.get` | — | `User` (vlastní, včetně `icsToken`) | — |
+| `me.updateSettings` | `{ licensePlate?, preferredParkingSpotId? }` | `User` | `NOT_FOUND`, `VALIDATION_FAILED` |
+| `me.regenerateIcsToken` | — | `{ icsToken }` | `CONFLICT` |
+
+`me.get` vrací `icsToken`, protože je to token volajícího a obrazovka nastavení z něj skládá
+adresu feedu.
+
+`me.updateSettings` je částečná změna se **třemi** stavy na pole:
+
+| hodnota | význam |
+| --- | --- |
+| pole chybí | neměnit |
+| `null` | vymazat (žádná SPZ / žádné preferované místo) |
+| hodnota | nastavit |
+
+Obě pole jsou na entitě nullable, takže „vymazat" musí jít vyjádřit; samotné `.partial()` by to
+od „neměnit" nerozeznalo. `NOT_FOUND` je neexistující preferované místo, `VALIDATION_FAILED`
+míření na deaktivované.
+
+`preferredParkingSpotId` se používá **výhradně** jako první volba při hromadné rezervaci; na
+běžnou jednodenní rezervaci nemá vliv (`doc/decision/0004-*`).
+
+### ICS feed
+
+Feed samotný je **mimo oRPC** — `plan.md` §Contract-first ho jmenuje jako jedinou výjimku.
+Kalendářní klienti (Outlook, Google) stahují prostou URL a nejde je naučit posílat hlavičky,
+takže feed nemůže jet po RPC transportu ani po session cookie. Je to obyčejný `GET`
+autentizovaný neuhodnutelným tokenem v cestě.
+
+Kontrakt proto nevlastní endpoint, ale **tvar URL**, aby se `apps/api` (které ho servíruje)
+a `apps/web` (které ho zobrazuje) nemohly rozejít:
+
+```ts
+ICS_FEED_BASE_PATH        // '/api/calendar'   (včetně globálního prefixu apps/api)
+ICS_FEED_FILE_EXTENSION   // '.ics'
+buildIcsFeedPath(token)   // '/api/calendar/<token>.ics'
+buildIcsFeedUrl(base, token)  // 'https://host/api/calendar/<token>.ics'
+```
+
+`buildIcsFeedUrl` ořízne koncová lomítka v `base` a token percent-enkóduje. Prázdný token nebo
+prázdné `base` vyhodí — jinak by vznikla URL mířící na kolekci místo na uživatele.
+
+`me.regenerateIcsToken` vrací **jen token**, ne URL: kontrakt neví, na jakém originu je nasazení
+dostupné, a nemá to hádat. URL složí klient helperem. Regenerace okamžitě zneplatní starou
+adresu, takže UI musí uživateli říct, že si musí předplatné v kalendáři vyměnit.
+
+### Rezervační okno (admin)
+
+| procedura | vstup | výstup | další chyby |
+| --- | --- | --- | --- |
+| `admin.window.get` | — | `ReservationWindowSettings` | — |
+| `admin.window.update` | `{ openDaysBefore?, lockMode? }` | `ReservationWindowSettings` | `VALIDATION_FAILED`, `CONFLICT` |
+| `admin.window.months` | `{ from, to }` (`YYYY-MM`) | `{ months[], settings }` | `VALIDATION_FAILED` |
+
+`admin.window.update` je **náhrada, ne patch**: vstupem je přímo `reservationWindowSettingsSchema`,
+takže vynechané pole spadne na svůj **default** (`openDaysBefore: 7`, `lockMode: 'AUTO'`), ne na
+aktuálně uloženou hodnotu. Pole jsou dvě, admin formulář vždy vykreslí obě — „PUT nahrazuje
+zdroj" se čte líp než patch, jehož výsledek závisí na neviditelném stavu. **Posílej obě.**
+
+`admin.window.months` vrací měsíce vzestupně a k nim nastavení, pod kterým byly stavy odvozené,
+aby admin záložka vykreslila tabulku i formulář z jedné odpovědi. `from <= to` se kontroluje ve
+schématu — `YYYY-MM` se řadí lexikograficky, takže na to není potřeba datumová aritmetika.
+
+Běžný uživatel žádnou z těchhle procedur nevolá; stav okna pro konkrétní den dostane
+v `overview.day`.
+
+---
+
+## Jak přidat proceduru
+
+1. **Schémata vstupu a výstupu** jako pojmenované konstanty (`fooInputSchema`,
+   `fooOutputSchema`) v souboru podle domény v `api/`. Odvozuj z entit (`.pick()`, `.omit()`,
+   `.partial()`), nikdy neopisuj. Typ přes `z.infer`.
+2. **Proceduru** postav na builderu `authed` (nese `FORBIDDEN`), přidej `.input()`, `.output()`
+   a `.errors(contractErrors(...))`. **Procedura bez deklarovaných chyb je skoro jistě špatně** —
+   a stejně tak procedura, která deklaruje kód, pro který neumíš pojmenovat spouštěč.
+   `.input()` se **nevynechává**: procedura bez argumentů dostane `noInputSchema`.
+3. **Zapoj ji do `router.ts`** — pod `admin.`, jestli vyžaduje roli.
+4. **Test vedle** (`*.spec.ts`): platný vstup, neplatný vstup, a co má výstup zaručit.
+5. **Doplň `EXPECTED_PROCEDURES` a `EXPECTED_ERROR_CODES` v `api/router.spec.ts`.** Ty dva
+   seznamy jsou úmyslně ruční — každá změna povrchu API je pak vidět v diffu.
+6. **Popiš ji tady**, v tabulce příslušné sekce.
+
+Co se **nepřidává**: procedura vracející ad-hoc tvar chyby, validace potřebující data z databáze
+(patří do service vrstvy) a jakýkoliv import z `@orpc/client` nebo `@orpc/server` — kontrakt
+nesmí sáhnout na transport a ESLint to vynucuje.
+
 ---
 
 ## Jak přidat nové schéma
@@ -155,6 +428,7 @@ Kontrakt na ni staví, ale používá ji i backend a `libs/i18n`.
 | Europe/Prague | `PRAGUE_TIME_ZONE`, `todayInPrague`, `toDateOnlyInPrague`, `startOfDayInPrague`, `endOfDayExclusiveInPrague` |
 | české svátky | `easterSunday`, `goodFriday`, `easterMonday`, `czechPublicHolidays`, `czechPublicHolidayOn`, `isCzechPublicHoliday`, `isBusinessDay` |
 | výčty a defaulty | `PARKING_GROUPS`, `USER_ROLES`, `RESERVATION_LOCK_MODES`, `MONTH_LOCK_STATES`, `DEFAULT_OPEN_DAYS_BEFORE`, `MIN/MAX_OPEN_DAYS_BEFORE`, `DEFAULT_RESERVATION_LOCK_MODE` |
+| hromadná rezervace | `BULK_DAY_OUTCOMES`, `BULK_UNAVAILABLE_REASONS`, `MAX_BULK_BOOKING_DAYS` |
 | rezervační okno | `isMonthOpen`, `monthLockState`, `reservationWindowRange` |
 
 Aritmetika je kalendářní a časová zóna se řeší na jediné hranici — viz
@@ -171,4 +445,7 @@ Meeus/Jones/Butcher algoritmem, ne z tabulky, takže nezastarají.
 - `doc/decision/0013-kalendarni-aritmetika-a-jedina-hranice-casove-zony.md`
 - `doc/decision/0014-dateonly-je-nebrandovany-string.md`
 - `doc/decision/0015-casova-razitka-v-kontraktu-jsou-iso-retezce.md`
-- `doc/decision/0016-uzavrene-vycty-a-uuid-v-kontraktu.md`
+- `doc/decision/0016-uzavrene-vycty-a-uuid-v-kontraktu.md` – proč je verze UUID nevázaná
+- `doc/decision/0018-mapovani-error-kontraktu-na-orpc.md` – `details` = oRPC `data`, statusy
+- `doc/decision/0019-navrh-a-potvrzeni-hromadne-rezervace.md` – proč rozdíl počítá klient
+- `doc/decision/0020-orpc-je-esm-only-jest-ho-musi-transpilovat.md` – nutná Jest konfigurace
