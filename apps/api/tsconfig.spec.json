@@ -4,6 +4,10 @@
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
     "moduleResolution": "bundler",
+    // ts-jest transpiles the ESM-only `@orpc/*` and `@nestjs/config` packages
+    // into CommonJS for Jest (see `jest.config.cts`), which means it has to be
+    // willing to read `.js`/`.mjs` in the first place.
+    "allowJs": true,
     "types": ["jest", "node"]
   },
   "include": [

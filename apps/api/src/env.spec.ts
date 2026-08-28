@@ -28,7 +28,46 @@ describe('validateApiEnv', () => {
       AUTH_OKTA_AUDIENCE: 'api://default',
       CORS_ALLOWED_ORIGINS: ['http://localhost:4200', 'http://localhost:3000'],
       LOG_LEVEL: 'info',
+      // Operational-baseline keys are optional; these are their defaults.
+      THROTTLE_TTL_MS: 60_000,
+      THROTTLE_LIMIT: 300,
+      THROTTLE_STRICT_TTL_MS: 60_000,
+      THROTTLE_STRICT_LIMIT: 20,
+      BODY_LIMIT: '100kb',
+      HEALTH_DB_TIMEOUT_MS: 3_000,
     });
+  });
+
+  it('coerces the operational-baseline overrides that are set', () => {
+    const env = validateApiEnv(
+      validEnv({
+        THROTTLE_TTL_MS: '1000',
+        THROTTLE_LIMIT: '5',
+        THROTTLE_STRICT_TTL_MS: '2000',
+        THROTTLE_STRICT_LIMIT: '2',
+        BODY_LIMIT: '1mb',
+        HEALTH_DB_TIMEOUT_MS: '250',
+      })
+    );
+
+    expect(env.THROTTLE_TTL_MS).toBe(1000);
+    expect(env.THROTTLE_LIMIT).toBe(5);
+    expect(env.THROTTLE_STRICT_TTL_MS).toBe(2000);
+    expect(env.THROTTLE_STRICT_LIMIT).toBe(2);
+    expect(env.BODY_LIMIT).toBe('1mb');
+    expect(env.HEALTH_DB_TIMEOUT_MS).toBe(250);
+  });
+
+  it('rejects a BODY_LIMIT without a unit, because body-parser would read it as bytes', () => {
+    expect(() => validateApiEnv(validEnv({ BODY_LIMIT: '100' }))).toThrow(/BODY_LIMIT/);
+  });
+
+  it.each([
+    ['THROTTLE_LIMIT', '0'],
+    ['THROTTLE_TTL_MS', '-1'],
+    ['HEALTH_DB_TIMEOUT_MS', 'soon'],
+  ])('rejects a non-positive %s', (variable, value) => {
+    expect(() => validateApiEnv(validEnv({ [variable]: value }))).toThrow(new RegExp(variable));
   });
 
   it('throws naming a missing required variable, without ever printing a value', () => {

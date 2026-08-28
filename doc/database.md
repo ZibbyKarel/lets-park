@@ -121,6 +121,7 @@ double booking no matter how careful the application code is.
 | `ReservationWindowSettings` `CHECK (id = 1)` | the singleton – see below |
 | `ReservationWindowSettings` `CHECK (openDaysBefore BETWEEN 1 AND 31)` | mirrors `MIN_OPEN_DAYS_BEFORE`/`MAX_OPEN_DAYS_BEFORE` from the contract |
 | the `AuditLog_append_only` trigger | `UPDATE`/`DELETE` on `AuditLog` throws an exception |
+| the `AuditLog_append_only_truncate` trigger | `TRUNCATE "AuditLog"` throws an exception (a row-level trigger never sees it) |
 
 Additional indexes: `Reservation(date)` and `WaitlistEntry(date)` (the daily
 parking-lot overview), `WaitlistEntry(parkingSpotId, date, createdAt, id)`
@@ -236,7 +237,16 @@ not by convention:
 CREATE TRIGGER "AuditLog_append_only"
   BEFORE UPDATE OR DELETE ON "AuditLog"
   FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"();
+
+CREATE TRIGGER "AuditLog_append_only_truncate"
+  BEFORE TRUNCATE ON "AuditLog"
+  FOR EACH STATEMENT EXECUTE FUNCTION "auditlog_reject_mutation"();
 ```
+
+There are deliberately two triggers: `TRUNCATE` **does not fire** row-level
+triggers, so the first trigger alone would let `TRUNCATE "AuditLog";` through
+and a single statement would erase the entire history. A statement-level
+trigger is the only way to close that hole.
 
 The function throws an exception with `ERRCODE = 'restrict_violation'`.
 Convention wouldn't be enough here: the audit log is the only record that a
@@ -366,8 +376,15 @@ pg_dump "$DATABASE_URL" --format=custom --file=lets-park-$(date +%F).dump
 # data only, no schema (migrations can restore the schema)
 pg_dump "$DATABASE_URL" --format=custom --data-only --file=lets-park-data-$(date +%F).dump
 
-# restore into an empty database
+# restore into an empty database (full dump, schema included)
 pg_restore --dbname="$DATABASE_URL" --clean --if-exists lets-park-2026-08-28.dump
+
+# restore data into a database where `prisma migrate deploy` has already run.
+# The init migration inserted `ReservationWindowSettings (id = 1)` there itself,
+# so that row has to be deleted first — otherwise the backed-up settings are
+# silently discarded (see below).
+psql "$DATABASE_URL" -c 'DELETE FROM "ReservationWindowSettings";'
+pg_restore --dbname="$DATABASE_URL" --data-only lets-park-data-2026-08-28.dump
 ```
 
 From a running container with no local `pg_dump`:
@@ -381,7 +398,20 @@ Notes:
 
 - Restore into a database where `prisma migrate deploy` has already run, and
   use `--data-only`; otherwise `pg_restore` fights with the existing schema.
+- **`ReservationWindowSettings` must be emptied before a `--data-only` restore.**
+  The init migration inserts the `id = 1` singleton into it, and a `--data-only`
+  restore goes through `COPY`, which has no `ON CONFLICT`. `pg_restore` merely
+  reports the primary-key conflict, carries on, and exits with code 0 — so the
+  backed-up `openDaysBefore` and `lockMode` are **silently discarded** and the
+  database keeps the migration's defaults. Hence the `DELETE` above. Check
+  afterwards with `psql "$DATABASE_URL" -c 'TABLE "ReservationWindowSettings";'`.
 - The `AuditLog_append_only` trigger **does not block** a restore:
-  `pg_restore` uses `INSERT`/`COPY`, not `UPDATE`.
+  `pg_restore` uses `INSERT`/`COPY`, not `UPDATE`. Watch out for
+  `AuditLog_append_only_truncate` though: `pg_restore --data-only --clean`
+  `TRUNCATE`s tables before filling them and will fail on that trigger. Either
+  restore `--data-only` **without** `--clean` into an empty table, or disable the
+  trigger for the duration of the restore
+  (`ALTER TABLE "AuditLog" DISABLE TRIGGER "AuditLog_append_only_truncate";`,
+  then `ENABLE` again when it finishes).
 - The `_prisma_migrations` table is part of the dump. A full restore therefore
   also carries over the migration history, which is desirable.

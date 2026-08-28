@@ -152,6 +152,42 @@ describe('init migration — hand-written constraints', () => {
     expect(flat).toContain('"AuditLog" FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"()');
     expect(flat).toContain('RAISE EXCEPTION');
   });
+
+  it('also seals TRUNCATE, which row-level triggers do not see', () => {
+    // Without this statement-level trigger a single `TRUNCATE "AuditLog";`
+    // would erase the entire audit trail — the only record that a hard-deleted
+    // reservation ever existed.
+    expect(flat).toContain('CREATE TRIGGER "AuditLog_append_only_truncate" BEFORE TRUNCATE ON');
+    expect(flat).toContain(
+      '"AuditLog" FOR EACH STATEMENT EXECUTE FUNCTION "auditlog_reject_mutation"()'
+    );
+  });
+});
+
+describe('init migration — column types the contract depends on', () => {
+  it('AuditLog.payload is JSONB, not TEXT or JSON', () => {
+    // `schema-contract-parity.spec.ts` defers the "JSONB NOT NULL" claim here,
+    // because Prisma's `Json` type cannot express the distinction.
+    const createTable = flat.match(/CREATE TABLE "AuditLog" \((.*?)\);/)?.[1];
+    expect(createTable).toBeDefined();
+    expect(createTable).toContain('"payload" JSONB NOT NULL');
+    expect(createTable).not.toMatch(/"payload" (TEXT|JSON\b)/);
+  });
+
+  it.each(['User', 'ParkingSpot', 'Reservation', 'WaitlistEntry', 'AuditLog'])(
+    '%s.id is UUID (decision 0025 — UUID v7 primary keys)',
+    (table) => {
+      const createTable = flat.match(new RegExp(`CREATE TABLE "${table}" \\((.*?)\\);`))?.[1];
+      expect(createTable).toBeDefined();
+      expect(createTable).toContain('"id" UUID NOT NULL');
+    }
+  );
+
+  it('ReservationWindowSettings.id is the INTEGER singleton key, not a UUID', () => {
+    const createTable = flat.match(/CREATE TABLE "ReservationWindowSettings" \((.*?)\);/)?.[1];
+    expect(createTable).toBeDefined();
+    expect(createTable).toContain('"id" INTEGER NOT NULL DEFAULT 1');
+  });
 });
 
 describe('migration_lock.toml', () => {

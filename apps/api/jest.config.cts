@@ -1,10 +1,29 @@
+/**
+ * Two dependencies of this app ship ESM only and have to be transpiled on the
+ * way into Jest's CommonJS runtime:
+ *
+ * - `@orpc/contract` (`"type": "module"`, `.mjs` only) — reached through
+ *   `@lets-park/contract`, which the exception filter imports for
+ *   `ERROR_DEFINITIONS`. Same three lines as `libs/contract/jest.config.cts`;
+ *   see `doc/decision/0020-*`.
+ * - `@nestjs/config` v12 (`"type": "module"`, `.js`) — imported by every module
+ *   that reads validated env, so any test that builds a Nest testing module
+ *   hits it.
+ *
+ * `libs/contract/jest.config.cts` notes that a third project needing this
+ * should move it into `jest.preset.js` rather than copy it again. That file is
+ * outside the file set assigned to this task, so the lines are copied here and
+ * the consolidation is flagged in the task report instead.
+ */
 module.exports = {
   displayName: 'api',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
+    '^.+\\.mjs$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
-  moduleFileExtensions: ['ts', 'js', 'html'],
+  transformIgnorePatterns: ['/node_modules/(?!(?:@orpc|@nestjs/config)/)'],
+  moduleFileExtensions: ['ts', 'js', 'mjs', 'html'],
   coverageDirectory: '../../coverage/apps/api',
 };

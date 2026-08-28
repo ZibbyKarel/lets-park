@@ -21,7 +21,15 @@
   CREATE TRIGGER "AuditLog_append_only"
     BEFORE UPDATE OR DELETE ON "AuditLog"
     FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"();
+
+  CREATE TRIGGER "AuditLog_append_only_truncate"
+    BEFORE TRUNCATE ON "AuditLog"
+    FOR EACH STATEMENT EXECUTE FUNCTION "auditlog_reject_mutation"();
   ```
+
+  The statement-level trigger on `TRUNCATE` is necessary: row-level triggers do
+  not fire for `TRUNCATE`, so without it a single `TRUNCATE "AuditLog";` would
+  bypass the whole append-only protection.
 
 - Every other foreign key uses `ON DELETE RESTRICT`; the only `SET NULL` is
   `User.preferredParkingSpotId`.

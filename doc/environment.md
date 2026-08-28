@@ -50,10 +50,40 @@ shortcut for auth.
 | `AUTH_OKTA_ISSUER` | absolute URL | the OIDC issuer whose JWKS API is used to validate incoming JWTs |
 | `AUTH_OKTA_AUDIENCE` | non-empty string | the expected `aud` claim in a JWT |
 | `CORS_ALLOWED_ORIGINS` | comma-separated list of absolute URLs | the CORS allow-list; no wildcard |
-| `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | the log level for `nestjs-pino` (arrives in a later phase) |
+| `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | the log level for `nestjs-pino` |
 
-The schema is written so that later phases can **only add** keys (Slack, ICS,
-throttler) – no existing key may be loosened.
+The schema is written so that later phases can **only add** keys (Slack, ICS) –
+no existing key may be loosened.
+
+#### Operational baseline – keys with a default
+
+These variables are **not required**; when absent, the default from the table is
+used. They all belong to the operational baseline described in
+`doc/api-operations.md`.
+
+| variable | shape | default | what it's for |
+| --- | --- | --- | --- |
+| `THROTTLE_TTL_MS` | positive integer (ms) | `60000` | the global rate-limit window |
+| `THROTTLE_LIMIT` | positive integer | `300` | requests per window, per route |
+| `THROTTLE_STRICT_TTL_MS` | positive integer (ms) | `60000` | the window for the stricter tier (`StrictThrottle()`) |
+| `THROTTLE_STRICT_LIMIT` | positive integer | `20` | requests per window for the stricter tier |
+| `BODY_LIMIT` | a size **with a unit**, e.g. `100kb` | `100kb` | the maximum request body size |
+| `HEALTH_DB_TIMEOUT_MS` | positive integer (ms) | `3000` | how long `/health/ready` waits for `SELECT 1` |
+
+Two things that are easy to miss:
+
+- `BODY_LIMIT` **must carry a unit.** The schema rejects a bare `100`, because to
+  the Express body parser that means *one hundred bytes* – which is almost never
+  what someone meant to write.
+- Times are in **milliseconds** (hence the `_MS` suffix). `@nestjs/throttler` v5
+  took seconds and v6 takes milliseconds; the suffix is there so the two cannot
+  be confused when reading a `.env`.
+
+**Why these have defaults instead of being required.** `.env.example` belongs to
+another task's file set, so a required key would have broken every existing
+`.env` with no way to update the example alongside it. The defaults in
+`apps/api/src/env.ts` (`ENV_DEFAULTS`) are also the production values, so leaving
+these keys out of a `.env` entirely is legitimate.
 
 ### `apps/web` (`apps/web/src/env.ts`)
 
@@ -175,7 +205,10 @@ node dist/apps/api/main.js
 ```
 
 The process exits with `exit code 1` and an `ExceptionHandler` error that
-names `DATABASE_URL` and never prints any value.
+names `DATABASE_URL` and never prints any value. **All** invalid variables are
+listed at once, not just the first. The verbatim output is in
+`doc/api-operations.md`, section "Behaviour on a missing or invalid env
+variable" – including the note that this particular output is not JSON yet.
 
 ### Web
 
