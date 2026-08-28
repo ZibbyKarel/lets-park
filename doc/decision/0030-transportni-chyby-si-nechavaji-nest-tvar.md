@@ -20,6 +20,19 @@ Neočekávaná chyba – cokoli, co není `DomainError`, namapovaná Prisma chyb
 `HttpException` – vrací **konstantní** tělo `{ statusCode: 500, message: 'Internal server
 error' }`. `HttpException` se statusem ≥ 500 se tím samým tělem přepíše.
 
+Z pravidla „5xx tělo se přepisuje" existuje **jediná výjimka**: výsledek health checku
+z `@nestjs/terminus` (503). Ten se propouští beze změny – je sestavený z návratových hodnot
+našich vlastních indikátorů, neobsahuje `Error` ani stack, a *je* smyslem toho endpointu.
+Sonda, jejíž tělo říká „internal server error", operátorovi nesděluje nic.
+
+A dvě věci, které nejsou `HttpException` a filtr je proto musí poznat explicitně:
+
+- **`http-errors` chyby vzniklé před routováním** – v praxi `PayloadTooLargeError` z body
+  parseru. Poznají se podle příznaku `expose === true`, kterým `http-errors` sám označuje
+  hlášky bezpečné pro klienta (nastavuje ho pro 4xx, ne pro 5xx). Vrací se `{ statusCode,
+  message }` na původním statusu, tedy 413.
+- **terminus výsledek** – viz výše.
+
 **Stack trace se vždy loguje a nikdy neodesílá.** Každá větev skládá tělo z pevné množiny
 polí; původní chyba se dostane jen do `this.logger`.
 
@@ -47,6 +60,19 @@ kterého se dohledá.
 je běžný vzorec a stejně tak běžně do zprávy propašuje interní detail. Status 5xx je hranice,
 za kterou se tělu nevěří.
 
+**Proč je výjimka pro terminus úzká.** Nestačí „propouštěj objektová těla" –
+`new InternalServerErrorException('connect ECONNREFUSED 10.0.0.7:5432')` má taky objektové
+tělo (`{statusCode, message, error}`) a je to přesně ten únik, kterému pravidlo brání.
+Výjimka proto testuje konkrétní tvar terminus výsledku (`status` ∈ `ok|error|shutting_down`
+plus objektové `info`, `error`, `details`) **a zároveň** že jde o `ServiceUnavailableException`.
+Test `still replaces an ordinary 5xx body` v `contract-exception.filter.spec.ts` hlídá, že se
+ta škvíra nerozšířila.
+
+**Proč `expose`, a ne jen status.** Rozhodovat podle „je to 4xx" by znamenalo poslat ven
+hlášku jakékoli cizí knihovny, která si u sebe nese 4xx. `expose` je vlastní kontrakt
+knihovny `http-errors` pro „tuhle zprávu je bezpečné ukázat klientovi"; opřít se o něj je
+levnější a poctivější než seznam povolených typů chyb.
+
 ## Jak
 
 ```ts
@@ -73,3 +99,12 @@ nezná. Transportní tělo proto **nesmí** mít `code`.
 Druhé riziko je opačné: přidat do doménové větve pole navíc (třeba `timestamp` nebo `path`).
 oRPC klient parsuje `ORPCErrorJSON` a pole navíc zahodí – takže by se to tvářilo neškodně,
 jen by ta informace nikdy nikam nedorazila.
+
+**Třetí riziko, a to se už jednou stalo:** tenhle filtr je poslední článek řetězu, takže
+jeho chování **nejde ověřit testem, který volá metodu kontroleru přímo**. První verze
+tohohle rozhodnutí tvrdila, že tělo přes limit vrací 413 a že terminus tělo projde ven –
+obojí bylo napsané z úvahy a obojí bylo špatně (413 se vracelo jako 500, terminus tělo se
+přepisovalo konstantou). Odhalil to až reálný HTTP request. Proto existuje
+`apps/api/src/app/http-pipeline.spec.ts`, který pouští requesty proti sestavené aplikaci
+a je wirovaný stejnou funkcí `configureApp` jako `main.ts` – **jakékoli další tvrzení
+o chování filtru patří ověřit tam**, ne úvahou.

@@ -56,7 +56,10 @@ v logu grepovatelný.
 
 ## Jak
 
-Skutečný výstup (zachyceno spuštěním, ne vymyšleno):
+Skutečný výstup (zachyceno spuštěním, ne vymyšleno). Zachytávalo se proti holému HTTP
+serveru s tímhle pino nastavením, ne proti celé aplikaci – v ostrém provozu je `res.headers`
+delší, protože obsahuje celou sadu hlaviček od helmetu (CSP, HSTS, COOP, referrer-policy …).
+Struktura záznamu je jinak identická:
 
 ```json
 {"level":"info","time":1787919198163,"app":"api","env":"production","reservationId":"b1e2...","message":"Reservation created"}

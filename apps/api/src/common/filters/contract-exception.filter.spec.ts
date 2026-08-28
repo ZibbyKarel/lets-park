@@ -6,7 +6,14 @@
  * into a clean 409 instead of a 500 — testable on a machine with no Postgres.
  */
 
-import { ArgumentsHost, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  InternalServerErrorException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { errorShapeSchema } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
@@ -92,6 +99,28 @@ describe('mapUniqueConstraintViolation', () => {
   it('degrades to CONFLICT when Prisma reports no target at all', () => {
     expect(mapUniqueConstraintViolation(undefined)).toBe('CONFLICT');
     expect(mapUniqueConstraintViolation({})).toBe('CONFLICT');
+  });
+
+  // The matching is by exact column set. A previous version joined the columns
+  // and used `includes`, so each of these mapped to a reservation error.
+  it.each([
+    [['userId', 'dateFrom']],
+    [['userId', 'updatedDate']],
+    [['parkingSpotId', 'dateCreated']],
+  ])('does not match %p, whose column merely contains "date"', (target) => {
+    expect(mapUniqueConstraintViolation({ target })).toBe('CONFLICT');
+  });
+
+  it('does not treat a superset of a known constraint as that constraint', () => {
+    // A future `Reservation (parkingSpotId, date, tenantId)` is a different
+    // rule and must not silently claim SPOT_ALREADY_RESERVED.
+    expect(mapUniqueConstraintViolation({ target: ['parkingSpotId', 'date', 'tenantId'] })).toBe(
+      'CONFLICT'
+    );
+  });
+
+  it('does not confuse another table with the same column pair', () => {
+    expect(mapUniqueConstraintViolation({ target: 'Invoice_userId_date_key' })).toBe('CONFLICT');
   });
 });
 
@@ -297,5 +326,132 @@ describe('ContractExceptionFilter', () => {
     expect(loggerCalls).toHaveLength(1);
     expect(loggerCalls[0]).toMatchObject({ level: 'error' });
     expect((loggerCalls[0]?.payload as { err: unknown }).err).toBe(failure);
+  });
+
+  /**
+   * Regression: the body parser's rejection is not an `HttpException`, so it
+   * used to fall through to the generic 500 arm — wrong status class, and a
+   * logged stack for something any anonymous caller can trigger at will.
+   * `http-pipeline.spec.ts` proves the end-to-end behaviour; these pin the
+   * boundaries of the recognition rule.
+   */
+  describe('http-errors raised before routing', () => {
+    /** The shape `raw-body` throws, as probed from a real oversized request. */
+    function payloadTooLarge() {
+      return Object.assign(new Error('request entity too large'), {
+        status: 413,
+        statusCode: 413,
+        expose: true,
+        type: 'entity.too.large',
+      });
+    }
+
+    it('answers 413 with the transport shape', () => {
+      const { host, captured } = createHost();
+
+      filter.catch(payloadTooLarge(), host);
+
+      expect(captured.status).toBe(413);
+      expect(captured.body).toEqual({ statusCode: 413, message: 'request entity too large' });
+    });
+
+    it('logs it at warn and without the stack — it is a client mistake, not a defect', () => {
+      const { host } = createHost();
+
+      filter.catch(payloadTooLarge(), host);
+
+      expect(loggerCalls).toHaveLength(1);
+      expect(loggerCalls[0]).toMatchObject({ level: 'warn' });
+      expect(loggerCalls[0]?.payload).not.toHaveProperty('err');
+    });
+
+    it('ignores a 4xx whose message the library marked internal (expose: false)', () => {
+      const { host, captured } = createHost();
+
+      filter.catch(
+        Object.assign(new Error('internal detail'), { status: 400, expose: false }),
+        host
+      );
+
+      expect(captured.status).toBe(500);
+      expect(captured.body).toEqual({ statusCode: 500, message: 'Internal server error' });
+      expect(serialized(captured)).not.toContain('internal detail');
+    });
+
+    it('ignores a 5xx http-error — those are never client-safe', () => {
+      const { host, captured } = createHost();
+
+      filter.catch(
+        Object.assign(new Error('upstream exploded at 10.0.0.7'), {
+          status: 502,
+          expose: false,
+        }),
+        host
+      );
+
+      expect(captured.status).toBe(500);
+      expect(serialized(captured)).not.toContain('10.0.0.7');
+    });
+  });
+
+  /**
+   * Regression: terminus signals a failed check by throwing a 503, which the
+   * `status >= 500` branch used to overwrite with the constant body — throwing
+   * away the only information a readiness probe exists to convey.
+   */
+  describe('terminus health results', () => {
+    function healthResult(status: 'ok' | 'error') {
+      const details = { database: { status: 'down', reason: 'Database is unreachable' } };
+      return { status, info: {}, error: details, details };
+    }
+
+    it('forwards the health payload at 503 instead of the constant body', () => {
+      const { host, captured } = createHost();
+
+      filter.catch(new ServiceUnavailableException(healthResult('error')), host);
+
+      expect(captured.status).toBe(503);
+      expect(captured.body).toMatchObject({
+        status: 'error',
+        details: { database: { status: 'down', reason: 'Database is unreachable' } },
+      });
+    });
+
+    it('logs a failed probe at warn without a stack — it repeats every probe interval', () => {
+      const { host } = createHost();
+
+      filter.catch(new ServiceUnavailableException(healthResult('error')), host);
+
+      expect(loggerCalls).toHaveLength(1);
+      expect(loggerCalls[0]).toMatchObject({ level: 'warn' });
+      expect(loggerCalls[0]?.payload).not.toHaveProperty('err');
+    });
+
+    // The guarantee that makes the allowance above safe to have.
+    it('still replaces an ordinary 5xx body, so no internal detail rides along', () => {
+      const { host, captured } = createHost();
+
+      filter.catch(
+        new InternalServerErrorException('connect ECONNREFUSED 10.0.0.7:5432 lets_park'),
+        host
+      );
+
+      expect(captured.status).toBe(500);
+      expect(captured.body).toEqual({ statusCode: 500, message: 'Internal server error' });
+      expect(serialized(captured)).not.toContain('10.0.0.7');
+      expect(serialized(captured)).not.toContain('lets_park');
+    });
+
+    it('does not forward a 503 whose body merely looks structured', () => {
+      const { host, captured } = createHost();
+
+      filter.catch(
+        new ServiceUnavailableException({ status: 'error', secret: 'connection string' }),
+        host
+      );
+
+      expect(captured.body).toEqual({ statusCode: 500, message: 'Internal server error' });
+      expect(serialized(captured)).not.toContain('connection string');
+    });
   });
 });

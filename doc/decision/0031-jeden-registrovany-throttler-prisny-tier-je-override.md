@@ -64,8 +64,15 @@ Použití v Tasku 11–12:
 feed() { … }
 ```
 
-`throttle-tiers.spec.ts` hlídá invariant „registrovaný je právě jeden" a to, že se čísla
-v `ENV_DEFAULTS` shodují s fallbackem dekorátoru.
+`throttle-tiers.spec.ts` hlídá invariant „registrovaný je právě jeden" a **volá dekorátor**:
+přečte resolvery, které nainstaloval (metadata `THROTTLER:TTLdefault` /
+`THROTTLER:LIMITdefault` na handleru), zavolá je se `process.env` nastaveným i nenastaveným
+a ověří, že se hodnota mění mezi dvěma voláními téhož resolveru – což je přesně ta
+vlastnost, kterou by číslo zamrzlé při importu nemělo.
+
+Dřívější verze téhle sady tvrdila totéž, ale ověřovala jen `expect(ENV_DEFAULTS.THROTTLE_STRICT_LIMIT).toBe(20)`
+– tedy dvě konstanty samy proti sobě, což platí bez ohledu na to, jestli je `StrictThrottle`
+vůbec čte.
 
 ## Riziko, když je to špatně
 
@@ -77,3 +84,8 @@ limit a efektivní limit by se vynásobil počtem instancí. Upgrade cesta je st
 Druhé riziko: až někdo přidá `@StrictThrottle()` na první routu, začne se přísný limit
 skutečně vynucovat a chybně nízká hodnota v `.env` se projeví hned. Do té doby je ta
 proměnná bez efektu, což svádí ji nastavit „nějak".
+
+Třetí, a to je zatím nevyřešené: `ThrottlerGuard` bucketuje podle `req.ip`, a protože není
+nastavené `trust proxy`, bere Express IP ze socketu. **Za reverzní proxy tedy všichni
+klienti sdílí jeden bucket.** Popsáno v `doc/provoz-api.md`; musí se to vyřešit dřív, než
+API pojede za proxy.

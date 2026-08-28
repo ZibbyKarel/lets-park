@@ -41,8 +41,3 @@ export class DomainError extends Error {
     return ERROR_DEFINITIONS[this.code].status;
   }
 }
-
-/** Narrows an unknown thrown value to a {@link DomainError}. */
-export function isDomainError(error: unknown): error is DomainError {
-  return error instanceof DomainError;
-}

@@ -30,10 +30,17 @@
  * over the size limit) keep Nest's `{ statusCode, message }` shape: they are
  * not domain errors and the closed enum has no member for them. See
  * `doc/decision/0030-*`.
+ *
+ * Two of those arrive as something other than an `HttpException` and are
+ * handled explicitly below — see {@link asExposedClientError} (the body
+ * parser's 413, which used to come out as a 500) and
+ * {@link isHealthCheckResult} (terminus' 503 payload, which used to be
+ * overwritten). Both were found by probing a running server; neither is
+ * reachable from a unit test that calls a controller method directly.
  */
 
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
-import { Catch, HttpException, HttpStatus } from '@nestjs/common';
+import { Catch, HttpException, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
 import type { Response } from 'express';
 import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { ErrorCode, ErrorDetails } from '@lets-park/contract';
@@ -91,10 +98,28 @@ function uniqueConstraintTarget(meta: Record<string, unknown> | undefined): stri
   return [];
 }
 
-/** True when the violated unique constraint covers every one of `columns`. */
-function targetCovers(target: string[], columns: readonly string[]): boolean {
-  const joined = target.join(',').toLowerCase();
-  return columns.every((column) => joined.includes(column.toLowerCase()));
+/**
+ * True when `target` names exactly this constraint — either as the full set of
+ * its columns, or as the index name Prisma generates for it.
+ *
+ * The comparison is by **exact set**, not substring. An earlier version joined
+ * the columns and used `includes`, which matched any future column merely
+ * containing the name (`dateFrom`, `updatedDate` both satisfy a test for
+ * `date`) and treated a superset as a match, so the check order carried the
+ * correctness rather than the check itself.
+ */
+function targetMatches(target: string[], table: string, columns: readonly string[]): boolean {
+  const normalised = target.map((entry) => entry.toLowerCase()).sort();
+  const expectedColumns = columns.map((column) => column.toLowerCase()).sort();
+  if (
+    normalised.length === expectedColumns.length &&
+    normalised.every((entry, index) => entry === expectedColumns[index])
+  ) {
+    return true;
+  }
+  // Prisma's own naming for a composite unique index: `Table_col1_col2_key`.
+  const indexName = `${table}_${columns.join('_')}_key`.toLowerCase();
+  return normalised.length === 1 && normalised[0] === indexName;
 }
 
 /**
@@ -111,14 +136,16 @@ function targetCovers(target: string[], columns: readonly string[]): boolean {
 export function mapUniqueConstraintViolation(meta: Record<string, unknown> | undefined): ErrorCode {
   const target = uniqueConstraintTarget(meta);
 
-  // Order matters: check the more specific spot+date pair first.
-  if (targetCovers(target, ['parkingSpotId', 'userId', 'date'])) {
+  // Each entry names its table, so these are exact identifications rather than
+  // an ordered sequence of increasingly loose guesses. They must stay in step
+  // with the `@@unique` blocks in `libs/database/prisma/schema.prisma`.
+  if (targetMatches(target, 'WaitlistEntry', ['parkingSpotId', 'userId', 'date'])) {
     return 'ALREADY_IN_WAITLIST';
   }
-  if (targetCovers(target, ['parkingSpotId', 'date'])) {
+  if (targetMatches(target, 'Reservation', ['parkingSpotId', 'date'])) {
     return 'SPOT_ALREADY_RESERVED';
   }
-  if (targetCovers(target, ['userId', 'date'])) {
+  if (targetMatches(target, 'Reservation', ['userId', 'date'])) {
     return 'RESERVATION_LIMIT_REACHED';
   }
   return 'CONFLICT';
@@ -156,6 +183,73 @@ export function contractErrorBody(code: ErrorCode, details?: ErrorDetails): Cont
     message: definition.message,
     ...(details === undefined ? {} : { data: details }),
   };
+}
+
+/**
+ * True for a `@nestjs/terminus` health-check result.
+ *
+ * This is the **only** 5xx body the filter forwards instead of replacing with
+ * {@link INTERNAL_ERROR_BODY}, so the check is deliberately narrow: the shape is
+ * built by terminus from our own indicators' `up()`/`down()` payloads, contains
+ * no `Error` and no stack, and *is* the point of the endpoint — a readiness
+ * probe whose body says "internal server error" tells the operator nothing.
+ *
+ * Everything else at 5xx still gets the constant body. In particular
+ * `new InternalServerErrorException(err.message)` — the usual way an internal
+ * detail escapes — produces `{ statusCode, message, error }`, which fails this
+ * check on all four keys. `contract-exception.filter.spec.ts` pins that.
+ */
+function isHealthCheckResult(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null || body instanceof Error) {
+    return false;
+  }
+  const result = body as Record<string, unknown>;
+  const status = result['status'];
+  return (
+    (status === 'ok' || status === 'error' || status === 'shutting_down') &&
+    isPlainObject(result['info']) &&
+    isPlainObject(result['error']) &&
+    isPlainObject(result['details'])
+  );
+}
+
+function isPlainObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Recognises an `http-errors`-shaped rejection raised *before* routing — the
+ * body parser's `PayloadTooLargeError` (413) being the one this application
+ * actually produces, when a request body exceeds `BODY_LIMIT`.
+ *
+ * These are not `HttpException`s, so without this they fell through to the
+ * "unhandled defect" arm and came back as **500 with a logged stack** — a wrong
+ * status class for a client input error, and a log-flood vector for an
+ * unauthenticated caller. (Nest converts `SyntaxError`-with-`body` and
+ * `URIError` into `BadRequestException` itself, which is why malformed JSON
+ * already answered 400 correctly and oversized bodies did not.)
+ *
+ * `expose` is `http-errors`' own signal for "this message is safe to show the
+ * client" — it sets it `true` for 4xx and `false` for 5xx. Keying on it rather
+ * than on the status alone means a third-party 4xx that marks its message
+ * internal is not forwarded either.
+ */
+function asExposedClientError(exception: unknown): TransportErrorBody | undefined {
+  if (typeof exception !== 'object' || exception === null) {
+    return undefined;
+  }
+  const candidate = exception as Record<string, unknown>;
+  const status = candidate['status'] ?? candidate['statusCode'];
+  if (
+    candidate['expose'] !== true ||
+    typeof status !== 'number' ||
+    status < HttpStatus.BAD_REQUEST ||
+    status >= HttpStatus.INTERNAL_SERVER_ERROR ||
+    typeof candidate['message'] !== 'string'
+  ) {
+    return undefined;
+  }
+  return { statusCode: status, message: candidate['message'] };
 }
 
 @Catch()
@@ -200,12 +294,35 @@ export class ContractExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const body: TransportErrorBody = { statusCode: status, message: exception.message };
       if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        const payload = exception.getResponse();
+        if (exception instanceof ServiceUnavailableException && isHealthCheckResult(payload)) {
+          // A failing health probe. Logged at `warn` and **without** `err`: during
+          // a database outage this fires once per probe interval forever, and a
+          // stack per probe is noise, not signal. The reason is already in the
+          // payload.
+          this.logger.warn({ healthCheck: payload }, 'Health check reported not ready');
+          response.status(status).json(payload);
+          return;
+        }
         this.logger.error({ err: exception }, 'Server-side HTTP exception');
         response.status(status).json(INTERNAL_ERROR_BODY);
         return;
       }
       this.logger.warn({ err: exception, statusCode: status }, 'Request rejected');
       response.status(status).json(body);
+      return;
+    }
+
+    const clientError = asExposedClientError(exception);
+    if (clientError !== undefined) {
+      // A client input error caught before routing (an oversized body). `warn`,
+      // and no `err`: forwarding the stack of something an anonymous caller can
+      // trigger at will turns a client mistake into a log-flood vector.
+      this.logger.warn(
+        { statusCode: clientError.statusCode, errorType: (exception as { type?: unknown }).type },
+        'Request rejected before routing'
+      );
+      response.status(clientError.statusCode).json(clientError);
       return;
     }
 

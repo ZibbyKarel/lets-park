@@ -86,7 +86,14 @@ export const apiEnvSchema = z.object({
 
   /** Global rate-limit window, in milliseconds. */
   THROTTLE_TTL_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.THROTTLE_TTL_MS),
-  /** Requests allowed per window, per client, on every route. */
+  /**
+   * Requests allowed per window, per source IP, on every route.
+   *
+   * "Per source IP" is literal: `ThrottlerGuard` buckets by `req.ip`, which
+   * Express takes from the socket because `trust proxy` is not set. Behind a
+   * reverse proxy every client therefore shares one bucket — see the proxy
+   * section in `doc/provoz-api.md` before deploying behind one.
+   */
   THROTTLE_LIMIT: positiveCountSchema.default(ENV_DEFAULTS.THROTTLE_LIMIT),
   /** Window for the stricter, session-less tier (see `StrictThrottle`). */
   THROTTLE_STRICT_TTL_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.THROTTLE_STRICT_TTL_MS),

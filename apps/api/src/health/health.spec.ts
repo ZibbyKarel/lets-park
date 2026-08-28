@@ -11,6 +11,14 @@
  * Docker is not available in this environment, so the database is a stub. The
  * query it stands in for is a genuine `SELECT 1` (`PrismaService.ping`), and it
  * is asserted here that readiness calls it exactly once per probe.
+ *
+ * **Scope.** These call the controller directly, so they establish what the
+ * indicator and the controller *compute* — how often the database is touched,
+ * what the timeout does, what the reason says. They deliberately do **not**
+ * claim anything about the HTTP response: review found that the global filter
+ * was overwriting the payload asserted here, and a controller-level test cannot
+ * see that. The response an orchestrator actually receives is asserted in
+ * `apps/api/src/app/http-pipeline.spec.ts`, against a running server.
  */
 
 import { ServiceUnavailableException } from '@nestjs/common';
@@ -22,7 +30,7 @@ import {
   DATABASE_HEALTH_TIMEOUT_MESSAGE,
   DatabaseHealthIndicator,
 } from './database.health-indicator';
-import { HEALTH_ROUTE_PREFIX, HealthController } from './health.controller';
+import { HealthController } from './health.controller';
 
 const HEALTH_DB_TIMEOUT_MS = 50;
 
@@ -69,11 +77,9 @@ describe('HealthController', () => {
     controller = await createController(prisma);
   });
 
-  describe('routing', () => {
-    it('is mounted at /health, which main.ts excludes from the api prefix', () => {
-      expect(HEALTH_ROUTE_PREFIX).toBe('health');
-    });
-  });
+  // Routing is not asserted here. `expect(HEALTH_ROUTE_PREFIX).toBe('health')`
+  // would only check a literal against itself; that the probes really answer
+  // outside the `/api` prefix is proved by request in `http-pipeline.spec.ts`.
 
   describe('/health/live', () => {
     it('reports ok', async () => {

@@ -18,10 +18,27 @@ Nastavení env proměnných (včetně výchozích hodnot) je v `doc/prostredi.md
 | graceful shutdown | `apps/api/src/shutdown/` | `GracefulShutdownService` |
 | globální filtr chyb | `apps/api/src/common/filters/` | `doc/decision/0029-*`, `doc/decision/0030-*` |
 | rate limiting | `apps/api/src/common/throttling/` | `@nestjs/throttler`, `doc/decision/0031-*` |
-| helmet, CORS, limit těla | `apps/api/src/main.ts` | CORS allow-list z env, žádný wildcard |
+| helmet, CORS, prefix, limit těla | `apps/api/src/configure-app.ts` | volá to `main.ts` i testy |
 
 Co tu **není a nemá být**: Sentry, metriky, APM, alerting, Redis, BullMQ ani message broker.
 Strukturované logování, sondy a graceful shutdown jsou provozní hygiena, ne monitoring.
+
+### Jak se to testuje
+
+HTTP wiring (prefix, helmet, CORS, parsery, shutdown hooky) je schválně vytažené do
+`apps/api/src/configure-app.ts`, aby ho `main.ts` i testy volaly **stejnou funkcí**.
+`apps/api/src/app/http-pipeline.spec.ts` pak nastartuje skutečný Nest server na náhodném
+portu a pouští proti němu reálné requesty.
+
+Není to kosmetika. Dvě chyby, které měl tenhle základ při odevzdání – 413 vracené jako 500
+a přepsané tělo readiness sondy – byly obě **neviditelné pro test, který volá metodu
+kontroleru přímo**, protože obě vznikaly až ve složení (body parser → filtr, terminus →
+filtr). Test, který si pipeline poskládá po svém, by se navíc rozešel s `main.ts` a schoval
+je stejně dobře. Proto ta jedna sdílená funkce.
+
+**Pravidlo:** jakékoli tvrzení o tom, co API vrací po drátě, patří ověřit v
+`http-pipeline.spec.ts`. Úvaha nad kódem na to nestačí – u obou chyb výše zněla přesvědčivě
+a byla špatně.
 
 ---
 
@@ -63,7 +80,8 @@ Jeden JSON objekt na řádek, na stdout. Aplikační řádek:
 {"level":"info","time":1787919198163,"app":"api","env":"production","reservationId":"b1e2...","message":"Reservation created"}
 ```
 
-Řádek o dokončeném requestu:
+Řádek o dokončeném requestu (zachyceno proti holému serveru s tímhle pino nastavením – v
+ostrém provozu má `res.headers` navíc celou sadu hlaviček od helmetu):
 
 ```json
 {"level":"info","time":1787919198176,"app":"api","env":"production","req":{"id":"0dce0a5c-6c80-4d74-86d4-ac204bb4deaf","method":"POST","url":"/api/reservations","headers":{"host":"127.0.0.1:63307","user-agent":"curl/8","content-length":"2"}},"res":{"statusCode":201,"headers":{"x-request-id":"0dce0a5c-6c80-4d74-86d4-ac204bb4deaf"}},"responseTime":1,"message":"request completed"}
@@ -82,6 +100,10 @@ Pevná pole:
 **Korelace.** `req.id` je hodnota příchozí hlavičky `x-request-id`, pokud dorazila, jinak
 nové UUID. Tatáž hodnota se vrací v response hlavičce `x-request-id` – uživatel hlásící
 chybu má tedy co citovat a je to grepovatelné.
+
+Výjimka: `genReqId` běží uvnitř pino-http middlewaru, který je pro obě health sondy vypnutý
+(`exclude`, viz níže). **Odpovědi na `/health/live` a `/health/ready` proto hlavičku
+`x-request-id` nenesou.** Je to důsledek toho, že se sondy nelogují, ne opomenutí.
 
 **Redakce.** Hlavičky `authorization`, `cookie` a `set-cookie` se ze záznamu odstraňují.
 V ukázce výše request nesl `authorization: Bearer secret-token` i `cookie: session=abc`;
@@ -119,15 +141,29 @@ Provede **skutečný `SELECT 1`** do Postgresu (`PrismaService.ping()`), obalen�
 Selhání = orchestrátor má instanci **vyřadit z rotace**, ne restartovat. Signalizuje se
 HTTP **503** (`ServiceUnavailableException`).
 
-Odpověď při nedostupné databázi:
+Odpověď při nedostupné databázi (HTTP 503, zachyceno reálným requestem na sestavenou
+aplikaci – `apps/api/src/app/http-pipeline.spec.ts`):
 
 ```json
-{"status":"error","details":{"database":{"status":"down","reason":"Database is unreachable","timeoutMs":3000}}}
+{"status":"error","info":{},"error":{"database":{"reason":"Database is unreachable","timeoutMs":3000,"status":"down"}},"details":{"database":{"reason":"Database is unreachable","timeoutMs":3000,"status":"down"}}}
+```
+
+Odpověď, když je databáze v pořádku (HTTP 200):
+
+```json
+{"status":"ok","info":{"database":{"responseTimeMs":0,"status":"up"}},"error":{},"details":{"database":{"responseTimeMs":0,"status":"up"}}}
 ```
 
 Důvod je záměrně hrubý – chybová hláška `pg` driveru obsahuje host, jméno databáze a někdy
 uživatele, a `/health/ready` bývá dosažitelné většímu okruhu lidí než logy. Při vypršení
 timeoutu je `reason` místo toho `Database did not respond in time`.
+
+> **Pozor při úpravách filtru.** Tělo health checku je **jediné** 5xx tělo, které
+> `ContractExceptionFilter` propouští ven; všechna ostatní nahrazuje konstantou (viz
+> `doc/decision/0030-*`). Původní verze filtru tuhle výjimku neměla, takže sonda sice
+> vracela 503, ale s tělem `{"statusCode":500,"message":"Internal server error"}` – status
+> správně, obsah bezcenný. Odhalil to až reálný request; test, který volal metodu
+> kontroleru přímo, to vidět nemohl.
 
 **`HEALTH_DB_TIMEOUT_MS` musí zůstat citelně pod probe timeoutem orchestrátoru.** Vyšší
 hodnota mechanismus vypne: orchestrátor sondu utne dřív, než stihne odpovědět.
@@ -220,6 +256,17 @@ Viz `doc/decision/0031-*`.
 Čítače jsou in-memory. To odpovídá jednoinstančnímu cíli MVP; při škálování by se limit
 vynásobil počtem instancí a řeší se výměnou `ThrottlerStorage`, ne změnou téhle struktury.
 
+> **Omezení: API zatím počítá limit podle IP socketu.** `ThrottlerGuard` bucketuje podle
+> `req.ip` a Express ho bere ze socketu, protože **`trust proxy` není nastavené**. Za
+> reverzní proxy (nginx, traefik, ingress) proto všichni klienti spadnou do **jednoho**
+> bucketu a `THROTTLE_LIMIT` se stane sdíleným rozpočtem celé uživatelské základny – jeden
+> hlučný klient odstřihne ostatní.
+>
+> Než se API nasadí za proxy, musí se to vyřešit: `app.set('trust proxy', …)` s **počtem
+> hopů nebo CIDR rozsahem**, nikdy holé `true` – to by klientovi dovolilo podvrhnout
+> `X-Forwarded-For` a limitu se úplně vyhnout. Task 10 to nenastavuje, protože topologie
+> nasazení zatím není rozhodnutá a špatná hodnota je horší než žádná.
+
 **Helmet** je zapnutý ve výchozí konfiguraci (`app.use(helmet())`).
 
 **CORS** je explicitní allow-list z `CORS_ALLOWED_ORIGINS`, `credentials: true`. Nikdy
@@ -230,5 +277,18 @@ CSRF plocha.
 parser vypnutý (`bodyParser: false` v `NestFactory.create`), aby byly zaregistrované parsery
 právě jedny a nezáleželo na pořadí. Schéma odmítá `BODY_LIMIT` bez jednotky: `100` znamená
 pro body-parser *bajty*, což skoro nikdy není to, co člověk psal.
+
+Příliš velké tělo dostane **413** (zachyceno reálným requestem):
+
+```json
+{"statusCode":413,"message":"request entity too large"}
+```
+
+> **Pozor při úpravách filtru.** Body parser nevyhazuje `HttpException`, ale
+> `PayloadTooLargeError` z knihovny `http-errors`. Původní verze filtru ji nepoznala, takže
+> propadla do větve „neočekávaná chyba" a vracela **500 se zalogovaným stackem** – špatná
+> třída statusu a zároveň způsob, jak může anonymní volající zaplavit error log. Filtr ji
+> teď rozpoznává podle příznaku `expose`, kterým `http-errors` sám označuje hlášky bezpečné
+> pro klienta. Viz `doc/decision/0030-*`.
 
 **Tajemství jsou výhradně z env** – v repozitáři není žádná zakódovaná hodnota.

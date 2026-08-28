@@ -13,11 +13,13 @@
  * this environment, so the connect path itself is unexercised.
  */
 
+import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { ContractExceptionFilter } from '../common/filters/contract-exception.filter';
+import { ENV_DEFAULTS } from '../env';
 import { PrismaService } from '../database/prisma.service';
 import { DatabaseHealthIndicator } from '../health/database.health-indicator';
 import { HealthController } from '../health/health.controller';
@@ -61,6 +63,36 @@ describe('AppModule', () => {
   afterAll(async () => {
     await moduleRef?.close();
     process.env = originalEnv;
+  });
+
+  describe('ConfigService returns Zod-transformed values, not raw strings', () => {
+    // `main.ts` passes these straight to `enableCors` and to the body parser.
+    // If `@nestjs/config` ever changed its lookup precedence and started
+    // returning `process.env`'s raw strings, `enableCors` would receive the
+    // string "http://localhost:4200" where it expects an array — which it
+    // silently accepts as a single origin, and CORS would keep working just
+    // differently enough to matter. Nothing else asserts this.
+    it('parses CORS_ALLOWED_ORIGINS into an array', () => {
+      const config = moduleRef.get(ConfigService);
+
+      expect(config.get('CORS_ALLOWED_ORIGINS')).toEqual(['http://localhost:4200']);
+    });
+
+    it('coerces the numeric keys to numbers', () => {
+      const config = moduleRef.get(ConfigService);
+
+      expect(config.get('PORT')).toBe(3000);
+      expect(config.get('HEALTH_DB_TIMEOUT_MS')).toBe(ENV_DEFAULTS.HEALTH_DB_TIMEOUT_MS);
+      expect(config.get('THROTTLE_LIMIT')).toBe(ENV_DEFAULTS.THROTTLE_LIMIT);
+    });
+
+    it('applies the schema defaults for keys absent from the environment', () => {
+      const config = moduleRef.get(ConfigService);
+
+      // These are not in `ENV` above, so this proves the `.default()`s reach
+      // the running application rather than only the schema.
+      expect(config.get('BODY_LIMIT')).toBe(ENV_DEFAULTS.BODY_LIMIT);
+    });
   });
 
   it.each([

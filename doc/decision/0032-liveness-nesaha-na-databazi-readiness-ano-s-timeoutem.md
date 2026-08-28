@@ -58,6 +58,12 @@ až `HEALTH_DB_TIMEOUT_MS`.
 `hang`) a ověřuje mimo jiné, že liveness při rozbité databázi **vůbec nezavolá `ping()`**,
 že readiness ho zavolá právě jednou, a že se v odpovědi neobjeví ani host ani jméno databáze.
 
+Ten soubor ale volá metody kontroleru **přímo**, takže o skutečné HTTP odpovědi neříká nic –
+a právě tam byla chyba: globální filtr terminus tělo přepisoval konstantou (viz
+`doc/decision/0030-*`). Co sonda opravdu vrací, ověřuje `apps/api/src/app/http-pipeline.spec.ts`
+reálnými requesty proti nastartovanému serveru. Rozdělení je záměrné: `health.spec.ts`
+testuje, co indikátor *spočítá*, `http-pipeline.spec.ts`, co klient *dostane*.
+
 ## Riziko, když je to špatně
 
 Kdyby někdo do `/health/live` přidal kontrolu databáze „pro úplnost", chová se to normálně

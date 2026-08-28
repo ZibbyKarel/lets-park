@@ -37,16 +37,19 @@ uživateli řekl „konflikt" místo „místo už je zabrané". Kdyby se nemapo
 je jediný způsob, jak z jednoho Prisma kódu dostat tři různé domény chyby, protože Prisma
 žádný jemnější kód nemá.
 
-**Proč se rozhoduje podle množiny sloupců, a ne podle jména constraintu.** `meta.target` má
-dva tvary: pole jmen sloupců (`['parkingSpotId', 'date']`), nebo jméno indexu jako string.
-Který přijde, závisí na driveru a verzi – proto `mapUniqueConstraintViolation` zvládá oba a
-testuje **pokrytí množinou sloupců**, ne rovnost řetězce. Jméno indexu se dá v migraci
-přejmenovat; kombinace sloupců je vlastnost domény.
+**Proč se musí zvládnout dva tvary `meta.target`.** Prisma ho hlásí buď jako pole jmen
+sloupců (`['parkingSpotId', 'date']`), nebo jako jméno indexu
+(`'Reservation_parkingSpotId_date_key'`). Který přijde, závisí na driveru a verzi, takže
+`mapUniqueConstraintViolation` musí umět oba – jinak by mapování v produkci tiše degradovalo
+na `CONFLICT`. Testy pokrývají obě formy.
 
-**Proč se pořadí testů nesmí přeházet.** `WaitlistEntry` je trojice
-`(parkingSpotId, userId, date)`, která obsahuje obě dvojice jako podmnožinu. Nejužší
-(nejvíce sloupců) se proto testuje první; opačné pořadí by waitlist hlásilo jako
-`SPOT_ALREADY_RESERVED`.
+**Porovnává se přesná množina sloupců, ne podřetězec.** První verze slepila sloupce do
+řetězce a ptala se `includes`. To mělo dvě tiché vady: sloupec, jehož jméno *obsahuje* jiné
+(`dateFrom`, `updatedDate` vůči `date`), test splnil, a nadmnožina známého constraintu
+(`(parkingSpotId, date, tenantId)`) se tvářila jako ten constraint. Správnost pak nesla
+*pořadí* podmínek, ne podmínky samotné. Teď se porovnává seřazená množina na rovnost a každá
+větev navíc jmenuje svoji tabulku, takže na pořadí nezáleží a cizí tabulka se stejnou dvojicí
+sloupců (`Invoice_userId_date_key`) se nenamapuje. Všechny tři pasti mají test.
 
 ## Jak
 
@@ -54,9 +57,9 @@ přejmenovat; kombinace sloupců je vlastnost domény.
 // apps/api/src/common/filters/contract-exception.filter.ts
 export function mapUniqueConstraintViolation(meta: Record<string, unknown> | undefined): ErrorCode {
   const target = uniqueConstraintTarget(meta);
-  if (targetCovers(target, ['parkingSpotId', 'userId', 'date'])) return 'ALREADY_IN_WAITLIST';
-  if (targetCovers(target, ['parkingSpotId', 'date'])) return 'SPOT_ALREADY_RESERVED';
-  if (targetCovers(target, ['userId', 'date'])) return 'RESERVATION_LIMIT_REACHED';
+  if (targetMatches(target, 'WaitlistEntry', ['parkingSpotId', 'userId', 'date'])) return 'ALREADY_IN_WAITLIST';
+  if (targetMatches(target, 'Reservation', ['parkingSpotId', 'date'])) return 'SPOT_ALREADY_RESERVED';
+  if (targetMatches(target, 'Reservation', ['userId', 'date'])) return 'RESERVATION_LIMIT_REACHED';
   return 'CONFLICT';
 }
 ```
@@ -73,3 +76,8 @@ to **tiše**: `P2002` propadne na `CONFLICT` a uživatel dostane generickou hlá
 správné. Nic se nerozbije, jen se zhorší – což je přesně ta kategorie regrese, kterou nikdo
 nenahlásí. Při zásahu do unique indexů v `libs/database/prisma/schema.prisma` se proto musí
 projít i tahle funkce; testy chytí jen to, že mapování dělá, co říká, ne že odpovídá schématu.
+
+Přesné porovnání tenhle sklon k tichému selhání **zesiluje** – dřív by změněný constraint
+možná ještě prošel podřetězcem, teď propadne na `CONFLICT` najisto. Je to vědomá volba:
+degradace na obecnější, ale pravdivou chybu je lepší než sebejisté nálepkování cizího
+constraintu jménem domény, které mu nepatří.
