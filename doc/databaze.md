@@ -183,7 +183,7 @@ nastavení bez identifikátoru. Fixní `1` je tedy interní detail úložiště,
 cesta – a `prisma db seed` se v produkci nepouští. Seed hodnoty pro jistotu ještě
 upsertuje, aby se ručně rozhrabaná dev databáze vrátila do známého stavu.
 
-Podrobněji: `doc/decision/0023-singleton-nastaveni-vynuceny-check-constraintem.md`.
+Podrobněji: `doc/decision/0026-singleton-nastaveni-vynuceny-check-constraintem.md`.
 
 ---
 
@@ -226,7 +226,7 @@ aplikaci. Trigger to zastaví ve všech případech.
 
 Cena: opravit překlep v `payload` nejde – jde jen připsat nový záznam. To je záměr.
 
-Podrobněji: `doc/decision/0024-hard-delete-a-append-only-auditlog.md`.
+Podrobněji: `doc/decision/0027-hard-delete-a-append-only-auditlog.md`.
 
 ---
 
@@ -247,7 +247,7 @@ nevynucuje (`z.uuid()`, `doc/decision/0016-*`), v7 je zvolené kvůli monotónn�
 prefixu – zápis na primární klíč má lepší lokalitu než náhodná v4. Generuje je Prisma
 Client, ne databáze; ruční `INSERT` v SQL proto musí `id` dodat sám (dělá to i seed
 řádek v migraci, jen tam je `id` fixní jednička).
-Podrobněji: `doc/decision/0022-uuid-v7-jako-primarni-klic.md`.
+Podrobněji: `doc/decision/0025-uuid-v7-jako-primarni-klic.md`.
 
 ---
 

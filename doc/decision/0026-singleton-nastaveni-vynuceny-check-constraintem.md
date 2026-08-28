@@ -1,4 +1,4 @@
-# 0023 – Singleton `ReservationWindowSettings` je vynucený `CHECK` constraintem
+# 0026 – Singleton `ReservationWindowSettings` je vynucený `CHECK` constraintem
 
 **Datum:** 2026-08-28 · **Stav:** přijato · **Navazuje na:** `doc/decision/0004-*`, `doc/decision/0016-*`
 

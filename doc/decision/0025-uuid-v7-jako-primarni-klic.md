@@ -1,4 +1,4 @@
-# 0022 – Primární klíče jsou UUID v7 generované klientem
+# 0025 – Primární klíče jsou UUID v7 generované klientem
 
 **Datum:** 2026-08-28 · **Stav:** přijato · **Navazuje na:** `doc/decision/0016-*`
 
@@ -8,7 +8,7 @@ Všechny entitní tabulky mají `id UUID` s `@default(uuid(7))`, tedy **UUID ver
 generované Prisma Clientem. Sloupec je nativní `UUID`, ne `TEXT`.
 
 Výjimka je `ReservationWindowSettings.id` – fixní `INTEGER` 1
-(viz `doc/decision/0023-*`).
+(viz `doc/decision/0026-*`).
 
 ## Proč
 

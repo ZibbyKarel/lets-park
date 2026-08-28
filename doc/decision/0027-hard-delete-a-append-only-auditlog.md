@@ -1,4 +1,4 @@
-# 0024 – Hard delete + append-only `AuditLog` místo soft delete
+# 0027 – Hard delete + append-only `AuditLog` místo soft delete
 
 **Datum:** 2026-08-28 · **Stav:** přijato · **Týká se:** Tasků 13, 27, 30
 
@@ -57,7 +57,7 @@ a stojí jednu funkci.
 
 Prisma append-only vyjádřit neumí, takže trigger je ručně dopsaný na konec init
 migrace – platí pro něj stejná past s `migrate dev` jako pro `CHECK` constrainty
-(viz `doc/decision/0023-*` a `doc/databaze.md`).
+(viz `doc/decision/0026-*` a `doc/databaze.md`).
 
 ## Jak
 

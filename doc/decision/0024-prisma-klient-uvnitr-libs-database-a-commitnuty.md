@@ -1,4 +1,4 @@
-# 0021 – Prisma klient se generuje dovnitř `libs/database` a je commitnutý
+# 0024 – Prisma klient se generuje dovnitř `libs/database` a je commitnutý
 
 **Datum:** 2026-08-28 · **Stav:** přijato · **Týká se:** Tasků 9–13, 30 a CI
 
