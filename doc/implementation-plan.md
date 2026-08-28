@@ -181,16 +181,24 @@ tomto stroji neběží, takže `docker compose up` neověřuj; napiš to do repo
        lockMode: 'AUTO' | 'FORCE_OPEN' | 'FORCE_LOCKED' (default 'AUTO') }`,
      - `MonthLockState` = `'NOT_YET_OPEN' | 'OPEN' | 'LOCKED'` + schéma přehledu měsíce
        (měsíc, rozsah okna od–do, stav).
-   - `dateOnlySchema` = `z.iso.date()` + validace rezervačního horizontu (viz `plan.md`
-     §Byznys pravidla) postavená nad helpery z `libs/shared-types`.
+   - `dateOnlySchema` = `z.iso.date()`, tj. **jen formát** `YYYY-MM-DD`. Schéma **nesmí**
+     validovat rezervační horizont (ruling `window-2`): starý horizont z `plan.md`
+     („do konce následujícího měsíce") zrušilo rozhodnutí `0004`, a nový horizont závisí na
+     `ReservationWindowSettings` čtených z DB, což statické Zod schéma vidět nemůže.
+     Kontrola „není v minulosti" a kontrola okna jsou **service-level** (Task 13) nad
+     `isMonthOpen` / `monthLockState` z `libs/shared-types`.
    - Error kontrakt: schéma error shapu (`code`, `message`, `details?`) a **uzavřený výčet**
      doménových error kódů: `SPOT_ALREADY_RESERVED`, `RESERVATION_LIMIT_REACHED`,
      `PAST_DATE`, `OUT_OF_HORIZON`, `NOT_FOUND`, `FORBIDDEN`, `ALREADY_IN_WAITLIST`,
      `CANNOT_WAITLIST_OWN_SPOT`, `SPOT_NOT_OCCUPIED`, `VALIDATION_FAILED`, `CONFLICT`,
-     **`RESERVATIONS_LOCKED`** (měsíc je mimo rezervační okno).
+     **`RESERVATIONS_LOCKED`**.
+     Rozdělení obou „okenních" kódů (ruling `window-3`): `OUT_OF_HORIZON` = cílový měsíc je
+     `NOT_YET_OPEN` (rezervace se teprve otevře), `RESERVATIONS_LOCKED` = cílový měsíc je
+     `LOCKED` (okno se už zavřelo). Oba vrací service vrstva, ne schéma.
    - Typy odvozené výhradně přes `z.infer`.
 3. Unit testy schémat: validní vstupy, nevalidní vstupy, hraniční data (dnešek,
-   včerejšek, poslední povolený den horizontu, den o jeden za horizontem, přestupný rok).
+   včerejšek, přestupný rok, přelom roku). **Horizont se v těchto testech netestuje** —
+   patří k `isMonthOpen` (bod 1) a k service testům v Tasku 13.
 4. Dokumentace: `doc/kontrakt.md` (zakládá se zde, doplní ho Task 4 a 5) – jak je kontrakt
    strukturovaný, jak se přidává nové schéma, proč jsou typy odvozené.
 
