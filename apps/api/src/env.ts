@@ -39,6 +39,36 @@ const corsAllowedOriginsSchema = z
   )
   .pipe(z.array(z.url()).min(1, 'must contain at least one valid origin URL'));
 
+/**
+ * Express `body-parser` size limit, e.g. `100kb` or `1mb`. A bare number is
+ * rejected on purpose: `limit: 100` means *bytes* to body-parser, which is
+ * almost never what someone writing `100` meant.
+ */
+const byteSizeSchema = z
+  .string()
+  .regex(/^\d+(\.\d+)?\s?(b|kb|mb|gb)$/i, 'must be a byte size with a unit, e.g. "100kb"');
+
+/** A positive whole number of milliseconds, coerced from its string env value. */
+const positiveMillisecondsSchema = z.coerce.number().int().positive();
+
+/** A positive whole request count. */
+const positiveCountSchema = z.coerce.number().int().positive();
+
+/**
+ * Defaults for the operational-baseline keys, exported so that the one place
+ * that cannot inject `ConfigService` — the `StrictThrottle()` decorator in
+ * `common/throttling/throttle-tiers.ts` — falls back to the same numbers this
+ * schema does, instead of a second copy that can drift.
+ */
+export const ENV_DEFAULTS = {
+  THROTTLE_TTL_MS: 60_000,
+  THROTTLE_LIMIT: 300,
+  THROTTLE_STRICT_TTL_MS: 60_000,
+  THROTTLE_STRICT_LIMIT: 20,
+  BODY_LIMIT: '100kb',
+  HEALTH_DB_TIMEOUT_MS: 3_000,
+} as const;
+
 export const apiEnvSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   PORT: z.coerce.number().int().min(1).max(65535),
@@ -47,6 +77,31 @@ export const apiEnvSchema = z.object({
   AUTH_OKTA_AUDIENCE: z.string().min(1),
   CORS_ALLOWED_ORIGINS: corsAllowedOriginsSchema,
   LOG_LEVEL: logLevelSchema,
+
+  // --- Operational baseline (Task 10) ------------------------------------
+  // Everything below has a default. `.env.example` is owned by another task's
+  // file set, so a *required* key here would break every existing `.env` with
+  // no way for this task to update the example. Defaults are the production
+  // values; `doc/prostredi.md` lists them.
+
+  /** Global rate-limit window, in milliseconds. */
+  THROTTLE_TTL_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.THROTTLE_TTL_MS),
+  /** Requests allowed per window, per client, on every route. */
+  THROTTLE_LIMIT: positiveCountSchema.default(ENV_DEFAULTS.THROTTLE_LIMIT),
+  /** Window for the stricter, session-less tier (see `StrictThrottle`). */
+  THROTTLE_STRICT_TTL_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.THROTTLE_STRICT_TTL_MS),
+  /** Requests allowed per window on routes that opt into the strict tier. */
+  THROTTLE_STRICT_LIMIT: positiveCountSchema.default(ENV_DEFAULTS.THROTTLE_STRICT_LIMIT),
+
+  /** Maximum accepted request body, passed to Express' JSON/urlencoded parsers. */
+  BODY_LIMIT: byteSizeSchema.default(ENV_DEFAULTS.BODY_LIMIT),
+
+  /**
+   * How long `/health/ready` waits for its `SELECT 1` before declaring the
+   * database down. Must stay well below the orchestrator's probe timeout, or a
+   * hung Postgres produces a hung probe instead of a failing one.
+   */
+  HEALTH_DB_TIMEOUT_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.HEALTH_DB_TIMEOUT_MS),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
