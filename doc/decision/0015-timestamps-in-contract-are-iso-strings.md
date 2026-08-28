@@ -1,40 +1,47 @@
-# 0015 – Časová razítka v kontraktu jsou ISO řetězce, ne `Date`
+# 0015 – Timestamps in the contract are ISO strings, not `Date`
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-`createdAt` / `updatedAt` a všechna ostatní časová razítka mají v `libs/contract` schéma
-`timestampSchema = z.iso.datetime()`, tedy **řetězec** v UTC (`2026-08-28T09:15:00.000Z`).
-Nepoužívá se `z.date()` ani `z.coerce.date()`.
+`createdAt` / `updatedAt` and every other timestamp have the schema
+`timestampSchema = z.iso.datetime()` in `libs/contract`, i.e. a **string** in
+UTC (`2026-08-28T09:15:00.000Z`). Neither `z.date()` nor `z.coerce.date()` is
+used.
 
-Netýká se to rezervačního dne — ten je `dateOnlySchema` (`YYYY-MM-DD`) a `DATE` v Postgresu,
-nikdy timestamp.
+This does not apply to the reservation day — that one is `dateOnlySchema`
+(`YYYY-MM-DD`) and `DATE` in Postgres, never a timestamp.
 
-## Proč
+## Why
 
-- **Kontrakt zůstává transportně neutrální.** Schéma platí stejně pro oRPC RPC protokol,
-  pro prosté JSON, pro OpenAPI i pro payload Socket.io eventu. `z.date()` funguje jen tam,
-  kde je mezi oběma stranami serializátor, který `Date` rekonstruuje — jinak se z něj po
-  `JSON.stringify` stane řetězec a schéma na druhé straně spadne.
-- **Konzistence s date-only sémantikou.** V kontraktu už jednou platí „datum je řetězec";
-  mít vedle toho „čas je objekt" je zbytečná druhá konvence.
-- **Selže hlasitě, ne tiše.** `z.coerce.date()` by přijal skoro cokoliv a vyrobil
-  `Invalid Date`; `z.iso.datetime()` neplatný vstup odmítne.
+- **The contract stays transport-neutral.** The schema holds equally for the
+  oRPC RPC protocol, for plain JSON, for OpenAPI, and for a Socket.io event
+  payload. `z.date()` only works where there is a serializer on both sides that
+  reconstructs `Date` — otherwise `JSON.stringify` turns it into a string and
+  the schema on the other side fails.
+- **Consistency with the date-only semantics.** The contract already has the
+  convention "a date is a string"; having "time is an object" as a second
+  convention alongside it would be redundant.
+- **Fails loudly, not silently.** `z.coerce.date()` would accept almost
+  anything and produce an `Invalid Date`; `z.iso.datetime()` rejects invalid
+  input outright.
 
-`z.iso.datetime()` ve výchozím nastavení přijímá **jen `Z`**, ne offsety (`+02:00`).
-To je záměr: jediný formát na drátě, žádné „je to +02:00 nebo +01:00" hádání.
+By default `z.iso.datetime()` accepts **only `Z`**, not offsets (`+02:00`).
+That is deliberate: a single wire format, no guessing whether it's `+02:00` or
+`+01:00`.
 
-## Jak
+## How
 
-- Backend serializuje razítka přes `Date.prototype.toISOString()`.
-- Frontend si `Date` vyrobí až tam, kde ho opravdu potřebuje (formátování v `libs/i18n`).
-- Prisma vrací `Date`; mapování na řetězec je mechanické a děje se v service vrstvě, která
-  entitu skládá do kontraktního tvaru.
+- The backend serializes timestamps via `Date.prototype.toISOString()`.
+- The frontend only builds a `Date` where it actually needs one (formatting in
+  `libs/i18n`).
+- Prisma returns `Date`; mapping it to a string is mechanical and happens in
+  the service layer that assembles the entity into the contract shape.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Kdyby se ukázalo, že oRPC serializace `Date` je natolik pohodlnější, že to stojí za ztrátu
-transportní neutrality, je změna lokální: `timestampSchema` je jedno místo a typy jsou
-odvozené, takže se přepíše jeden řádek a TypeScript ukáže všechna volající místa.
-Task 4 (oRPC procedury) je poslední moment, kdy to jde přehodnotit levně.
+If oRPC's `Date` serialization turns out to be convenient enough to be worth
+losing transport neutrality, the change is local: `timestampSchema` is a single
+place and types are derived, so one line gets rewritten and TypeScript points
+at every call site. Task 4 (oRPC procedures) is the last moment where
+reconsidering this is cheap.

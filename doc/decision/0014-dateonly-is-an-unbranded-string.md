@@ -1,48 +1,53 @@
-# 0014 – `DateOnly` je nebrandovaný `string`
+# 0014 – `DateOnly` is an unbranded `string`
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-`DateOnly` v `libs/shared-types` je prostý alias:
+`DateOnly` in `libs/shared-types` is a plain alias:
 
 ```ts
 export type DateOnly = string;
 ```
 
-Není to branded typ (`string & { __brand: 'DateOnly' }`). Runtime jistotu dávají
-`isDateOnly()` / `assertDateOnly()` v `libs/shared-types` a `dateOnlySchema`
-(`z.iso.date()`) na hranici kontraktu — ne typový systém.
+It is not a branded type (`string & { __brand: 'DateOnly' }`). Runtime
+guarantees come from `isDateOnly()` / `assertDateOnly()` in `libs/shared-types`
+and from `dateOnlySchema` (`z.iso.date()`) at the contract boundary — not from
+the type system.
 
-## Proč
+## Why
 
-Brand by musel existovat dvakrát a v obou podobách jinak:
+A brand would have to exist twice, and differently in each place:
 
-- `libs/shared-types` nesmí záviset na Zodu (viz `doc/decision/0003-*`), takže by si brand
-  musel definovat sám;
-- `libs/contract` odvozuje typy výhradně přes `z.infer`, takže by jeho `DateOnly` byl
-  `z.infer<typeof dateOnlySchema>` — buď obyčejný `string`, nebo Zodí vlastní brand
-  (`.brand<'DateOnly'>()`), který je strukturálně **jiný** než ten ruční.
+- `libs/shared-types` must not depend on Zod (see `doc/decision/0003-*`), so it
+  would have to define its own brand;
+- `libs/contract` derives types exclusively via `z.infer`, so its `DateOnly`
+  would be `z.infer<typeof dateOnlySchema>` — either a plain `string`, or Zod's
+  own brand (`.brand<'DateOnly'>()`), which is structurally **different** from
+  the hand-rolled one.
 
-Ať by se zvolilo cokoliv, kontraktní typ a doménový typ by si nebyly přiřaditelné a service
-vrstva by byla plná přetypování. Přetypování na každém řádku je horší než žádný brand:
-maskuje i ty chyby, které by brand chytil.
+Whichever was chosen, the contract type and the domain type would not be
+assignable to each other, and the service layer would be full of casts. A cast
+on every line is worse than no brand at all: it also masks the errors a brand
+would have caught.
 
-Navíc žádná hodnota v systému není „string, který se dá zaměnit za datum" — datumy chodí
-z DB (`DATE` sloupec) a z kontraktu (`z.iso.date()`), obojí už zvalidované.
+Moreover, no value in the system is "a string that might or might not be a
+date" — dates come from the DB (a `DATE` column) and from the contract
+(`z.iso.date()`), both already validated.
 
-## Jak
+## How
 
-- Veřejné API `libs/shared-types` každou vstupní hodnotu validuje (`parseDateOnly()`
-  volá `assertDateOnly()`), takže neplatný řetězec spadne na `TypeError` hned, ne až
-  o tři vrstvy dál.
-- `dateOnlySchema` v kontraktu validuje i **kalendářní platnost** — `z.iso.date()`
-  odmítne `2023-02-29` i `2026-04-31`, nejen špatný formát.
-- `YearMonth` (`YYYY-MM`) je řešený stejně.
+- `libs/shared-types`'s public API validates every input value
+  (`parseDateOnly()` calls `assertDateOnly()`), so an invalid string fails with
+  a `TypeError` immediately, not three layers further down.
+- `dateOnlySchema` in the contract also validates **calendar validity** —
+  `z.iso.date()` rejects `2023-02-29` and `2026-04-31`, not just a bad format.
+- `YearMonth` (`YYYY-MM`) is handled the same way.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Typový systém nezabrání předat do date funkce libovolný `string`. V praxi to chytí buď
-`assertDateOnly()` v runtime, nebo test. Kdyby se ukázalo, že to bolí, jde brand zavést
-později jedním místem (typ v `shared-types` + `.transform()` v `dateOnlySchema`) — API
-funkcí se přitom nemění.
+The type system won't stop an arbitrary `string` from being passed into a date
+function. In practice it's caught either by `assertDateOnly()` at runtime, or
+by a test. If this turns out to hurt, a brand can be introduced later in one
+place (a type in `shared-types` + a `.transform()` in `dateOnlySchema`) — the
+functions' API doesn't change.

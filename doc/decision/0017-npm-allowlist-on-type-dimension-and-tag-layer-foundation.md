@@ -1,104 +1,124 @@
-# 0017 – npm allow-list visí na dimenzi `type:`, `libs/shared-types` dostává `layer:foundation`
+# 0017 – The npm allow-list hangs off the `type:` dimension; `libs/shared-types` gets `layer:foundation`
 
-**Datum:** 2026-08-28 · **Stav:** přijato · **Řeší:** review Tasku 3, nálezy S3 a N3
+**Date:** 2026-08-28 · **Status:** accepted · **Resolves:** the Task 3 review, findings S3 and N3
 
-## Co
+## What
 
-Dvě změny v `eslint.config.mjs` (+ jeden tag v `libs/shared-types/project.json`):
+Two changes in `eslint.config.mjs` (plus one tag in
+`libs/shared-types/project.json`):
 
-1. **Každý `type:` tag má `allowedExternalImports`.** Do Tasku 4 ho měl jediný
-   `type:contract`; ostatních jedenáct tagů nemělo žádný, takže **nic neomezovaly** —
-   `ds:tokens` mohl importovat `lodash`, `type:ui` mohl importovat `@prisma/client`.
-   Seznamy jsou v jedné mapě `NPM_ALLOWLIST` s klíči `app` / `feature` / `ui` / `util` /
-   `contract` / `data` / `foundation`.
-2. **`libs/shared-types` nese nový tag `layer:foundation`** s `onlyDependOnLibsWithTags: []`
-   a `allowedExternalImports: []` — tedy nesmí záviset na žádné workspace lib ani na žádném
-   npm balíčku. `type:contract` zároveň závisí na `layer:foundation`, ne na `type:util`.
+1. **Every `type:` tag gets an `allowedExternalImports`.** Before Task 4, only
+   `type:contract` had one; the other eleven tags had none, so they
+   **restricted nothing** — `ds:tokens` could import `lodash`, `type:ui` could
+   import `@prisma/client`. The lists live in one map, `NPM_ALLOWLIST`, keyed
+   by `app` / `feature` / `ui` / `util` / `contract` / `data` / `foundation`.
+2. **`libs/shared-types` carries a new tag, `layer:foundation`**, with
+   `onlyDependOnLibsWithTags: []` and `allowedExternalImports: []` — i.e. it
+   may depend on no workspace lib and no npm package at all. `type:contract`
+   now depends on `layer:foundation` instead of on `type:util`.
 
-## Proč
+## Why
 
-### Proč jen `type:`, a ne na všech dvanácti tagách
+### Why only `type:`, and not all twelve tags
 
-Review chtěl doplnit `allowedExternalImports` „na všech jedenáct zbývajících tagů". Po
-přečtení implementace pravidla to ale není správné řešení. V
-`@nx/eslint-plugin/dist/src/utils/runtime-lint-utils.js` funkce `hasBannedImport()`
-**vyfiltruje všechny** constraints, jejichž source tag projekt nese, a pak vrátí
-`.find(...)` — tedy **stačí jediný**, který import zakáže:
+The review asked for `allowedExternalImports` to be added "on all eleven
+remaining tags". After reading the rule's implementation, though, that isn't
+the right fix. In
+`@nx/eslint-plugin/dist/src/utils/runtime-lint-utils.js`, the function
+`hasBannedImport()` **filters down to every** constraint whose source tag the
+project carries, and then returns `.find(...)` — meaning **a single one** is
+enough to ban the import:
 
 ```js
 depConstraints = depConstraints.filter((c) => tags.every((t) => hasTag(source, t)));
 return depConstraints.find((constraint) => isConstraintBanningProject(target, constraint, imp));
 ```
 
-Constraints se tedy **ANDují** a výsledná povolená množina je **průnik** všech dimenzí, které
-projekt nese. Kdyby seznamy visely i na `scope:` a `ds:`, musel by být `react` vypsaný ve
-třech seznamech současně a vynechání v kterémkoliv z nich by ho tiše zakázalo. To je horší
-past než ta původní.
+Constraints are therefore **ANDed**, and the resulting allowed set is the
+**intersection** of every dimension the project carries. If the lists also
+hung off `scope:` and `ds:`, `react` would have to be listed in three lists at
+once, and omitting it from any one of them would silently ban it. That's a
+worse trap than the original one.
 
-`type:` je zvolená proto, že jako jediná dimenze workspace **rozděluje beze zbytku**: každý
-projekt nese právě jeden `type:` tag. Seznam na téhle dimenzi tedy pokrývá všechno a žádný
-projekt nezůstane neomezený — což byl přesně obsah nálezu S3. `scope:` a `ds:` zůstávají čistě
-o směru závislosti, což je to, co modelují.
+`type:` was chosen because it's the only dimension in the workspace that
+**partitions without remainder**: every project carries exactly one `type:`
+tag. A list on that dimension therefore covers everything, and no project is
+left unrestricted — which was exactly the substance of finding S3. `scope:`
+and `ds:` remain purely about dependency direction, which is what they model.
 
-Rozdíl mezi „chybí" a „prázdné" je zásadní a stojí za zapamatování:
+The difference between "missing" and "empty" matters and is worth
+remembering:
 
-| zápis | chování |
+| notation | behavior |
 | --- | --- |
-| `allowedExternalImports` chybí | **nic neomezuje**, projde libovolný balíček |
-| `allowedExternalImports: []` | zakáže **všechny** npm balíčky |
+| `allowedExternalImports` missing | **nothing is restricted**, any package passes |
+| `allowedExternalImports: []` | **every** npm package is banned |
 
-### Proč `layer:foundation`
+### Why `layer:foundation`
 
-Nález N3: `type:util` smí záviset na `type:contract` a `type:contract` smí záviset na
-`type:util` — na úrovni tagů cyklus. Obojí je přitom v konkrétních projektech legitimní:
+Finding N3: `type:util` is allowed to depend on `type:contract`, and
+`type:contract` is allowed to depend on `type:util` — a cycle at the tag
+level. Both directions are legitimate in specific projects, though:
 
-- `libs/api-client` (`type:util`) **musí** vidět kontrakt — je to jeho wrapper,
-- `libs/contract` **musí** vidět `libs/shared-types` (date helpery, výčty).
+- `libs/api-client` (`type:util`) **must** see the contract — it's its
+  wrapper,
+- `libs/contract` **must** see `libs/shared-types` (date helpers, enums).
 
-Chyba není ve směru, ale v tom, že tag `type:util` slepuje dvě různé vrstvy: wrappery **nad**
-kontraktem a `shared-types` **pod** ním. Nový tag to rozděluje. Výsledné vrstvení je acyklické:
+The bug isn't the direction, it's that the `type:util` tag glues together two
+different layers: wrappers **above** the contract, and `shared-types`
+**below** it. The new tag splits them apart. The resulting layering is
+acyclic:
 
 ```
 app → feature → ui → util → contract → foundation
 ```
 
-Jako vedlejší efekt je rozhodnutí `0003` („`shared-types` nesmí táhnout Zod") poprvé vynucené
-na úrovni grafu, ne jen ručně udržovaným `no-restricted-imports` blokem se jménem jednoho
-balíčku. Ten blok zůstává, protože dává lepší chybovou hlášku — ale už není jediná pojistka.
+As a side effect, decision `0003` ("`shared-types` must not pull in Zod") is
+now enforced for the first time at the graph level, not merely by a
+hand-maintained `no-restricted-imports` block naming one package. That block
+stays, because it gives a better error message — but it's no longer the only
+safeguard.
 
-## Jak
+## How
 
-- `NPM_ALLOWLIST` v `eslint.config.mjs`, jeden komentovaný klíč na `type:` tag.
-- `util` seznam je záměrně **hrubý**: je to sjednocení všech balíčků z `WRAPPED_LIBRARIES`,
-  protože všech osm wrapperů nese stejný tag `type:util`. Že `libs/form` smí jen
-  `react-hook-form` a `libs/auth` jen `next-auth`, vynucují per-adresářové
-  `no-restricted-imports` overridy — Nx dimenze na to nestačí.
-- `libs/shared-types/project.json`: `"tags": ["type:util", "scope:shared", "layer:foundation"]`.
+- `NPM_ALLOWLIST` in `eslint.config.mjs`, one commented key per `type:` tag.
+- The `util` list is deliberately **coarse**: it's the union of every package
+  from `WRAPPED_LIBRARIES`, because all eight wrappers carry the same
+  `type:util` tag. That `libs/form` may only use `react-hook-form` and
+  `libs/auth` only `next-auth` is enforced by per-directory
+  `no-restricted-imports` overrides — the Nx dimension alone isn't fine-grained
+  enough for that.
+- `libs/shared-types/project.json`:
+  `"tags": ["type:util", "scope:shared", "layer:foundation"]`.
 - `type:contract` → `onlyDependOnLibsWithTags: ['layer:foundation']`.
 
-**Ověřeno dočasnými probe soubory** (smazané), ne jen tím, že lint projde:
+**Verified with temporary probe files** (deleted afterward), not merely by
+lint passing:
 
-| probe | očekáváno | výsledek |
+| probe | expected | result |
 | --- | --- | --- |
-| `import 'zod'` v `libs/shared-types` | zákaz | `type:util … not allowed to import "zod"` |
-| `import 'react'` v `libs/shared-types` (`react` je v `util` seznamu) | zákaz z `foundation` | `layer:foundation … not allowed to import "react"` |
-| `import '@lets-park/design-system/tokens'` v `libs/shared-types` | zákaz | `layer:foundation cannot depend on any libs with tags` |
-| `import 'zod'` v `libs/design-system/tokens` | zákaz | `type:ui … not allowed to import "zod"` |
-| `import '@orpc/client'` v `libs/contract` | zákaz | `type:contract … not allowed to import "@orpc/client"` |
-| `import 'react'` v `libs/design-system/tokens` | **povoleno** | lint zelený |
+| `import 'zod'` in `libs/shared-types` | banned | `type:util … not allowed to import "zod"` |
+| `import 'react'` in `libs/shared-types` (`react` is in the `util` list) | banned by `foundation` | `layer:foundation … not allowed to import "react"` |
+| `import '@lets-park/design-system/tokens'` in `libs/shared-types` | banned | `layer:foundation cannot depend on any libs with tags` |
+| `import 'zod'` in `libs/design-system/tokens` | banned | `type:ui … not allowed to import "zod"` |
+| `import '@orpc/client'` in `libs/contract` | banned | `type:contract … not allowed to import "@orpc/client"` |
+| `import 'react'` in `libs/design-system/tokens` | **allowed** | lint green |
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Allow-list je ze své podstaty neúplný pro libs, které ještě neexistují (`type:feature`,
-`type:data`, a wrappery pod `type:util`). Když budoucí task potřebuje balíček, který v seznamu
-není, **lint spadne s jeho jménem** a task přidá jeden řádek — to je zamýšlené chování, ne
-regrese: přidání je vidět v review. Opačná chyba (seznam vynechat) je tichá, a právě ta se
-tady opravovala.
+An allow-list is by nature incomplete for libs that don't exist yet
+(`type:feature`, `type:data`, and wrappers under `type:util`). When a future
+task needs a package that isn't listed, **lint fails naming it**, and the task
+adds one line — that's the intended behavior, not a regression: the addition
+is visible in review. The opposite mistake (omitting a list entirely) is
+silent, and that's exactly what was being fixed here.
 
-Konkrétně `type:ui` je vyplněný dopředu (React, `clsx`, `tailwind-merge`,
-`class-variance-authority`, Storybook, TanStack Table), protože Tasky 6–8 na design systému
-běží souběžně. Kdyby se netrefil, je to jeden řádek navíc.
+Specifically, `type:ui` is pre-populated (React, `clsx`, `tailwind-merge`,
+`class-variance-authority`, Storybook, TanStack Table), because Tasks 6–8 on
+the design system run concurrently. If it misses the mark, it's one extra
+line.
 
-`layer:foundation` je čtvrtá dimenze tagů. Nese ji jediný projekt a je to záměr — kdyby
-vznikla druhá „nulově závislá" lib, dostane stejný tag. Kdyby `shared-types` někdy npm
-závislost opravdu potřebovala, je to signál, že patří jinam, ne že se má seznam povolit.
+`layer:foundation` is the fourth tag dimension. Exactly one project carries
+it, and that's intentional — if a second "zero-dependency" lib appears, it
+gets the same tag. If `shared-types` ever genuinely needed an npm dependency,
+that's a signal it belongs elsewhere, not a reason to loosen the list.
