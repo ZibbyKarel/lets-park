@@ -139,6 +139,14 @@ const NPM_ALLOWLIST = {
     'storybook',
     'storybook/*',
     '@storybook/*',
+    // Storybook's Tailwind v4 bridge, used only in `.storybook/main.ts`.
+    '@tailwindcss/vite',
+    // Test-only. The boundary rule cannot distinguish a spec file from a
+    // shipped one, so these have to be allowed for the whole tag; keeping
+    // them out would ban every design-system test.
+    '@testing-library/react',
+    '@testing-library/user-event',
+    '@testing-library/jest-dom',
   ],
 
   /**
