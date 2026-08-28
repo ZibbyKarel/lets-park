@@ -9,7 +9,7 @@
 /apps/web/.next
 **/*.tsbuildinfo
 
-# Not workspace source: hand-written Czech docs, exported design assets, tool config
+# Not workspace source: hand-written docs, exported design assets, tool config
 /doc
 /plan.md
 /.claude

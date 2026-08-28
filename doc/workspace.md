@@ -1,106 +1,110 @@
-# Workspace – struktura, skripty, hranice
+# Workspace – structure, scripts, boundaries
 
-Nx 23 monorepo pro Let's Park. Tenhle dokument popisuje, **jak je repo poskládané**,
-**jak se spouštějí kontroly** a **jak přidat novou lib tak, aby ji hlídaly stejné
-hranice jako všechno ostatní**.
+Nx 23 monorepo for Let's Park. This document describes **how the repo is put
+together**, **how the checks are run**, and **how to add a new lib so that it
+gets watched by the same boundaries as everything else**.
 
-Závazná specifikace je `plan.md`, rozpad na úkoly `doc/implementation-plan.md`.
-Rozhodnutí, která se odchylují od `plan.md` nebo ho zpřesňují, jsou v `doc/decision/`.
+The binding specification is `plan.md`, broken down into tasks in
+`doc/implementation-plan.md`. Decisions that deviate from `plan.md` or refine
+it live in `doc/decision/`.
 
 ---
 
-## Struktura repa
+## Repo structure
 
 ```
 apps/
-  web/          Next.js 16 (App Router, React 19)   tagy: type:app,  scope:web
-  web-e2e/      Playwright e2e pro web              tagy: type:app,  scope:web
-  api/          NestJS 11 (API + Socket.io gateway) tagy: type:app,  scope:api
-  api-e2e/      Jest integrační testy proti API     tagy: type:app,  scope:api
+  web/          Next.js 16 (App Router, React 19)   tags: type:app,  scope:web
+  web-e2e/      Playwright e2e for web              tags: type:app,  scope:web
+  api/          NestJS 11 (API + Socket.io gateway) tags: type:app,  scope:api
+  api-e2e/      Jest integration tests against the API tags: type:app,  scope:api
 libs/
-  shared-types/ doménové konstanty + Europe/Prague date logika
-                                      tagy: type:util,     scope:shared
-  contract/     Zod schémata + oRPC kontrakt + realtime eventy
-                (dva vstupní body: @lets-park/contract a @lets-park/contract/realtime)
-                                      tagy: type:contract, scope:shared
-  database/     Prisma 7 schéma, migrace, seed + generovaný klient
-                                      tagy: type:data,     scope:api
+  shared-types/ domain constants + Europe/Prague date logic
+                                      tags: type:util,     scope:shared
+  contract/     Zod schemas + oRPC contract + realtime events
+                (two entry points: @lets-park/contract and @lets-park/contract/realtime)
+                                      tags: type:contract, scope:shared
+  database/     Prisma 7 schema, migrations, seed + generated client
+                                      tags: type:data,     scope:api
   design-system/
-    tokens/     design tokeny + Tailwind v4 bridge   tagy: type:ui, scope:web, ds:tokens
-    primitives/ primitivy + Storybook 10             tagy: type:ui, scope:web, ds:primitives
-  (zbytek vzniká v dalších úkolech – plánované tagy níže)
-doc/            dokumentace, rozhodnutí, export vizuálního designu
-prisma.config.ts  konfigurace Prisma CLI (schéma v libs/database, `.env` z rootu)
+    tokens/     design tokens + Tailwind v4 bridge   tags: type:ui, scope:web, ds:tokens
+    primitives/ primitives + Storybook 10             tags: type:ui, scope:web, ds:primitives
+  (the rest is created in later tasks – planned tags below)
+doc/            documentation, decisions, visual design export
+prisma.config.ts  Prisma CLI configuration (schema in libs/database, `.env` from the root)
 ```
 
-Konfigurace, která platí pro celý workspace:
+Configuration that applies to the whole workspace:
 
-| soubor | k čemu je |
+| file | what it's for |
 | --- | --- |
-| `nx.json` | pluginy, cache, `targetDefaults`, defaulty generátorů |
-| `tsconfig.base.json` | společné `compilerOptions` + path aliasy `@lets-park/*` |
-| `eslint.config.mjs` | flat config: hranice modulů, wrapper vrstvy, `no-console` |
-| `.prettierrc`, `.editorconfig` | formát pro TS/TSX/JSON/MD |
-| `jest.preset.js`, `jest.config.ts` | společný Jest preset a agregace projektů |
+| `nx.json` | plugins, cache, `targetDefaults`, generator defaults |
+| `tsconfig.base.json` | shared `compilerOptions` + `@lets-park/*` path aliases |
+| `eslint.config.mjs` | flat config: module boundaries, wrapper layers, `no-console` |
+| `.prettierrc`, `.editorconfig` | formatting for TS/TSX/JSON/MD |
+| `jest.preset.js`, `jest.config.ts` | shared Jest preset and project aggregation |
 
-Lib může mít víc než jeden vstupní bod: `libs/contract` má vedle `@lets-park/contract` ještě
-`@lets-park/contract/realtime`, aby Socket.io půlka kontraktu netahala `@orpc/contract`. Druhý
-vstupní bod = druhý řádek v `paths` v `tsconfig.base.json` a **test, který izolaci dokazuje**
-(`libs/contract/src/realtime/no-orpc.spec.ts`) — viz `doc/decision/0023-*`.
+A lib can have more than one entry point: `libs/contract` has
+`@lets-park/contract/realtime` alongside `@lets-park/contract`, so the
+Socket.io half of the contract doesn't pull in `@orpc/contract`. A second
+entry point means a second entry in `paths` in `tsconfig.base.json`, plus **a
+test that proves the isolation**
+(`libs/contract/src/realtime/no-orpc.spec.ts`) — see `doc/decision/0023-*`.
 
-Balíčky se jmenují `@lets-park/<lib>` (viz `doc/decision/0005-npm-scope-lets-park.md`).
-Scope se odvozuje z názvu root `package.json` (`@lets-park/source`), takže generátory
-Nx ho doplní samy.
+Packages are named `@lets-park/<lib>` (see
+`doc/decision/0005-npm-scope-lets-park.md`). The scope is derived from the
+root `package.json`'s name (`@lets-park/source`), so Nx generators fill it in
+automatically.
 
 ---
 
-## Skripty
+## Scripts
 
-Všechno se pouští z rootu repa přes npm:
+Everything runs from the repo root via npm:
 
-| příkaz | co dělá |
+| command | what it does |
 | --- | --- |
-| `npm run lint` | ESLint nad všemi projekty (`nx run-many -t lint`), **`--max-warnings=0`** |
-| `npm run typecheck` | `tsc --noEmit` nad všemi tsconfigy každého projektu |
-| `npm run test` | Jest unit testy (`nx run-many -t test`) |
-| `npm run build` | produkční build `web` i `api` |
-| `npm run affected` | `nx affected -t lint,test,build` – jen to, co se změnilo (pro CI) |
-| `npm run format` | Prettier zápis |
-| `npm run format:check` | Prettier kontrola (padá, když něco není naformátované) |
+| `npm run lint` | ESLint across every project (`nx run-many -t lint`), **`--max-warnings=0`** |
+| `npm run typecheck` | `tsc --noEmit` against every project's tsconfigs |
+| `npm run test` | Jest unit tests (`nx run-many -t test`) |
+| `npm run build` | production build of both `web` and `api` |
+| `npm run affected` | `nx affected -t lint,test,build` – only what changed (for CI) |
+| `npm run format` | Prettier write |
+| `npm run format:check` | Prettier check (fails if anything is unformatted) |
 
-E2e testy nejsou součástí `npm run test`, spouští se cíleně:
+E2e tests aren't part of `npm run test`; they run on demand:
 
 ```bash
-npx nx run web-e2e:e2e      # Playwright; dev server si nastartuje sám
-npx nx run api-e2e:e2e      # Jest; nastartuje si api:serve
+npx nx run web-e2e:e2e      # Playwright; starts the dev server itself
+npx nx run api-e2e:e2e      # Jest; starts api:serve itself
 ```
 
-Stejně tak **Storybook není součástí `npm run build`** – do CI se musí přidat
-zvlášť (`nx run-many -t build-storybook`), jinak se rozbitá story pozná až
-ručně:
+Likewise, **Storybook isn't part of `npm run build`** – it must be added to CI
+separately (`nx run-many -t build-storybook`), otherwise a broken story is
+only noticed by hand:
 
 ```bash
 npx nx run design-system-primitives:storybook         # dev server, port 4400
-npx nx run design-system-primitives:build-storybook   # statický build
+npx nx run design-system-primitives:build-storybook   # static build
 ```
 
-Užitečné jednotlivé cíle:
+Useful individual targets:
 
 ```bash
 npx nx run web:dev          # Next.js dev server
-npx nx run api:serve        # NestJS ve watch režimu
-npx nx run-many -t lint --skip-nx-cache   # obejít cache
-npx nx graph                # graf závislostí
+npx nx run api:serve        # NestJS in watch mode
+npx nx run-many -t lint --skip-nx-cache   # bypass the cache
+npx nx graph                # dependency graph
 ```
 
-CI zatím nemá pipeline soubor – záměrně. Skripty výše jsou navržené tak, aby je
-pipeline jen zavolala (`npm ci && npm run affected`).
+CI has no pipeline file yet – deliberately. The scripts above are designed so
+a pipeline just has to call them (`npm ci && npm run affected`).
 
 ---
 
 ## TypeScript
 
-`tsconfig.base.json` zapíná napříč workspace:
+`tsconfig.base.json` enables, workspace-wide:
 
 - `strict: true`
 - `noUncheckedIndexedAccess: true`
@@ -108,82 +112,89 @@ pipeline jen zavolala (`npm ci && npm run affected`).
 - `exactOptionalPropertyTypes: true`
 - `forceConsistentCasingInFileNames: true`
 
-Žádný projekt tyhle volby nesmí vypínat. Když nový kód narazí na
-`exactOptionalPropertyTypes`, řešení je upravit typ (`prop?: T | undefined`), ne
-vypnout kontrolu.
+No project may turn any of these off. When new code hits
+`exactOptionalPropertyTypes`, the fix is to adjust the type
+(`prop?: T | undefined`), not to disable the check.
 
-Každý projekt má vlastní cíl `typecheck` (`nx:run-commands` + `tsc --noEmit`).
-**Nová lib si ho musí přidat taky** – jinak se do `npm run typecheck` nedostane.
+Every project has its own `typecheck` target (`nx:run-commands` +
+`tsc --noEmit`). **A new lib must add one too** – otherwise it never becomes
+part of `npm run typecheck`.
 
 ---
 
-## Nx tagy a hranice modulů
+## Nx tags and module boundaries
 
-Tagy se píší do `project.json` (`"tags": [...]`) a vynucuje je ESLint pravidlo
-`@nx/enforce-module-boundaries`. Používají se čtyři nezávislé dimenze; **pravidla ze všech
-dimenzí musí platit současně** (Nx je ANDuje – viz `doc/decision/0017-*`).
+Tags are written into `project.json` (`"tags": [...]`) and enforced by the
+ESLint rule `@nx/enforce-module-boundaries`. Four independent dimensions are
+used; **rules from every dimension must hold simultaneously** (Nx ANDs them —
+see `doc/decision/0017-*`).
 
-### Dimenze `type:` – jakou roli lib hraje
+### The `type:` dimension – what role a lib plays
 
-Tahle dimenze workspace **rozděluje beze zbytku** (každý projekt nese právě jeden `type:`
-tag), a proto na ní visí i seznam povolených npm balíčků (`allowedExternalImports`).
+This dimension **partitions the workspace without remainder** (every project
+carries exactly one `type:` tag), which is why the npm allow-list
+(`allowedExternalImports`) hangs off it too.
 
-| tag | význam | smí záviset na | z npm smí |
+| tag | meaning | may depend on | may use from npm |
 | --- | --- | --- | --- |
-| `type:app` | aplikace (`apps/*`) | na čemkoliv; nikdo nesmí záviset na aplikaci | `*` |
-| `type:feature` | doménová kompozice | `feature`, `ui`, `util`, `contract`, `data` | `tslib` |
-| `type:ui` | design systém, bez domény | `ui`, `util` | React, `clsx`, `tailwind-merge`, `class-variance-authority`, TanStack Table, Storybook |
-| `type:util` | wrapper vrstvy a helpery | `util`, `contract` | React/Next + sjednocení balíčků z `WRAPPED_LIBRARIES` |
+| `type:app` | an application (`apps/*`) | anything; nothing may depend on an app | `*` |
+| `type:feature` | domain composition | `feature`, `ui`, `util`, `contract`, `data` | `tslib` |
+| `type:ui` | the design system, domain-free | `ui`, `util` | React, `clsx`, `tailwind-merge`, `class-variance-authority`, TanStack Table, Storybook |
+| `type:util` | wrapper layers and helpers | `util`, `contract` | React/Next + the union of packages from `WRAPPED_LIBRARIES` |
 | `type:contract` | `libs/contract` – Zod + oRPC | `layer:foundation` | `zod`, `@orpc/contract`, `tslib` |
-| `type:data` | přístup k datům (`libs/database`) | `data`, `util`, `contract` | Prisma |
+| `type:data` | data access (`libs/database`) | `data`, `util`, `contract` | Prisma |
 
-### Dimenze `layer:` – spodek grafu
+### The `layer:` dimension – the bottom of the graph
 
-| tag | smí záviset na | z npm smí |
+| tag | may depend on | may use from npm |
 | --- | --- | --- |
-| `layer:foundation` | **na ničem** | **na ničem** |
+| `layer:foundation` | **nothing** | **nothing** |
 
-Nese ho jediný projekt, `libs/shared-types`. Odděluje ho od wrapperů, které mají stejný tag
-`type:util`, ale leží **nad** kontraktem, zatímco `shared-types` leží **pod** ním. Bez toho
-by `type:util → type:contract` a `type:contract → type:util` tvořily cyklus. Výsledné
-vrstvení je acyklické: `app → feature → ui → util → contract → foundation`.
+Only one project carries it, `libs/shared-types`. It separates it from the
+wrappers, which share the same `type:util` tag but sit **above** the contract,
+whereas `shared-types` sits **below** it. Without this, `type:util →
+type:contract` and `type:contract → type:util` would form a cycle. The
+resulting layering is acyclic: `app → feature → ui → util → contract →
+foundation`.
 
-> **Pozor na rozdíl mezi „chybí" a „prázdné":** `allowedExternalImports` **bez uvedení**
-> neomezuje nic (projde libovolný balíček), kdežto `allowedExternalImports: []` zakáže
-> všechny. Právě proto má seznam každý `type:` tag, i kdyby byl jen `['tslib']`.
-> Podrobnosti a probe důkazy: `doc/decision/0017-*`.
+> **Watch the difference between "missing" and "empty":**
+> `allowedExternalImports` **left out entirely** restricts nothing (any
+> package passes), whereas `allowedExternalImports: []` bans everything. That's
+> exactly why every `type:` tag has a list, even if it's just `['tslib']`.
+> Details and probe evidence: `doc/decision/0017-*`.
 
-### Dimenze `scope:` – na které straně lib žije
+### The `scope:` dimension – which side a lib lives on
 
-| tag | smí záviset na |
+| tag | may depend on |
 | --- | --- |
 | `scope:web` | `scope:web`, `scope:shared` |
 | `scope:api` | `scope:api`, `scope:shared` |
 | `scope:shared` | `scope:shared` |
 
-Tahle dimenze drží rozhodnutí `0003`: `apps/api` (`scope:api`) smí na
-`libs/shared-types` (`scope:shared`), ale **ne** na `libs/i18n` (`scope:web`), takže se
-do backendu nedostane `next-intl`.
+This dimension enforces decision `0003`: `apps/api` (`scope:api`) may depend
+on `libs/shared-types` (`scope:shared`), but **not** on `libs/i18n`
+(`scope:web`), so `next-intl` never reaches the backend.
 
-### Dimenze `ds:` – vrstvy design systému
+### The `ds:` dimension – design-system layers
 
-| tag | smí záviset na |
+| tag | may depend on |
 | --- | --- |
 | `ds:tokens` | `type:util` |
 | `ds:primitives` | `ds:tokens`, `type:util` |
 | `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` |
 
-Vynucuje směr tokens → primitives → compounds. Samotné `type:ui` na to nestačí, protože
-všechny tři vrstvy ho nesou – podrobnosti v `doc/decision/0007-*`.
+Enforces the direction tokens → primitives → compounds. `type:ui` alone isn't
+enough for this, since all three layers carry it – details in
+`doc/decision/0007-*`.
 
 ---
 
-## Wrapper vrstvy (`no-restricted-imports`)
+## Wrapper layers (`no-restricted-imports`)
 
-Aplikační a knihovní kód nesmí importovat tyhle balíčky přímo. Jediné povolené místo je
-wrapper lib, která je vlastní:
+Application and library code must not import these packages directly. The
+only allowed place is the wrapper lib that owns them:
 
-| zakázaný balíček | používej místo něj | jediný povolený adresář |
+| forbidden package | use instead | only allowed directory |
 | --- | --- | --- |
 | `react-hook-form` | `@lets-park/form` | `libs/form` |
 | `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/design-system/compounds` |
@@ -194,45 +205,50 @@ wrapper lib, která je vlastní:
 | `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` |
 | `next-intl` | `@lets-park/i18n` | `libs/i18n` |
 
-Seznam je v `eslint.config.mjs` v jedné mapě `WRAPPED_LIBRARIES`; globální zákaz
-i výjimky pro jednotlivé wrappery se z ní generují, aby se nemohly rozejít. Chybová
-hláška vždy říká, kterou wrapper lib má vývojář použít.
+The list lives in `eslint.config.mjs` in a single map, `WRAPPED_LIBRARIES`;
+the global ban and the per-wrapper exceptions are both generated from it, so
+they can't drift apart. The error message always states which wrapper lib the
+developer should use instead.
 
-Dál platí `no-console: error` v `apps/api/**` a `libs/**` – backend loguje přes
-`nestjs-pino`. Console je povolená jen v `tools/**`, `scripts/**`, `**/scripts/**`
-a v konfiguračních souborech.
+`no-console: error` also applies in `apps/api/**` and `libs/**` – the backend
+logs through `nestjs-pino`. Console is allowed only in `tools/**`,
+`scripts/**`, `**/scripts/**`, and in configuration files.
 
-Zvlášť je ošetřená `libs/shared-types`: má vlastní `no-restricted-imports` blok, který
-tam navíc zakazuje **`zod`**. Nx dimenze `type:util` to vyjádřit neumí – stejný tag nesou
-i wrapper libs, které na třetích stranách záviset musí. Bez tohohle bloku by nic nebránilo
-tomu, aby `apps/api` přes `shared-types` táhla Zod (viz `doc/decision/0003-*`).
+`libs/shared-types` is handled specially: it has its own
+`no-restricted-imports` block that additionally bans **`zod`** there. The Nx
+`type:util` dimension can't express this – the wrapper libs, which must
+depend on third parties, share the same tag. Without this block, nothing
+would stop `apps/api` from pulling in Zod through `shared-types` (see
+`doc/decision/0003-*`).
 
-> **Past při úpravách `eslint.config.mjs`:** Nx spouští `eslint .` s **cwd nastaveným na
-> adresář projektu**, ne na root repa. Config objekt, jehož `files` jsou cesty od rootu
-> (`apps/**`, `libs/form/**`), proto musí mít `basePath: workspaceRoot` – jinak se glob
-> porovná s cestou relativní k projektu, nikdy nesedne a pravidlo **tiše nic nedělá**.
-> Po každé změně path-scoped pravidla ho ověř dočasným souborem, ne jen tím, že lint
-> projde.
+> **Trap when editing `eslint.config.mjs`:** Nx runs `eslint .` with **cwd set
+> to the project's directory**, not the repo root. A config object whose
+> `files` are root-relative paths (`apps/**`, `libs/form/**`) must therefore
+> set `basePath: workspaceRoot` – otherwise the glob is matched against a
+> project-relative path, never matches, and the rule **silently does
+> nothing**. After every change to a path-scoped rule, verify it with a
+> temporary file, not just by lint passing.
 
 ---
 
-## Jak přidat novou lib
+## How to add a new lib
 
-1. **Vygeneruj ji.** Alias `@lets-park/<nazev>` se do `tsconfig.base.json` doplní sám.
+1. **Generate it.** The `@lets-park/<name>` alias is added to
+   `tsconfig.base.json` automatically.
 
    ```bash
-   # čistě TypeScriptová lib (kontrakt, util, backend service)
+   # a pure TypeScript lib (contract, util, backend service)
    npx nx g @nx/js:lib libs/shared-types --name=shared-types \
      --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
 
-   # React lib (design systém, wrappery pro frontend)
+   # a React lib (design system, frontend wrappers)
    npx nx g @nx/react:lib libs/design-system/primitives --name=design-system-primitives \
      --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
    ```
 
-2. **Nastav tagy** v `libs/<nazev>/project.json`. Plánované rozdělení:
+2. **Set the tags** in `libs/<name>/project.json`. Planned split:
 
-   | lib | tagy |
+   | lib | tags |
    | --- | --- |
    | `libs/contract` | `type:contract`, `scope:shared` |
    | `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` |
@@ -243,30 +259,32 @@ tomu, aby `apps/api` přes `shared-types` táhla Zod (viz `doc/decision/0003-*`)
    | `libs/calendar-export` | `type:util`, `scope:api` |
    | `libs/database` | `type:data`, `scope:api` |
 
-   Projekt bez tagů žádná pravidla neomezují – **netagovaná lib je díra v hranicích.**
-   Když lib potřebuje npm balíček, který v `NPM_ALLOWLIST` pro její `type:` tag není,
-   lint spadne s jeho jménem; doplň ho tam jedním řádkem, ať je změna vidět v review.
+   A project with no tags is restricted by nothing – **an untagged lib is a
+   hole in the boundaries.** When a lib needs an npm package that isn't in the
+   `NPM_ALLOWLIST` for its `type:` tag, lint fails naming it; add it there in
+   one line, so the change is visible in review.
 
-3. **Přidej cíl `typecheck`** do `project.json`:
+3. **Add a `typecheck` target** to `project.json`:
 
    ```json
    "typecheck": {
      "executor": "nx:run-commands",
-     "options": { "command": "tsc --noEmit -p libs/<nazev>/tsconfig.lib.json" }
+     "options": { "command": "tsc --noEmit -p libs/<name>/tsconfig.lib.json" }
    }
    ```
 
-4. **Ověř**: `npm run lint && npm run typecheck && npm run test`.
+4. **Verify**: `npm run lint && npm run typecheck && npm run test`.
 
-> **Lint padá i na varování.** `nx.json` přidává všem `lint` cílům `--max-warnings=0`. Bez toho
-> `nx run-many` skončí s kódem 0, i když ESLint varování vypsal, a souhrnná hláška
-> „Successfully ran targets" ho schová — přesně tak Task 4 propašoval varování do mainu.
-> Global constraint 11 chce čistý výstup, tak ať to hlídá build, ne pozornost recenzenta.
+> **Lint fails on warnings too.** `nx.json` adds `--max-warnings=0` to every
+> `lint` target. Without it, `nx run-many` exits 0 even if ESLint printed
+> warnings, and the summary line "Successfully ran targets" hides them —
+> exactly how Task 4 let a warning slip into main. Global constraint 11 wants
+> clean output, so let the build enforce it, not a reviewer's attention.
 
 ---
 
-## Poznámky k formátování
+## Formatting notes
 
-`npm run format` běží nad zdrojovým kódem, ne nad `doc/` – ručně psané české dokumenty
-a export designu jsou v `.prettierignore`, aby Prettier nepřeformátovával tabulky
-a text, který nepatří jemu.
+`npm run format` runs over the source code, not over `doc/` – hand-written
+documents and the design export are in `.prettierignore`, so Prettier doesn't
+reflow tables and text that aren't its to format.
