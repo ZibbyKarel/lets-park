@@ -1,104 +1,111 @@
-# 0004 – Rozsah MVP zahrnuje i funkce, které jsou jen v designu
+# 0004 – MVP scope also includes features that exist only in the design
 
-**Datum:** 2026-08-28 · **Stav:** přijato (rozhodl uživatel) · **Mění:** `plan.md` §Doménový model, §Byznys pravidla
+**Date:** 2026-08-28 · **Status:** accepted (decided by the user) · **Amends:** `plan.md` §Domain model, §Business rules
 
-## Co
+## What
 
-Do MVP patří i tři funkce, které jsou v hotovém designu, ale v doménovém modelu `plan.md`
-chybí. Tam, kde si odporují, **vyhrává design**:
+The MVP also includes three features that are present in the finished design but
+missing from the `plan.md` domain model. Where they conflict, **the design wins**:
 
-### 1. Rezervační okno se zámkem
+### 1. Reservation window with a lock
 
-Nová entita nastavení (singleton) `ReservationWindowSettings`:
+A new settings entity (singleton) `ReservationWindowSettings`:
 
-| Pole | Typ | Default |
+| Field | Type | Default |
 | --- | --- | --- |
 | `openDaysBefore` | int (1–31) | `7` |
 | `lockMode` | `AUTO` \| `FORCE_OPEN` \| `FORCE_LOCKED` | `AUTO` |
 
-Odvození stavu měsíce (přesně dle `doc/design/lets-park-design.dc.html`, fce `monthOpen`,
-ř. 546–554):
+Deriving the month state (exactly per `doc/design/lets-park-design.dc.html`, function
+`monthOpen`, lines 546–554):
 
 ```
 isMonthOpen(targetDate, openDaysBefore, lockMode, today):
   FORCE_OPEN   -> true
   FORCE_LOCKED -> false
-  AUTO         -> first = 1. den měsíce targetDate
-                  from  = first - openDaysBefore dní
+  AUTO         -> first = 1st day of month targetDate
+                  from  = first - openDaysBefore days
                   return today >= from && today < first
 ```
 
-Tři zobrazované stavy měsíce: `Zatím neotevřeno` (dnes < from), `Otevřeno`
-(from ≤ dnes < first), `Uzamčeno` (dnes ≥ first). Tj. **jakmile měsíc začne, je uzamčený** —
-běžná rezervace na aktuální měsíc už nejde.
+Three displayed month states: `Zatím neotevřeno` ("not yet open"; today < from),
+`Otevřeno` ("open"; from ≤ today < first), `Uzamčeno` ("locked"; today ≥ first). I.e.
+**as soon as a month starts, it is locked** — a regular reservation for the current
+month is no longer possible.
 
-Dopad na pravidla:
+Effect on the rules:
 
-- V uzamčeném měsíci **běžný uživatel nesmí**: vytvořit rezervaci, přidat se do fronty,
-  odejít z fronty, spustit hromadnou rezervaci.
-- V uzamčeném měsíci **běžný uživatel smí**: zrušit svoji vlastní rezervaci (kdykoliv).
-- **Admin není omezen** rezervačním oknem vůbec.
-- Kontrola je na backendu (nejen v UI) a vrací nový error kód `RESERVATIONS_LOCKED`.
+- In a locked month a **regular user may not**: create a reservation, join the
+  waitlist, leave the waitlist, start a bulk reservation.
+- In a locked month a **regular user may**: cancel their own reservation (at any time).
+- **The admin is not constrained** by the reservation window at all.
+- The check happens on the backend (not only in the UI) and returns a new error code,
+  `RESERVATIONS_LOCKED`.
 
-Toto pravidlo **nahrazuje** formulaci z `plan.md` „maximálně do konce následujícího měsíce".
-Horizont je nadále omezený, ale jeho hranicí je rezervační okno, ne pevné „konec příštího
-měsíce". Zachovává se: rezervovat lze jen dnešek a budoucnost (Europe/Prague).
+This rule **replaces** the wording in `plan.md`, "at most until the end of the following
+month". The horizon is still bounded, but its boundary is the reservation window, not a
+fixed "end of next month". Preserved: only today and the future can be reserved
+(Europe/Prague).
 
-### 2. Hromadná rezervace
+### 2. Bulk reservation
 
-Dvoukrokový flow (`doc/design/screens/10-modal-bulk.png`):
+A two-step flow (`doc/design/screens/10-modal-bulk.png`):
 
-1. **Výběr dní** – kalendářní mřížka měsíce (sloupce PO–NE). Víkendy a české svátky nelze
-   vybrat. Vybírá se v rámci jednoho měsíce.
-2. **Návrh rozvrhu** – server pro každý vybraný den navrhne: preferované místo (je-li volné)
-   → jiné volné místo → zařazení do fronty s pozicí. Uživatel návrh vidí a potvrdí
-   („Potvrdit rozvrh"), nebo se vrátí k výběru.
+1. **Day selection** – a calendar grid for the month (columns Mon–Sun). Weekends and
+   Czech public holidays cannot be selected. Selection happens within a single month.
+2. **Schedule proposal** – for each selected day the server proposes: the preferred
+   spot (if free) → another free spot → placement on the waitlist with a position. The
+   user reviews the proposal and confirms it (`Potvrdit rozvrh`, "confirm schedule"),
+   or goes back to selection.
 
-Návrh je **read-only výpočet** (nic nerezervuje). Potvrzení je jedna transakce; dny, které
-mezitím obsadil někdo jiný, spadnou do fronty — výsledek se uživateli vrátí, ne zahodí.
-Respektuje pravidlo max 1 rezervace na uživatele a den.
+The proposal is a **read-only computation** (it reserves nothing). Confirmation is a
+single transaction; days that someone else has taken in the meantime fall onto the
+waitlist — the result is returned to the user, not discarded. It respects the rule of
+max 1 reservation per user per day.
 
-### 3. Preferované parkovací místo
+### 3. Preferred parking spot
 
-Nové nullable pole `User.preferredParkingSpotId`. Nastavuje se v profilu
-(`doc/design/screens/11-settings.png`), používá se **výhradně** jako první volba
-při hromadné rezervaci. Nemá vliv na běžnou jednodenní rezervaci.
+A new nullable field, `User.preferredParkingSpotId`. Set in the profile
+(`doc/design/screens/11-settings.png`), used **exclusively** as the first choice during
+a bulk reservation. It has no effect on a regular single-day reservation.
 
-### 4. ICS zůstává
+### 4. ICS stays
 
-Sekce ICS v nastavení profilu v designu **není**, ale `plan.md` ji vyžaduje — doplní se
-ve stejném vizuálním stylu (viz Task 26).
+The design does **not** have an ICS section in the profile settings, but `plan.md`
+requires one — it is added in the same visual style (see Task 26).
 
-## Proč
+## Why
 
-Uživateli byly předloženy tři varianty rozsahu (jen `plan.md`, `plan.md` + rezervační okno,
-celý design) a explicitně zvolil **celý rozsah designu**. Z chatu u designu je navíc vidět,
-že rezervační okno si vyžádal záměrně a popsal reálné firemní pravidlo („rezervování míst je
-typicky možné jen týden před novým měsícem na nový měsíc"). Design je tedy novější než
-`plan.md` a v konfliktu má přednost.
+The user was presented with three scope options (`plan.md` only, `plan.md` + the
+reservation window, the full design) and explicitly chose **the full design scope**.
+The design chat also shows the reservation window was requested deliberately, describing
+a real company rule ("spots can typically only be reserved a week before the new month,
+for the new month"). The design is therefore newer than `plan.md` and takes precedence
+in a conflict.
 
-## Jak
+## How
 
-Funkce se **nevkládají jako samostatná fáze**, ale rozpouštějí do stávajících fází, aby
-zůstalo contract-first pořadí:
+The features are **not inserted as a separate phase**, but dissolved into the existing
+phases so the contract-first order is preserved:
 
-| Kde | Co přibývá |
+| Where | What is added |
 | --- | --- |
-| Task 3 (schémata) | `ReservationWindowSettings`, `MonthLockState`, `User.preferredParkingSpotId`, error kód `RESERVATIONS_LOCKED`, čistá funkce `isMonthOpen` v `libs/shared-types` |
-| Task 4 (oRPC kontrakt) | čtení/změna nastavení okna, přehled stavů měsíců, návrh a potvrzení hromadné rezervace, nastavení preferovaného místa |
-| Task 9 (Prisma) | tabulka nastavení (singleton), FK `preferredParkingSpotId` |
-| Task 12 (moduly) | admin správa rezervačního okna, preferované místo v user settings |
-| Task 13 (rezervace) | vynucení zámku u create/join/leave; zrušení vlastní rezervace zůstává povolené |
-| **Task 30 (nový)** | backend alokátor a transakce hromadné rezervace |
-| Task 24 (parkoviště) | banner stavu okna, dlaždice „rezervace uzamčeny", modal s vysvětlením |
-| **Task 31 (nový)** | FE modal hromadné rezervace |
-| Task 26 (nastavení) | preferované místo + ICS sekce |
-| Task 27 (admin) | záložka „Rezervační okno" |
+| Task 3 (schemas) | `ReservationWindowSettings`, `MonthLockState`, `User.preferredParkingSpotId`, error code `RESERVATIONS_LOCKED`, pure function `isMonthOpen` in `libs/shared-types` |
+| Task 4 (oRPC contract) | reading/changing the window settings, an overview of month states, proposing and confirming a bulk reservation, setting the preferred spot |
+| Task 9 (Prisma) | settings table (singleton), FK `preferredParkingSpotId` |
+| Task 12 (modules) | admin management of the reservation window, preferred spot in user settings |
+| Task 13 (reservations) | enforcing the lock on create/join/leave; canceling one's own reservation stays allowed |
+| **Task 30 (new)** | backend allocator and transaction for the bulk reservation |
+| Task 24 (parking lot) | window-state banner, "reservations locked" tile, explanatory modal |
+| **Task 31 (new)** | FE bulk-reservation modal |
+| Task 26 (settings) | preferred spot + ICS section |
+| Task 27 (admin) | "Reservation window" tab |
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Největší nejistota je hromadná rezervace: v designu je alokátor jen naznačený dummy kódem,
-takže konkrétní strategie (pořadí míst, chování při konfliktu) je náš návrh. Když se
-nestrefíme, mění se jedna služba na backendu a jeden modal na FE — kontrakt a datový model
-zůstávají. Rezervační okno je naopak v designu popsané jednoznačně včetně výpočtu, tam riziko
-prakticky není.
+The biggest uncertainty is the bulk reservation: in the design the allocator is only
+sketched with dummy code, so the actual strategy (spot ordering, conflict behavior) is
+our own design. If we get it wrong, what changes is one backend service and one FE modal
+— the contract and data model stay the same. The reservation window, by contrast, is
+described unambiguously in the design, including the calculation, so there is
+practically no risk there.

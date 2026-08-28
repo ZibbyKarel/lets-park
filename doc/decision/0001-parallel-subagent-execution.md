@@ -1,47 +1,52 @@
-# 0001 – Paralelní běh fází přes git worktrees
+# 0001 – Parallel phase execution via git worktrees
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-Fáze z `plan.md` se implementují subagenty. Nezávislé fáze běží **paralelně**, každá
-paralelní větev ve vlastním git worktree; po čistém review se větev merguje do
-`feat/lets-park-mvp` a teprve na mergnutém stavu se pouští fázová brána
-(`nx run-many -t lint,test,build`).
+Phases from `plan.md` are implemented by subagents. Independent phases run **in
+parallel**, each parallel branch in its own git worktree; after a clean review the
+branch is merged into `feat/lets-park-mvp`, and only on the merged state does the
+phase gate (`nx run-many -t lint,test,build`) run.
 
-Topologie vln:
+Wave topology:
 
-| Vlna | Větev A (hlavní strom) | Větev B (worktree) |
+| Wave | Branch A (main tree) | Branch B (worktree) |
 | --- | --- | --- |
-| 1 | Task 1–2 (Fáze 0 scaffolding) | – |
-| 2 | Task 3–5 (Fáze 1 kontrakt) | Task 6–8 (Fáze 2+3 design systém) |
-| 3 | Task 9–16 (Fáze 5 backend) | Task 17–22 (Fáze 4 wrapper libs) |
-| 4 | Task 23–27 (Fáze 6 frontend) | – |
-| 5 | Task 28–29 (Fáze 7 e2e + provoz) | – |
+| 1 | Task 1–2 (Phase 0 scaffolding) | – |
+| 2 | Task 3–5 (Phase 1 contract) | Task 6–8 (Phase 2+3 design system) |
+| 3 | Task 9–16 (Phase 5 backend) | Task 17–22 (Phase 4 wrapper libs) |
+| 4 | Task 23–27 (Phase 6 frontend) | – |
+| 5 | Task 28–29 (Phase 7 e2e + operations) | – |
 
-## Proč
+## Why
 
-- Uživatel to explicitně zadal („implementuj na sobě nezávislé fáze paralelně").
-- Skill `subagent-driven-development` jinak paralelní implementační subagenty zakazuje
-  kvůli konfliktům v jednom pracovním stromu. Instrukce uživatele má přednost, ale
-  konflikty jsou reálné → řešíme je izolací, ne ignorováním.
-- `plan.md` požaduje striktní pořadí fází. Paralelizujeme jen tam, kde mezi fázemi
-  **není datová ani typová závislost**: kontrakt (Zod/oRPC) nezávisí na design systému
-  a naopak; backend nezávisí na FE wrapper vrstvách.
+- The user explicitly requested it ("implement mutually independent phases in
+  parallel").
+- The `subagent-driven-development` skill otherwise forbids parallel implementation
+  subagents because of conflicts in a single working tree. The user's instruction
+  takes precedence, but the conflicts are real → we address them through isolation,
+  not by ignoring them.
+- `plan.md` requires a strict phase order. We parallelize only where **no data or
+  type dependency** exists between phases: the contract (Zod/oRPC) does not depend
+  on the design system and vice versa; the backend does not depend on the FE
+  wrapper layers.
 
-## Jak
+## How
 
-- Každá paralelní větev dostane vlastní worktree (`Agent` tool, `isolation: "worktree"`).
-- Worktree nemá `node_modules` ani gitignorované soubory → agent si spustí `npm install`,
-  zadání (brief) dostane absolutní cestou do hlavního stromu.
-- Očekávané konflikty při mergi jsou jen ve sdílených konfigurácích
+- Each parallel branch gets its own worktree (`Agent` tool, `isolation: "worktree"`).
+- A worktree has no `node_modules` or gitignored files → the agent runs `npm install`
+  itself; the brief is handed to it as an absolute path into the main tree.
+- Expected merge conflicts are limited to shared configuration
   (`package.json`, `package-lock.json`, `tsconfig.base.json`, `nx.json`, ESLint config).
-  Řešení: vzít obě strany ručně, `package-lock.json` regenerovat přes `npm install`.
-- Fázová brána `plan.md` (buildne se, testy prochází) se vyhodnocuje **až na mergnutém
-  stavu**, ne uvnitř worktree.
+  Resolution: take both sides manually, regenerate `package-lock.json` via
+  `npm install`.
+- The `plan.md` phase gate (it builds, tests pass) is evaluated **only on the merged
+  state**, not inside the worktree.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Merge konflikty v Nx konfiguraci mohou stát víc času, než paralelizace ušetří. Fallback:
-zbylé vlny doběhnout sériově v hlavním stromu – změna je lokální (jen dispatch strategie),
-už hotové commity se nezahazují.
+Merge conflicts in the Nx configuration could cost more time than the
+parallelization saves. Fallback: run the remaining waves sequentially in the main
+tree – the change is local (just the dispatch strategy), already-completed commits
+are not discarded.

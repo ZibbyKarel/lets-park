@@ -1,42 +1,43 @@
-# 0003 – Europe/Prague date logika žije v `libs/shared-types`, ne v `libs/i18n`
+# 0003 – Europe/Prague date logic lives in `libs/shared-types`, not `libs/i18n`
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-Čistá date-only logika pro zónu Europe/Prague (dnešek, hranice dne, horizont rezervací,
-české svátky, parsování/serializace `YYYY-MM-DD`) se implementuje v **`libs/shared-types`**
-už ve Fázi 1. `libs/i18n` ji ve Fázi 4 jen re-exportuje a přidává formátování vázané na
-next-intl (názvy měsíců, dnů, lokalizované popisky).
+Pure date-only logic for the Europe/Prague zone (today, day boundaries, the
+reservation horizon, Czech public holidays, parsing/serializing `YYYY-MM-DD`) is
+implemented in **`libs/shared-types`**, already in Phase 1. `libs/i18n` in Phase 4 only
+re-exports it and adds next-intl-bound formatting (month names, day names, localized
+labels).
 
-## Proč
+## Why
 
-`plan.md` umisťuje „jedinou implementaci Europe/Prague date logiky" do `libs/i18n`
-(Fáze 4), ale zároveň ji potřebují dřívější/paralelní fáze:
+`plan.md` places "the single implementation of Europe/Prague date logic" in `libs/i18n`
+(Phase 4), but earlier/parallel phases need it too:
 
-- **Fáze 1 (kontrakt)** – validace horizontu rezervací v Zod schématech.
-- **Fáze 5 (backend)** – „dnešek" pro pravidlo „rezervovat lze jen dnešek a budoucnost",
-  cron joby v Europe/Prague.
+- **Phase 1 (contract)** – validating the reservation horizon in Zod schemas.
+- **Phase 5 (backend)** – "today" for the rule "only today and the future can be
+  reserved", cron jobs in Europe/Prague.
 
-Backend přitom nesmí záviset na `next-intl` (frontend knihovna). Kdyby helper zůstal
-v `libs/i18n`, buď by ho někdo duplikoval (porušení „jediná implementace"), nebo by
-`apps/api` táhlo next-intl.
+Meanwhile the backend must not depend on `next-intl` (a frontend library). If the helper
+stayed in `libs/i18n`, either someone would duplicate it (violating "single
+implementation"), or `apps/api` would drag in next-intl.
 
-`plan.md` sám `libs/shared-types` zavádí pro „doménové typy/konstanty nesouvisející přímo
-s kontraktem" a explicitně připouští helper „v `libs/i18n` **nebo** `libs/shared-types`"
-(§Contract-first, datumová sémantika) – tohle rozhodnutí jen fixuje, která z těch dvou
-možností platí.
+`plan.md` itself introduces `libs/shared-types` for "domain types/constants not directly
+tied to the contract" and explicitly allows the helper to live "in `libs/i18n` **or**
+`libs/shared-types`" (§Contract-first, date semantics) – this decision just fixes which
+of the two options applies.
 
-## Jak
+## How
 
-- `libs/shared-types` nemá žádnou runtime závislost na next-intl ani na Zodu.
-- Implementace na nativním `Intl` / `Temporal`-free přístupu s explicitní zónou
-  `Europe/Prague`; žádný `new Date()` bez zóny v doménové logice.
-- ESLint `no-restricted-imports` zakáže v `apps/api` import `libs/i18n`.
-- `libs/i18n` re-exportuje veřejné API `libs/shared-types` pod stejnými jmény, aby feature
-  kód na FE dál importoval jen `@myorg/i18n` (wrapper pravidlo zůstává v platnosti).
+- `libs/shared-types` has no runtime dependency on next-intl or on Zod.
+- Implemented with a native `Intl` / `Temporal`-free approach with an explicit
+  `Europe/Prague` zone; no `new Date()` without a zone anywhere in domain logic.
+- ESLint `no-restricted-imports` forbids importing `libs/i18n` in `apps/api`.
+- `libs/i18n` re-exports `libs/shared-types`'s public API under the same names, so FE
+  feature code keeps importing only `@myorg/i18n` (the wrapper rule still holds).
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Pokud by se ukázalo, že svátky/formátování patří jinam, přesun je mechanický – jde o jednu
-lib bez závislostí a wrapper v `libs/i18n` drží veřejné API stabilní.
+If it turns out holidays/formatting belong elsewhere, the move is mechanical – it's one
+lib with no dependencies, and the wrapper in `libs/i18n` keeps the public API stable.

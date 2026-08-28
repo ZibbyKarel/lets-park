@@ -1,30 +1,32 @@
-# 0005 – NPM scope je `@lets-park`, ne `@myorg`
+# 0005 – The npm scope is `@lets-park`, not `@myorg`
 
-**Datum:** 2026-08-28 · **Stav:** přijato (rozhodl uživatel) · **Mění:** `plan.md` (názvy entry pointů)
+**Date:** 2026-08-28 · **Status:** accepted (decided by the user) · **Amends:** `plan.md` (entry-point names)
 
-## Co
+## What
 
-Všechny libs v workspace žijí pod scope `@lets-park`:
+Every lib in the workspace lives under the `@lets-park` scope:
 
-| `plan.md` píše | Skutečnost |
+| `plan.md` says | Reality |
 | --- | --- |
 | `@myorg/contract` | `@lets-park/contract` |
 | `@myorg/contract/realtime` | `@lets-park/contract/realtime` |
 | `@myorg/design-system/primitives` | `@lets-park/design-system/primitives` |
 | … | … |
 
-## Proč
+## Why
 
-`@myorg` je zjevný placeholder. Změna scope se dotýká každého importu v repu, takže je
-prakticky zdarma teď (před vznikem první lib) a drahá později. Uživatel volbu potvrdil.
+`@myorg` is an obvious placeholder. Changing the scope touches every import in the
+repo, so it's essentially free now (before the first lib exists) and expensive later.
+The user confirmed the choice.
 
-## Jak
+## How
 
-Scope se nastavuje v Tasku 1 (root `package.json`, `nx.json`, path aliasy
-v `tsconfig.base.json` a defaulty generátorů), aby každá lib vzniklá v dalších úkolech
-spadla pod `@lets-park/*` automaticky.
+The scope is set in Task 1 (root `package.json`, `nx.json`, path aliases in
+`tsconfig.base.json`, and generator defaults), so every lib created in later tasks
+falls under `@lets-park/*` automatically.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Přejmenování scope je mechanické (search & replace + regenerace path aliasů), ale čím
-později, tím víc souborů. Proto to řešíme hned v Tasku 1.
+Renaming the scope is mechanical (search & replace + regenerating path aliases), but
+the later it happens, the more files are affected. That's why we handle it right away
+in Task 1.
