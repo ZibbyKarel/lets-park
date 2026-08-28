@@ -141,7 +141,13 @@ export default [
             {
               sourceTag: 'type:contract',
               onlyDependOnLibsWithTags: ['type:util'],
-              allowedExternalImports: ['zod', 'zod/*', '@orpc/contract', 'tslib'],
+              allowedExternalImports: [
+                'zod',
+                'zod/*',
+                '@orpc/contract',
+                '@orpc/contract/*',
+                'tslib',
+              ],
             },
             {
               sourceTag: 'type:data',
