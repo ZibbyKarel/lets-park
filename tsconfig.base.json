@@ -19,7 +19,9 @@
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"]
+      "@lets-park/contract": ["./libs/contract/src/index.ts"],
+      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"],
+      "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -28,7 +28,7 @@ export const FONT_FAMILIES = {
  * itself says "8 řezů"). Declaring an `@font-face` for a file that doesn't
  * exist would 404 in the browser for no benefit, so that one entry is
  * deliberately dropped here rather than copied 1:1 — see
- * `doc/decision/0010-otf-fonty-commitnute-bez-overene-licence.md`. Bold
+ * `doc/decision/0012-otf-fonty-commitnute-bez-overene-licence.md`. Bold
  * italic text still renders (browser synthesizes italic from weight 700
  * normal), it just isn't the true drawn italic.
  *

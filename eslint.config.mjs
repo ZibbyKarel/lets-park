@@ -223,6 +223,30 @@ export default [
     },
   },
   ...wrapperLibOverrides,
+  // `libs/shared-types` has to stay dependency-free: it is imported by
+  // apps/api, libs/contract and libs/i18n alike. The Nx `type:util` constraint
+  // cannot express this, because the same tag covers the wrapper libs, which
+  // exist precisely to depend on third-party packages.
+  // See doc/decision/0003-date-helpery-v-shared-types.md.
+  {
+    basePath: workspaceRoot,
+    files: ['libs/shared-types/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...restrictWrappedLibraries().patterns,
+            {
+              group: ['zod', 'zod/*'],
+              message:
+                'libs/shared-types must not depend on Zod — it is imported by apps/api too. Zod schemas belong to libs/contract (@lets-park/contract).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Structured logging only (nestjs-pino on the backend); no ad-hoc console output.
   {
     basePath: workspaceRoot,

@@ -49,7 +49,7 @@ ostatní (`tokens.css`, mapování v `theme.css`) z něj vychází.
 
 ## Proč je `tokens.css` generovaný a commitnutý
 
-Viz `doc/decision/0008-generovany-tokens-css-je-commitnuty.md`. Krátce: je
+Viz `doc/decision/0010-generovany-tokens-css-je-commitnuty.md`. Krátce: je
 commitnutý, aby appka po `npm ci` fungovala bez extra build kroku, a je vyloučený
 z Prettieru, protože věrně kopíruje styl zdrojového `colors_and_type.css`
 (velká písmena v hexu, žádné mezery v `rgba()`), který by Prettier přepsal.
@@ -141,7 +141,7 @@ proto nežije v design systému.
 
 8 řezů Neue Haas Grotesk Display Pro (`.otf`) je zkopírováno do `assets/fonts/`
 a použito v generovaných `@font-face` blocích. **Licence pro produkční nasazení
-není ověřená** (viz `doc/design/README.md` a `doc/decision/0010-*`) – proto má
+není ověřená** (viz `doc/design/README.md` a `doc/decision/0012-*`) – proto má
 `FONT_FAMILIES.sans` vždy funkční fallback (`Neue Haas Grotesk` → `Helvetica Neue`
 → `Inter` → `Arial` → `system-ui` → `sans-serif`), takže appka vypadá rozumně, i
 kdyby se `.otf` soubory musely z produkčního buildu vyřadit.

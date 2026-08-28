@@ -1,4 +1,4 @@
-# 0010 – `.otf` fonty jsou commitnuté i bez ověřené licence, s povinným fallbackem
+# 0012 – `.otf` fonty jsou commitnuté i bez ověřené licence, s povinným fallbackem
 
 **Datum:** 2026-08-28 · **Stav:** přijato (dočasně) · **Riziko:** licence
 

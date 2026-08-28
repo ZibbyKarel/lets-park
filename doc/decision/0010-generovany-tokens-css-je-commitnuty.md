@@ -1,4 +1,4 @@
-# 0008 – Generovaný `tokens.css` je commitnutý a vyloučený z Prettieru
+# 0010 – Generovaný `tokens.css` je commitnutý a vyloučený z Prettieru
 
 **Datum:** 2026-08-28 · **Stav:** přijato
 

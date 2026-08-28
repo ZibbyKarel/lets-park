@@ -1,4 +1,4 @@
-# 0009 – Breakpointy jsou odvozené, ne ze zdroje
+# 0011 – Breakpointy jsou odvozené, ne ze zdroje
 
 **Datum:** 2026-08-28 · **Stav:** přijato
 
