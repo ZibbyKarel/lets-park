@@ -1,142 +1,158 @@
-# Prostředí – env proměnné, Docker stack, fail-fast validace
+# Environment – env variables, Docker stack, fail-fast validation
 
-Tento dokument popisuje, **jaké env proměnné aplikace potřebují**, **jak spustit lokální
-Docker stack** a **jak se dev/e2e liší od produkce** (jen hodnotami proměnných, nikdy
-kódem). Zdroj pravdy pro tvar proměnných je Zod schéma v `apps/api/src/env.ts` a
-`apps/web/src/env.ts` – tento dokument je popisný, ne autoritativní; při rozchodu věř kódu.
-
----
-
-## Filozofie: fail-fast, žádné testovací větve
-
-Obě aplikace validují svoje env proměnné hned při startu přes Zod schéma. Pokud proměnná
-chybí nebo má špatný tvar, aplikace **okamžitě spadne** se srozumitelnou hláškou, která
-jmenuje proměnnou (nikdy ne její hodnotu):
-
-- **`apps/api`** – validace běží uvnitř `ConfigModule.forRoot({ validate: validateApiEnv })`
-  (`apps/api/src/app/app.module.ts`). Selhání validace vyhodí výjimku ještě před
-  `app.listen()`, takže proces nikdy nezačne přijímat requesty s nevalidní konfigurací.
-- **`apps/web`** – validace běží v `apps/web/src/instrumentation.ts` → `register()`, což
-  Next.js zavolá přesně jednou při startu serveru (`next dev` / `next start`). Chybu odsud
-  Next.js sám o sobě neukončí proces (zůstal by běžet a vracet 500), proto
-  `apps/web/src/instrumentation-node.ts` po zalogování chyby volá `process.exit(1)` – proces
-  je tak stejně "mrtvý" jako u API. Detaily a proč to není v `next.config.ts`, viz
-  `doc/decision/0008-web-env-validace-instrumentation-hook.md`.
-
-**Dev, e2e i produkce běží přesně ten samý kód.** Liší se jen hodnoty proměnných – v dev/e2e
-míří `AUTH_OKTA_ISSUER` na `mock-oauth2-server` běžící v Dockeru, v produkci na skutečný Okta
-issuer. Nikde v kódu není `if (isTest)` ani jiná testovací zkratka pro auth.
+This document describes **what env variables the applications need**, **how to
+start the local Docker stack**, and **how dev/e2e differ from production**
+(only in variable values, never in code). The source of truth for the shape
+of the variables is the Zod schema in `apps/api/src/env.ts` and
+`apps/web/src/env.ts` – this document is descriptive, not authoritative; when
+they disagree, trust the code.
 
 ---
 
-## Env proměnné
+## Philosophy: fail-fast, no test-only branches
+
+Both applications validate their env variables right at startup via a Zod
+schema. If a variable is missing or has the wrong shape, the application
+**crashes immediately** with a readable message naming the variable (never its
+value):
+
+- **`apps/api`** – validation runs inside
+  `ConfigModule.forRoot({ validate: validateApiEnv })`
+  (`apps/api/src/app/app.module.ts`). A validation failure throws before
+  `app.listen()`, so the process never starts accepting requests with an
+  invalid configuration.
+- **`apps/web`** – validation runs in `apps/web/src/instrumentation.ts` →
+  `register()`, which Next.js calls exactly once at server startup (`next
+  dev` / `next start`). Next.js itself doesn't terminate the process on an
+  error from there (it would keep running and returning 500s), so
+  `apps/web/src/instrumentation-node.ts` calls `process.exit(1)` after logging
+  the error – making the process just as "dead" as the API's. Details, and
+  why this isn't in `next.config.ts`, are in
+  `doc/decision/0008-web-env-validation-instrumentation-hook.md`.
+
+**Dev, e2e, and production all run exactly the same code.** Only the variable
+values differ – in dev/e2e, `AUTH_OKTA_ISSUER` points at a
+`mock-oauth2-server` running in Docker; in production, at the real Okta
+issuer. Nowhere in the code is there an `if (isTest)` or any other test-only
+shortcut for auth.
+
+---
+
+## Env variables
 
 ### `apps/api` (`apps/api/src/env.ts`)
 
-| proměnná | tvar | k čemu je |
+| variable | shape | what it's for |
 | --- | --- | --- |
-| `NODE_ENV` | `development` \| `test` \| `production` | běžný Node přepínač prostředí |
-| `PORT` | celé číslo 1–65535 | port, na kterém NestJS HTTP server poslouchá |
-| `DATABASE_URL` | absolutní URL | connection string do Postgresu (`postgresql://user:pass@host:port/db`) |
-| `AUTH_OKTA_ISSUER` | absolutní URL | OIDC issuer, jehož JWKS API používá k validaci příchozích JWT |
-| `AUTH_OKTA_AUDIENCE` | neprázdný string | očekávaný `aud` claim v JWT |
-| `CORS_ALLOWED_ORIGINS` | čárkou oddělený seznam absolutních URL | CORS allow-list; žádný wildcard |
-| `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | úroveň logování pro `nestjs-pino` (přijde v pozdější fázi) |
+| `NODE_ENV` | `development` \| `test` \| `production` | the standard Node environment switch |
+| `PORT` | integer 1–65535 | the port the NestJS HTTP server listens on |
+| `DATABASE_URL` | absolute URL | the Postgres connection string (`postgresql://user:pass@host:port/db`) |
+| `AUTH_OKTA_ISSUER` | absolute URL | the OIDC issuer whose JWKS API is used to validate incoming JWTs |
+| `AUTH_OKTA_AUDIENCE` | non-empty string | the expected `aud` claim in a JWT |
+| `CORS_ALLOWED_ORIGINS` | comma-separated list of absolute URLs | the CORS allow-list; no wildcard |
+| `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | the log level for `nestjs-pino` (arrives in a later phase) |
 
-Schéma je psáno tak, aby šlo v dalších fázích **jen přidávat** klíče (Slack, ICS,
-throttler) – žádný stávající klíč se nesmí rozvolnit.
+The schema is written so that later phases can **only add** keys (Slack, ICS,
+throttler) – no existing key may be loosened.
 
 ### `apps/web` (`apps/web/src/env.ts`)
 
-| proměnná | tvar | k čemu je |
+| variable | shape | what it's for |
 | --- | --- | --- |
-| `NODE_ENV` | `development` \| `test` \| `production` | Next.js si ji nastavuje sám pro `dev`/`build`/`start` |
-| `NEXT_PUBLIC_API_URL` | absolutní URL | base URL API, na kterou web volá (včetně `/api` prefixu) |
-| `AUTH_SECRET` | string, min. 32 znaků | klíč Auth.js pro podpis/šifrování session cookie |
-| `AUTH_OKTA_ISSUER` | absolutní URL | stejný OIDC issuer jako u API |
-| `AUTH_OKTA_CLIENT_ID` | neprázdný string | OAuth2 client ID webové aplikace |
-| `AUTH_OKTA_CLIENT_SECRET` | neprázdný string | OAuth2 client secret webové aplikace |
+| `NODE_ENV` | `development` \| `test` \| `production` | Next.js sets it itself for `dev`/`build`/`start` |
+| `NEXT_PUBLIC_API_URL` | absolute URL | the API's base URL that the web app calls (including the `/api` prefix) |
+| `AUTH_SECRET` | string, min. 32 characters | Auth.js's key for signing/encrypting the session cookie |
+| `AUTH_OKTA_ISSUER` | absolute URL | the same OIDC issuer as the API's |
+| `AUTH_OKTA_CLIENT_ID` | non-empty string | the web app's OAuth2 client ID |
+| `AUTH_OKTA_CLIENT_SECRET` | non-empty string | the web app's OAuth2 client secret |
 
-### Proměnné jen pro `docker-compose.yml`
+### Variables only for `docker-compose.yml`
 
-Tyhle nečte žádná z aplikací – slouží jen ke konfiguraci `postgres` kontejneru. Musí se ručně
-shodovat s přihlašovacími údaji zakódovanými v `DATABASE_URL` výše (jedno se neodvozuje od
-druhého).
+Neither application reads these – they only configure the `postgres`
+container. They must manually match the credentials encoded in
+`DATABASE_URL` above (neither is derived from the other).
 
-| proměnná | k čemu je |
+| variable | what it's for |
 | --- | --- |
-| `POSTGRES_USER` | uživatel vytvořený v `postgres` kontejneru |
-| `POSTGRES_PASSWORD` | jeho heslo |
-| `POSTGRES_DB` | výchozí databáze |
+| `POSTGRES_USER` | the user created inside the `postgres` container |
+| `POSTGRES_PASSWORD` | its password |
+| `POSTGRES_DB` | the default database |
 
 ---
 
-## Kde která proměnná bydlí (dva `.env`, ne jeden)
+## Where each variable lives (two `.env` files, not one)
 
-`.env.example` je jeden soubor v rootu repa, ale reálně z něj vzniknou **dvě** kopie – běh
-obou aplikací totiž čte proměnné z různých adresářů (podrobné proč je v
-`doc/decision/0009-env-file-topologie-a-compose-profily.md`):
+`.env.example` is a single file at the repo root, but in practice it produces
+**two** copies – running both applications reads variables from different
+directories (the detailed reasoning is in
+`doc/decision/0009-env-file-topology-and-compose-profiles.md`):
 
-- **root `.env`** – čte ho `docker compose` (substituce v `docker-compose.yml`) a `apps/api`
-  spuštěné přes `nx serve api` (NestJS `ConfigModule` čte `.env` relativně k `process.cwd()`,
-  což je pro tento Nx exekutor root repa).
-- **`apps/web/.env`** – čte ho `apps/web` spuštěné přes `nx run web:dev` / `next build` /
-  `next start` (Next.js načítá env soubory relativně ke svému vlastnímu adresáři, ne k rootu
-  repa).
+- **root `.env`** – read by `docker compose` (substitution in
+  `docker-compose.yml`) and by `apps/api` when run via `nx serve api` (NestJS's
+  `ConfigModule` reads `.env` relative to `process.cwd()`, which for this Nx
+  executor is the repo root).
+- **`apps/web/.env`** – read by `apps/web` when run via `nx run web:dev` /
+  `next build` / `next start` (Next.js loads env files relative to its own
+  directory, not the repo root).
 
 ```bash
 cp .env.example .env
 cp .env.example apps/web/.env
 ```
 
-Skutečné `.env` soubory jsou v `.gitignore` – nikdy se necommitují.
+The actual `.env` files are in `.gitignore` – they are never committed.
 
 ---
 
-## Jak spustit lokální stack
+## How to start the local stack
 
-1. Zkopírovat env soubory (viz výše).
-2. Nastartovat infrastrukturu (Postgres + mock OIDC; `adminer` navíc v `dev` profilu):
+1. Copy the env files (see above).
+2. Start the infrastructure (Postgres + mock OIDC; `adminer` additionally in
+   the `dev` profile):
 
    ```bash
    docker compose --profile dev up -d
    ```
 
-   Bez `--profile dev` naběhnou jen `postgres` a `mock-oauth2-server` – to stačí, pokud
-   `adminer` nepotřebujete.
+   Without `--profile dev`, only `postgres` and `mock-oauth2-server` come up
+   – that's enough if you don't need `adminer`.
 
-   `web` a `api` v `docker-compose.yml` jsou jen **placeholdery** za profilem `app` – nemají
-   ještě produkční Dockerfile (ten vznikne v Tasku 29) a `docker compose up` je bez
-   explicitního `--profile app` nespustí. Do té doby se obě aplikace pouští na hostu:
-
-   ```bash
-   npx nx run api:serve   # NestJS, port podle PORT v .env (výchozí 3000)
-   npx nx run web:dev -- -p 4200   # Next.js; -p 4200, aby nekolidoval s API na 3000
-   ```
-
-3. Ověřit, že Postgres je zdravý:
+   `web` and `api` in `docker-compose.yml` are only **placeholders** behind
+   the `app` profile – they have no production Dockerfile yet (that arrives
+   in Task 29), and `docker compose up` won't start them without an explicit
+   `--profile app`. Until then, both applications run on the host:
 
    ```bash
-   docker compose ps postgres   # STATUS má obsahovat "healthy"
+   npx nx run api:serve   # NestJS, port per PORT in .env (default 3000)
+   npx nx run web:dev -- -p 4200   # Next.js; -p 4200 so it doesn't collide with the API on 3000
    ```
 
-4. Ověřit, že mock OIDC server běží – discovery dokument musí odpovědět:
+3. Verify Postgres is healthy:
+
+   ```bash
+   docker compose ps postgres   # STATUS should include "healthy"
+   ```
+
+4. Verify the mock OIDC server is running – the discovery document must
+   respond:
 
    ```bash
    curl -s http://localhost:8080/default/.well-known/openid-configuration | head -c 200
    ```
 
-   Očekávaná odpověď obsahuje `"issuer":"http://localhost:8080/default"` a URL na
-   `authorize`/`token`/`jwks` endpointy. `mock-oauth2-server` (image
-   `ghcr.io/navikt/mock-oauth2-server`) běží bez namountovaného `JSON_CONFIG` – vestavěný
-   issuer `default` je pro tuhle fázi dostačující.
+   The expected response includes `"issuer":"http://localhost:8080/default"`
+   and URLs for the `authorize`/`token`/`jwks` endpoints. `mock-oauth2-server`
+   (image `ghcr.io/navikt/mock-oauth2-server`) runs without a mounted
+   `JSON_CONFIG` – the built-in `default` issuer is sufficient for this phase.
 
-5. (Volitelně) Otevřít Adminer na `http://localhost:8081` a připojit se k Postgresu pomocí
-   `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` z `.env`, host `postgres`, port `5432`.
+5. (Optional) Open Adminer at `http://localhost:8081` and connect to Postgres
+   using `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` from `.env`, host
+   `postgres`, port `5432`.
 
-**Docker démon na vývojovém stroji, kde vznikl tento dokument, neběžel** – ověřeno jen
-`docker compose config` (viz níže), `docker compose up` nebylo možné reálně vyzkoušet. Než
-to poprvé zkusíte, ověřte aspoň syntaxi bez démona:
+**The Docker daemon on the development machine this document was written on
+was not running** – verified only with `docker compose config` (see below);
+`docker compose up` could not actually be tried. Before your first attempt, at
+least verify the syntax without a daemon:
 
 ```bash
 docker compose config
@@ -146,20 +162,20 @@ docker compose --profile app config
 
 ---
 
-## Demonstrace fail-fast (bez Dockeru)
+## Demonstrating fail-fast (without Docker)
 
 ### API
 
 ```bash
-# DATABASE_URL chybí úmyslně
+# DATABASE_URL is deliberately missing
 NODE_ENV=development PORT=3000 \
 AUTH_OKTA_ISSUER=http://localhost:8080/default AUTH_OKTA_AUDIENCE=api://default \
 CORS_ALLOWED_ORIGINS=http://localhost:4200 LOG_LEVEL=info \
 node dist/apps/api/main.js
 ```
 
-Proces skončí s `exit code 1` a chybou `ExceptionHandler`, která jmenuje `DATABASE_URL` a
-nikdy nevypisuje žádnou hodnotu.
+The process exits with `exit code 1` and an `ExceptionHandler` error that
+names `DATABASE_URL` and never prints any value.
 
 ### Web
 
@@ -168,9 +184,11 @@ cd apps/web
 env -i PATH="$PATH" HOME="$HOME" ../../node_modules/.bin/next start -p 4310
 ```
 
-Server nahodí HTTP port, ale hned potom instrumentation hook zjistí, že chybí
-`NEXT_PUBLIC_API_URL`, `AUTH_SECRET`, `AUTH_OKTA_ISSUER`, `AUTH_OKTA_CLIENT_ID` a
-`AUTH_OKTA_CLIENT_SECRET`, vypíše je a proces skončí s `exit code 1`.
+The server opens its HTTP port, but right afterward the instrumentation hook
+notices that `NEXT_PUBLIC_API_URL`, `AUTH_SECRET`, `AUTH_OKTA_ISSUER`,
+`AUTH_OKTA_CLIENT_ID`, and `AUTH_OKTA_CLIENT_SECRET` are missing, prints them,
+and the process exits with `exit code 1`.
 
-Reálné výstupy obou příkazů (z vývojového stroje, bez Dockeru) jsou v
+The actual output of both commands (from the development machine, without
+Docker) is in
 `.superpowers/sdd/implementation-plan/task-2-report.md`.
