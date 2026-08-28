@@ -61,6 +61,17 @@ export const FOCUS_RING =
   'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue';
 
 /**
+ * The same ring, drawn *inside* the element's box rather than around it.
+ *
+ * For items that sit flush against a panel edge — menu items, tabs — an outward
+ * ring is clipped by the panel or overlaps the neighbour above. The offset is
+ * the negative of `FOCUS_RING`'s, off the same numeric scale, so the two rings
+ * are the same weight and the same colour and only their side differs.
+ */
+export const INSET_FOCUS_RING =
+  'outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-blue';
+
+/**
  * Press feedback, taken verbatim from the design's `style-active` rules
  * (`transform:scale(0.97)`). A transform ratio, not a color or a length, so it
  * has no token counterpart.

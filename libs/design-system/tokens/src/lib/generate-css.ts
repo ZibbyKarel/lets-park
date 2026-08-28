@@ -53,6 +53,7 @@ export function generateTokensCss(tokens: DesignTokens): string {
     motion,
     layout,
     controls,
+    overlays,
   } = tokens;
   const { brand, neutral, surface, fg, line, status } = colors;
   const { families, faces, fontSize, lineHeight, letterSpacing } = typography;
@@ -134,7 +135,7 @@ export function generateTokensCss(tokens: DesignTokens): string {
   --danger-100: ${status.danger100};
 
   /* --- Car color palette ---
-     Scoped ONLY to the vehicle glyphs on the app's map surface — see
+     Scoped ONLY to the repeating glyphs on the app's map surface — see
      car-palette.ts. Deliberately namespaced away from the general palette. */
   --palette-car-1: ${carColorPalette[0]};
   --palette-car-2: ${carColorPalette[1]};
@@ -227,6 +228,25 @@ export function generateTokensCss(tokens: DesignTokens): string {
   --switch-pad: ${controls.switch.trackPadding};
   --switch-knob: ${controls.switch.knobSize};
   --switch-knob-shadow: ${controls.switch.knobShadow};
+
+  /* --- Overlays and layering ---
+     DERIVED from lets-park-design.dc.html where the design draws the thing,
+     invented where it does not — see overlays.ts and doc/decision/0020-*. */
+  --z-sticky: ${overlays.z.sticky};
+  --z-bar: ${overlays.z.bar};
+  --z-overlay: ${overlays.z.overlay};
+  --z-dropdown: ${overlays.z.dropdown};
+  --z-toast: ${overlays.z.toast};
+  --z-tooltip: ${overlays.z.tooltip};
+
+  --scrim: ${overlays.scrim};
+
+  --modal-w-sm: ${overlays.size.modalWidth.sm};
+  --modal-w-md: ${overlays.size.modalWidth.md};
+  --menu-min-w: ${overlays.size.menuMinWidth};
+  --tab-indicator-h: ${overlays.size.tabIndicator};
+  --tooltip-max-w: ${overlays.size.tooltipMaxWidth};
+  --toast-w: ${overlays.size.toastWidth};
 }`;
 
   return `/* ============================================================

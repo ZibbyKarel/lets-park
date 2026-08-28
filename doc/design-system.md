@@ -26,11 +26,15 @@ Trojice `#fcaf00`/`#00e25a`/`#3b88ff` (barvy aut na obsazených místech) je z
 `plan.md` / `doc/design/README.md` – je to samostatná skupina tokenů, **není**
 součástí obecné palety (viz níže).
 
-Dvě skupiny tokenů jsou **odvozené, ne opsané** z `colors_and_type.css`, a mají
+Tři skupiny tokenů jsou **odvozené, ne opsané** z `colors_and_type.css`, a mají
 to napsané v hlavičce svého souboru: `BREAKPOINTS` v `layout.ts`
-(`doc/decision/0009-breakpointy-jsou-odvozene.md`) a `CONTROLS` v `controls.ts`
+(`doc/decision/0009-breakpointy-jsou-odvozene.md`), `CONTROLS` v `controls.ts`
 – výšky ovládacích prvků a geometrie přepínače, čtené z exportovaného designu
-(`doc/decision/0011-odvozene-control-tokeny-a-zaokrouhleni.md`).
+(`doc/decision/0011-odvozene-control-tokeny-a-zaokrouhleni.md`) – a `OVERLAYS`
+v `overlays.ts`: škála vrstvení, scrim a rozměry dialogů, menu, tooltipu
+a toastu (`doc/decision/0020-overlay-tokeny-a-vrstveni.md`). `overlays.ts` má
+navíc u **každé** položky napsané, jestli je ze designu, nebo vymyšlená –
+tooltip ani toast v designu vůbec nejsou.
 
 ## Jak jsou tokeny poskládané
 
@@ -47,6 +51,7 @@ libs/design-system/tokens/
       shadows.ts               – --shadow-*
       motion.ts                 – --ease-*, --dur-*
       layout.ts                  – --container*, BREAKPOINTS (odvozené, viz 0009)
+      overlays.ts                 – --z-*, --scrim, --modal-w-*, ... (ODVOZENÉ, viz 0020)
       tokens.ts                   – DESIGN_TOKENS = spojení všeho výše
       generate-css.ts               – generateTokensCss(tokens) -> CSS text (čistá funkce)
       generate-css.spec.ts           – test, že commitnutý tokens.css == generateTokensCss(...)
@@ -181,8 +186,9 @@ kdyby se `.otf` soubory musely z produkčního buildu vyřadit.
 # Primitivy (`libs/design-system/primitives`)
 
 Balíček `@lets-park/design-system/primitives`, tagy `type:ui`, `scope:web`,
-`ds:primitives`. Devět komponent, ke každé **story vedle komponenty** a Jest +
-Testing Library test (84 testů celkem).
+`ds:primitives`. **Čtrnáct komponent** ve dvou dávkách – devět formulářových
+(task 7) a pět overlay/navigačních (task 8) – ke každé **story vedle
+komponenty** a Jest + Testing Library test (165 testů celkem).
 
 ```
 libs/design-system/primitives/
@@ -193,11 +199,13 @@ libs/design-system/primitives/
   src/
     lib/
       cx.ts               – spojovač class names (žádný clsx, tři řádky)
-      control-size.ts     – sdílená škála sm|md|lg|xl + FOCUS_RING, PRESS_FEEDBACK
+      control-size.ts     – sdílená škála sm|md|lg|xl + FOCUS_RING, INSET_FOCUS_RING, PRESS_FEEDBACK
       field.tsx           – useFieldIds() + <Field> (label / hint / error kolem prvku)
+      use-focus-trap.ts   – focus trap + návrat focusu (jen Modal; viz 0021)
       button.tsx    badge.tsx    avatar.tsx
       input.tsx     select.tsx   checkbox.tsx   radio.tsx
       switch.tsx    stepper.tsx
+      modal.tsx     dropdown.tsx tabs.tsx       tooltip.tsx    toast.tsx
       *.stories.tsx        – story ke každé komponentě
       *.spec.tsx            – test ke každé komponentě
     index.ts                 – veřejné API
@@ -331,6 +339,145 @@ z podstaty prvku a nikdy neodešle formulář.
 Hodnota je `role="spinbutton"`, takže je dosažitelná Tabem a ovladatelná
 šipkami, Home a End – tlačítka jsou pohodlí pro myš, ne jediná cesta.
 `formatValue` je zároveň `aria-valuetext`, takže se jednotka i přečte.
+
+## Overlay a navigační primitivy
+
+Pět komponent z druhé dávky. Jsou to ty nejrizikovější kusy z hlediska
+přístupnosti, takže tady platí navíc:
+
+- **Klávesnice je první třída.** Focus trap, Escape, šipky a Home/End nejsou
+  „nice to have" – jsou to jediné cesty, jak tyhle komponenty ovládá někdo, kdo
+  nemá myš. Testují se proto jako **chování** (`user-event`, skutečný Tab a
+  skutečný focus), ne jako přítomnost atributu.
+- **Přebíjení barev je tady horší než u `disabled`.** Overlay komponenty mají
+  víc podmíněných stavů (aktivní vs. neaktivní tab, otevřený vs. zavřený
+  trigger, pět tónů toastu). Každý stav proto dodává **celou** sadu barev pro
+  všechny vlastnosti, které nastavuje – hlídá to `disabled-styling.spec.tsx`.
+- **Vrstvení jde z jedné škály** `--z-*` (`doc/decision/0020-*`). Žádná
+  komponenta si `z-index` nevymýšlí.
+
+### `Modal`
+
+| prop | typ | default |
+| --- | --- | --- |
+| `open` | `boolean` | – (povinné) |
+| `onClose` | `() => void` | – (povinné) |
+| `title` | `ReactNode` | – (povinné, je to i přístupné jméno) |
+| `description` | `ReactNode` | – (napojené na `aria-describedby`) |
+| `eyebrow` | `ReactNode` | – (pilulka nad titulkem) |
+| `footer` | `ReactNode` | – (zarovnané doprava) |
+| `size` | `'sm' \| 'md'` | `'sm'` (460 / 620 px) |
+| `closeOnScrimClick` | `boolean` | `true` |
+| `closeLabel` | `string` | `'Zavřít'` |
+| `hideCloseButton` | `boolean` | `false` |
+
+`<div role="dialog" aria-modal="true">` v portálu na `document.body`.
+**Nikdy se nezavírá sám** – `open` vlastní volající, `onClose` se volá pro
+všechny tři cesty ven (Escape, scrim, ×).
+
+Co dělá pro přístupnost:
+
+- **Skutečný focus trap.** Tab i Shift+Tab cyklí uvnitř; když focus skončí mimo,
+  další Tab ho vtáhne zpět. Dialog bez jediného ovládacího prvku fokusuje sám
+  sebe (`tabIndex={-1}`), ať odečítač nezůstane na stránce za ním.
+- **Návrat focusu** na prvek, který dialog otevřel.
+- **Escape zavírá.**
+- **Zamyká scroll stránky** pod sebou – scrollování je jediná cesta, jak se
+  myší dostat na obsah, který scrim zakrývá.
+- „Obsah vzadu je inert" je řešené trojicí `aria-modal` + trap + krycí scrim, ne
+  mutací sousedních uzlů; **proč** je v `doc/decision/0021-*` spolu s tím, proč
+  to není nativní `<dialog>`.
+
+### `Dropdown`
+
+| prop | typ | default |
+| --- | --- | --- |
+| `trigger` | `ReactNode` | – (obsah tlačítka, které komponenta vlastní) |
+| `triggerLabel` | `string` | – (jméno triggeru, když není samopopisný) |
+| `items` | `DropdownItem[]` | – (povinné) |
+| `onSelect` | `(id: string) => void` | – |
+| `header` | `ReactNode` | – (nefokusovatelný blok nad položkami) |
+| `label` | `string` | jméno triggeru |
+| `align` | `'start' \| 'end'` | `'end'` |
+
+`DropdownItem`: `id`, `label`, `trailing?`, `danger?`, `disabled?`.
+
+Trigger je `aria-haspopup="menu"` + `aria-expanded` + `aria-controls`, panel
+`role="menu"`, položky `role="menuitem"`. Klávesnice: `ArrowDown` otevře na
+první položce, `ArrowUp` na poslední, uvnitř šipky se zabalením, `Home`/`End`,
+`Enter`/mezerník vybere, `Escape` zavře a vrátí focus na trigger, `Tab` zavře
+a skočí za trigger. Zakázané položky se přeskakují. Klik mimo zavře.
+
+**Roving tabindex** – v tab orderu je vždy jen jedna položka, takže menu je
+jedna zastávka, ne N. **Type-ahead záměrně není** (`doc/decision/0022-*`).
+
+Není to portál (na rozdíl od `Modal`), takže `z-[var(--z-dropdown)]` platí
+lokálně vůči stacking contextu triggeru.
+
+### `Tabs`
+
+| prop | typ | default |
+| --- | --- | --- |
+| `items` | `TabItem[]` | – (povinné) |
+| `value` / `defaultValue` / `onValueChange` | `string` / `(id: string) => void` | neřízené od prvního povoleného |
+| `label` | `string` | – (jméno pásu) |
+
+`TabItem`: `id`, `label`, `content?`, `disabled?`.
+
+`role="tablist"` / `tab` / `tabpanel`, `aria-selected` na **všech** tabech
+(i `false`), `aria-controls` a `aria-labelledby` svazují tab s panelem oběma
+směry. Klávesnice: `←`/`→` posunou focus **i výběr** (automatická aktivace),
+`Home`/`End` skočí na kraje, `↑`/`↓` zůstávají stránce. Roving tabindex, takže
+`Tab` z pásu jde rovnou do panelu; panel má `tabIndex={0}`, aby byl dosažitelný
+i když v něm nic fokusovatelného není. Rozhodnutí v `doc/decision/0022-*`.
+
+Podtržení vybraného tabu je `border-bottom` o `--tab-indicator-h` (3px) na
+**každém** tabu – nevybrané mají `border-transparent` – takže se při přepnutí
+nic neposune.
+
+### `Tooltip`
+
+| prop | typ | default |
+| --- | --- | --- |
+| `content` | `ReactNode` | – (povinné) |
+| `children` | `ReactElement` | – (právě jeden fokusovatelný prvek) |
+| `placement` | `'top' \| 'bottom'` | `'top'` |
+
+Otevírá se na **focus i hover**, zavírá na blur, odjetí myši a `Escape`
+(bez přesunu focusu). `aria-describedby` se zapisuje **na dítě samotné** přes
+`cloneElement`, sloučeně s tím, co si tam volající dal sám – na obalu by
+nepopisovalo nic, protože odečítač čte popis z fokusovaného prvku.
+
+Je to **popis, ne jméno**: prvek, jehož jediné jméno by přišlo z tooltipu,
+potřebuje `aria-label`. Bublina se montuje na vyžádání, takže mimo zobrazení
+není ani ve stromu přístupnosti, a nepřidává vlastní zastávku do tab orderu.
+
+### `Toast` a `ToastRegion`
+
+| prop (`Toast`) | typ | default |
+| --- | --- | --- |
+| `children` | `ReactNode` | – (povinné, samotná zpráva) |
+| `title` | `ReactNode` | – (tučný první řádek) |
+| `tone` | `'neutral' \| 'info' \| 'success' \| 'warning' \| 'danger'` | `'info'` |
+| `icon` | `ReactNode` | – (dekorativní, `aria-hidden`) |
+| `onDismiss` | `() => void` | – (teprve tohle zobrazí × tlačítko) |
+| `dismissLabel` | `string` | `'Zavřít'` |
+
+| prop (`ToastRegion`) | typ | default |
+| --- | --- | --- |
+| `children` | `ReactNode` | – (`Toast` prvky, klidně žádné) |
+| `placement` | `'top-right' \| 'bottom-right' \| 'bottom-center'` | `'top-right'` |
+| `label` | `string` | – (jméno oblasti) |
+
+**Ohlašuje se, ale nekrade focus** – to je celý smysl toastu. `role="status"`
+(zdvořilé) pro všechny tóny kromě `danger`, který má `role="alert"` (naléhavé).
+
+`ToastRegion` renderuj **bezpodmínečně a klidně prázdný**: živá oblast, která se
+objeví už s textem uvnitř, se často nepřečte. Sama oblast je `role="region"`,
+ne druhá živá oblast – vnořené živé oblasti některé odečítače přečtou dvakrát.
+
+Fronta, časovač ani imperativní `toast.success(...)` tu **nejsou** a nebudou:
+je to stav aplikace, ne design systému (`doc/decision/0023-*`).
 
 ## Storybook
 

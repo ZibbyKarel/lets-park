@@ -3,7 +3,8 @@
  *
  * NOT part of the general Shoptet DS palette in `colors_and_type.css` — this
  * triple comes from `plan.md` and is documented in `doc/design/README.md` as
- * scoped *only* to the vehicle glyphs the app draws on its map surface. Every
+ * scoped *only* to the small repeating glyphs the app draws on its map
+ * surface. Every
  * other UI surface (buttons, badges, status, text, ...) must keep using
  * `COLORS` from `colors.ts`. Do not add these values to the general scale, and
  * do not use the general scale's colors here.

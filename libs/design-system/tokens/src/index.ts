@@ -7,5 +7,6 @@ export * from './lib/controls';
 export * from './lib/shadows';
 export * from './lib/motion';
 export * from './lib/layout';
+export * from './lib/overlays';
 export * from './lib/tokens';
 export * from './lib/generate-css';

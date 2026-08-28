@@ -1,0 +1,267 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import { Dropdown, type DropdownItem } from './dropdown';
+
+const ITEMS: DropdownItem[] = [
+  { id: 'settings', label: 'Nastavení' },
+  { id: 'admin', label: 'Správa', trailing: '→' },
+  { id: 'signout', label: 'Odhlásit se', danger: true },
+];
+
+function renderDropdown(props: Partial<Parameters<typeof Dropdown>[0]> = {}) {
+  const onSelect = jest.fn();
+  render(
+    <div>
+      <button type="button">Před</button>
+      <Dropdown trigger="Karel Z." items={ITEMS} onSelect={onSelect} {...props} />
+      <button type="button">Za</button>
+    </div>
+  );
+
+  return { onSelect };
+}
+
+describe('Dropdown', () => {
+  it('announces itself as a closed menu button', () => {
+    renderDropdown();
+
+    const trigger = screen.getByRole('button', { name: 'Karel Z.' });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('opens on click and marks itself expanded', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+
+    expect(screen.getByRole('button', { name: 'Karel Z.' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+  });
+
+  it('opens with ArrowDown on the first item', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    screen.getByRole('button', { name: 'Karel Z.' }).focus();
+    await user.keyboard('{ArrowDown}');
+
+    expect(screen.getByRole('menuitem', { name: 'Nastavení' })).toHaveFocus();
+  });
+
+  it('opens with ArrowUp on the last item', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    screen.getByRole('button', { name: 'Karel Z.' }).focus();
+    await user.keyboard('{ArrowUp}');
+
+    expect(screen.getByRole('menuitem', { name: 'Odhlásit se' })).toHaveFocus();
+  });
+
+  it('moves focus with the arrow keys and wraps at both ends', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    screen.getByRole('button', { name: 'Karel Z.' }).focus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Nastavení' })).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Správa →' })).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Odhlásit se' })).toHaveFocus();
+
+    // Past the end wraps to the start.
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Nastavení' })).toHaveFocus();
+
+    // ...and back the other way.
+    await user.keyboard('{ArrowUp}');
+    expect(screen.getByRole('menuitem', { name: 'Odhlásit se' })).toHaveFocus();
+  });
+
+  it('jumps to the first and last item with Home and End', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    screen.getByRole('button', { name: 'Karel Z.' }).focus();
+    await user.keyboard('{ArrowDown}{End}');
+    expect(screen.getByRole('menuitem', { name: 'Odhlásit se' })).toHaveFocus();
+
+    await user.keyboard('{Home}');
+    expect(screen.getByRole('menuitem', { name: 'Nastavení' })).toHaveFocus();
+  });
+
+  it('keeps exactly one item in the tab order (roving tabindex)', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+
+    const tabbable = screen
+      .getAllByRole('menuitem')
+      .filter((item) => item.getAttribute('tabindex') === '0');
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAccessibleName('Nastavení');
+
+    await user.keyboard('{ArrowDown}');
+
+    const afterMove = screen
+      .getAllByRole('menuitem')
+      .filter((item) => item.getAttribute('tabindex') === '0');
+    expect(afterMove).toHaveLength(1);
+    expect(afterMove[0]).toHaveAccessibleName('Správa →');
+  });
+
+  it('closes on Escape and puts focus back on the trigger', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Karel Z.' })).toHaveFocus();
+  });
+
+  it('closes on Tab and lets focus continue past the widget, not into it', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    expect(screen.getByRole('menuitem', { name: 'Nastavení' })).toHaveFocus();
+
+    await user.tab();
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Za' })).toHaveFocus();
+  });
+
+  it('closes on Shift+Tab and continues backwards from the trigger', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    await user.tab({ shift: true });
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Před' })).toHaveFocus();
+  });
+
+  it('selects with Enter and reports the item id', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderDropdown();
+
+    screen.getByRole('button', { name: 'Karel Z.' }).focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+    expect(onSelect).toHaveBeenCalledWith('admin');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Karel Z.' })).toHaveFocus();
+  });
+
+  it('selects with Space as well', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderDropdown();
+
+    screen.getByRole('button', { name: 'Karel Z.' }).focus();
+    await user.keyboard('{ArrowUp}{ }');
+
+    expect(onSelect).toHaveBeenCalledWith('signout');
+  });
+
+  it('selects with the pointer too', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Nastavení' }));
+
+    expect(onSelect).toHaveBeenCalledWith('settings');
+  });
+
+  it('closes when something outside is clicked, without stealing focus', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    await user.click(screen.getByRole('button', { name: 'Před' }));
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('closes again when the trigger is clicked a second time', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    const trigger = screen.getByRole('button', { name: 'Karel Z.' });
+    await user.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('skips disabled items when arrowing, and refuses to select them', async () => {
+    const user = userEvent.setup();
+    const onSelect = jest.fn();
+    render(
+      <Dropdown
+        trigger="Akce"
+        onSelect={onSelect}
+        items={[
+          { id: 'a', label: 'První' },
+          { id: 'b', label: 'Zakázaná', disabled: true },
+          { id: 'c', label: 'Třetí' },
+        ]}
+      />
+    );
+
+    screen.getByRole('button', { name: 'Akce' }).focus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'První' })).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Třetí' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Zakázaná' })).not.toHaveFocus();
+
+    await user.click(screen.getByRole('menuitem', { name: 'Zakázaná' }));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('names the menu after its trigger unless given a name of its own', async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    expect(screen.getByRole('menu')).toHaveAccessibleName('Karel Z.');
+  });
+
+  it('takes an explicit menu label', async () => {
+    const user = userEvent.setup();
+    renderDropdown({ label: 'Uživatelské menu' });
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    expect(screen.getByRole('menu')).toHaveAccessibleName('Uživatelské menu');
+  });
+
+  it('renders a non-focusable header above the items', async () => {
+    const user = userEvent.setup();
+    renderDropdown({ header: <span>karel@firma.cz</span> });
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+
+    expect(screen.getByText('karel@firma.cz')).toBeInTheDocument();
+    // The header must not become a menu item, or arrow keys would stop on it.
+    expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+  });
+});
