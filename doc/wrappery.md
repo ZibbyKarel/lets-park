@@ -70,6 +70,80 @@ systému. Jediné místo, kde `libs/form` design systém přesto potřebuje, je 
 demonstrační test (`app-form.spec.tsx`) — a ten má vlastní, úzce zacílený ESLint override
 (`doc/decision/0029-*`), ne rozšíření `WRAPPED_LIBRARIES`.
 
+### Příklad použití
+
+`FormField` je obecný render-prop (viz výše) — spojuje jedno pole (hodnotu, `onChange`,
+`onBlur`, `ref`, resolvovanou Zod chybu) s primitivem, který zvolí volající. Pro `Input` a
+`Select` stačí `{...field}` rozbalit přímo, protože jejich `value`/`onChange` odpovídají
+tomu, co react-hook-form posílá. **`Checkbox` ne** — je to nativní `<input
+type="checkbox">`, který stav nese přes `checked` (boolean), ne `value`, a jeho `onChange`
+posílá event, jehož `target.checked` (ne `target.value`) je potřeba zpátky poslat do
+`field.onChange`. Tohle je přesně to místo, kde render-prop design přenáší odpovědnost na
+volajícího — a přesně to, co se dá při psaní nové domain formy nejsnáz zapomenout:
+
+```tsx
+import * as z from 'zod';
+import { Checkbox, Input, Select } from '@lets-park/design-system-primitives';
+import { FormField, FormProvider, useAppForm } from '@lets-park/form';
+
+const bookingSchema = z.object({
+  spotId: z.string().min(1, 'Choose a spot'),
+  vehicleType: z.enum(['car', 'motorcycle']),
+  recurring: z.boolean(),
+});
+
+function BookingForm() {
+  const form = useAppForm({
+    schema: bookingSchema,
+    defaultValues: { spotId: '', vehicleType: 'car', recurring: false },
+  });
+
+  return (
+    <FormProvider {...form}>
+      <form onSubmit={form.handleSubmit((values) => submitBooking(values))}>
+        {/* Input/Select: field shape already matches value/onChange, spread directly. */}
+        <FormField
+          name="spotId"
+          render={({ field, error }) => <Input label="Parking spot" error={error} {...field} />}
+        />
+        <FormField
+          name="vehicleType"
+          render={({ field, error }) => (
+            <Select label="Vehicle" error={error} {...field}>
+              <option value="car">Car</option>
+              <option value="motorcycle">Motorcycle</option>
+            </Select>
+          )}
+        />
+
+        {/* Checkbox adapter: checked (not value), and onChange must read
+            event.target.checked back into field.onChange — a plain
+            {...field} spread here would silently do nothing on click. */}
+        <FormField
+          name="recurring"
+          render={({ field, error }) => (
+            <Checkbox
+              label="Repeat this reservation weekly"
+              error={error}
+              name={field.name}
+              checked={field.value}
+              onChange={(event) => field.onChange(event.target.checked)}
+              onBlur={field.onBlur}
+              ref={field.ref}
+            />
+          )}
+        />
+
+        <button type="submit">Reserve</button>
+      </form>
+    </FormProvider>
+  );
+}
+```
+
+Stejný vzor (i s testy nad `Checkbox`) je ověřený v `libs/form/src/lib/app-form.spec.tsx` —
+tenhle příklad z něj přímo vychází, jen s parkovací doménou místo obecného demo schématu.
+
 ## Jak přidat další wrapper lib (Tasky 19–22)
 
 1. **Vygeneruj lib** stejně jako každou jinou (`doc/workspace.md`, „Jak přidat novou lib").

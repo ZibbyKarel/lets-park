@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form';
-import type { FieldValues, Resolver, UseFormProps, UseFormReturn } from 'react-hook-form';
+import type { FieldValues, UseFormProps, UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
 
@@ -8,27 +8,31 @@ import type { z } from 'zod';
  * accepts, minus `resolver` (which `useAppForm` always derives from
  * `schema`), plus the schema itself.
  *
- * `TSchema` is generic rather than fixed to a `libs/contract` schema — this
- * lib is domain-free and validates whatever Zod object schema a caller (in
- * `apps/web` or a future `type:feature` lib) passes in.
+ * `useAppForm` is parameterised directly on `TIn`/`TOut` (the field-value and
+ * submitted-value shapes), not on the schema's own type — see the comment on
+ * `useAppForm` for why that is what lets `zodResolver`'s result flow through
+ * with no cast. `schema` is typed as `z.ZodType<TOut, TIn>` rather than a
+ * `libs/contract` schema — this lib is domain-free and validates whatever Zod
+ * object schema a caller (in `apps/web` or a future `type:feature` lib)
+ * passes in.
  */
-export interface UseAppFormOptions<TSchema extends z.ZodType<FieldValues, FieldValues>>
-  extends Omit<UseFormProps<z.input<TSchema>, unknown, z.output<TSchema>>, 'resolver'> {
+export interface UseAppFormOptions<TIn extends FieldValues, TOut extends FieldValues = TIn>
+  extends Omit<UseFormProps<TIn, unknown, TOut>, 'resolver'> {
   /** The single source of truth for this form's shape and validation rules. */
-  readonly schema: TSchema;
+  readonly schema: z.ZodType<TOut, TIn>;
 }
 
 /**
- * `UseFormReturn` typed from one Zod schema: field values are `z.input<TSchema>`
+ * `UseFormReturn` typed from one Zod schema: field values are `TIn`
  * (what `register`/`Controller` read and write, before Zod's own transforms),
- * and `handleSubmit`'s callback receives `z.output<TSchema>` (after them) —
- * the same split react-hook-form itself makes between "field values" and
- * "transformed values".
+ * and `handleSubmit`'s callback receives `TOut` (after them) — the same split
+ * react-hook-form itself makes between "field values" and "transformed
+ * values".
  */
-export type AppForm<TSchema extends z.ZodType<FieldValues, FieldValues>> = UseFormReturn<
-  z.input<TSchema>,
+export type AppForm<TIn extends FieldValues, TOut extends FieldValues = TIn> = UseFormReturn<
+  TIn,
   unknown,
-  z.output<TSchema>
+  TOut
 >;
 
 /**
@@ -40,41 +44,43 @@ export type AppForm<TSchema extends z.ZodType<FieldValues, FieldValues>> = UseFo
  * (`libs/contract`) — never a hand-duplicated set of validation rules.
  *
  * A typo in a field name passed to `register`/`control` elsewhere is a
- * compile error, because `TSchema` drives both the field-value type and the
+ * compile error, because `TIn`/`TOut` drive both the field-value type and the
  * submitted-value type; nothing here falls back to `any`.
+ *
+ * `useAppForm` is generic over `TIn`/`TOut` themselves, not over the schema's
+ * own type (an earlier version was generic over `TSchema extends
+ * z.ZodType<FieldValues, FieldValues>` and cast `zodResolver`'s result through
+ * `unknown` — see decision 0030). `zodResolver`'s own signature is generic
+ * over a type parameter `T extends Zod4Type<Output, Input>` that it infers
+ * from its `schema` argument. Inference behaves differently depending on
+ * *how* the argument's type mentions the caller's generics:
+ * - when `schema`'s declared type is a bare, still-unresolved type parameter
+ *   (`schema: TSchema`), TypeScript can only match `T` against `TSchema`'s
+ *   *constraint*, not its eventual instantiation, so `Output`/`Input` widen to
+ *   the constraint's `FieldValues`/`FieldValues` — a mismatch with the
+ *   caller-facing `Resolver<TIn, unknown, TOut>` `useForm` expects below;
+ * - when `schema`'s declared type instead *applies* the caller's generics
+ *   structurally (`schema: z.ZodType<TOut, TIn>`), `TOut`/`TIn` sit in
+ *   argument positions TypeScript can unify against directly, the same way
+ *   `function unwrap<A>(x: Box<A>): A` infers `A` from `Box<A>` even though
+ *   `A` is still generic. `zodResolver` then reports exactly `Resolver<TIn,
+ *   unknown, TOut>`, which is what `useForm` needs — no cast required.
+ *
+ * Verified directly: with a concrete schema (e.g. `z.object({ name:
+ * z.string(), age: z.coerce.number() })`), `tsc` both accepts
+ * `form.getValues('name'): string` and `values.age: number` in
+ * `handleSubmit`, and rejects the same with the types swapped, and rejects a
+ * typo'd field name — see `use-app-form.spec.tsx` / `app-form.spec.tsx` for
+ * the runtime side of the same guarantee.
  */
-export function useAppForm<TSchema extends z.ZodType<FieldValues, FieldValues>>(
-  options: UseAppFormOptions<TSchema>
-): AppForm<TSchema> {
+export function useAppForm<TIn extends FieldValues, TOut extends FieldValues = TIn>(
+  options: UseAppFormOptions<TIn, TOut>
+): AppForm<TIn, TOut> {
   const { schema, ...formOptions } = options;
 
-  /**
-   * The one narrow type assertion in this lib, confined to this single line.
-   *
-   * `zodResolver`'s own generics are inferred *from* its `schema` argument;
-   * here `schema` is `TSchema`, a still-generic type parameter, not a
-   * concrete schema. TypeScript can only resolve `z.input<TSchema>` /
-   * `z.output<TSchema>` against `TSchema`'s *constraint*
-   * (`z.ZodType<FieldValues, FieldValues>`), not its eventual instantiation —
-   * so both the fully-inferred call and an explicitly-typed one collapse to
-   * `Resolver<FieldValues, unknown, FieldValues>`, which does not structurally
-   * match the caller-facing `Resolver<z.input<TSchema>, unknown,
-   * z.output<TSchema>>` `useForm` below expects. This is a limitation of
-   * wrapping one already-generic function inside another, not a real type
-   * mismatch: at every call site `TSchema` is concrete, `zodResolver` runs
-   * against the real schema exactly as `@hookform/resolvers/zod` documents,
-   * and the assertion changes nothing about runtime behaviour. Every
-   * *consumer-facing* type in this file (`UseAppFormOptions`, `AppForm`,
-   * `useAppForm`'s signature) stays fully precise — this is the only place an
-   * escape hatch was needed, and it is a `Resolver` cast, not `any`.
-   */
-  const resolver = zodResolver(schema) as unknown as Resolver<
-    z.input<TSchema>,
-    unknown,
-    z.output<TSchema>
-  >;
+  const resolver = zodResolver(schema);
 
-  return useForm<z.input<TSchema>, unknown, z.output<TSchema>>({
+  return useForm<TIn, unknown, TOut>({
     ...formOptions,
     resolver,
   });

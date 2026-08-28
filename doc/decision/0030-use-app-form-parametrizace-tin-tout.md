@@ -1,50 +1,60 @@
-# 0030 – `useAppForm` obsahuje jeden zdůvodněný type cast na `zodResolver`
+# 0030 – `useAppForm` je parametrizované přes `TIn`/`TOut`, ne přes `TSchema` — bez castu
 
-**Datum:** 2026-08-28 · **Stav:** přijato · **Task:** 18 (`libs/form`)
+**Datum:** 2026-08-28 · **Stav:** přijato (revidováno po code review Tasku 18) · **Task:** 18
+(`libs/form`)
 
 ## Co
 
-`useAppForm` (`libs/form/src/lib/use-app-form.ts`) volá `zodResolver(schema)` a výsledek
-přetypuje: `zodResolver(schema) as unknown as Resolver<z.input<TSchema>, unknown,
-z.output<TSchema>>`. Je to jediné místo v `libs/form`, kde se typová kontrola obchází —
-veřejné API (`UseAppFormOptions`, `AppForm`, signatura `useAppForm`) zůstává beze změny plně
-typované.
+`useAppForm` (`libs/form/src/lib/use-app-form.ts`) volá `zodResolver(schema)` a jeho výsledek
+předá `useForm` **beze castu**. Původní revize byla generická přes `TSchema extends
+z.ZodType<FieldValues, FieldValues>` a výsledek `zodResolver` přetypovávala přes
+`unknown`; review Tasku 18 ukázal, že přetypování šlo odstranit změnou toho, přes co se
+`useAppForm` parametrizuje — tenhle záznam nahrazuje původní verzi, která tvrdila, že
+cast je nutný. Nebyl.
 
-## Proč
+## Proč (co nefungovalo a proč)
 
-`zodResolver` z `@hookform/resolvers/zod` je samo generické a svoje generika (`Input`,
-`Context`, `Output`) odvozuje **ze svého argumentu** `schema`. Uvnitř `useAppForm<TSchema
-extends z.ZodType<FieldValues, FieldValues>>` je ale `schema` typu `TSchema` — tedy pořád
-obecný typový parametr, ne konkrétní schéma. TypeScript v tomhle bodě umí `z.input<TSchema>`
-a `z.output<TSchema>` vyhodnotit jen vůči **omezení** (`constraint`) `TSchema`
-(`z.ZodType<FieldValues, FieldValues>`), ne vůči jeho budoucí konkrétní instanci — takže ať
-už se generika `zodResolver` nechají odvodit sama, nebo se předají explicitně, výsledek se
-vždy zúží na `Resolver<FieldValues, unknown, FieldValues>`, které strukturálně neodpovídá
-`Resolver<z.input<TSchema>, unknown, z.output<TSchema>>`, jaký čeká `useForm` níž.
+`zodResolver` z `@hookform/resolvers/zod` je samo generické: `zodResolver<Input, Context,
+Output, T extends Zod4Type<Output, Input> = Zod4Type<Output, Input>>(schema: T, …):
+Resolver<z4.input<T>, Context, z4.output<T>>` — `T` (a tedy `Input`/`Output`) odvozuje
+TypeScript **ze statického typu argumentu** `schema`.
 
-Vyzkoušeny byly obě cesty bez castu (viz `use-app-form.ts`, dřívější revize) — obě padají na
-`tsc` s obdobnou chybou (`exactOptionalPropertyTypes` na prvním pokusu, plné
-`No overload matches this call` na druhém). Je to typová limitace obalování jedné generické
-funkce jinou generickou funkcí přes ještě nedosazený typový parametr, ne skutečná
-neshoda typů: na každém volajícím místě je `TSchema` konkrétní a `zodResolver` běží přesně
-podle dokumentace `@hookform/resolvers/zod` (ověřeno přes context7, viz global constraint 10).
+- Ve verzi `useAppForm<TSchema extends z.ZodType<FieldValues, FieldValues>>` byl `schema`
+  typu `TSchema` — tedy samotný, dosud nedosazený typový parametr. Když TypeScript odvozuje
+  `T` z argumentu, jehož typ je bary typový parametr, umí `T` porovnat jen vůči **omezení**
+  (`constraint`) `TSchema`, tj. `z.ZodType<FieldValues, FieldValues>` — ne vůči tomu, čím
+  bude `TSchema` na konkrétním volacím místě. Výsledek se proto vždy zúžil na
+  `Resolver<FieldValues, unknown, FieldValues>`, což strukturálně neodpovídalo
+  `Resolver<z.input<TSchema>, unknown, z.output<TSchema>>`, jaký čekal `useForm` níž — odtud
+  cast.
+- Řešení: `useAppForm` se parametrizuje přímo přes `TIn extends FieldValues`, `TOut extends
+  FieldValues = TIn` (tvary field-values a submitnutých hodnot), a `schema` má typ
+  `z.ZodType<TOut, TIn>` — tedy **aplikaci** `TIn`/`TOut` na `z.ZodType`, ne holý typový
+  parametr. V tomhle tvaru TypeScript `TOut`/`TIn` z argumentu odvodit umí — stejně jako
+  `function unwrap<A>(x: Box<A>): A` umí odvodit `A` z `Box<A>`, i když `A` je pořád
+  generické. `zodResolver(schema)` pak vrátí přesně `Resolver<TIn, unknown, TOut>`, což je
+  přesně to, co `useForm<TIn, unknown, TOut>` níž očekává — bez castu.
+
+Ověřeno přímo (`tsc --noEmit`, dočasné probe soubory, od té doby smazané): s konkrétním
+schématem (`z.object({ name: z.string(), age: z.coerce.number() })`) `tsc` správně přijímá
+`form.getValues('name'): string` a `values.age: number` v `handleSubmit`, správně odmítá
+tytéž přiřazení s prohozenými typy, a odmítá překlep v názvu pole (`getValues('nam')`) —
+tedy typová přesnost je stejná jako u předchozí (castované) verze, jen bez castu.
 
 ## Jak
 
-- Cast jde přes `unknown` (`as unknown as Resolver<...>`), protože `tsc` přímý cast mezi
-  `Resolver<FieldValues,…>` a `Resolver<z.input<TSchema>,…>` odmítá jako „nedostatečně se
-  překrývající" — jde o standardní TypeScript idiom pro tenhle typ konverze, ne o obcházení
-  chyby.
-- Cast je opatřený komentářem v kódu, který vysvětluje přesně tohle zdůvodnění, aby se
-  příště nezaměnil za nedbalost.
-- Nikde jinde v `libs/form` se `any` ani neopodstatněný cast nepoužívá — `FormField` a
-  `FormProvider` jsou plně typované bez escape hatch.
+- `UseAppFormOptions<TIn, TOut = TIn>`, `AppForm<TIn, TOut = TIn>`, `useAppForm<TIn, TOut =
+  TIn>` — všechny tři generické přes tvar dat, ne přes typ schématu.
+- `schema: z.ZodType<TOut, TIn>` — Zod v4 `ZodType<Output, Input>` (v tomto pořadí), viz
+  `node_modules/zod/v4/classic/schemas.d.ts`.
+- Žádný `as`/`as unknown as` v `use-app-form.ts`; `FormField` a `FormProvider` byly beze
+  castu už předtím.
 
 ## Riziko, když je to špatně
 
-Kdyby `@hookform/resolvers` v budoucí verzi změnilo tvar `ResolverOptions`/`Resolver` tak,
-že by se runtime chování rozešlo s tím, co cast tvrdí, `tsc` by to **neodhalil** — cast
-typovou kontrolu na tomhle jednom řádku vypíná. Zmírňuje to `use-app-form.spec.tsx` a
-`app-form.spec.tsx`: obě demonstrují reálné submitování a validaci přes skutečný
-`zodResolver`, takže regrese v runtime chování (na rozdíl od typů) padne na testu, ne jen
-tiše projde.
+Žádné nové oproti běžnému psaní generik: pokud `@hookform/resolvers` v budoucí verzi změní
+tvar `Zod4Type`/`Resolver` tak, že se `TOut`/`TIn` přestanou z `z.ZodType<TOut, TIn>`
+odvozovat, `tsc` to na rozdíl od dřívějšího castu **rovnou nahlásí jako chybu na volajícím
+místě** (žádné potichu prošlé přetypování) — to je přesně důvod, proč je tahle verze lepší,
+ne jen jinak zapsaná. Běhové chování je navíc dál kryto `use-app-form.spec.tsx` a
+`app-form.spec.tsx`.
