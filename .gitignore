@@ -1,0 +1,11 @@
+plan.md
+node_modules/
+.playwright-mcp/
+.nx/
+dist/
+tmp/
+.env
+.env.local
+*.local
+coverage/
+storage-state*.json
