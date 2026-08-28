@@ -22,11 +22,14 @@ libs/
                                       tagy: type:util,     scope:shared
   contract/     Zod schémata + (od Tasku 4) oRPC kontrakt
                                       tagy: type:contract, scope:shared
+  database/     Prisma 7 schéma, migrace, seed + generovaný klient
+                                      tagy: type:data,     scope:api
   design-system/
     tokens/     design tokeny + Tailwind v4 bridge   tagy: type:ui, scope:web, ds:tokens
     primitives/ primitivy + Storybook 10             tagy: type:ui, scope:web, ds:primitives
   (zbytek vzniká v dalších úkolech – plánované tagy níže)
 doc/            dokumentace, rozhodnutí, export vizuálního designu
+prisma.config.ts  konfigurace Prisma CLI (schéma v libs/database, `.env` z rootu)
 ```
 
 Konfigurace, která platí pro celý workspace:
