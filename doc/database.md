@@ -1,31 +1,34 @@
-# Databáze – schéma, migrace, seed, zálohy
+# Database – schema, migrations, seed, backups
 
-PostgreSQL 17 + Prisma 7. Všechno databázové žije v `libs/database` (tag `type:data`,
-`scope:api`); konfigurace CLI je v `prisma.config.ts` v rootu repa.
+PostgreSQL 17 + Prisma 7. Everything database-related lives in `libs/database`
+(tag `type:data`, `scope:api`); the CLI configuration is in `prisma.config.ts`
+at the repo root.
 
-Zdroj pravdy pro **tvar dat** je kontrakt (`libs/contract/src/schemas/entities.ts`).
-Prisma schéma ho zrcadlí – stejná jména polí, stejná nullabilita, stejné výčty. Kde se
-úložiště liší, je to záměr a je to popsané níže v sekci
-[Kde se úložiště liší od kontraktu](#kde-se-úložiště-liší-od-kontraktu).
+The source of truth for **the shape of the data** is the contract
+(`libs/contract/src/schemas/entities.ts`). The Prisma schema mirrors it – the
+same field names, the same nullability, the same enums. Where storage
+differs, it's deliberate and described below in the section
+[Where storage differs from the contract](#where-storage-differs-from-the-contract).
 
 ---
 
-## Soubory
+## Files
 
-| soubor | k čemu je |
+| file | what it's for |
 | --- | --- |
-| `prisma.config.ts` (root) | konfigurace Prisma CLI: cesta ke schématu, k migracím, `DATABASE_URL`, příkaz pro seed |
-| `libs/database/prisma/schema.prisma` | doménový model |
-| `libs/database/prisma/migrations/` | SQL migrace + `migration_lock.toml` |
-| `libs/database/src/generated/prisma/` | **generovaný** Prisma Client (commitnutý, needituje se ručně) |
-| `libs/database/src/lib/create-prisma-client.ts` | jediné místo, kde se klient vytváří (driver adapter) |
-| `libs/database/src/lib/seed-data.ts` | seed data jako čistá data (testovatelná bez databáze) |
-| `libs/database/src/scripts/seed.ts` | skript, který je zapíše (idempotentní) |
-| `libs/database/src/index.ts` | veřejný vstup `@lets-park/database` |
+| `prisma.config.ts` (root) | Prisma CLI configuration: the path to the schema, to migrations, `DATABASE_URL`, the seed command |
+| `libs/database/prisma/schema.prisma` | the domain model |
+| `libs/database/prisma/migrations/` | SQL migrations + `migration_lock.toml` |
+| `libs/database/src/generated/prisma/` | the **generated** Prisma Client (committed, never hand-edited) |
+| `libs/database/src/lib/create-prisma-client.ts` | the single place the client is created (the driver adapter) |
+| `libs/database/src/lib/seed-data.ts` | seed data as plain data (testable without a database) |
+| `libs/database/src/scripts/seed.ts` | the script that writes it (idempotent) |
+| `libs/database/src/index.ts` | the public entry point, `@lets-park/database` |
 
-`prisma.config.ts` je v rootu proto, že tam Prisma CLI konfiguraci hledá a tam leží
-i kořenový `.env` (viz `doc/decision/0009-*`). Prisma 7 už `.env` sama nenačítá –
-proto `import 'dotenv/config'` hned na prvním řádku toho souboru.
+`prisma.config.ts` sits at the root because that's where the Prisma CLI looks
+for configuration, and it's also where the root `.env` lives (see
+`doc/decision/0009-*`). Prisma 7 no longer loads `.env` itself – hence
+`import 'dotenv/config'` as the very first line of that file.
 
 ---
 
@@ -33,12 +36,12 @@ proto `import 'dotenv/config'` hned na prvním řádku toho souboru.
 
 ```mermaid
 erDiagram
-    User ||--o{ Reservation : "má"
-    User ||--o{ WaitlistEntry : "čeká ve frontě"
-    User ||--o{ AuditLog : "je actor"
-    User }o--o| ParkingSpot : "preferuje (nullable, SET NULL)"
-    ParkingSpot ||--o{ Reservation : "je rezervováno"
-    ParkingSpot ||--o{ WaitlistEntry : "má frontu"
+    User ||--o{ Reservation : "has"
+    User ||--o{ WaitlistEntry : "waits in"
+    User ||--o{ AuditLog : "is actor of"
+    User }o--o| ParkingSpot : "prefers (nullable, SET NULL)"
+    ParkingSpot ||--o{ Reservation : "is reserved via"
+    ParkingSpot ||--o{ WaitlistEntry : "has a waitlist of"
 
     User {
         uuid id PK
@@ -67,7 +70,7 @@ erDiagram
         uuid id PK
         uuid parkingSpotId FK
         uuid userId FK
-        date date "UK s parkingSpotId, UK s userId"
+        date date "UK with parkingSpotId, UK with userId"
         timestamptz createdAt
     }
 
@@ -75,7 +78,7 @@ erDiagram
         uuid id PK
         uuid parkingSpotId FK
         uuid userId FK
-        date date "UK s parkingSpotId+userId"
+        date date "UK with parkingSpotId+userId"
         timestamptz createdAt
     }
 
@@ -90,128 +93,144 @@ erDiagram
     }
 
     ReservationWindowSettings {
-        int id PK "vždy 1 (CHECK)"
+        int id PK "always 1 (CHECK)"
         int openDaysBefore "CHECK 1..31"
         ReservationLockMode lockMode "AUTO | FORCE_OPEN | FORCE_LOCKED"
         timestamptz updatedAt
     }
 ```
 
-`ReservationWindowSettings` v diagramu stojí bokem – nemá vazbu na nic, je to
-globální nastavení (viz `doc/decision/0004-*`).
+`ReservationWindowSettings` stands off to the side in the diagram – it has no
+relationship to anything; it's a global setting (see `doc/decision/0004-*`).
 
 ---
 
-## Constrainty, na kterých stojí rezervační logika
+## Constraints the reservation logic stands on
 
-Tyhle indexy nejsou optimalizace, ale **byznys pravidla vynucená databází**. Bez nich
-je souběžný zápis dvou requestů schopný vytvořit dvojitou rezervaci, ať je aplikační
-kód jakkoliv opatrný.
+These indexes aren't optimizations, they're **business rules enforced by the
+database**. Without them, a concurrent write from two requests can produce a
+double booking no matter how careful the application code is.
 
-| constraint | co garantuje |
+| constraint | what it guarantees |
 | --- | --- |
-| `Reservation (parkingSpotId, date)` UNIQUE | jedno místo na jeden den má nejvýš jednu rezervaci; porušení (`P2002`) mapuje Task 10 na kontraktovou chybu `SPOT_ALREADY_RESERVED` |
-| `Reservation (userId, date)` UNIQUE | jeden uživatel má na jeden den nejvýš jednu rezervaci |
-| `WaitlistEntry (parkingSpotId, userId, date)` UNIQUE | do stejné fronty se nedá přihlásit dvakrát |
-| `User.email`, `User.oktaId`, `User.icsToken` UNIQUE | přihlášení přes Okta i ICS feed musí najít právě jednoho uživatele; `oktaId` je klíč, podle kterého se provisionuje |
-| `ParkingSpot.label` UNIQUE | popisek je přirozený klíč místa (a klíč, na který upsertuje seed) |
-| `ReservationWindowSettings` `CHECK (id = 1)` | singleton – viz níže |
-| `ReservationWindowSettings` `CHECK (openDaysBefore BETWEEN 1 AND 31)` | zrcadlí `MIN_OPEN_DAYS_BEFORE`/`MAX_OPEN_DAYS_BEFORE` z kontraktu |
-| trigger `AuditLog_append_only` | `UPDATE`/`DELETE` nad `AuditLog` skončí výjimkou |
+| `Reservation (parkingSpotId, date)` UNIQUE | one spot has at most one reservation per day; a violation (`P2002`) is mapped by Task 10 onto the contract error `SPOT_ALREADY_RESERVED` |
+| `Reservation (userId, date)` UNIQUE | one user has at most one reservation per day |
+| `WaitlistEntry (parkingSpotId, userId, date)` UNIQUE | can't join the same waitlist twice |
+| `User.email`, `User.oktaId`, `User.icsToken` UNIQUE | Okta login and the ICS feed must each resolve to exactly one user; `oktaId` is the key used for provisioning |
+| `ParkingSpot.label` UNIQUE | the label is the spot's natural key (and the key the seed upserts on) |
+| `ReservationWindowSettings` `CHECK (id = 1)` | the singleton – see below |
+| `ReservationWindowSettings` `CHECK (openDaysBefore BETWEEN 1 AND 31)` | mirrors `MIN_OPEN_DAYS_BEFORE`/`MAX_OPEN_DAYS_BEFORE` from the contract |
+| the `AuditLog_append_only` trigger | `UPDATE`/`DELETE` on `AuditLog` throws an exception |
 
-Indexy navíc: `Reservation(date)` a `WaitlistEntry(date)` (denní přehled parkoviště),
-`WaitlistEntry(parkingSpotId, date, createdAt, id)` (kdo je další ve frontě),
-`AuditLog(createdAt)`, `AuditLog(actorUserId)`, `AuditLog(entityType, entityId)`
-(filtrování v adminu), `User(preferredParkingSpotId)` (aby `ON DELETE SET NULL`
-nemuselo sekvenčně číst celou tabulku).
+Additional indexes: `Reservation(date)` and `WaitlistEntry(date)` (the daily
+parking-lot overview), `WaitlistEntry(parkingSpotId, date, createdAt, id)`
+(who's next on the waitlist), `AuditLog(createdAt)`, `AuditLog(actorUserId)`,
+`AuditLog(entityType, entityId)` (filtering in the admin UI),
+`User(preferredParkingSpotId)` (so `ON DELETE SET NULL` doesn't have to
+sequentially scan the whole table).
 
-**Chování cizích klíčů** je explicitní všude, ne default:
+**Foreign-key behavior** is explicit everywhere, never the default:
 
-- `User.preferredParkingSpotId` → `ON DELETE SET NULL`. Preference je pohodlí, ne
-  závazek: zrušení místa nesmí uživatele smazat ani zablokovat.
-- všechny ostatní FK → `ON DELETE RESTRICT`. Uživatele ani místo, na které visí
-  rezervace nebo audit záznam, nejde smazat; místo mazání se deaktivují
-  (`active = false`).
-
----
-
-## Proč je `date` sloupec typu `DATE`
-
-Rezervační den je kalendářní den v `Europe/Prague`, ne okamžik. `TIMESTAMP` by ho
-zakotvil do časové zóny a den by se v závislosti na zóně klienta i serveru posouval –
-přesně ta třída chyb, kterou Task 3 celý řešil v `libs/shared-types`
-(`doc/decision/0013-kalendarni-aritmetika-a-jedina-hranice-casove-zony.md`).
-V kontraktu je to `z.iso.date()` (`YYYY-MM-DD`), v Postgresu `DATE`, a **jediné**
-místo, kde se převádí, je servisní vrstva v Tasku 10.
-
-Prisma sloupec `DATE` v TypeScriptu typuje jako `Date` (půlnoc UTC). Test
-`schema-contract-parity.spec.ts` proto přímo tvrdí, že storage je `Date` a kontrakt
-`string` – aby nikdo nepředal `Date` rovnou do odpovědi typované kontraktem.
+- `User.preferredParkingSpotId` → `ON DELETE SET NULL`. A preference is a
+  convenience, not a commitment: removing a spot must not delete or block the
+  user.
+- every other FK → `ON DELETE RESTRICT`. A user or a spot with a reservation
+  or an audit record attached to it cannot be deleted; instead they're
+  deactivated (`active = false`).
 
 ---
 
-## Singleton `ReservationWindowSettings`
+## Why the `date` column is type `DATE`
 
-Tabulka má mít **právě jeden řádek**. Vynucení:
+The reservation day is a calendar day in `Europe/Prague`, not an instant.
+`TIMESTAMP` would anchor it to a timezone, and the day would shift depending
+on the client's and the server's zone – exactly the class of bug Task 3's
+work in `libs/shared-types` addressed
+(`doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary.md`). In
+the contract it's `z.iso.date()` (`YYYY-MM-DD`); in Postgres it's `DATE`; and
+the **only** place the conversion happens is the service layer in Task 10.
+
+Prisma types a `DATE` column as `Date` in TypeScript (UTC midnight). The test
+`schema-contract-parity.spec.ts` therefore directly asserts that storage is
+`Date` and the contract is `string` – so nobody passes a `Date` straight into
+a contract-typed response.
+
+---
+
+## The `ReservationWindowSettings` singleton
+
+The table is meant to hold **exactly one row**. Enforcement:
 
 ```sql
 ALTER TABLE "ReservationWindowSettings"
   ADD CONSTRAINT "ReservationWindowSettings_singleton_check" CHECK ("id" = 1);
 ```
 
-`id` je `INTEGER` s `DEFAULT 1` a primárním klíčem. Dohromady to dává:
-primární klíč zakazuje **druhý** řádek s `id = 1`, `CHECK` zakazuje **jakékoliv jiné**
-`id`. Víc než jeden řádek tedy v tabulce být nemůže, a to nezávisle na tom, kdo do ní
-píše – aplikace, `psql`, Adminer, budoucí migrace.
+`id` is an `INTEGER` with `DEFAULT 1` and is the primary key. Together, this
+means: the primary key forbids a **second** row with `id = 1`, and the `CHECK`
+forbids **any other** `id`. So the table can never hold more than one row,
+regardless of who writes to it – the application, `psql`, Adminer, a future
+migration.
 
-**Proč ne jinak:**
+**Why not some other approach:**
 
-- *„Aplikace zapisuje jen jeden řádek."* To není vynucení, to je zvyk. První skript,
-  který se splete, tabulku rozdvojí a čtení začne vracet náhodný řádek.
-- *Partial unique index* (`CREATE UNIQUE INDEX … ON t ((true))`) funguje taky, ale je
-  to okluznější zápis téhož a Prisma ho ve schématu neumí vyjádřit o nic líp.
-- *`@@unique` nad konstantním sloupcem* by znamenal sloupec navíc, který nic neznamená.
+- *"The application only ever writes one row."* That's not enforcement,
+  that's a habit. The first script with a bug splits the table in two, and
+  reads start returning a random row.
+- *A partial unique index* (`CREATE UNIQUE INDEX … ON t ((true))`) also works,
+  but it's a more obscure way of writing the same thing, and Prisma's schema
+  language expresses it no better.
+- *`@@unique` over a constant column* would mean an extra column that means
+  nothing.
 
-**Proč `id` není UUID.** `doc/decision/0016-*` říká, že identifikátory **entit** jsou
-UUID, protože chodí v URL a v realtime payloadech. Tenhle `id` nikam nechodí:
-`reservationWindowSettingsSchema` v kontraktu žádné `id` nemá, API čte a zapisuje
-nastavení bez identifikátoru. Fixní `1` je tedy interní detail úložiště, ne porušení
-0016 – a je to jediná varianta, ve které `CHECK` může být tak triviální.
+**Why `id` isn't a UUID.** `doc/decision/0016-*` says **entity** identifiers
+are UUIDs, because they travel in URLs and realtime payloads. This `id` goes
+nowhere: the contract's `reservationWindowSettingsSchema` has no `id` at all —
+the API reads and writes the settings with no identifier. The fixed `1` is
+therefore an internal storage detail, not a violation of 0016 – and it's the
+only variant where the `CHECK` can stay this trivial.
 
-Řádek zakládá **migrace**, ne seed (`INSERT … ON CONFLICT DO NOTHING` na konci
-`migration.sql`). Tabulka totiž nesmí být nikdy prázdná – čte ji každá rezervační
-cesta – a `prisma db seed` se v produkci nepouští. Seed hodnoty pro jistotu ještě
-upsertuje, aby se ručně rozhrabaná dev databáze vrátila do známého stavu.
+The row is created by a **migration**, not a seed (`INSERT … ON CONFLICT DO
+NOTHING` at the end of `migration.sql`). The table must never be empty –
+every reservation path reads it – and `prisma db seed` doesn't run in
+production. The seed values still upsert it for good measure, so a
+manually messed-up dev database returns to a known state.
 
-Podrobněji: `doc/decision/0026-singleton-nastaveni-vynuceny-check-constraintem.md`.
+More detail: `doc/decision/0026-singleton-settings-enforced-by-check-constraint.md`.
 
 ---
 
-## Hard delete + `AuditLog` místo soft delete
+## Hard delete + `AuditLog` instead of soft delete
 
-Zrušení rezervace **maže řádek** a zapisuje záznam do `AuditLog`. Soft delete
-(`deletedAt`) se nepoužívá.
+Cancelling a reservation **deletes the row** and writes a record into
+`AuditLog`. Soft delete (`deletedAt`) is not used.
 
-**Proč:**
+**Why:**
 
-1. **Unikátní index musí platit.** `Reservation (parkingSpotId, date)` je to jediné, co
-   brání dvojité rezervaci. Se soft delete by v tabulce zůstal „zrušený" řádek a index
-   by na to místo ten den už nikoho nepustil. Šlo by to obejít částečným indexem
-   (`WHERE "deletedAt" IS NULL`), ale tím se z jednoduché garance stává něco, co musí
-   mít každý dotaz na paměti — a co jednou někdo zapomene.
-2. **Každý dotaz by musel filtrovat.** „Kdo dnes parkuje" se ptá na živé rezervace.
-   Soft delete přidává `WHERE "deletedAt" IS NULL` do každého dotazu, joinu i agregace;
-   jedno zapomenuté místo znamená tichou chybu v datech, ne pád.
-3. **Historii stejně potřebujeme jinde.** Audit má odpovídat na „kdo, co, kdy a s jakým
-   payloadem", tedy i na akce, které žádný řádek nemažou (`USER_UPDATED`,
-   `SPOT_UPDATED`, `WAITLIST_PROMOTED`). `AuditLog` to umí celé; soft delete pokrývá
-   jen mazání, takže by se vedle auditu udržoval druhý, poloviční záznam historie.
-4. **Mazání smí být skutečné jen tam, kde je bezpečné.** Uživatelé ani místa se
-   nemažou vůbec – deaktivují se (`active = false`), právě aby FK a audit zůstaly
-   platné. Hard delete se týká jen rezervací a položek fronty, což jsou krátkodobé,
-   datem ohraničené záznamy.
+1. **The unique index has to hold.** `Reservation (parkingSpotId, date)` is
+   the only thing preventing a double booking. With soft delete, a
+   "cancelled" row would stay in the table, and the index would then block
+   anyone else from taking that spot that day. This could be worked around
+   with a partial index (`WHERE "deletedAt" IS NULL`), but that turns a
+   simple guarantee into something every query has to remember — and
+   something someone eventually forgets.
+2. **Every query would have to filter.** "Who's parking today" asks about
+   live reservations. Soft delete adds `WHERE "deletedAt" IS NULL` to every
+   query, join, and aggregate; one forgotten spot means a silent data bug,
+   not a crash.
+3. **We need the history elsewhere anyway.** The audit trail has to answer
+   "who, what, when, and with what payload", including for actions that
+   delete no row at all (`USER_UPDATED`, `SPOT_UPDATED`, `WAITLIST_PROMOTED`).
+   `AuditLog` covers all of it; soft delete covers only deletion, so a second,
+   partial history would end up maintained alongside the audit log.
+4. **Deletion may only be real where it's safe.** Users and spots are never
+   deleted at all – they're deactivated (`active = false`), precisely so
+   FKs and the audit log stay valid. Hard delete applies only to
+   reservations and waitlist entries, which are short-lived, date-bounded
+   records.
 
-**`AuditLog` je proto append-only** a je to vynucené databází, ne konvencí:
+**That's why `AuditLog` is append-only**, and it's enforced by the database,
+not by convention:
 
 ```sql
 CREATE TRIGGER "AuditLog_append_only"
@@ -219,143 +238,150 @@ CREATE TRIGGER "AuditLog_append_only"
   FOR EACH ROW EXECUTE FUNCTION "auditlog_reject_mutation"();
 ```
 
-Funkce vyhodí výjimku s `ERRCODE = 'restrict_violation'`. Konvence by tady nestačila:
-audit je jediný záznam o tom, že rezervace vůbec existovala, takže omylem spuštěný
-`UPDATE` ničí důkaz, který se nemá odkud obnovit — a k tabulce se dá dostat i mimo
-aplikaci. Trigger to zastaví ve všech případech.
+The function throws an exception with `ERRCODE = 'restrict_violation'`.
+Convention wouldn't be enough here: the audit log is the only record that a
+reservation ever existed at all, so an accidental `UPDATE` destroys evidence
+that has nowhere to be restored from — and the table is reachable outside the
+application too. The trigger stops it in every case.
 
-Cena: opravit překlep v `payload` nejde – jde jen připsat nový záznam. To je záměr.
+The cost: a typo in `payload` can't be fixed – only a new record can be
+appended. That's deliberate.
 
-Podrobněji: `doc/decision/0027-hard-delete-a-append-only-auditlog.md`.
+More detail: `doc/decision/0027-hard-delete-and-append-only-auditlog.md`.
 
 ---
 
-## Kde se úložiště liší od kontraktu
+## Where storage differs from the contract
 
-Všechno ostatní je 1:1 (a hlídá to `libs/database/src/lib/schema-contract-parity.spec.ts`).
+Everything else is 1:1 (and guarded by
+`libs/database/src/lib/schema-contract-parity.spec.ts`).
 
-| pole | kontrakt (drát) | úložiště | proč |
+| field | contract (wire) | storage | why |
 | --- | --- | --- | --- |
-| `AuditLog.payload` | `Record<string, unknown>` | `JSONB` (`Prisma.JsonValue`) | tvar payloadu závisí na `action`; strukturovaný sloupec by musel být union šesti tvarů. `JsonValue` navíc připouští JSON hodnotu `null`, i když sloupec je `NOT NULL` – to je vlastnost JSONu, ne nullable sloupec |
-| `Reservation.date`, `WaitlistEntry.date` | `string` (`YYYY-MM-DD`) | `DATE` → `Date` | viz sekce o `DATE` výše |
-| `*.createdAt`, `*.updatedAt` | `string` (ISO 8601, `doc/decision/0015-*`) | `TIMESTAMPTZ(3)` → `Date` | kontrakt je transport-neutrální; databáze ukládá okamžik včetně zóny |
-| `ReservationWindowSettings.id`, `.updatedAt` | neexistuje | `INTEGER` / `TIMESTAMPTZ(3)` | singleton se přes API neadresuje – viz sekce výše |
-| `User.role`, `ParkingSpot.active`, … | bez defaultu | s `DEFAULT` | defaulty v databázi jsou pojistka, hodnoty se nemění |
+| `AuditLog.payload` | `Record<string, unknown>` | `JSONB` (`Prisma.JsonValue`) | the payload's shape depends on `action`; a structured column would have to be a union of six shapes. `JsonValue` also allows the JSON value `null`, even though the column is `NOT NULL` – that's a property of JSON, not a nullable column |
+| `Reservation.date`, `WaitlistEntry.date` | `string` (`YYYY-MM-DD`) | `DATE` → `Date` | see the section on `DATE` above |
+| `*.createdAt`, `*.updatedAt` | `string` (ISO 8601, `doc/decision/0015-*`) | `TIMESTAMPTZ(3)` → `Date` | the contract is transport-neutral; the database stores an instant including the zone |
+| `ReservationWindowSettings.id`, `.updatedAt` | doesn't exist | `INTEGER` / `TIMESTAMPTZ(3)` | the singleton isn't addressed through the API – see the section above |
+| `User.role`, `ParkingSpot.active`, … | no default | with `DEFAULT` | database defaults are a safeguard; the values don't change |
 
-Identifikátory jsou **UUID v7** (`@default(uuid(7))`, sloupec `UUID`). Kontrakt verzi
-nevynucuje (`z.uuid()`, `doc/decision/0016-*`), v7 je zvolené kvůli monotónnímu
-prefixu – zápis na primární klíč má lepší lokalitu než náhodná v4. Generuje je Prisma
-Client, ne databáze; ruční `INSERT` v SQL proto musí `id` dodat sám (dělá to i seed
-řádek v migraci, jen tam je `id` fixní jednička).
-Podrobněji: `doc/decision/0025-uuid-v7-jako-primarni-klic.md`.
+Identifiers are **UUID v7** (`@default(uuid(7))`, a `UUID` column). The
+contract doesn't enforce a version (`z.uuid()`, `doc/decision/0016-*`); v7 was
+chosen for its monotonic prefix – writes to the primary key get better
+locality than a random v4. They're generated by the Prisma Client, not the
+database; a manual SQL `INSERT` therefore has to supply `id` itself (the seed
+row in the migration does this too, just with a fixed `1`).
+More detail: `doc/decision/0025-uuid-v7-as-primary-key.md`.
 
 ---
 
-## Jak se to pouští
+## How to run it
 
-Předpoklad: běží `postgres` z `docker-compose.yml` a v rootu je `.env` s
-`DATABASE_URL` (viz `doc/prostredi.md`).
+Prerequisite: `postgres` from `docker-compose.yml` is running, and there's a
+root `.env` with `DATABASE_URL` (see `doc/environment.md`).
 
 ```bash
 docker compose up -d postgres
-cp .env.example .env      # jednou
+cp .env.example .env      # once
 ```
 
-Všechny příkazy se pouští **z rootu repa** – `prisma.config.ts` si cesty do
-`libs/database` dohledá sama.
+Every command runs **from the repo root** – `prisma.config.ts` resolves the
+paths into `libs/database` itself.
 
-| příkaz | co dělá |
+| command | what it does |
 | --- | --- |
-| `npx prisma validate` | ověří schéma (bez databáze) |
-| `npx prisma format` | naformátuje `schema.prisma` (bez databáze) |
-| `npx prisma generate` | přegeneruje klienta do `libs/database/src/generated/prisma` (bez databáze) |
-| `npx prisma migrate dev --name <jmeno>` | dev: vytvoří novou migraci a aplikuje ji |
-| `npx prisma migrate deploy` | produkce/CI: aplikuje existující migrace, nic negeneruje |
-| `npx prisma migrate status` | co je aplikované a co chybí |
-| `npx prisma db seed` | spustí `libs/database/src/scripts/seed.ts` |
-| `npx prisma studio` | prohlížeč dat (dev) |
+| `npx prisma validate` | validates the schema (no database needed) |
+| `npx prisma format` | formats `schema.prisma` (no database needed) |
+| `npx prisma generate` | regenerates the client into `libs/database/src/generated/prisma` (no database needed) |
+| `npx prisma migrate dev --name <name>` | dev: creates a new migration and applies it |
+| `npx prisma migrate deploy` | production/CI: applies existing migrations, generates nothing |
+| `npx prisma migrate status` | what's applied and what's missing |
+| `npx prisma db seed` | runs `libs/database/src/scripts/seed.ts` |
+| `npx prisma studio` | a data browser (dev) |
 
-Typický první běh:
+A typical first run:
 
 ```bash
 npx prisma migrate deploy
 npx prisma db seed
 ```
 
-### Past: ručně psané SQL a `migrate dev`
+### Trap: hand-written SQL and `migrate dev`
 
-Konec `migration.sql` obsahuje SQL, které Prisma ze schématu neumí odvodit
-(`CHECK` constrainty, trigger, `INSERT` singletonu). `prisma migrate dev` porovnává
-stav po aplikaci migrací proti `schema.prisma`, takže tyhle objekty vidí jako „drift"
-a do nové migrace by navrhl jejich **zrušení**.
+The end of `migration.sql` contains SQL that Prisma can't derive from the
+schema (the `CHECK` constraints, the trigger, the singleton `INSERT`).
+`prisma migrate dev` compares the post-migration state against
+`schema.prisma`, so it sees these objects as "drift" and would propose
+**dropping** them in a new migration.
 
-Postup při každé další změně schématu:
+The procedure for every subsequent schema change:
 
 ```bash
-npx prisma migrate dev --create-only --name <jmeno>   # jen vygeneruje SQL
-# → otevři vygenerovaný migration.sql a smaž z něj případné
+npx prisma migrate dev --create-only --name <name>   # only generates the SQL
+# → open the generated migration.sql and delete any
 #   DROP CONSTRAINT ...singleton_check / ...range_check / DROP TRIGGER
-npx prisma migrate dev                                 # teď to aplikuj
+npx prisma migrate dev                                 # now apply it
 ```
 
-Když se ručně psané SQL někdy rozroste, je alternativou přesunout ho do samostatné
-„always-run" migrace; dokud jsou to tři objekty, je tenhle postup levnější než další
-vrstva nástrojů.
+If the hand-written SQL ever grows, an alternative is to move it into a
+separate "always-run" migration; as long as it's three objects, this
+procedure is cheaper than another layer of tooling.
 
 ### Seed
 
-Seed je **idempotentní** – každý zápis je `upsert` na přirozený klíč (`label`,
-`email`, `id = 1`), nic nemaže. Dá se pustit opakovaně i nad částečně naplněnou
-databází.
+The seed is **idempotent** – every write is an `upsert` on a natural key
+(`label`, `email`, `id = 1`), nothing is deleted. It can be run repeatedly,
+even against a partially populated database.
 
-Co zakládá:
+What it creates:
 
-- **Parkovací místa** podle reálného layoutu: `E2.92`–`E2.95` (skupina `IT`),
-  `E2.96`, `E2.65`, `E2.66`, `E2.61`, `E2.62` (skupina `SHARED`).
-- **Dev uživatele** `admin@example.com` (ADMIN), `user@example.com`,
-  `user2@example.com` a `inactive@example.com` (deaktivovaný, kvůli testování
-  offboardingu). Adresy jsou schválně na `example.com` – v repu nesmí být nic, co
-  vypadá jako skutečná identita (stejná konvence jako v `.env.example`).
-- **Nastavení rezervačního okna** `openDaysBefore = 7`, `lockMode = AUTO`.
+- **Parking spots** matching the real layout: `E2.92`–`E2.95` (group `IT`),
+  `E2.96`, `E2.65`, `E2.66`, `E2.61`, `E2.62` (group `SHARED`).
+- **Dev users** `admin@example.com` (ADMIN), `user@example.com`,
+  `user2@example.com`, and `inactive@example.com` (deactivated, for testing
+  offboarding). The addresses are deliberately on `example.com` – nothing in
+  the repo may look like a real identity (the same convention as in
+  `.env.example`).
+- **Reservation window settings**: `openDaysBefore = 7`, `lockMode = AUTO`.
 
-Rezervace ani položky fronty se neseedují: jsou vázané na datum a v okamžiku, kdy je
-někdo spustí, by už byly v minulosti.
+Reservations and waitlist entries aren't seeded: they're bound to a date, and
+by the time anyone runs the seed, they'd already be in the past.
 
-**Jak se přihlásit za seedovaného uživatele.** `mock-oauth2-server` běží bez
-namountovaného `JSON_CONFIG`, takže jeho přihlašovací formulář přijme libovolný
-`sub`. Pole `oktaId` v seedu je hodnota, kterou má vývojář do formuláře napsat, aby
-padl na konkrétní účet: `dev-admin`, `dev-user`, `dev-user-2`, `dev-inactive`.
-Až Task 12 doplní provisioning, bude tohle jediná vazba mezi mock OIDC a databází.
+**How to sign in as a seeded user.** `mock-oauth2-server` runs without a
+mounted `JSON_CONFIG`, so its login form accepts any `sub`. The seed's
+`oktaId` field is the value a developer types into that form to land on a
+specific account: `dev-admin`, `dev-user`, `dev-user-2`, `dev-inactive`. Once
+Task 12 adds provisioning, this will be the only link between the mock OIDC
+server and the database.
 
 ---
 
-## Zálohy
+## Backups
 
-Jednoinstanční nasazení, žádný managed backup – záloha je `pg_dump`.
+A single-instance deployment, no managed backup – the backup is `pg_dump`.
 
 ```bash
-# plná záloha (custom formát, komprimovaný; nejlepší pro pg_restore)
+# full backup (custom format, compressed; best for pg_restore)
 pg_dump "$DATABASE_URL" --format=custom --file=lets-park-$(date +%F).dump
 
-# jen data, bez schématu (schéma umí obnovit migrace)
+# data only, no schema (migrations can restore the schema)
 pg_dump "$DATABASE_URL" --format=custom --data-only --file=lets-park-data-$(date +%F).dump
 
-# obnova do prázdné databáze
+# restore into an empty database
 pg_restore --dbname="$DATABASE_URL" --clean --if-exists lets-park-2026-08-28.dump
 ```
 
-Z běžícího kontejneru bez lokálního `pg_dump`:
+From a running container with no local `pg_dump`:
 
 ```bash
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   --format=custom > lets-park-$(date +%F).dump
 ```
 
-Poznámky:
+Notes:
 
-- Obnovujte do databáze, kde už proběhlo `prisma migrate deploy`, a použijte
-  `--data-only`; jinak se `pg_restore` pere s existujícím schématem.
-- Trigger `AuditLog_append_only` **nebrání** obnově: `pg_restore` dělá `INSERT`/`COPY`,
-  ne `UPDATE`.
-- Tabulka `_prisma_migrations` je součástí dumpu. Při plné obnově se tím přenese
-  i historie migrací, což je žádoucí.
+- Restore into a database where `prisma migrate deploy` has already run, and
+  use `--data-only`; otherwise `pg_restore` fights with the existing schema.
+- The `AuditLog_append_only` trigger **does not block** a restore:
+  `pg_restore` uses `INSERT`/`COPY`, not `UPDATE`.
+- The `_prisma_migrations` table is part of the dump. A full restore therefore
+  also carries over the migration history, which is desirable.
