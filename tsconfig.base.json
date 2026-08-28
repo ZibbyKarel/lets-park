@@ -23,7 +23,8 @@
       "@lets-park/contract/realtime": ["./libs/contract/src/realtime/index.ts"],
       "@lets-park/design-system-primitives": ["./libs/design-system/primitives/src/index.ts"],
       "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"],
-      "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"]
+      "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"],
+      "@lets-park/i18n": ["./libs/i18n/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

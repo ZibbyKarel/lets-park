@@ -168,6 +168,11 @@ const NPM_ALLOWLIST = {
     'next',
     'next/*',
     ...Object.keys(WRAPPED_LIBRARIES).flatMap((pkg) => [pkg, `${pkg}/*`]),
+    // Test-only, same reasoning as `ui` above: the boundary rule cannot tell
+    // a spec file from a shipped one, so these have to be allowed for the
+    // whole tag. Needed by `libs/i18n`'s component test (`IntlProvider`).
+    '@testing-library/react',
+    '@testing-library/jest-dom',
   ],
 
   /**
