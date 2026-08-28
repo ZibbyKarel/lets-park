@@ -1,4 +1,36 @@
+import { fontStack } from './typography';
 import type { DesignTokens } from './tokens';
+
+/**
+ * Emits `var(--target)` for a token that `colors_and_type.css` defines as an
+ * alias of another token rather than as a literal value.
+ *
+ * The TS token objects hold resolved values (`SURFACE_COLORS.bg` is the string
+ * `#FFFFFF`, not a reference), so without this the generator would flatten the
+ * source's alias chains to literals. The chains are semantically load-bearing —
+ * re-pointing `--bg` at a different neutral is how a future theme is built, and
+ * that only works if consumers inherit the reference. So the alias is emitted,
+ * and this guard proves the two sides still agree: if someone changes
+ * `SURFACE_COLORS.bg` without changing `NEUTRAL_COLORS[0]`, generation throws
+ * instead of silently writing `--bg: var(--neutral-0)` for a token that no
+ * longer holds that value.
+ *
+ * @param targetProperty the aliased custom property, e.g. `--neutral-0`
+ * @param targetValue    the current TS value of that property
+ * @param aliasValue     the current TS value of the token being emitted
+ */
+function alias(targetProperty: string, targetValue: string, aliasValue: string): string {
+  if (targetValue !== aliasValue) {
+    throw new Error(
+      `Token alias drift: colors_and_type.css defines this token as ` +
+        `var(${targetProperty}), but its TS value ${JSON.stringify(aliasValue)} no longer ` +
+        `equals ${JSON.stringify(targetValue)}. Either restore the values or stop ` +
+        `emitting it as an alias.`
+    );
+  }
+
+  return `var(${targetProperty})`;
+}
 
 /**
  * Renders `DESIGN_TOKENS` to the CSS custom-property file the design system
@@ -11,7 +43,17 @@ import type { DesignTokens } from './tokens';
  * `generate-css.spec.ts` (to prove the written file is still current).
  */
 export function generateTokensCss(tokens: DesignTokens): string {
-  const { colors, carColorPalette, typography, spacing, radius, shadows, motion, layout } = tokens;
+  const {
+    colors,
+    carColorPalette,
+    typography,
+    spacing,
+    radius,
+    shadows,
+    motion,
+    layout,
+    controls,
+  } = tokens;
   const { brand, neutral, surface, fg, line, status } = colors;
   const { families, faces, fontSize, lineHeight, letterSpacing } = typography;
 
@@ -27,9 +69,8 @@ export function generateTokensCss(tokens: DesignTokens): string {
     )
     .join('\n');
 
-  const quoteIfMultiWord = (name: string) => (name.includes(' ') ? `"${name}"` : name);
-  const fontSansValue = families.sans.map(quoteIfMultiWord).join(', ');
-  const fontMonoValue = families.mono.map(quoteIfMultiWord).join(', ');
+  const fontSansValue = fontStack(families.sans);
+  const fontMonoValue = fontStack(families.mono);
 
   const rootBlock = `:root {
   /* --- Brand color palette --- */
@@ -46,7 +87,7 @@ export function generateTokensCss(tokens: DesignTokens): string {
   --brand-green-700: ${brand.green700};
   --brand-yellow-700: ${brand.yellow700};
 
-  --brand-blue-100: ${brand.blue100};
+  --brand-blue-100: ${alias('--brand-light', brand.light, brand.blue100)};
   --brand-green-100: ${brand.green100};
   --brand-yellow-100: ${brand.yellow100};
 
@@ -65,30 +106,30 @@ export function generateTokensCss(tokens: DesignTokens): string {
   --neutral-950: ${neutral[950]};
 
   /* --- Semantic surfaces --- */
-  --bg: ${surface.bg};
-  --bg-soft: ${surface.bgSoft};
-  --bg-muted: ${surface.bgMuted};
-  --bg-inverse: ${surface.bgInverse};
+  --bg: ${alias('--neutral-0', neutral[0], surface.bg)};
+  --bg-soft: ${alias('--neutral-50', neutral[50], surface.bgSoft)};
+  --bg-muted: ${alias('--neutral-100', neutral[100], surface.bgMuted)};
+  --bg-inverse: ${alias('--brand-dark', brand.dark, surface.bgInverse)};
 
   /* --- Semantic foreground --- */
-  --fg: ${fg.fg};
-  --fg-2: ${fg.fg2};
-  --fg-3: ${fg.fg3};
-  --fg-on-yellow: ${fg.onYellow};
-  --fg-on-green: ${fg.onGreen};
-  --fg-on-blue: ${fg.onBlue};
-  --fg-on-light: ${fg.onLight};
-  --fg-on-dark: ${fg.onDark};
+  --fg: ${alias('--text', brand.text, fg.fg)};
+  --fg-2: ${alias('--neutral-700', neutral[700], fg.fg2)};
+  --fg-3: ${alias('--neutral-500', neutral[500], fg.fg3)};
+  --fg-on-yellow: ${alias('--brand-dark', brand.dark, fg.onYellow)};
+  --fg-on-green: ${alias('--neutral-0', neutral[0], fg.onGreen)};
+  --fg-on-blue: ${alias('--neutral-0', neutral[0], fg.onBlue)};
+  --fg-on-light: ${alias('--brand-dark', brand.dark, fg.onLight)};
+  --fg-on-dark: ${alias('--neutral-0', neutral[0], fg.onDark)};
 
   /* --- Lines --- */
-  --border: ${line.border};
-  --border-strong: ${line.borderStrong};
-  --divider: ${line.divider};
+  --border: ${alias('--neutral-200', neutral[200], line.border)};
+  --border-strong: ${alias('--neutral-300', neutral[300], line.borderStrong)};
+  --divider: ${alias('--neutral-100', neutral[100], line.divider)};
 
   /* --- Status --- */
-  --success: ${status.success};
-  --info: ${status.info};
-  --warning: ${status.warning};
+  --success: ${alias('--brand-green', brand.green, status.success)};
+  --info: ${alias('--brand-blue', brand.blue, status.info)};
+  --warning: ${alias('--brand-yellow', brand.yellow, status.warning)};
   --danger: ${status.danger};
   --danger-100: ${status.danger100};
 
@@ -152,7 +193,7 @@ export function generateTokensCss(tokens: DesignTokens): string {
   --radius-lg: ${radius.lg};
   --radius-xl: ${radius.xl};
   --radius-cta: ${radius.cta};
-  --radius-pill: ${radius.pill};
+  --radius-pill: ${alias('--radius-cta', radius.cta, radius.pill)};
 
   /* --- Shadows --- */
   --shadow-xs: ${shadows.xs};
@@ -172,6 +213,20 @@ export function generateTokensCss(tokens: DesignTokens): string {
   /* --- Layout --- */
   --container: ${layout.container.base};
   --container-wide: ${layout.container.wide};
+
+  /* --- Controls ---
+     DERIVED from lets-park-design.dc.html, NOT from colors_and_type.css —
+     see controls.ts and doc/decision/0011-*. */
+  --control-h-sm: ${controls.height.sm};
+  --control-h-md: ${controls.height.md};
+  --control-h-lg: ${controls.height.lg};
+  --control-h-xl: ${controls.height.xl};
+
+  --switch-w: ${controls.switch.trackWidth};
+  --switch-h: ${controls.switch.trackHeight};
+  --switch-pad: ${controls.switch.trackPadding};
+  --switch-knob: ${controls.switch.knobSize};
+  --switch-knob-shadow: ${controls.switch.knobShadow};
 }`;
 
   return `/* ============================================================

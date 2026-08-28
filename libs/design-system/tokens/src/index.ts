@@ -3,6 +3,7 @@ export * from './lib/car-palette';
 export * from './lib/typography';
 export * from './lib/spacing';
 export * from './lib/radius';
+export * from './lib/controls';
 export * from './lib/shadows';
 export * from './lib/motion';
 export * from './lib/layout';

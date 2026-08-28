@@ -22,6 +22,10 @@ libs/
                                       tagy: type:util,     scope:shared
   contract/     Zod schémata + (od Tasku 4) oRPC kontrakt
                                       tagy: type:contract, scope:shared
+  design-system/
+    tokens/     design tokeny + Tailwind v4 bridge   tagy: type:ui, scope:web, ds:tokens
+    primitives/ primitivy + Storybook 10             tagy: type:ui, scope:web, ds:primitives
+  (zbytek vzniká v dalších úkolech – plánované tagy níže)
 doc/            dokumentace, rozhodnutí, export vizuálního designu
 ```
 
@@ -60,6 +64,15 @@ E2e testy nejsou součástí `npm run test`, spouští se cíleně:
 ```bash
 npx nx run web-e2e:e2e      # Playwright; dev server si nastartuje sám
 npx nx run api-e2e:e2e      # Jest; nastartuje si api:serve
+```
+
+Stejně tak **Storybook není součástí `npm run build`** – do CI se musí přidat
+zvlášť (`nx run-many -t build-storybook`), jinak se rozbitá story pozná až
+ručně:
+
+```bash
+npx nx run design-system-primitives:storybook         # dev server, port 4400
+npx nx run design-system-primitives:build-storybook   # statický build
 ```
 
 Užitečné jednotlivé cíle:

@@ -3,19 +3,50 @@
  * heights and letter spacing. 1:1 with `doc/design/ds/colors_and_type.css`.
  */
 
+/**
+ * One entry in a `font-family` stack.
+ *
+ * `quoted` is copied per entry from the source CSS, never derived from the
+ * name. No rule reproduces `colors_and_type.css`: it quotes `"Arial"` and
+ * `"Inter"` (single words) but leaves `Menlo` (also a single word) bare, and
+ * leaves the generic families (`system-ui`, `sans-serif`, `ui-monospace`,
+ * `monospace`) bare too. Storing the flag keeps `assets/tokens.css`
+ * byte-faithful to the source by construction instead of by heuristic.
+ */
+export interface FontFamilyEntry {
+  /** Family name, without quotes. */
+  readonly name: string;
+  /** Whether the source CSS wraps this name in double quotes. */
+  readonly quoted: boolean;
+}
+
 /** Font family stacks. `sans` leads with the brand font, falls back sanely without it. */
 export const FONT_FAMILIES = {
   sans: [
-    'NHaasGroteskDS',
-    'Neue Haas Grotesk',
-    'Helvetica Neue',
-    'Inter',
-    'Arial',
-    'system-ui',
-    'sans-serif',
-  ] as const,
-  mono: ['ui-monospace', 'SF Mono', 'JetBrains Mono', 'Menlo', 'monospace'] as const,
-} as const;
+    { name: 'NHaasGroteskDS', quoted: true },
+    { name: 'Neue Haas Grotesk', quoted: true },
+    { name: 'Helvetica Neue', quoted: true },
+    { name: 'Inter', quoted: true },
+    { name: 'Arial', quoted: true },
+    { name: 'system-ui', quoted: false },
+    { name: 'sans-serif', quoted: false },
+  ],
+  mono: [
+    { name: 'ui-monospace', quoted: false },
+    { name: 'SF Mono', quoted: true },
+    { name: 'JetBrains Mono', quoted: true },
+    { name: 'Menlo', quoted: false },
+    { name: 'monospace', quoted: false },
+  ],
+} as const satisfies Record<string, ReadonlyArray<FontFamilyEntry>>;
+
+/**
+ * Renders a family stack exactly as the source CSS writes it — the quoting of
+ * each name comes from the token data, not from inspecting the name.
+ */
+export function fontStack(entries: readonly FontFamilyEntry[]): string {
+  return entries.map((entry) => (entry.quoted ? `"${entry.name}"` : entry.name)).join(', ');
+}
 
 /**
  * `@font-face` sources for the brand font, "NHaasGroteskDS" (Neue Haas

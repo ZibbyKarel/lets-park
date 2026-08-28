@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { generateTokensCss } from './generate-css';
-import { DESIGN_TOKENS } from './tokens';
+import { DESIGN_TOKENS, type DesignTokens } from './tokens';
 
 /**
  * Guards against TS tokens and the committed `assets/tokens.css` drifting
@@ -40,6 +40,47 @@ describe('generateTokensCss', () => {
     expect(css).toContain('--palette-car-3: #3b88ff;');
     // None of the car colors leak into the brand/neutral namespaces.
     expect(css).not.toMatch(/--(brand|neutral)-\S*:\s*#fcaf00/);
+  });
+
+  it('keeps the source CSS alias chains instead of flattening them to literals', () => {
+    const css = generateTokensCss(DESIGN_TOKENS);
+
+    // `colors_and_type.css` defines these as references, not values — a future
+    // theme re-points the target and every consumer follows.
+    expect(css).toContain('--bg: var(--neutral-0);');
+    expect(css).toContain('--fg: var(--text);');
+    expect(css).toContain('--border: var(--neutral-200);');
+    expect(css).toContain('--success: var(--brand-green);');
+    expect(css).toContain('--radius-pill: var(--radius-cta);');
+    // ...while the tokens the source spells out literally stay literal.
+    expect(css).toContain('--danger: #E5484D;');
+  });
+
+  it('throws instead of emitting an alias whose target no longer holds the same value', () => {
+    // `DesignTokens` is `typeof DESIGN_TOKENS`, so every value is a literal
+    // type — a changed hex cannot be expressed without widening. The cast is
+    // the point of the test: it simulates the one thing the type system
+    // cannot, someone editing a value in `src/lib/*.ts`.
+    const drifted = {
+      ...DESIGN_TOKENS,
+      colors: {
+        ...DESIGN_TOKENS.colors,
+        surface: { ...DESIGN_TOKENS.colors.surface, bg: '#123456' },
+      },
+    } as unknown as DesignTokens;
+
+    expect(() => generateTokensCss(drifted)).toThrow(/Token alias drift/);
+  });
+
+  it('quotes each font family name exactly as the source CSS does', () => {
+    const css = generateTokensCss(DESIGN_TOKENS);
+
+    expect(css).toContain(
+      '--font-sans: "NHaasGroteskDS", "Neue Haas Grotesk", "Helvetica Neue", "Inter", "Arial", system-ui, sans-serif;'
+    );
+    expect(css).toContain(
+      '--font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;'
+    );
   });
 
   it('emits one @font-face rule per font file', () => {

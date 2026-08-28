@@ -20,6 +20,7 @@
     "forceConsistentCasingInFileNames": true,
     "paths": {
       "@lets-park/contract": ["./libs/contract/src/index.ts"],
+      "@lets-park/design-system-primitives": ["./libs/design-system/primitives/src/index.ts"],
       "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"],
       "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"]
     }
