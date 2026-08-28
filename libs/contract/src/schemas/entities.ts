@@ -37,6 +37,27 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 
 /**
+ * How one user appears to **another** user.
+ *
+ * Deliberately a `pick` of three fields: the parking screen shows who parks
+ * where and which car it is, and nothing else. `email`, `oktaId` and above all
+ * `icsToken` (the secret in a personal feed URL) must never reach another
+ * user's browser, and picking from `userSchema` means adding a field to the
+ * entity cannot silently widen this one.
+ *
+ * It lives among the entities rather than in `api/` because **both** entry
+ * points need it: the day overview returns it, and the realtime events
+ * broadcast it into a day room. `src/realtime` must not import from `src/api`,
+ * so a projection shared by the two belongs here (Task 5).
+ */
+export const userSummarySchema = userSchema.pick({
+  id: true,
+  name: true,
+  licensePlate: true,
+});
+export type UserSummary = z.infer<typeof userSummarySchema>;
+
+/**
  * A physical parking spot. Retired spots are deactivated rather than deleted,
  * for the same foreign-key reason as users.
  */
@@ -64,6 +85,23 @@ export const reservationSchema = z.object({
   createdAt: timestampSchema,
 });
 export type Reservation = z.infer<typeof reservationSchema>;
+
+/**
+ * A reservation as it is shown to everybody who can see the day: which
+ * reservation it is, when it was made, and who holds it.
+ *
+ * `parkingSpotId`, `userId` and `date` are deliberately absent — every consumer
+ * already knows all three from its surrounding context (the spot row of the day
+ * overview, the event payload of a realtime broadcast), and `user` carries the
+ * only part of the holder that may be shown to others.
+ *
+ * Shared by `src/api` and `src/realtime`, for the reason given on
+ * {@link userSummarySchema}.
+ */
+export const publicReservationSchema = reservationSchema
+  .pick({ id: true, createdAt: true })
+  .extend({ user: userSummarySchema });
+export type PublicReservation = z.infer<typeof publicReservationSchema>;
 
 /**
  * A user waiting for an already-booked spot on a given day. Queue order is

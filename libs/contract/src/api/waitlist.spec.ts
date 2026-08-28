@@ -5,7 +5,7 @@ import {
   TIMESTAMP,
   UUID_A,
   UUID_B,
-} from './__fixtures__/fixtures';
+} from '../__fixtures__/fixtures';
 import {
   joinWaitlistInputSchema,
   joinWaitlistOutputSchema,

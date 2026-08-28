@@ -1,4 +1,4 @@
-import { NOT_A_UUID, UUID_B, userFixture } from './__fixtures__/fixtures';
+import { NOT_A_UUID, UUID_B, userFixture } from '../__fixtures__/fixtures';
 import { buildIcsFeedUrl } from './ics';
 import { myProfileSchema, regenerateIcsTokenOutputSchema, updateMySettingsInputSchema } from './me';
 

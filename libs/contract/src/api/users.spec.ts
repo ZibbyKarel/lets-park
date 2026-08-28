@@ -1,4 +1,4 @@
-import { NOT_A_UUID, UUID_A, userFixture } from './__fixtures__/fixtures';
+import { NOT_A_UUID, UUID_A, userFixture } from '../__fixtures__/fixtures';
 import {
   adminListUsersInputSchema,
   adminListUsersOutputSchema,

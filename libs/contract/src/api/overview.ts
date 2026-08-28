@@ -10,38 +10,20 @@
  */
 
 import * as z from 'zod';
-import { parkingSpotSchema, reservationSchema, userSchema } from '../schemas/entities';
+import { parkingSpotSchema, publicReservationSchema } from '../schemas/entities';
 import { dateOnlySchema, idSchema } from '../schemas/primitives';
 import { monthWindowOverviewSchema } from '../schemas/reservation-window';
 import { authed } from './errors';
 
-/**
- * How one user appears to another user.
- *
- * Deliberately a `pick` of three fields: the day overview shows who parks where
- * and which car it is, and nothing else. `email`, `oktaId` and above all
- * `icsToken` (the secret in a personal feed URL) must never reach another user's
- * browser, and picking from `userSchema` means adding a field to the entity
- * cannot silently widen this one.
- */
-export const userSummarySchema = userSchema.pick({
-  id: true,
-  name: true,
-  licensePlate: true,
-});
-export type UserSummary = z.infer<typeof userSummarySchema>;
-
-/** The reservation occupying a spot on the overviewed day, with its holder. */
-export const daySpotReservationSchema = reservationSchema
-  .pick({ id: true, createdAt: true })
-  .extend({ user: userSummarySchema });
-export type DaySpotReservation = z.infer<typeof daySpotReservationSchema>;
-
 /** One spot's row in the day overview. */
 export const daySpotOverviewSchema = z.object({
   spot: parkingSpotSchema,
-  /** `null` when the spot is free for that day. */
-  reservation: daySpotReservationSchema.nullable(),
+  /**
+   * `null` when the spot is free for that day. `publicReservationSchema` lives
+   * in `../schemas/entities` because the realtime events broadcast the same
+   * shape, and `src/realtime` must not import from `src/api`.
+   */
+  reservation: publicReservationSchema.nullable(),
   /** How many people are queued for this spot on this day. */
   waitlistCount: z.int().nonnegative(),
   /** The caller's own queue entry for this spot, or `null` if not queued. */
