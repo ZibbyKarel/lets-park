@@ -1,351 +1,370 @@
-# Design systém – tokeny a primitivy
+# Design system – tokens and primitives
 
-Tasky 6 a 7 z `doc/implementation-plan.md`. Dokument popisuje dvě spodní vrstvy
-design systému:
+Tasks 6 and 7 from `doc/implementation-plan.md`. This document describes the
+two bottom layers of the design system:
 
-1. **tokeny** (`libs/design-system/tokens`) – hodnoty,
-2. **primitivy** (`libs/design-system/primitives`) – nejmenší komponenty
-   postavené výhradně z těch hodnot.
+1. **tokens** (`libs/design-system/tokens`) – values,
+2. **primitives** (`libs/design-system/primitives`) – the smallest components,
+   built exclusively from those values.
 
-Třetí vrstva (`compounds`, např. DataTable) vzniká v dalším úkolu. Směr
-závislostí `tokens → primitives → compounds` vynucuje ESLint (viz
-`doc/workspace.md`, dimenze `ds:*`); **compounds smí importovat primitivy,
-nikdy naopak**.
+The third layer (`compounds`, e.g. DataTable) is created in a later task. The
+dependency direction `tokens → primitives → compounds` is enforced by ESLint
+(see `doc/workspace.md`, the `ds:*` dimension); **compounds may import
+primitives, never the other way around**.
 
-Design systém je **domain-free**: v `libs/design-system/**` nesmí být nic, co ví
-o `ParkingSpot`/`Reservation`/uživatelích – ani v názvech props, ani ve stories.
-Tokeny jsou čistě prezentační hodnoty, primitivy čistě prezentační komponenty.
+The design system is **domain-free**: nothing in `libs/design-system/**` may
+know about `ParkingSpot`/`Reservation`/users – not in prop names, not in
+stories. Tokens are purely presentational values; primitives are purely
+presentational components.
 
-## Zdroj pravdy
+## Source of truth
 
 `doc/design/ds/colors_and_type.css` ("Shoptet Design System — Foundations").
-Každá barva, `--fs-*`, `--lh-*`, `--tracking-*`, `--space-*`, `--radius-*`,
-`--shadow-*`, `--dur-*`, `--ease-*` a `--container*` v TS zdroji je **1:1** kopie
-tohoto souboru – žádné zaokrouhlování, přejmenování ani "vylepšování" hodnot.
-Trojice `#fcaf00`/`#00e25a`/`#3b88ff` (barvy aut na obsazených místech) je z
-`plan.md` / `doc/design/README.md` – je to samostatná skupina tokenů, **není**
-součástí obecné palety (viz níže).
+Every color, `--fs-*`, `--lh-*`, `--tracking-*`, `--space-*`, `--radius-*`,
+`--shadow-*`, `--dur-*`, `--ease-*`, and `--container*` in the TS source is a
+**1:1** copy of this file – no rounding, renaming, or "improving" the values.
+The triple `#fcaf00`/`#00e25a`/`#3b88ff` (colors of cars on occupied spots) is
+from `plan.md` / `doc/design/README.md` – it's a separate group of tokens and
+is **not** part of the general palette (see below).
 
-Dvě skupiny tokenů jsou **odvozené, ne opsané** z `colors_and_type.css`, a mají
-to napsané v hlavičce svého souboru: `BREAKPOINTS` v `layout.ts`
-(`doc/decision/0009-breakpointy-jsou-odvozene.md`) a `CONTROLS` v `controls.ts`
-– výšky ovládacích prvků a geometrie přepínače, čtené z exportovaného designu
-(`doc/decision/0011-odvozene-control-tokeny-a-zaokrouhleni.md`).
+Two token groups are **derived, not copied**, from `colors_and_type.css`, and
+their file headers say so: `BREAKPOINTS` in `layout.ts`
+(`doc/decision/0011-breakpoints-are-derived.md`) and `CONTROLS` in
+`controls.ts` – control heights and switch geometry, read from the exported
+design (`doc/decision/0011-derived-control-tokens-and-rounding.md`).
 
-## Jak jsou tokeny poskládané
+## How the tokens are put together
 
 ```
 libs/design-system/tokens/
   src/
     lib/
-      colors.ts          – brand, neutrály, semantické surface/fg/line/status
-      car-palette.ts      – CAR_COLOR_PALETTE (jen barva auta, samostatný namespace)
+      colors.ts          – brand, neutrals, semantic surface/fg/line/status
+      car-palette.ts      – CAR_COLOR_PALETTE (car color only, a separate namespace)
       typography.ts        – font families, @font-face metadata, type scale, lh, tracking
       spacing.ts            – --space-*
       radius.ts              – --radius-*
-      controls.ts             – --control-h-*, --switch-* (ODVOZENÉ, viz 0011)
+      controls.ts             – --control-h-*, --switch-* (DERIVED, see 0011)
       shadows.ts               – --shadow-*
       motion.ts                 – --ease-*, --dur-*
-      layout.ts                  – --container*, BREAKPOINTS (odvozené, viz 0009)
-      tokens.ts                   – DESIGN_TOKENS = spojení všeho výše
-      generate-css.ts               – generateTokensCss(tokens) -> CSS text (čistá funkce)
-      generate-css.spec.ts           – test, že commitnutý tokens.css == generateTokensCss(...)
-    index.ts                          – veřejné API (@lets-park/design-system/tokens)
+      layout.ts                  – --container*, BREAKPOINTS (derived, see 0011)
+      tokens.ts                   – DESIGN_TOKENS = everything above, combined
+      generate-css.ts               – generateTokensCss(tokens) -> CSS text (a pure function)
+      generate-css.spec.ts           – test that the committed tokens.css == generateTokensCss(...)
+    index.ts                          – public API (@lets-park/design-system/tokens)
   scripts/
-    build-tokens-css.ts                 – zapíše generateTokensCss(...) do assets/tokens.css
+    build-tokens-css.ts                 – writes generateTokensCss(...) into assets/tokens.css
   assets/
-    tokens.css                            – GENEROVANÝ (viz níže), commitnutý
-    theme.css                              – RUČNĚ PSANÝ Tailwind v4 bridge
-    fonts/*.otf                             – Neue Haas Grotesk Display Pro (8 řezů)
+    tokens.css                            – GENERATED (see below), committed
+    theme.css                              – HAND-WRITTEN Tailwind v4 bridge
+    fonts/*.otf                             – Neue Haas Grotesk Display Pro (8 weights)
 ```
 
-**Jediný zdroj pravdy v kódu je TS** (`DESIGN_TOKENS` v `tokens.ts`). Všechno
-ostatní (`tokens.css`, mapování v `theme.css`) z něj vychází.
+**The single source of truth in code is TS** (`DESIGN_TOKENS` in `tokens.ts`).
+Everything else (`tokens.css`, the mapping in `theme.css`) is derived from it.
 
-## Proč je `tokens.css` generovaný a commitnutý
+## Why `tokens.css` is generated and committed
 
-Viz `doc/decision/0010-generovany-tokens-css-je-commitnuty.md`. Krátce: je
-commitnutý, aby appka po `npm ci` fungovala bez extra build kroku, a je vyloučený
-z Prettieru, protože věrně kopíruje styl zdrojového `colors_and_type.css`
-(velká písmena v hexu, žádné mezery v `rgba()`), který by Prettier přepsal.
+See `doc/decision/0010-generated-tokens-css-is-committed.md`. In short: it's
+committed so the app works right after `npm ci` with no extra build step, and
+it's excluded from Prettier because it faithfully copies the style of the
+source `colors_and_type.css` (uppercase hex, no spaces in `rgba()`), which
+Prettier would otherwise rewrite.
 
-### Aliasy se zachovávají
+### Aliases are preserved
 
-`colors_and_type.css` část tokenů nedefinuje hodnotou, ale odkazem
-(`--bg: var(--neutral-0)`, `--fg: var(--text)`, `--success: var(--brand-green)`,
-`--radius-pill: var(--radius-cta)`, `--brand-blue-100: var(--brand-light)`).
-Generátor tenhle řetěz **neplošťuje na literál** – vypíše ho jako `var(...)`,
-protože právě přes něj se dělá budoucí téma (přesměruješ cíl a všichni
-konzumenti se posunou s ním).
+`colors_and_type.css` defines part of the tokens not as a value, but as a
+reference (`--bg: var(--neutral-0)`, `--fg: var(--text)`,
+`--success: var(--brand-green)`, `--radius-pill: var(--radius-cta)`,
+`--brand-blue-100: var(--brand-light)`). The generator does **not** flatten
+this chain into a literal – it writes it out as `var(...)`, because this is
+exactly how future theming works (redirect the target and every consumer
+moves with it).
 
-TS objekty ale drží už rozřešené hodnoty (`SURFACE_COLORS.bg` je řetězec
-`#FFFFFF`, ne odkaz), takže by se data a vypsaný alias mohly rozejít. Hlídá to
-funkce `alias()` v `generate-css.ts`: při generování porovná hodnotu tokenu
-s hodnotou cíle a při neshodě **vyhodí výjimku** místo aby napsala
-`--bg: var(--neutral-0)` pro token, který už bílou nemá.
+The TS objects, however, hold already-resolved values (`SURFACE_COLORS.bg` is
+the string `#FFFFFF`, not a reference), so the data and the emitted alias
+could drift apart. This is guarded by the `alias()` function in
+`generate-css.ts`: at generation time it compares the token's value against
+the target's value and, on a mismatch, **throws** instead of writing
+`--bg: var(--neutral-0)` for a token that no longer holds white.
 
-**Drift test** (`generate-css.spec.ts`) hlídá, že se TS zdroj a commitnutý soubor
-nerozejdou: čte `assets/tokens.css` ze disku a porovnává ho `toBe()` s tím, co by
-`generateTokensCss(DESIGN_TOKENS)` vygenerovalo právě teď. Změníš-li token v TS a
-nezavoláš `nx run design-system-tokens:generate-css`, test spadne v CI.
+The **drift test** (`generate-css.spec.ts`) guards against the TS source and
+the committed file drifting apart: it reads `assets/tokens.css` from disk and
+compares it with `toBe()` against what `generateTokensCss(DESIGN_TOKENS)`
+would generate right now. Change a token in TS without running
+`nx run design-system-tokens:generate-css`, and the test fails in CI.
 
-## Jak přidat nový token
+## How to add a new token
 
-1. Přidej hodnotu do příslušného `src/lib/*.ts` souboru (nebo založ nový, pokud
-   jde o novou kategorii) a zapoj ho do `DESIGN_TOKENS` v `tokens.ts`.
-2. Přidej odpovídající řádek do `generateTokensCss` v `generate-css.ts` (stejné
-   jméno `--custom-property`, jaké by měl mít v `colors_and_type.css` / designu).
-3. Spusť `npx nx run design-system-tokens:generate-css` a commitni změněný
+1. Add the value to the relevant `src/lib/*.ts` file (or create a new one for
+   a new category) and wire it into `DESIGN_TOKENS` in `tokens.ts`.
+2. Add the corresponding line to `generateTokensCss` in `generate-css.ts` (the
+   same `--custom-property` name it should have in `colors_and_type.css` /
+   the design).
+3. Run `npx nx run design-system-tokens:generate-css` and commit the changed
    `assets/tokens.css`.
-4. Pokud má token smysl jako Tailwind utilita (barva, spacing, radius, shadow,
-   font, tracking/leading, ease/duration), přidej mapovací řádek do
-   `assets/theme.css` (`@theme inline { --tailwind-namespace-*: var(--tvuj-token); }`).
-   Namespace se řídí Tailwindovou dokumentací (`--color-*`, `--spacing-*`,
+4. If the token makes sense as a Tailwind utility (color, spacing, radius,
+   shadow, font, tracking/leading, ease/duration), add a mapping line to
+   `assets/theme.css` (`@theme inline { --tailwind-namespace-*: var(--your-token); }`).
+   The namespace follows Tailwind's documentation (`--color-*`, `--spacing-*`,
    `--radius-*`, `--shadow-*`, `--font-*`, `--text-*`, `--leading-*`,
    `--tracking-*`, `--ease-*`, `--duration-*`, `--breakpoint-*`).
-5. `npm run test` (ověří drift test) + `npm run lint` + `npm run typecheck`.
+5. `npm run test` (runs the drift test) + `npm run lint` + `npm run typecheck`.
 
-Nikdy nepiš hodnotu ručně na dvou místech (TS **a** CSS) – jedno musí vždy vznikat
-z druhého (generátor), jinak vznikne přesně ten drift, který má test odchytit.
+Never write a value by hand in two places (TS **and** CSS) – one must always
+be derived from the other (the generator), or you get exactly the drift the
+test exists to catch.
 
-## Napojení na Tailwind v4
+## Wiring into Tailwind v4
 
-`assets/theme.css` je vstupní CSS soubor pro konzumenty. Prvním z nich je
-Storybook primitivů, a ten ho importuje **relativní cestou** –
-`@import '../../tokens/assets/theme.css'` v `.storybook/preview.css`. Důvod:
-`@lets-park/design-system/tokens` je jen TS `tsconfig` path alias pro modulovou
-rezoluci v JS/TS; CSS `@import` ani bundlery ho neznají automaticky. Jak se
-`theme.css` dostane do výstupního CSS `apps/web` (relativní cesta vs. `exports`
-mapping v `package.json` libky) rozhodne task, který web poprvé stylizuje:
+`assets/theme.css` is the entry CSS file for consumers. The first consumer is
+the primitives' Storybook, which imports it via a **relative path** –
+`@import '../../tokens/assets/theme.css'` in `.storybook/preview.css`. Reason:
+`@lets-park/design-system/tokens` is only a TS `tsconfig` path alias for
+module resolution in JS/TS; neither CSS `@import` nor bundlers understand it
+automatically. How `theme.css` reaches `apps/web`'s output CSS (a relative
+path vs. an `exports` mapping in the lib's `package.json`) is decided by
+whichever task first styles the web app:
 
 ```css
 @import 'tailwindcss';
 @import './tokens.css';
 
 @theme {
-  /* breakpointy – literální hodnoty, Tailwind je potřebuje do @media */
+  /* breakpoints – literal values, Tailwind needs them for @media */
   --breakpoint-sm: 640px;
   /* ... */
 }
 
 @theme inline {
-  /* každý řádek je var() odkaz na custom property z tokens.css,
-     nikdy duplikovaná literální hodnota */
+  /* every line is a var() reference to a custom property from tokens.css,
+     never a duplicated literal value */
   --color-brand-blue: var(--brand-blue);
   /* ... */
 }
 ```
 
-- `@import "tailwindcss"` + `@theme inline` je aktuální (Tailwind v4) CSS-first
-  syntax – žádný `tailwind.config.js` (ověřeno přes Context7/oficiální docs, ne
-  z paměti, viz global constraint 10).
-- `@theme inline` mapuje custom properties z `tokens.css` na Tailwind theme
-  proměnné (`--color-*`, `--text-*`, `--spacing-*`, ...), takže Tailwind
-  vygeneruje utility (`bg-brand-blue`, `text-fg-2`, `rounded-md`, `shadow-lg`,
-  `duration-base`, ...) se stejnou hodnotou, jakou má css proměnná.
-  `inline` je nutné, protože `--theme-*` proměnné jinak nejdou odkazovat na jiné
-  custom properties definované mimo `@theme` blok (bez `inline` by Tailwind
-  zamrznul hodnotu při parse-time, ne runtime).
-- `--breakpoint-*` je v (ne-`inline`) `@theme` bloku, protože breakpointy
-  Tailwind potřebuje jako literální hodnoty pro generování `@media` – `var()`
-  se do media query dosadit nedá.
-- `--container` / `--container-wide` (content max-width, ne container queries)
-  **nejsou** mapované do Tailwindova `--container-*` namespace – ten je vyhrazený
-  pro `@container` query breakpointy, jiný koncept. Používej je přímo jako CSS
-  proměnnou, např. `max-w-[var(--container)]`.
-- `tailwindcss` a `@tailwindcss/vite` už v repu jsou (přidal je Task 7 kvůli
-  Storybooku). PostCSS/Next.js pipeline v `apps/web` je pořád mimo tenhle
-  dokument – patří tasku na `apps/web`.
+- `@import "tailwindcss"` + `@theme inline` is the current (Tailwind v4)
+  CSS-first syntax – no `tailwind.config.js` (verified via Context7/official
+  docs, not from memory, per global constraint 10).
+- `@theme inline` maps custom properties from `tokens.css` onto Tailwind theme
+  variables (`--color-*`, `--text-*`, `--spacing-*`, ...), so Tailwind
+  generates utilities (`bg-brand-blue`, `text-fg-2`, `rounded-md`,
+  `shadow-lg`, `duration-base`, ...) with the same value the CSS variable
+  has. `inline` is required because `--theme-*` variables otherwise cannot
+  reference other custom properties defined outside a `@theme` block
+  (without `inline`, Tailwind would freeze the value at parse time, not
+  runtime).
+- `--breakpoint-*` sits in the (non-`inline`) `@theme` block, because
+  Tailwind needs breakpoints as literal values to generate `@media` –
+  `var()` can't be substituted into a media query.
+- `--container` / `--container-wide` (content max-width, not container
+  queries) **are not** mapped into Tailwind's `--container-*` namespace –
+  that's reserved for `@container` query breakpoints, a different concept.
+  Use them directly as a CSS variable, e.g. `max-w-[var(--container)]`.
+- `tailwindcss` and `@tailwindcss/vite` are already in the repo (added by
+  Task 7 for Storybook). The PostCSS/Next.js pipeline in `apps/web` is still
+  outside the scope of this document – it belongs to the task that touches
+  `apps/web`.
 
-## Barva auta na obsazeném místě – proč je jinde
+## The occupied-spot car color – why it lives elsewhere
 
-`CAR_COLOR_PALETTE` (`car-palette.ts`) a `--palette-car-1/2/3` v `tokens.css` /
-`--color-car-1/2/3` v `theme.css` jsou **záměrně** oddělené od obecné palety
-(`COLORS`). Design (`doc/design/README.md`) je definuje jen pro barvu auta na
-obsazeném parkovacím místě – žádná jiná UI komponenta (tlačítko, badge, stav) je
-nemá používat. Tokeny nesou jen surová data (tři barvy); deterministický výběr
-"který uživatel má kterou barvu" je doménová logika (potřebuje pojem "uživatel"),
-proto nežije v design systému.
+`CAR_COLOR_PALETTE` (`car-palette.ts`) and `--palette-car-1/2/3` in
+`tokens.css` / `--color-car-1/2/3` in `theme.css` are **deliberately**
+separated from the general palette (`COLORS`). The design
+(`doc/design/README.md`) defines them only for the color of a car on an
+occupied parking spot – no other UI component (button, badge, status) should
+use them. The tokens carry only the raw data (three colors); the
+deterministic choice of "which user gets which color" is domain logic (it
+needs the concept of a "user"), so it doesn't live in the design system.
 
-## Fonty a licence
+## Fonts and licensing
 
-8 řezů Neue Haas Grotesk Display Pro (`.otf`) je zkopírováno do `assets/fonts/`
-a použito v generovaných `@font-face` blocích. **Licence pro produkční nasazení
-není ověřená** (viz `doc/design/README.md` a `doc/decision/0012-*`) – proto má
-`FONT_FAMILIES.sans` vždy funkční fallback (`Neue Haas Grotesk` → `Helvetica Neue`
-→ `Inter` → `Arial` → `system-ui` → `sans-serif`), takže appka vypadá rozumně, i
-kdyby se `.otf` soubory musely z produkčního buildu vyřadit.
+The 8 weights of Neue Haas Grotesk Display Pro (`.otf`) are copied into
+`assets/fonts/` and used in the generated `@font-face` blocks. **The
+production-deployment license is not verified** (see `doc/design/README.md`
+and `doc/decision/0012-*`) – which is why `FONT_FAMILIES.sans` always has a
+working fallback (`Neue Haas Grotesk` → `Helvetica Neue` → `Inter` → `Arial`
+→ `system-ui` → `sans-serif`), so the app still looks reasonable even if the
+`.otf` files had to be dropped from a production build.
 
 ---
 
-# Primitivy (`libs/design-system/primitives`)
+# Primitives (`libs/design-system/primitives`)
 
-Balíček `@lets-park/design-system/primitives`, tagy `type:ui`, `scope:web`,
-`ds:primitives`. Devět komponent, ke každé **story vedle komponenty** a Jest +
-Testing Library test (84 testů celkem).
+The package `@lets-park/design-system/primitives`, tags `type:ui`,
+`scope:web`, `ds:primitives`. Nine components, each with a **story alongside
+the component** and a Jest + Testing Library test (84 tests total).
 
 ```
 libs/design-system/primitives/
   .storybook/
     main.ts         – Storybook 10 + @storybook/react-vite, viteFinal → @tailwindcss/vite
-    preview.ts      – parametry, backgrounds
-    preview.css     – @import theme.css z libky tokenů + @source '../src'
+    preview.ts      – parameters, backgrounds
+    preview.css     – @import theme.css from the tokens lib + @source '../src'
   src/
     lib/
-      cx.ts               – spojovač class names (žádný clsx, tři řádky)
-      control-size.ts     – sdílená škála sm|md|lg|xl + FOCUS_RING, PRESS_FEEDBACK
-      field.tsx           – useFieldIds() + <Field> (label / hint / error kolem prvku)
+      cx.ts               – a class-name joiner (no clsx, three lines)
+      control-size.ts     – the shared sm|md|lg|xl scale + FOCUS_RING, PRESS_FEEDBACK
+      field.tsx           – useFieldIds() + <Field> (label / hint / error around an element)
       button.tsx    badge.tsx    avatar.tsx
       input.tsx     select.tsx   checkbox.tsx   radio.tsx
       switch.tsx    stepper.tsx
-      *.stories.tsx        – story ke každé komponentě
-      *.spec.tsx            – test ke každé komponentě
-    index.ts                 – veřejné API
+      *.stories.tsx        – a story for every component
+      *.spec.tsx            – a test for every component
+    index.ts                 – the public API
 ```
 
-## Zásady, které platí napříč primitivy
+## Rules that apply across every primitive
 
-- **Žádná ručně psaná hodnota.** Barvy, rozestupy, poloměry a velikosti písma
-  chodí z tokenů přes Tailwind utility (`bg-brand-blue`, `px-4`, `rounded-cta`,
-  `text-sm`); výšky ovládacích prvků přes `h-[var(--control-h-lg)]`.
-  Zaokrouhlování rozměrů z designu řeší `doc/decision/0011-*`.
-- **Nativní prvky.** Input/Select/Checkbox/Radio jsou opravdové `<input>` /
-  `<select>`, jen přestylované. Chování z klávesnice dodává platforma, ne náš
-  kód (`doc/decision/0012-*`).
-- **Jednotný focus ring** (`FOCUS_RING`) na každém fokusovatelném prvku –
-  2px `--brand-blue` přes `:focus-visible`. Design ho nepředepisuje, viz
+- **No hand-written value.** Colors, spacing, radii, and font sizes come from
+  tokens via Tailwind utilities (`bg-brand-blue`, `px-4`, `rounded-cta`,
+  `text-sm`); control heights via `h-[var(--control-h-lg)]`. Rounding
+  dimensions from the design is covered in `doc/decision/0011-*`.
+- **Native elements.** Input/Select/Checkbox/Radio are real `<input>` /
+  `<select>` elements, only restyled. Keyboard behavior comes from the
+  platform, not our code (`doc/decision/0012-*`).
+- **A uniform focus ring** (`FOCUS_RING`) on every focusable element – 2px
+  `--brand-blue` via `:focus-visible`. The design doesn't specify one, see
   `doc/decision/0012-*`.
-- **Vypnutý stav se nepřebíjí, ale nahrazuje.** Dvě utility, které nastavují
-  stejnou vlastnost (`bg-bg` a `bg-bg-muted`, `text-fg` a `text-fg-3`), mají
-  stejnou specificitu – vyhrává ta, kterou Tailwind vypíše ve stylesheetu
-  později, ne ta, která je později v `className`. Přidat vypnuté barvy *navrch*
-  k zapnutým proto u každé dvojice náhodně vyjde, nebo tiše nevyjde. Barvy pro
-  zapnutý stav proto patří do zapnuté větve ternárního výrazu, ať prvek nikdy
-  nenese obě poloviny dvojice zároveň. Totéž platí pro `checked:` – varianta
-  přebije obě prosté utility, takže vypnutý zaškrtnutý Checkbox si musí
-  přebarvit i `checked:` výplň, jinak svítí značkovou modrou.
-  Jsdom žádný stylesheet neaplikuje, takže tohle žádný render test nechytí –
-  invariant hlídá `disabled-styling.spec.tsx`.
-- **Chybový stav je zpráva.** Prop `error` neexistuje jako boolean: text chyby
-  *je* stav. Nastaví `aria-invalid`, červený rámeček i `role="alert"` naráz,
-  takže se nemůžou rozejít.
-- **UI copy česky** (např. výchozí názvy tlačítek Stepperu), **identifikátory a
-  komentáře anglicky.**
+- **The disabled state doesn't override, it replaces.** Two utilities that
+  set the same property (`bg-bg` and `bg-bg-muted`, `text-fg` and
+  `text-fg-3`) have the same specificity – whichever Tailwind emits later in
+  the stylesheet wins, not whichever comes later in `className`. Adding
+  disabled colors *on top of* the enabled ones therefore works by luck for
+  any given pair, or silently doesn't. Enabled-state colors therefore belong
+  in the enabled branch of a ternary, so an element never carries both halves
+  of a pair at once. The same applies to `checked:` – that variant overrides
+  both plain utilities, so a disabled, checked Checkbox has to recolor its
+  `checked:` fill too, or it lights up brand blue.
+  jsdom applies no stylesheet at all, so no render test catches this – the
+  invariant is guarded by `disabled-styling.spec.tsx`.
+- **The error state is a message.** The `error` prop doesn't exist as a
+  boolean: the error text *is* the state. It sets `aria-invalid`, the red
+  border, and `role="alert"` together, so they can't drift apart.
+- **UI copy in Czech** (e.g. the Stepper's default button labels),
+  **identifiers and comments in English.**
 
-## Soupis a API
+## Inventory and API
 
-Sdílené typy: `ControlSize = 'sm' | 'md' | 'lg' | 'xl'` (36/40/48/56 px).
-Prvky formuláře navíc přijímají `label`, `hint`, `error` (typ `FieldOwnProps`).
+Shared types: `ControlSize = 'sm' | 'md' | 'lg' | 'xl'` (36/40/48/56 px). Form
+elements additionally accept `label`, `hint`, `error` (the `FieldOwnProps`
+type).
 
 ### `Button`
 
-| prop | typ | default | popis |
+| prop | type | default | description |
 | --- | --- | --- | --- |
-| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'danger' \| 'ghost'` | `'primary'` | vizuální váha |
-| `size` | `ControlSize` | `'md'` | výška |
+| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'danger' \| 'ghost'` | `'primary'` | visual weight |
+| `size` | `ControlSize` | `'md'` | height |
 | `loading` | `boolean` | `false` | spinner + `aria-busy` + `disabled` |
-| `fullWidth` | `boolean` | `false` | roztáhne na šířku rodiče |
-| `startAdornment` / `endAdornment` | `ReactNode` | – | obsah před/za popiskem |
-| `type` | `'button' \| 'submit' \| 'reset'` | `'button'` | výchozí `button`, aby nechtěně neodeslal formulář |
+| `fullWidth` | `boolean` | `false` | stretches to the parent's width |
+| `startAdornment` / `endAdornment` | `ReactNode` | – | content before/after the label |
+| `type` | `'button' \| 'submit' \| 'reset'` | `'button'` | defaults to `button`, so it never accidentally submits a form |
 
-Plus všechny nativní atributy `<button>`. `ref` míří na `<button>`.
+Plus every native `<button>` attribute. `ref` points at the `<button>`.
 
-Varianty jsou odvozené z designu: `primary` je modré pill CTA
-(hover `--brand-blue-700` + `--shadow-blue`), `secondary` bílé s rámečkem,
-`outline` průhledné s tmavým rámečkem (hover se invertuje na plnou tmavou),
-`danger` je „Smazat" – světle červené, po hoveru plné červené.
+The variants are derived from the design: `primary` is the blue pill CTA
+(hover `--brand-blue-700` + `--shadow-blue`), `secondary` is white with a
+border, `outline` is transparent with a dark border (hover inverts to solid
+dark), `danger` is the "Delete" style – light red, solid red on hover.
 
 ### `Input`
 
 `size`, `fullWidth` (default `true`), `label`, `hint`, `error`,
-`wrapperClassName` + nativní atributy `<input>` kromě `size` (ten je přebitý
-škálou – znakový `size` do design systému nepatří). `ref` míří na `<input>`.
+`wrapperClassName`, plus every native `<input>` attribute except `size`
+(overridden by the scale – a character-count `size` has no place in the
+design system). `ref` points at the `<input>`.
 
 ### `Select`
 
-Stejné props jako `Input` (`size` opět přebitý), `children` jsou `<option>`.
-Šipka je `aria-hidden` SVG, prvek zůstává nativní `<select>`.
+Same props as `Input` (`size` overridden again), `children` are `<option>`
+elements. The arrow is an `aria-hidden` SVG; the element stays a native
+`<select>`.
 
 ### `Checkbox`
 
-`label`, `hint`, `error`, `indeterminate`, `wrapperClassName` + nativní atributy
-`<input>` kromě `type` a `size`. `indeterminate` se nastavuje přes ref, protože
-existuje jen na DOM uzlu, ne jako HTML atribut.
+`label`, `hint`, `error`, `indeterminate`, `wrapperClassName`, plus every
+native `<input>` attribute except `type` and `size`. `indeterminate` is set
+via a ref, since it exists only on the DOM node, not as an HTML attribute.
 
-### `Radio` a `RadioGroup`
+### `Radio` and `RadioGroup`
 
-`Radio` má stejné props jako `Checkbox` (bez `indeterminate`).
-**`aria-invalid` na něm záměrně není** – `role="radio"` ho nepodporuje, validitu
-nese skupina.
+`Radio` has the same props as `Checkbox` (minus `indeterminate`).
+**It deliberately has no `aria-invalid`** – `role="radio"` doesn't support it;
+the group carries validity instead.
 
-`RadioGroup` (`<fieldset>`): `legend` (povinné, přístupné jméno skupiny),
+`RadioGroup` (`<fieldset>`): `legend` (required, the group's accessible name),
 `hint`, `error`, `horizontal`.
 
 ### `Badge`
 
 `tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger'` (default
-`neutral`) + atributy `<span>`. Bez role – je to popisek, ne prvek. Když badge
-nese informaci, která není v okolním textu, musí ji volající vystavit sám.
+`neutral`) plus `<span>` attributes. No role – it's a label, not a control.
+When a badge carries information not present in the surrounding text, the
+caller must expose it itself.
 
 ### `Avatar`
 
-| prop | typ | default |
+| prop | type | default |
 | --- | --- | --- |
-| `initials` | `string` | – (povinné) |
+| `initials` | `string` | – (required) |
 | `label` | `string` | – |
 | `tone` | `'dark' \| 'info' \| 'neutral' \| 'warning'` | `'neutral'` |
 | `size` | `'sm' \| 'md' \| 'lg'` (24/32/40 px) | `'md'` |
 
-S `label` je to `role="img"` s přístupným jménem, bez něj `aria-hidden` –
-předpoklad je, že jméno je napsané vedle. **Iniciály si počítá aplikace**, ne
-design systém: k tomu je potřeba vědět, co je jméno, a to je doména.
+With `label` it's `role="img"` with an accessible name; without it,
+`aria-hidden` – the assumption is that a name is written next to it.
+**The application computes the initials**, not the design system: that
+requires knowing what the name is, which is domain logic.
 
 ### `Switch`
 
 `checked` / `defaultChecked` / `onCheckedChange`, `label`, `aria-label`,
-`tone: 'info' | 'success'`, `disabled`, `id`, `name`. Řízený i neřízený režim.
-Je to `<button type="button" role="switch">`, takže Enter i mezerník fungují
-z podstaty prvku a nikdy neodešle formulář.
+`tone: 'info' | 'success'`, `disabled`, `id`, `name`. Both controlled and
+uncontrolled modes. It's a `<button type="button" role="switch">`, so Enter
+and Space work by virtue of the element itself, and it never submits a form.
 
 ### `Stepper`
 
-| prop | typ | default |
+| prop | type | default |
 | --- | --- | --- |
-| `value` / `defaultValue` / `onValueChange` | `number` / `(v: number) => void` | neřízený od `min` |
+| `value` / `defaultValue` / `onValueChange` | `number` / `(v: number) => void` | uncontrolled, starting at `min` |
 | `min` / `max` / `step` | `number` | `0` / `MAX_SAFE_INTEGER` / `1` |
-| `label` | `string` | – (povinné) |
+| `label` | `string` | – (required) |
 | `formatValue` | `(v: number) => string` | – |
-| `decrementLabel` / `incrementLabel` | `string` | `'Snížit'` / `'Zvýšit'` |
+| `decrementLabel` / `incrementLabel` | `string` | `'Snížit'` ("Decrease") / `'Zvýšit'` ("Increase") |
 
-Hodnota je `role="spinbutton"`, takže je dosažitelná Tabem a ovladatelná
-šipkami, Home a End – tlačítka jsou pohodlí pro myš, ne jediná cesta.
-`formatValue` je zároveň `aria-valuetext`, takže se jednotka i přečte.
+The value has `role="spinbutton"`, so it's reachable via Tab and operable
+with the arrow keys, Home, and End – the buttons are a mouse convenience, not
+the only way in. `formatValue` also becomes `aria-valuetext`, so the unit
+gets read out too.
 
 ## Storybook
 
 ```bash
 npx nx run design-system-primitives:storybook         # dev server, port 4400
-npx nx run design-system-primitives:build-storybook   # statický build do dist/
+npx nx run design-system-primitives:build-storybook   # static build into dist/
 ```
 
-Konfigurace je psaná ručně, bez `@nx/storybook` a bez addonů – proč, je
-v `doc/decision/0013-*`. Pozor: `build-storybook` **není** součástí
-`npm run build`, do CI se musí přidat zvlášť.
+The configuration is written by hand, without `@nx/storybook` and without
+addons – why, is covered in `doc/decision/0013-*`. Note: `build-storybook` is
+**not** part of `npm run build`; it has to be added to CI separately.
 
-`preview.css` importuje `theme.css` (ne `tokens.css` – ten sám o sobě dá
-proměnné, ale žádné Tailwind utility) a přidává `@source '../src'`, aby Tailwind
-skenoval komponenty; hledá totiž od adresáře toho CSS souboru, kde je
-`@import "tailwindcss"`, a ten je v libce tokenů.
+`preview.css` imports `theme.css` (not `tokens.css` – that alone gives
+variables but no Tailwind utilities) and adds `@source '../src'` so Tailwind
+scans the components; it looks starting from the directory of the CSS file
+that contains `@import "tailwindcss"`, which lives in the tokens lib.
 
-## Jak přidat primitiv
+## How to add a primitive
 
-1. `src/lib/<jmeno>.tsx` – komponenta. Rozměry ze škály v `control-size.ts`,
-   barvy z Tailwind utilit napojených na tokeny. Nativní prvek, kdykoli
-   existuje.
-2. `src/lib/<jmeno>.stories.tsx` – **současně**, ne potom. Stavy, které dávají
-   smysl: default, varianty, velikosti, disabled, error, loading.
-3. `src/lib/<jmeno>.spec.tsx` – **současně**. Testuje se `role`, přístupné
-   jméno, dosažitelnost Tabem, klávesnice a interakce; ne vzhled.
-4. Export z `src/index.ts`.
-5. `npm run lint && npm run typecheck && npm run test` a
+1. `src/lib/<name>.tsx` – the component. Dimensions from the scale in
+   `control-size.ts`, colors from Tailwind utilities wired to tokens. A
+   native element, whenever one exists.
+2. `src/lib/<name>.stories.tsx` – **at the same time**, not afterward. States
+   that make sense: default, variants, sizes, disabled, error, loading.
+3. `src/lib/<name>.spec.tsx` – **at the same time**. Tests `role`, accessible
+   name, Tab reachability, keyboard, and interaction; not appearance.
+4. Export it from `src/index.ts`.
+5. `npm run lint && npm run typecheck && npm run test` and
    `npx nx run design-system-primitives:build-storybook`.
