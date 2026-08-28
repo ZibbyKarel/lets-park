@@ -18,7 +18,9 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {}
+    "paths": {
+      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }

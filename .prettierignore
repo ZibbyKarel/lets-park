@@ -14,3 +14,10 @@
 /plan.md
 /.claude
 **/package-lock.json
+
+# Generated 1:1 from TS design tokens (libs/design-system/tokens/src/lib/*.ts) to
+# mirror doc/design/ds/colors_and_type.css byte-for-byte (uppercase hex, no rgba()
+# spacing, double quotes) — Prettier would rewrite those stylistic choices even
+# though the source of truth uses them. Regenerate via
+# `nx run design-system-tokens:generate-css`; never hand-edit.
+/libs/design-system/tokens/assets/tokens.css
