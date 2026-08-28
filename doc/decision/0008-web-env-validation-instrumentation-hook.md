@@ -1,65 +1,75 @@
-# 0008 – Validace env proměnných webu v `instrumentation.ts`, ne v `next.config.ts`
+# 0008 – Web env-variable validation lives in `instrumentation.ts`, not `next.config.ts`
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-Fail-fast validace env proměnných `apps/web` (`validateWebEnv`, `apps/web/src/env.ts`) se
-nevolá z `next.config.ts` na top-levelu, jak by naznačovalo doslovné znění Tasku 2
-(„validace při buildu/bootu"). Volá se z `apps/web/src/instrumentation.ts` (Next.js hook
-`register()`), a pouze pro Node.js runtime – přes samostatný modul
-`apps/web/src/instrumentation-node.ts`, ne inline. Selhání validace navíc končí explicitním
-`process.exit(1)`, ne pouhým `throw`.
+Fail-fast validation of `apps/web`'s env variables (`validateWebEnv`,
+`apps/web/src/env.ts`) is not called from the top level of `next.config.ts`, as the
+literal wording of Task 2 might suggest ("validation at build/boot time"). It is
+called from `apps/web/src/instrumentation.ts` (the Next.js `register()` hook), and
+only for the Node.js runtime — via a separate module,
+`apps/web/src/instrumentation-node.ts`, not inline. A validation failure also ends
+with an explicit `process.exit(1)`, not a plain `throw`.
 
-## Proč
+## Why
 
-**Proč ne `next.config.ts`.** `next.config.ts` nečte jen `next dev`/`build`/`start` – čte ho
-i `@nx/next` plugin při výpočtu Nx project graphu, tedy i `nx run web:lint`,
-`web:typecheck`, `nx graph` atd. Ověřeno empiricky: s `validateWebEnv()` na top-levelu
-`next.config.ts` selhávalo i `nx run web:typecheck` bez jakéhokoli běžícího serveru, protože
-Nx načte `next.config.ts` bez reálného `.env`. Validace v konfiguračním souboru by tedy
-blokovala i příkazy, které s runtime env nemají nic společného.
+**Why not `next.config.ts`.** `next.config.ts` isn't read only by `next
+dev`/`build`/`start` – it's also read by the `@nx/next` plugin when computing the Nx
+project graph, i.e. by `nx run web:lint`, `web:typecheck`, `nx graph`, etc. Verified
+empirically: with `validateWebEnv()` at the top level, `next.config.ts` caused even
+`nx run web:typecheck` to fail with no server running at all, because Nx loads
+`next.config.ts` without a real `.env`. Validation in the config file would
+therefore block commands that have nothing to do with the runtime env.
 
-**Proč `instrumentation.ts` → `register()`.** Podle Next.js dokumentace (ověřeno přes
-context7, `/vercel/next.js/v16.1.6`) se `register()` volá přesně jednou, když se spouští
-nová instance serveru (`next dev` / `next start`) – ne při `nx`/Nx-pluginové introspekci
-konfigurace, ne (empiricky ověřeno buildem bez env) při `next build`. To přesně odpovídá
-požadavku „spuštění app s chybějící proměnnou skončí pádem" – jde o **boot**, ne o build.
+**Why `instrumentation.ts` → `register()`.** Per the Next.js documentation (verified
+via context7, `/vercel/next.js/v16.1.6`), `register()` is called exactly once, when
+a new server instance starts (`next dev` / `next start`) – not during `nx`/Nx-plugin
+config introspection, and not (empirically verified with a build lacking env) during
+`next build`. That matches exactly the requirement "starting the app with a missing
+variable results in a crash" — this is about **boot**, not build.
 
-**Proč zvlášť `instrumentation-node.ts`.** `register()` běží v obou runtimech (`nodejs` i
-`edge`). Validace používá jen Node-safe kód, ale `process.exit()` v Edge runtimu neexistuje
-– Turbopack to při buildu nahlásil jako warning („A Node.js API is used … which is not
-supported in the Edge Runtime"), přestože běh chráníme podmínkou
-`NEXT_RUNTIME !== 'nodejs' → return`. Runtime podmínka sama nestačí, protože bundler
-analyzuje kód staticky pro obě varianty. Přesunutím `process.exit`/`validateWebEnv` do
-vlastního modulu, na který se odkazujeme jen přes `await import(...)` uvnitř podmínky (přesně
-podle vzoru z Next.js dokumentace pro runtime-specific instrumentation), Turbopack modul do
-edge bundlu nezahrne a warning zmizí.
+**Why a separate `instrumentation-node.ts`.** `register()` runs in both runtimes
+(`nodejs` and `edge`). The validation uses only Node-safe code, but `process.exit()`
+doesn't exist in the Edge runtime – Turbopack flagged this during the build as a
+warning ("A Node.js API is used … which is not supported in the Edge Runtime"),
+even though the run is guarded by the condition `NEXT_RUNTIME !== 'nodejs' →
+return`. The runtime condition alone isn't enough, because the bundler analyzes the
+code statically for both variants. By moving `process.exit`/`validateWebEnv` into
+their own module, referenced only via `await import(...)` inside the condition
+(exactly per the pattern in the Next.js documentation for runtime-specific
+instrumentation), Turbopack excludes the module from the edge bundle and the warning
+goes away.
 
-**Proč `process.exit(1)`, ne jen `throw`.** Empiricky ověřeno (`next start` bez env): Next.js
-chybu vyhozenou z `register()` odchytí, vypíše „Failed to prepare server" a **server dál
-běží** a odpovídá 500 na každý request – proces nespadne. To porušuje požadavek na fail-fast
-(„okamžitý pád"). Explicitní `process.exit(1)` po zalogování chyby proces skutečně shodí,
-stejným efektem jako výjimka z `ConfigModule.forRoot({ validate })` na API straně.
+**Why `process.exit(1)`, not just `throw`.** Verified empirically (`next start`
+without env): Next.js catches an error thrown from `register()`, prints "Failed to
+prepare server", and **the server keeps running**, answering every request with a
+500 — the process does not crash. That violates the fail-fast requirement
+("immediate crash"). An explicit `process.exit(1)` after logging the error actually
+brings the process down, with the same effect as an exception thrown from
+`ConfigModule.forRoot({ validate })` on the API side.
 
-## Jak
+## How
 
-- `apps/web/src/env.ts` – schéma a `validateWebEnv`, bez vazby na to, kdo ji volá.
-- `apps/web/src/instrumentation.ts` – `register()`, jen routing podle `NEXT_RUNTIME`.
-- `apps/web/src/instrumentation-node.ts` – vlastní validace + `console.error` +
-  `process.exit(1)` při chybě. `no-console` zde neplatí (vynucuje se jen v `apps/api/**` a
-  `libs/**`, viz `eslint.config.mjs`).
-- Ověřeno reálným během: `next build` prochází bez env (build validaci nevolá);
-  `next start` bez env skončí (`exit code 1`) s hláškou jmenující všechny chybějící
-  proměnné a bez jejich hodnot – výstup je v `task-2-report.md`.
+- `apps/web/src/env.ts` – the schema and `validateWebEnv`, with no assumption about
+  who calls it.
+- `apps/web/src/instrumentation.ts` – `register()`, only routing by `NEXT_RUNTIME`.
+- `apps/web/src/instrumentation-node.ts` – the actual validation + `console.error` +
+  `process.exit(1)` on failure. `no-console` doesn't apply here (it's enforced only
+  in `apps/api/**` and `libs/**`, see `eslint.config.mjs`).
+- Verified with a real run: `next build` passes without env (build doesn't call the
+  validation); `next start` without env exits (`exit code 1`) with a message naming
+  every missing variable, without their values – the output is in
+  `task-2-report.md`.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Pokud budoucí Next.js verze změní, kdy se `register()` volá (např. i při `next build`),
-build-time fail-fast už nebude platit vůbec – dnes neplatí ani teoreticky, protože ho žádný
-hook nekryje. Zmírnění: `next build` samo o sobě nic runtime-specifického nepotřebuje (env
-proměnné z tohoto schématu nejsou čteny žádnou stránkou v Fázi 0), takže mezera je dnes bez
-praktického dopadu; jakmile budoucí fáze začnou číst `NEXT_PUBLIC_*` proměnné přímo v
-komponentách, chybějící/neplatná hodnota se sice neprojeví jako pád buildu, ale build i tak
-selže o krok později (chybějící typ/hodnota v komponentě) – a `nx run web-e2e:e2e` by
-takovou konfigurační chybu odhalil při startu dev serveru přes tento stejný hook.
+If a future Next.js version changes when `register()` is called (e.g. also during
+`next build`), the build-time fail-fast guarantee stops holding at all — today it
+doesn't hold even in theory, since no hook covers it. Mitigation: `next build` by
+itself needs nothing runtime-specific today (no page in Phase 0 reads env variables
+from this schema), so the gap has no practical impact right now; once future phases
+start reading `NEXT_PUBLIC_*` variables directly in components, a missing/invalid
+value won't show up as a build crash, but the build will still fail one step later
+(a missing type/value in the component) – and `nx run web-e2e:e2e` would catch such a
+configuration mistake at dev-server startup via this same hook.

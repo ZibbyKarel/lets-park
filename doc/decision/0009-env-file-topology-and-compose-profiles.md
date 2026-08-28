@@ -1,54 +1,63 @@
-# 0009 – Jeden `.env.example`, tři cíle; `web`/`api` v `docker-compose.yml` za profilem
+# 0009 – One `.env.example`, three targets; `web`/`api` in `docker-compose.yml` sit behind a profile
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-1. Existuje jeden `.env.example` v rootu repa (přesně jak žádá Task 2), ale reálně se z něj
-   musí vytvořit **dvě** kopie `.env`, ne jedna: `.env` v rootu (pro `docker compose` a pro
-   `apps/api` spouštěné přes `nx serve api`) a `apps/web/.env` (pro `nx run web:dev` / `next
-   build` / `next start`).
-2. Placeholder služby `web` a `api` v `docker-compose.yml` mají `profiles: ['app']`, takže
-   `docker compose up` (bez `--profile`) je nespustí.
+1. There is one `.env.example` at the repo root (exactly as Task 2 requires), but in
+   practice **two** `.env` copies must be created from it, not one: `.env` at the
+   root (for `docker compose` and for `apps/api` run via `nx serve api`) and
+   `apps/web/.env` (for `nx run web:dev` / `next build` / `next start`).
+2. The placeholder `web` and `api` services in `docker-compose.yml` have
+   `profiles: ['app']`, so `docker compose up` (without `--profile`) doesn't start
+   them.
 
-## Proč
+## Why
 
-**1) Dvě kopie `.env`.** `@nestjs/config`'s `ConfigModule.forRoot()` bez `envFilePath` čte
-`.env` relativně k `process.cwd()`. Nx exekutor `@nx/js:node`, kterým běží `api:serve`, cwd
-nepřepisuje – zůstává root repa – takže root `.env` API stačí. Next.js ale env soubory
-(`.env`, `.env.local`, …) načítá relativně k adresáři, ve kterém běží `next` CLI, a
-`apps/web`'s `dev` target (inferovaný `@nx/next` pluginem, viz `nx.json`) má explicitně
-`"cwd": "apps/web"`. Next tedy hledá `apps/web/.env`, ne root `.env` – ověřeno chováním
-build/serve targetů z `project.json`, ne odhadem. Jeden sdílený `.env` v rootu by `apps/web`
-prostě neviděl.
+**1) Two `.env` copies.** `@nestjs/config`'s `ConfigModule.forRoot()` without
+`envFilePath` reads `.env` relative to `process.cwd()`. The Nx executor
+`@nx/js:node`, which runs `api:serve`, doesn't override the cwd — it stays the repo
+root — so the root `.env` is enough for the API. Next.js, however, reads env files
+(`.env`, `.env.local`, …) relative to the directory in which the `next` CLI runs, and
+`apps/web`'s `dev` target (inferred by the `@nx/next` plugin, see `nx.json`)
+explicitly sets `"cwd": "apps/web"`. So Next looks for `apps/web/.env`, not the root
+`.env` – verified from the actual behavior of the build/serve targets in
+`project.json`, not guessed. A single shared `.env` at the root would simply be
+invisible to `apps/web`.
 
-**2) `profiles: ['app']` pro `web`/`api`.** Task 2 brief žádá „placeholder služby, build
-context připravený, ale skutečné Dockerfiles vzniknou až v Tasku 29". Bez Dockerfilů by
-neomezený `docker compose up` skončil chybou (`dockerfile: apps/api/Dockerfile` neexistuje).
-Dnešní dev workflow navíc běží obě aplikace na hostu (`nx serve`/`nx dev`), ne v kontejneru –
-`docker-compose.yml` v této fázi poskytuje jen infrastrukturu (`postgres`,
-`mock-oauth2-server`, volitelně `adminer`). Profil `app` je proto oddělený od profilu `dev`
-(ten drží jen `adminer`, přesně podle brief) a od výchozích služeb bez profilu
-(`postgres`, `mock-oauth2-server`), které chce mít každý dev pořád po ruce.
+**2) `profiles: ['app']` for `web`/`api`.** The Task 2 brief calls for "placeholder
+services, build context ready, but real Dockerfiles only appear in Task 29". Without
+Dockerfiles, an unrestricted `docker compose up` would fail
+(`dockerfile: apps/api/Dockerfile` doesn't exist). Today's dev workflow also runs
+both apps on the host (`nx serve`/`nx dev`), not in a container — at this stage
+`docker-compose.yml` only provides infrastructure (`postgres`,
+`mock-oauth2-server`, optionally `adminer`). The `app` profile is therefore kept
+separate from the `dev` profile (which holds only `adminer`, exactly per the brief)
+and from the default, profile-less services (`postgres`, `mock-oauth2-server`) that
+every dev wants available at all times.
 
-## Jak
+## How
 
-- `.env.example` (root) má na začátku komentář vysvětlující přesně tohle rozdělení a odkaz na
-  `doc/prostredi.md`.
-- `doc/prostredi.md`, sekce „Jak spustit" má explicitní `cp .env.example .env && cp
-  .env.example apps/web/.env`.
-- `docker-compose.yml`: `web`/`api` mají `profiles: ['app']` a komentář odkazující na Task 29;
-  `adminer` má `profiles: ['dev']` beze změny; `postgres`/`mock-oauth2-server` bez profilu.
-- Ověřeno: `docker compose config` (bez profilu) ukáže jen `postgres` +
-  `mock-oauth2-server`; `docker compose --profile app config` ukáže i `web`/`api` a validuje
-  i s neexistujícím Dockerfile souborem (`config` nekontroluje, že build context/Dockerfile
-  fyzicky existuje – to řeší až `docker compose build`, který v Tasku 29 poprvé poběží).
+- `.env.example` (root) opens with a comment explaining exactly this split and
+  points to `doc/environment.md`.
+- `doc/environment.md`, the "How to start" section, has an explicit `cp .env.example
+  .env && cp .env.example apps/web/.env`.
+- `docker-compose.yml`: `web`/`api` have `profiles: ['app']` and a comment pointing to
+  Task 29; `adminer` keeps `profiles: ['dev']` unchanged; `postgres`/
+  `mock-oauth2-server` have no profile.
+- Verified: `docker compose config` (no profile) shows only `postgres` +
+  `mock-oauth2-server`; `docker compose --profile app config` also shows
+  `web`/`api` and validates even with a non-existent Dockerfile (`config` doesn't
+  check that the build context/Dockerfile physically exists — that's only checked
+  by `docker compose build`, which first runs in Task 29).
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Rozdělení `.env` na dvě kopie je snadné zapomenout a nechat `apps/web` běžet s prázdným env –
-to se ale projeví okamžitě jako fail-fast pád podle `doc/decision/0008-*`, ne jako tichá
-chyba, takže riziko je nízké. Jakmile Task 29 přidá skutečné Dockerfiles a produkční
-kontejnerový běh obou aplikací, tahle nesymetrie zmizí sama (produkční kontejner injektuje
-env přes `env_file`/orchestrátor, ne přes soubor na disku vedle `next.config.ts`) – tehdy má
-smysl `docker-compose.yml`'s `web`/`api` profil `app` odstranit a nechat je jet vždy.
+The split into two `.env` copies is easy to forget, leaving `apps/web` running with
+an empty env – but that immediately shows up as a fail-fast crash per
+`doc/decision/0008-web-env-validation-instrumentation-hook.md`, not as a silent bug,
+so the risk is low. Once Task 29 adds real Dockerfiles and both apps run in
+containers in production, this asymmetry disappears on its own (a production
+container injects env via `env_file`/the orchestrator, not via a file on disk next
+to `next.config.ts`) – at that point it makes sense to remove the `app` profile from
+`docker-compose.yml`'s `web`/`api` and let them always run.

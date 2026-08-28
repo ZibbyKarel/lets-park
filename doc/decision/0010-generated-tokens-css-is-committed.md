@@ -1,53 +1,58 @@
-# 0010 – Generovaný `tokens.css` je commitnutý a vyloučený z Prettieru
+# 0010 – The generated `tokens.css` is committed and excluded from Prettier
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-`libs/design-system/tokens/assets/tokens.css` je **generovaný** soubor (z TS tokenů
-v `src/lib/*.ts`, funkcí `generateTokensCss`), ale je **commitnutý do gitu** a je
-z formátování Prettierem vyloučený přes `.prettierignore` – stejně jako
-`apps/web/next-env.d.ts`.
+`libs/design-system/tokens/assets/tokens.css` is a **generated** file (from the TS
+tokens in `src/lib/*.ts`, via the `generateTokensCss` function), but it is
+**committed to git** and excluded from Prettier formatting via `.prettierignore` —
+the same treatment as `apps/web/next-env.d.ts`.
 
-## Proč
+## Why
 
-1. **Commitnutý.** Konzumenti (Next.js app, Storybook, testy) mají po `npm ci`
-   rovnou funkční CSS proměnné bez nutnosti spouštět build krok navíc. Design systém
-   je teprve v Tasku 6 (jen `tokens`); `primitives`/`compounds` v dalších taskách
-   budou tento soubor importovat – nemusí čekat na to, že si někdo pamatuje spustit
-   generátor. **Pozor:** přesný import specifier (relativní cesta vs. nějaký
-   `exports` mapping) zatím není vyřešený – `@lets-park/design-system/tokens` je jen
-   TS `tsconfig.paths` alias pro modulovou rezoluci, CSS `@import`/bundler ho
-   nezná automaticky. Jak apps/web/Storybook budou `theme.css` reálně importovat
-   je na Tasku, který tuhle lib poprvé konzumuje – viz `doc/design-system.md`.
-2. **Mimo Prettier.** `generateTokensCss` vědomě reprodukuje styl zdrojového
-   `doc/design/ds/colors_and_type.css` 1:1 – velká písmena v hex kódech
-   (`#008FFF`), dvojité uvozovky, `rgba(35,34,31,0.04)` bez mezer za čárkami.
-   Zadání Tasku 6 explicitně zakazuje hodnoty „rounding/renaming/improving“.
-   Prettier by ale hex kódy zmenšil na malá písmena a přidal mezery do `rgba()` –
-   tedy změnil by zápis, i když ne barvu. Nechat Prettier přeformátovat by rozbilo
-   1:1 shodu se zdrojem a hlavně by po každém `npm run format` přepsalo soubor
-   jinak, než jak ho generuje `generateTokensCss` – drift test (`generate-css.spec.ts`)
-   by pak padal i po neškodném `format:write`.
+1. **Committed.** Consumers (the Next.js app, Storybook, tests) get working CSS
+   variables right after `npm ci`, with no need to run an extra build step. The
+   design system exists only up to Task 6 so far (just `tokens`); `primitives`/
+   `compounds` in later tasks will import this file — they shouldn't have to wait on
+   someone remembering to run the generator. **Note:** the exact import specifier
+   (a relative path vs. some `exports` mapping) isn't resolved yet –
+   `@lets-park/design-system/tokens` is only a TS `tsconfig.paths` alias for module
+   resolution; a CSS `@import`/bundler doesn't know it automatically. How
+   apps/web/Storybook actually import `theme.css` is up to whichever task first
+   consumes this lib — see `doc/design-system.md`.
+2. **Excluded from Prettier.** `generateTokensCss` deliberately reproduces the style
+   of the source `doc/design/ds/colors_and_type.css` 1:1 — uppercase hex codes
+   (`#008FFF`), double quotes, `rgba(35,34,31,0.04)` with no spaces after commas.
+   The Task 6 brief explicitly forbids "rounding/renaming/improving" the values.
+   Prettier, however, would lowercase the hex codes and add spaces inside `rgba()` —
+   changing the notation, even though not the color. Letting Prettier reformat it
+   would break the 1:1 match with the source, and worse, would rewrite the file
+   differently than `generateTokensCss` produces it after every `npm run format` –
+   the drift test (`generate-css.spec.ts`) would then fail even after a harmless
+   `format:write`.
 
-## Jak
+## How
 
-- Generátor: `libs/design-system/tokens/src/lib/generate-css.ts`
-  (`generateTokensCss(tokens: DesignTokens): string`), čistá funkce bez I/O.
-- Spouštěč: `libs/design-system/tokens/scripts/build-tokens-css.ts`, cíl
+- Generator: `libs/design-system/tokens/src/lib/generate-css.ts`
+  (`generateTokensCss(tokens: DesignTokens): string`), a pure function with no I/O.
+- Runner: `libs/design-system/tokens/scripts/build-tokens-css.ts`, target
   `nx run design-system-tokens:generate-css`.
-- Drift test: `generate-css.spec.ts` čte commitnutý soubor ze disku (`fs.readFileSync`)
-  a porovnává ho `toBe()` s výstupem `generateTokensCss(DESIGN_TOKENS)` – žádný Jest
-  inline snapshot, protože ten by se tiše přepsal na nový výstup generátoru a nikdy
-  by nechytil rozjetí generátoru/TS zdroje od skutečného souboru na disku.
+- Drift test: `generate-css.spec.ts` reads the committed file from disk
+  (`fs.readFileSync`) and compares it with `toBe()` against the output of
+  `generateTokensCss(DESIGN_TOKENS)` – no Jest inline snapshot, since that would
+  silently get rewritten to match the generator's new output and would never catch
+  the generator/TS source drifting from the actual file on disk.
 - `.prettierignore`: `/libs/design-system/tokens/assets/tokens.css`.
-- `theme.css` (hand-written Tailwind bridge ve stejné složce) **naopak** Prettier
-  hlídá běžně – je to strukturální soubor s `var()` odkazy, ne kopie hodnot.
+- `theme.css` (the hand-written Tailwind bridge in the same folder), by contrast, **is**
+  formatted by Prettier as usual – it's a structural file with `var()` references,
+  not a copy of raw values.
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Kdyby se ukázalo, že commitnutý generovaný soubor vadí (např. konflikty při mergi,
-nebo touha mít CSS čistě odvozené za buildu), řešení je hodit `assets/tokens.css`
-do `.gitignore` a spustit `generate-css` jako `preinstall`/`prebuild` skript – žádná
-jiná část kódu na commitnutí souboru nezávisí kromě testu, který by se upravil na
-`beforeAll` regeneraci do tmp souboru.
+If the committed generated file turns out to be a problem (e.g. merge conflicts, or
+a wish to have the CSS purely derived at build time), the fix is to add
+`assets/tokens.css` to `.gitignore` and run `generate-css` as a `preinstall`/
+`prebuild` script – no other part of the code depends on the file being committed
+except the test, which would be adjusted to regenerate into a tmp file in
+`beforeAll`.

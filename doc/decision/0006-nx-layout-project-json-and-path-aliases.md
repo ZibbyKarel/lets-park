@@ -1,48 +1,50 @@
-# 0006 – Nx layout: `project.json` + path aliasy v `tsconfig.base.json`
+# 0006 – Nx layout: `project.json` + path aliases in `tsconfig.base.json`
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-Workspace používá **klasický Nx layout**, ne novější „TS solution setup":
+The workspace uses the **classic Nx layout**, not the newer "TS solution setup":
 
-- každý projekt má vlastní `project.json` (`--useProjectJson`),
-- libs se rozlišují path aliasy v `tsconfig.base.json`
+- every project has its own `project.json` (`--useProjectJson`),
+- libs are resolved via path aliases in `tsconfig.base.json`
   (`"@lets-park/contract": ["./libs/contract/src/index.ts"]`),
-- **ne** npm workspaces + TypeScript project references (`--no-workspaces`).
+- **not** npm workspaces + TypeScript project references (`--no-workspaces`).
 
-## Proč
+## Why
 
-`create-nx-workspace` dnes defaultně nabízí TS solution setup (npm workspaces,
-`references`, `nx sync`). Pro tento projekt je klasický layout výhodnější:
+`create-nx-workspace` today defaults to offering the TS solution setup (npm
+workspaces, `references`, `nx sync`). For this project the classic layout is
+preferable:
 
-- **Žádný `nx sync`.** V TS solution setupu se po přidání závislosti mezi libs musí
-  regenerovat `references`; v neinteraktivním běhu (CI, subagent) task místo běhu
-  spadne s výzvou „run nx sync". Přes projekt jde 29 úkolů, které postupně přidávají
-  13 libs – tenhle paper cut by se opakoval pořád dokola.
-- **Jeden greppovatelný seznam.** Všechny entry pointy jsou na jednom místě
-  v `tsconfig.base.json`, což odpovídá rozhodnutí 0005 (scope `@lets-park`) a usnadňuje
-  kontrolu, že žádná lib nevzniká mimo scope.
-- **Zdroj místo buildu.** Libs se resolvují na `src/index.ts`, takže `lint`, `test`
-  i `typecheck` nepotřebují libs nejdřív buildovat. Rychlejší a méně stavů, ve kterých
-  může běh selhat.
+- **No `nx sync`.** In the TS solution setup, adding a dependency between libs
+  requires regenerating `references`; in a non-interactive run (CI, subagent) the
+  task fails with a prompt to "run nx sync" instead of running. The project spans 29
+  tasks that progressively add 13 libs – this paper cut would repeat over and over.
+- **One greppable list.** All entry points live in one place, in
+  `tsconfig.base.json`, which matches decision 0005 (scope `@lets-park`) and makes
+  it easy to check that no lib is created outside the scope.
+- **Source instead of build.** Libs resolve to `src/index.ts`, so `lint`, `test` and
+  `typecheck` don't need libs built first. Faster, and fewer states in which a run
+  can fail.
 
-Subpath entry pointy (`@lets-park/contract/realtime` podle `plan.md`) fungují v obou
-variantách – v klasickém layoutu jako druhý záznam v `paths`.
+Subpath entry points (`@lets-park/contract/realtime` per `plan.md`) work under
+either variant – in the classic layout, as a second entry in `paths`.
 
-## Jak
+## How
 
-- Workspace vygenerován přes `create-nx-workspace@23.1.2 --preset=apps
+- Workspace generated via `create-nx-workspace@23.1.2 --preset=apps
   --workspaceType=integrated --no-workspaces --useProjectJson --pm=npm --nxCloud=skip`.
-- Scope `@lets-park` plyne z názvu root `package.json` (`@lets-park/source`); generátory
-  Nx z něj odvozují alias automaticky – ověřeno vygenerováním a smazáním testovací lib.
-- Nové libs se přidávají generátorem, který alias do `tsconfig.base.json` doplní sám
-  (viz `doc/workspace.md`).
+- Scope `@lets-park` follows from the root `package.json` name (`@lets-park/source`);
+  Nx generators derive the alias from it automatically – verified by generating and
+  deleting a test lib.
+- New libs are added via a generator that fills in the alias in
+  `tsconfig.base.json` itself (see `doc/workspace.md`).
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Nx podporuje oba layouty a nabízí migraci do TS solution setupu; přechod je ale plošný
-zásah do všech `tsconfig.json` a `package.json` v repu. Kdyby se ukázalo, že projekt
-potřebuje buildovatelné publikovatelné balíčky (což MVP nepotřebuje – deployuje se
-jedna instance), je to práce na jeden dedikovaný úkol, ne rozhodnutí, které by blokovalo
-cokoliv dřív.
+Nx supports both layouts and offers a migration to the TS solution setup; the
+switch is, however, a sweeping change across every `tsconfig.json` and
+`package.json` in the repo. If it turns out the project needs buildable,
+publishable packages (which the MVP doesn't – a single instance is deployed), that's
+one dedicated task's worth of work, not a decision that would block anything sooner.

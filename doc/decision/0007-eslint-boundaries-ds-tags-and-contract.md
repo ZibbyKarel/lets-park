@@ -1,54 +1,59 @@
-# 0007 – ESLint hranice: dimenze tagů `ds:*` a externí importy kontraktu
+# 0007 – ESLint boundaries: the `ds:*` tag dimension and external contract imports
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-Dvě odchylky od doslovného znění zadání Tasku 1 v konfiguraci
-`@nx/enforce-module-boundaries` (`eslint.config.mjs`):
+Two deviations from the literal wording of the Task 1 brief in the
+`@nx/enforce-module-boundaries` configuration (`eslint.config.mjs`):
 
-1. Vedle dimenzí `type:*` a `scope:*` existuje třetí dimenze **`ds:tokens` /
-   `ds:primitives` / `ds:compounds`** pro vrstvy design systému.
-2. `type:contract` má `allowedExternalImports: ['zod', 'zod/*', '@orpc/contract',
-   'tslib']` – tedy nejen `zod`.
+1. Alongside the `type:*` and `scope:*` dimensions there is a third dimension,
+   **`ds:tokens` / `ds:primitives` / `ds:compounds`**, for the design-system layers.
+2. `type:contract` has `allowedExternalImports: ['zod', 'zod/*', '@orpc/contract',
+   'tslib']` – i.e. not just `zod`.
 
-## Proč
+## Why
 
-**1) `ds:*` dimenze.** Zadání požaduje, aby `libs/design-system/primitives` nesmělo
-importovat `libs/design-system/compounds`. Obě libs jsou ale `type:ui`, a pravidlo
-`type:ui → [type:ui, type:util]` mezi nimi nedokáže rozlišit. Nx vyhodnocuje všechna
-pravidla, jejichž `sourceTag` sedí, **konjunktivně** – přidáním druhého tagu tedy vznikne
-další podmínka, kterou musí cíl splnit:
+**1) The `ds:*` dimension.** The brief requires that `libs/design-system/primitives`
+must not import `libs/design-system/compounds`. But both libs are `type:ui`, and the
+rule `type:ui → [type:ui, type:util]` cannot distinguish between them. Nx evaluates
+every rule whose `sourceTag` matches **conjunctively** – adding a second tag therefore
+creates an additional condition the target must satisfy:
 
-| zdroj | smí záviset na |
+| source | may depend on |
 | --- | --- |
 | `ds:tokens` | `type:util` |
 | `ds:primitives` | `ds:tokens`, `type:util` |
 | `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` |
 
-`primitives → compounds` projde přes `type:ui`, ale spadne na pravidle `ds:primitives`,
-protože `compounds` nenese ani `ds:tokens`, ani `type:util`. Směr tokens → primitives →
-compounds je tím vynucený jednosměrně, přesně jak žádá `plan.md`.
+`primitives → compounds` passes the `type:ui` rule but fails the `ds:primitives`
+rule, because `compounds` carries neither `ds:tokens` nor `type:util`. The direction
+tokens → primitives → compounds is thereby enforced one-way, exactly as `plan.md`
+requires.
 
-**2) `@orpc/contract` v kontraktu.** Zadání Tasku 1 říká „`type:contract` nesmí importovat
-nic kromě `zod` a `type:util`", ale `plan.md` (Fáze 1) do téže lib umisťuje **oRPC
-kontrakt** – procedury se tam definují přes `@orpc/contract`. Doslovné pravidlo by
-znemožnilo napsat Fázi 1. Povolený je jen `@orpc/contract` (definice kontraktu), ne
-`@orpc/server` ani `@orpc/client` – ty patří do backendu, respektive do
-`libs/api-client`. `tslib` je runtime helper TypeScriptu (`importHelpers: true`), ne
-závislost v doménovém smyslu.
+**2) `@orpc/contract` in the contract lib.** The Task 1 brief says "`type:contract`
+must not import anything besides `zod` and `type:util`", but `plan.md` (Phase 1)
+places the **oRPC contract** in that same lib – procedures are defined there via
+`@orpc/contract`. The literal rule would make Phase 1 impossible to write. Only
+`@orpc/contract` (contract definitions) is allowed, not `@orpc/server` or
+`@orpc/client` – those belong to the backend and to `libs/api-client` respectively.
+`tslib` is a TypeScript runtime helper (`importHelpers: true`), not a dependency in
+the domain sense.
 
-## Jak
+## How
 
-- Konfigurace je v `eslint.config.mjs`, sekce `@nx/enforce-module-boundaries`.
-- Tagy pro budoucí libs jsou vypsané v `doc/workspace.md` (tabulka „jak přidat novou lib").
-- Ověřeno dočasnými libs: `primitives → compounds` a `scope:api → scope:web` ESLint
-  odmítne (viz report Tasku 1).
+- The configuration lives in `eslint.config.mjs`, in the
+  `@nx/enforce-module-boundaries` section.
+- Tags for future libs are listed in `doc/workspace.md` (the "how to add a new lib"
+  table).
+- Verified with temporary libs: ESLint rejects both `primitives → compounds` and
+  `scope:api → scope:web` (see the Task 1 report).
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Kdyby se ukázalo, že rozdělení design systému na tři libs je zbytečné, `ds:*` tagy se
-smažou spolu s libs – nikde jinde se nepoužívají. Kdyby kontrakt potřeboval další balíček
-(např. jiný oRPC modul), rozšíření `allowedExternalImports` je jednořádková změna; horší
-by bylo, kdyby seznam nikdo neudržoval a pravidlo se vypnulo úplně – proto je zúžený na
-konkrétní balíčky, ne na `@orpc/*`.
+If splitting the design system into three libs turns out to be unnecessary, the
+`ds:*` tags get deleted along with the libs – they're not used anywhere else. If the
+contract needs another package (e.g. a different oRPC module), extending
+`allowedExternalImports` is a one-line change; the worse outcome would be if nobody
+maintained the list and the rule got disabled entirely – that's why it's scoped to
+specific packages, not to `@orpc/*`.
