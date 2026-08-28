@@ -1,81 +1,84 @@
-# 0011 – Odvozené control tokeny a zaokrouhlení rozměrů z designu
+# 0011 – Derived control tokens and rounding dimensions from the design
 
-## Co
+## What
 
-Vznikl nový, **záměrně oddělený** modul tokenů
-`libs/design-system/tokens/src/lib/controls.ts` s vlastní skupinou CSS
-proměnných:
+A new, **deliberately separate** token module was created,
+`libs/design-system/tokens/src/lib/controls.ts`, with its own group of CSS
+variables:
 
-- `--control-h-sm|md|lg|xl` = `36px | 40px | 48px | 56px` – sdílená výšková
-  škála pro Button, Input, Select a Stepper,
-- `--switch-w|h|pad|knob|knob-shadow` – geometrie přepínače (46×26, knoflík 20px).
+- `--control-h-sm|md|lg|xl` = `36px | 40px | 48px | 56px` – a shared height scale
+  for Button, Input, Select and Stepper,
+- `--switch-w|h|pad|knob|knob-shadow` – the switch's geometry (46×26, a 20px knob).
 
-Zároveň platí pravidlo **zaokrouhlování**: rozměry a velikosti písma z designu,
-které nesedí na existující škálu, se snapují na nejbližší token, ne kopírují
-doslova.
+At the same time, a **rounding rule** applies: dimensions and font sizes from the
+design that don't land on an existing scale are snapped to the nearest token,
+never copied literally.
 
-| v designu | v primitivu | token |
+| in the design | in the primitive | token |
 | --- | --- | --- |
-| výšky 32 / 44 / 52 px | 36 / 40 / 48 px | `--control-h-*` |
+| heights 32 / 44 / 52 px | 36 / 40 / 48 px | `--control-h-*` |
 | `font-size` 13 / 15 / 17 px | 14 / 16 / 18 px | `--fs-sm` / `--fs-base` / `--fs-md` |
 | padding 14 / 18 / 22 / 26 / 34 px | 12 / 16 / 20 / 24 / 32 px | `--space-3..8` |
 | avatar 22 / 30 / 34 px | 24 / 32 / 40 px | `--space-6/8/10` |
-| badge výška 24 i 26 px | 24 px | `--space-6` |
-| stepper tlačítko 44×48 | 48×48 | `--control-h-lg` |
+| badge height 24 and 26 px | 24 px | `--space-6` |
+| stepper button 44×48 | 48×48 | `--control-h-lg` |
 
-## Proč
+## Why
 
-Global constraint 5 zakazuje ručně psané hodnoty barev a spacingu mimo vrstvu
-tokenů. Design (`doc/design/lets-park-design.dc.html`) je ale psaný inline styly
-a používá **sedm různých výšek** tlačítek a pět velikostí písma, z nichž velká
-část na `--space-*` ani `--fs-*` škálu nesedí (36, 44, 52, 56 px; 13, 15, 17 px).
+Global constraint 5 forbids hand-written color and spacing values outside the
+tokens layer. The design (`doc/design/lets-park-design.dc.html`), however, is
+written with inline styles and uses **seven different button heights** and five
+font sizes, most of which don't land on the `--space-*` or `--fs-*` scale at all
+(36, 44, 52, 56 px; 13, 15, 17 px).
 
-Byly tři možnosti:
+There were three options:
 
-1. Napsat hodnoty natvrdo do primitivů → porušení constraintu 5.
-2. Vynechat je a použít jen to, co na škále je → primitivy by se viditelně
-   rozešly s designem (chybělo by hero CTA 56 px i kompaktní řádek 36 px).
-3. Doplnit chybějící kategorii do vrstvy tokenů a zbytek zaokrouhlit.
+1. Hard-code the values into the primitives → violates constraint 5.
+2. Skip them and use only what's on the scale → the primitives would visibly
+   diverge from the design (missing both the 56 px hero CTA and the 36 px compact
+   row).
+3. Add the missing category to the tokens layer and round the rest.
 
-Zvolena je 3. Výšku interaktivního prvku je navíc rozumné mít jako **vlastní
-sémantickou kategorii** – není to spacing ani radius, je to rozměr ovládacího
-prvku, a design systém ji potřebuje sdílet mezi čtyřmi komponentami.
+Option 3 was chosen. It's also reasonable for an interactive element's height to
+have **its own semantic category** – it isn't spacing or radius, it's a control
+dimension, and the design system needs to share it across four components.
 
-Zaokrouhlení řeší druhou půlku problému: kdyby se do tokenů dostala každá
-hodnota z designu, vznikla by škála o sedmi krocích, kterou nikdo neudrží
-konzistentní. Rozdíl 1–4 px je vizuálně nepostřehnutelný, roztříštěná škála se
-pozná okamžitě.
+Rounding solves the other half of the problem: if every value from the design were
+turned into a token, the result would be a seven-step scale nobody could keep
+consistent. A difference of 1–4 px is visually imperceptible; a fragmented scale
+is noticeable immediately.
 
-## Jak
+## How
 
-- `controls.ts` má v hlavičce **výslovně napsáno, že je DERIVED**, ne 1:1 kopie
-  `colors_and_type.css` – stejným způsobem, jakým je označený `BREAKPOINTS`
-  v `layout.ts` (viz `doc/decision/0009-breakpointy-jsou-odvozene.md`).
-  Ostatní moduly tokenů (`colors.ts`, `shadows.ts`, `spacing.ts`) zůstávají
-  bajt za bajtem věrné zdroji – proto je i stín knoflíku přepínače
-  (`0 1px 2px rgba(35,34,31,0.24)`, tmavší než kterýkoli `--shadow-*`)
-  v `controls.ts` a ne v `shadows.ts`.
-- Do `generateTokensCss` přibyla sekce `/* --- Controls --- */`,
-  `assets/tokens.css` je přegenerovaný, drift test prošel.
-- Do `assets/theme.css` se `--control-*` **nemapují**. Tailwind v4 nemá
-  namespace pro výšku (výšky bere ze `--spacing-*`) a protlačit je přes
-  `--spacing-*` by vyrobilo nesmyslné utility `w-control-lg` / `p-control-lg`.
-  Primitivy je konzumují jako arbitrary value: `h-[var(--control-h-lg)]`.
-- Mapování krok → padding → velikost písma je na jednom místě
-  (`libs/design-system/primitives/src/lib/control-size.ts`), aby se čtyři
-  komponenty nemohly rozejít.
+- `controls.ts`'s header **explicitly states it is DERIVED**, not a 1:1 copy of
+  `colors_and_type.css` – the same way `BREAKPOINTS` in `layout.ts` is marked (see
+  `doc/decision/0011-breakpoints-are-derived.md`). The other token modules
+  (`colors.ts`, `shadows.ts`, `spacing.ts`) remain byte-for-byte faithful to the
+  source – which is why the switch knob's shadow
+  (`0 1px 2px rgba(35,34,31,0.24)`, darker than any `--shadow-*`) lives in
+  `controls.ts`, not `shadows.ts`.
+- `generateTokensCss` gained a `/* --- Controls --- */` section;
+  `assets/tokens.css` was regenerated, and the drift test passed.
+- `--control-*` is **not** mapped into `assets/theme.css`. Tailwind v4 has no
+  namespace for height (it draws heights from `--spacing-*`), and forcing them
+  through `--spacing-*` would produce nonsensical utilities like `w-control-lg` /
+  `p-control-lg`. The primitives consume them as an arbitrary value:
+  `h-[var(--control-h-lg)]`.
+- The step → padding → font-size mapping lives in a single place
+  (`libs/design-system/primitives/src/lib/control-size.ts`), so the four
+  components can't drift apart.
 
-## Riziko
+## Risk
 
-- **Odchylka od designu.** Tlačítka v modálech jsou 48 px místo návrhových 48 px
-  (sedí), ale např. „Přidat místo" bude 40 nebo 48 místo 44. Rozdíl je do 4 px.
-  Kdyby si to vizuální review vyžádalo, přidat pátý krok je jeden řádek
-  v `controls.ts` + přegenerování CSS.
-- **Dvojí povaha tokenů.** V jedné libce jsou teď dvě skupiny tokenů s různým
-  zdrojem pravdy (`colors_and_type.css` vs. exportovaný design). Kdo bude
-  příště přidávat token, musí vědět, do které skupiny patří – proto to má
-  `controls.ts` napsané v hlavičce a `doc/design-system.md` v sekci
-  „Jak přidat nový token".
-- **Zaokrouhlení je jednosměrné.** Až přijde aktualizovaný design, nepůjde
-  automaticky poznat, jestli je rozdíl 4 px záměrné zaokrouhlení, nebo nová
-  hodnota. Tabulka výše je proto součástí tohoto rozhodnutí.
+- **Deviation from the design.** Buttons in modals are 48 px, matching the
+  design's 48 px, but e.g. "Přidat místo" ("Add spot") will be 40 or 48 instead of
+  44. The difference is within 4 px. If a visual review calls for it, adding a
+  fifth step is one line in `controls.ts` plus regenerating the CSS.
+- **Dual nature of the tokens.** This one lib now holds two token groups with
+  different sources of truth (`colors_and_type.css` vs. the exported design).
+  Whoever adds the next token needs to know which group it belongs to – that's
+  why `controls.ts` states it in its header, and `doc/design-system.md` covers it
+  in the "How to add a new token" section.
+- **Rounding is one-directional.** Once an updated design arrives, it won't be
+  automatically obvious whether a 4 px difference is deliberate rounding or a new
+  value. The table above is therefore part of this decision record.

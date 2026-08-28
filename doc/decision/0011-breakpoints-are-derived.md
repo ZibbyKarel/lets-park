@@ -1,39 +1,42 @@
-# 0011 – Breakpointy jsou odvozené, ne ze zdroje
+# 0011 – Breakpoints are derived, not sourced
 
-**Datum:** 2026-08-28 · **Stav:** přijato
+**Date:** 2026-08-28 · **Status:** accepted
 
-## Co
+## What
 
-`doc/design/ds/colors_and_type.css` nedefinuje žádné `--breakpoint-*` custom
-properties. `libs/design-system/tokens/src/lib/layout.ts` (`BREAKPOINTS`) a
-`assets/theme.css` (`@theme { --breakpoint-* }`) proto používají Tailwind v4
-defaultní hodnoty: `sm:640px, md:768px, lg:1024px, xl:1280px, 2xl:1536px`.
+`doc/design/ds/colors_and_type.css` defines no `--breakpoint-*` custom properties
+at all. `libs/design-system/tokens/src/lib/layout.ts` (`BREAKPOINTS`) and
+`assets/theme.css` (`@theme { --breakpoint-* }`) therefore use Tailwind v4's
+default values: `sm:640px, md:768px, lg:1024px, xl:1280px, 2xl:1536px`.
 
-## Proč
+## Why
 
-Zadání Tasku 6 říká: „Breakpointy, které v CSS nejsou explicitně, odvoď z designu
-a označ komentářem.“ Zdrojový CSS soubor breakpointy vůbec nemá – jen dva obsahové
-`--container`/`--container-wide` (1200px/1320px). Snímky obrazovek v
-`doc/design/screens/` ukazují jednotlivé stavy, ne mezilehlé šířky, kde se layout
-zlomí. Bez přístupu k živému `.dc.html` renderu (běžel by Playwright) nejde
-breakpointy „naměřit“ přesně – zvolil jsem tedy Tailwind v4 defaulty, protože:
+The Task 6 brief says: "Derive any breakpoints not explicit in the CSS from the
+design and mark them with a comment." The source CSS file has no breakpoints at
+all — only two content widths, `--container`/`--container-wide` (1200px/1320px).
+The screenshots in `doc/design/screens/` show individual states, not the
+intermediate widths where the layout actually breaks. Without access to a live
+`.dc.html` render (which would require Playwright), there's no way to "measure"
+breakpoints precisely – so I chose the Tailwind v4 defaults, because:
 
-- `xl` (1280px) leží mezi `--container` (1200px) a `--container-wide` (1320px) –
-  rozumný bod, kde container přestává být limitujícím faktorem.
-- `2xl` (1536px) je nad oběma containery.
-- `sm`/`md` pokrývají běžný mobil→tablet přechod, který design (mobile-first typ
-  scale v `colors_and_type.css`, komentář „bumped at md via utilities“) předpokládá.
+- `xl` (1280px) sits between `--container` (1200px) and `--container-wide`
+  (1320px) – a reasonable point where the container stops being the limiting
+  factor.
+- `2xl` (1536px) is above both containers.
+- `sm`/`md` cover the ordinary mobile→tablet transition that the design (the
+  mobile-first type scale in `colors_and_type.css`, commented "bumped at md via
+  utilities") assumes.
 
-## Jak
+## How
 
-- TS zdroj: `BREAKPOINTS` v `layout.ts`, s komentářem „DERIVED“.
-- CSS: `assets/theme.css`, blok `@theme { ... }` (ne `@theme inline` – breakpointy
-  musí být literální hodnoty, Tailwind je vyhodnocuje do `@media`, nejde tam dát
-  `var()`).
+- TS source: `BREAKPOINTS` in `layout.ts`, with a "DERIVED" comment.
+- CSS: `assets/theme.css`, the `@theme { ... }` block (not `@theme inline` –
+  breakpoints must be literal values; Tailwind evaluates them into `@media`, where
+  `var()` cannot be used).
 
-## Riziko, když je to špatně
+## Risk if this is wrong
 
-Až budou k dispozici skutečné šířky ze `.dc.html` (Task na `primitives`/`compounds`,
-nebo review designu), oprava je lokální: změnit `BREAKPOINTS` v `layout.ts` a
-odpovídající řádky v `theme.css`. Nic dalšího v `tokens` na konkrétních hodnotách
-breakpointů nezávisí.
+Once real widths from the `.dc.html` are available (a task on `primitives`/
+`compounds`, or a design review), the fix is local: change `BREAKPOINTS` in
+`layout.ts` and the corresponding lines in `theme.css`. Nothing else in `tokens`
+depends on the specific breakpoint values.

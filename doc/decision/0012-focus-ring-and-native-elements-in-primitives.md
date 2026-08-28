@@ -1,66 +1,72 @@
-# 0012 – Focus ring navíc proti designu a nativní prvky v primitivech
+# 0012 – An extra focus ring beyond the design, and native elements in the primitives
 
-## Co
+## What
 
-Dvě přístupová rozhodnutí pro vrstvu `libs/design-system/primitives`:
+Two accessibility decisions for the `libs/design-system/primitives` layer:
 
-1. **Každý fokusovatelný primitiv dostal jednotný focus ring** –
-   `outline: 2px var(--brand-blue)` s `outline-offset` 2px, přes
-   `:focus-visible`. Design ho nepředepisuje.
-2. **Input, Select, Checkbox a Radio jsou nativní HTML prvky**, jen
-   přestylované (`appearance-none` + tokeny). Žádný z nich není `div`
-   s `role=""`. Switch je `<button role="switch">`, Stepper je dvojice
-   `<button>` plus hodnota s `role="spinbutton"`.
+1. **Every focusable primitive gets a uniform focus ring** –
+   `outline: 2px var(--brand-blue)` with a 2px `outline-offset`, via
+   `:focus-visible`. The design does not specify one.
+2. **Input, Select, Checkbox and Radio are native HTML elements**, only
+   restyled (`appearance-none` + tokens). None of them is a `div` with a
+   `role=""`. Switch is a `<button role="switch">`; Stepper is a pair of
+   `<button>` elements plus a value with `role="spinbutton"`.
 
-## Proč
+## Why
 
-**K bodu 1.** Design (`doc/design/lets-park-design.dc.html`) definuje
-`style-focus` **jen u textových polí a selectů**, a to jako změnu barvy rámečku
-na `#008FFF`. U tlačítek, přepínačů a stepperu nedefinuje fokus vůbec – protože
-je psaný inline styly pro statickou ukázku, ne jako produkční CSS.
+**On point 1.** The design (`doc/design/lets-park-design.dc.html`) defines
+`style-focus` **only for text fields and selects**, and only as a change of the
+border color to `#008FFF`. For buttons, switches and the stepper it defines no
+focus state at all – because it's written with inline styles for a static
+demo, not as production CSS.
 
-Převzít to doslova by znamenalo:
+Taking that literally would mean:
 
-- tlačítka bez jakéhokoli viditelného fokusu (prohlížeč by nakreslil default,
-  který se s pill tvarem a barvami designu tluče),
-- u polí by jediným signálem fokusu byla změna barvy 1px rámečku, což je málo
-  kontrastní na to, aby to byl jediný indikátor.
+- buttons with no visible focus at all (the browser would draw its default,
+  which clashes with the design's pill shape and colors),
+- for fields, the only focus signal would be a 1px border-color change, which is
+  too low-contrast to be the sole indicator.
 
-Dostupnost z klávesnice je u tohohle úkolu funkční požadavek, ne kosmetika, a
-neviditelný fokus ji rozbíjí. Ring je proto **doplněk, ne náhrada** – u polí
-zůstává i modrý rámeček z designu.
+Keyboard accessibility is a functional requirement for this task, not cosmetics,
+and an invisible focus state breaks it. The ring is therefore an **addition, not
+a replacement** – fields keep the design's blue border too.
 
-**K bodu 2.** Vlastní listbox / checkbox / radio z `div`ů by musel
-znovu naimplementovat type-ahead, Home/End, Alt+šipky, roving tabindex mezi
-radiy, mobilní picker, `:checked`, odesílání formuláře a celý kontrakt pro
-odečítače obrazovky. To je přesně to místo, kde v design systémech vznikají
-chyby v přístupnosti. Nativní prvek to všechno má a design sám používá
-`<select>` a `<input>`, takže není ani vizuální důvod je opouštět.
+**On point 2.** A hand-rolled listbox / checkbox / radio built from `div`s would
+have to reimplement type-ahead, Home/End, Alt+arrow keys, roving tabindex among
+radios, the mobile picker, `:checked`, form submission, and the entire screen-
+reader contract. That's exactly where accessibility bugs originate in design
+systems. The native element already provides all of that, and the design itself
+uses `<select>` and `<input>`, so there's no visual reason to abandon them
+either.
 
-## Jak
+## How
 
-- `control-size.ts` exportuje `FOCUS_RING` jako jednu konstantu, kterou
-  používají všechny primitivy – nejde ho někde zapomenout ani mít jinak.
-- Vizuální chrome se řeší `appearance-none` a překreslením: u Selectu je šipka
-  `aria-hidden` SVG, u Checkboxu je fajfka `aria-hidden` SVG nad `peer`
-  inputem, u Radia vnitřní tečka. **Prvek, který drží chování, je vždycky ten
-  nativní**, ne jeho grafický sourozenec.
-- Stav „neplatné" nese `aria-invalid` na tom prvku, který ho podporuje. U Radia
-  ho `role="radio"` nepodporuje, takže ho drží skupina (`RadioGroup`,
-  `<fieldset>`), ne jednotlivá volba.
-- U Switche je `disabled` řešené barvou z tokenů (`--border`), ne `opacity`,
-  aby stav zůstal popsaný tokenem.
-- Testy (Jest + Testing Library) u každé komponenty ověřují `role`, přístupné
-  jméno, dosažitelnost Tabem a ovládání klávesnicí – ne vzhled.
+- `control-size.ts` exports `FOCUS_RING` as a single constant used by every
+  primitive – it can't be forgotten in one place or defined differently
+  elsewhere.
+- Visual chrome is handled with `appearance-none` and an overlay: for Select the
+  arrow is an `aria-hidden` SVG, for Checkbox the checkmark is an `aria-hidden`
+  SVG layered over a `peer` input, for Radio it's an inner dot. **The element
+  that carries the behavior is always the native one**, never its graphical
+  sibling.
+- The "invalid" state is carried by `aria-invalid` on whichever element supports
+  it. For Radio, `role="radio"` doesn't support it, so the group carries it
+  instead (`RadioGroup`, `<fieldset>`), not the individual option.
+- For Switch, `disabled` is expressed with a token color (`--border`), not
+  `opacity`, so the state stays described by a token.
+- Tests (Jest + Testing Library) for each component verify `role`, the
+  accessible name, Tab reachability and keyboard control – not appearance.
 
-## Riziko
+## Risk
 
-- **Odchylka od vizuálního zadání.** Ring je viditelný prvek, který v designu
-  není. Kdyby ho designér chtěl jinak (jiná barva, `box-shadow` místo
-  `outline`), je to změna jedné konstanty.
-- **`role="spinbutton"` u Stepperu je nad rámec designu**, kde je hodnota jen
-  needitovatelný box. Přidává hodnotu do pořadí tabů. Bez toho by ale šla
-  hodnota měnit výhradně dvěma tlačítky a šipky by nedělaly nic.
-- **jsdom neumí klávesovou obsluhu nativního `<select>`u.** Test proto ověřuje,
-  že prvek zůstal `<select>` (tj. že chování dodává platforma), ne že šipka
-  posune výběr – to je tvrzení, které umí ověřit až e2e v prohlížeči (Fáze 7).
+- **Deviation from the visual brief.** The ring is a visible element that isn't
+  in the design. If a designer wants it different (a different color, a
+  `box-shadow` instead of `outline`), it's a change to one constant.
+- **`role="spinbutton"` on the Stepper goes beyond the design**, where the value
+  is just a non-editable box. It adds the value to tab order. Without it, though,
+  the value could only be changed by the two buttons, and arrow keys would do
+  nothing.
+- **jsdom can't emulate keyboard handling for a native `<select>`.** The test
+  therefore verifies that the element remains a `<select>` (i.e. that the
+  platform supplies the behavior), not that an arrow key changes the selection –
+  that's a claim only a browser-based e2e test (Phase 7) can verify.
