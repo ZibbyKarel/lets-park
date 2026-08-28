@@ -1,3 +1,4 @@
+import { MAX_MONTH_WINDOW_SPAN } from '@lets-park/shared-types';
 import {
   listMonthWindowsInputSchema,
   listMonthWindowsOutputSchema,
@@ -59,6 +60,30 @@ describe('listMonthWindowsInputSchema', () => {
     expect(
       listMonthWindowsInputSchema.safeParse({ from: '2026-09-01', to: '2026-12-01' }).success
     ).toBe(false);
+  });
+
+  // The span cap is structural so the client knows the limit from the schema
+  // instead of discovering it by being rejected at runtime; that is why the
+  // procedure declares no VALIDATION_FAILED (doc/decision/0021-*).
+  it('accepts a range exactly MAX_MONTH_WINDOW_SPAN months long', () => {
+    // 2026-01 .. 2027-12 is 24 months counting both endpoints.
+    expect(MAX_MONTH_WINDOW_SPAN).toBe(24);
+    expect(listMonthWindowsInputSchema.safeParse({ from: '2026-01', to: '2027-12' }).success).toBe(
+      true
+    );
+  });
+
+  it('rejects a range one month longer than the cap', () => {
+    expect(listMonthWindowsInputSchema.safeParse({ from: '2026-01', to: '2028-01' }).success).toBe(
+      false
+    );
+  });
+
+  it('counts the span across a year boundary, not lexicographically', () => {
+    // 2026-12 .. 2027-01 is two months, not thirteen.
+    expect(listMonthWindowsInputSchema.safeParse({ from: '2026-12', to: '2027-01' }).success).toBe(
+      true
+    );
   });
 });
 

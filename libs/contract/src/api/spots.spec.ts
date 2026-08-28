@@ -1,4 +1,4 @@
-import { NOT_A_UUID, UUID_B, parkingSpotFixture } from './fixtures';
+import { NOT_A_UUID, UUID_B, parkingSpotFixture } from './__fixtures__/fixtures';
 import {
   adminListSpotsInputSchema,
   createSpotInputSchema,

@@ -7,7 +7,7 @@ import {
   parkingSpotFixture,
   userFixture,
   userSummaryFixture,
-} from './fixtures';
+} from './__fixtures__/fixtures';
 import {
   dayOverviewInputSchema,
   dayOverviewOutputSchema,

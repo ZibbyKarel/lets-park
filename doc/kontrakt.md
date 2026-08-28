@@ -163,12 +163,24 @@ schéma a vrací ho oRPC vlastní chybou. Každá procedura, která ho deklaruje
 | procedura | co ho vyvolá |
 | --- | --- |
 | `reservation.create`, `waitlist.join` | místo existuje, ale je deaktivované |
+| `reservation.create`, `waitlist.join` | `date` není pracovní den (víkend nebo český státní svátek) |
 | `reservation.previewBulk`, `reservation.confirmBulk` | totéž pro preferované místo uživatele |
 | `me.updateSettings` | preferované místo je deaktivované |
 | `admin.spot.create`, `admin.spot.update` | `group` mimo povolenou sadu skupin parkoviště |
 | `admin.user.update` | změna role, kterou nelze provést (poslední admin) |
 | `admin.window.update` | kombinace `openDaysBefore` a `lockMode`, kterou nelze uplatnit |
-| `admin.window.months` | rozsah `from`–`to` delší, než kolik měsíců lze spočítat najednou |
+
+`waitlist.join` je v tabulce dvakrát schválně: obě pravidla se dají zjistit až z databáze
+(deaktivované místo) nebo z kalendáře svátků, a schéma je odchytit neumí. Že `date` musí být
+pracovní den, plyne z `canReserve` (viz níž) — jednodenní rezervace na sobotu nebo na 28. 9.
+proto musí spadnout, a `VALIDATION_FAILED` je jediný deklarovaný kód, který na to sedí.
+(Hromadná rezervace to řeší jinak: tam je nepracovní den per-day výsledek
+`UNAVAILABLE` / `NOT_A_BUSINESS_DAY` uvnitř úspěšné odpovědi, ne chyba celé dávky.)
+
+`admin.window.months` `VALIDATION_FAILED` **nedeklaruje**. Rozsah `from`–`to` je celý hlídaný
+strukturálně: `from <= to` refinementem a délka rozsahu proti `MAX_MONTH_WINDOW_SPAN`
+(`libs/shared-types`), stejně jako `MAX_BULK_BOOKING_DAYS` u hromadné rezervace. Klient tak
+limit zná ze schématu a nemusí ho objevovat odmítnutím.
 
 `overview.day` ho **nedeklaruje** — je to čtení a žádné doménové pravidlo tam strukturálně
 platné datum porušit nemůže (den mimo všechna okna se vrátí s `canReserve: false`, ne chybou).
@@ -309,7 +321,7 @@ deaktivovat sám sebe.
 | --- | --- | --- | --- |
 | `me.get` | — | `User` (vlastní, včetně `icsToken`) | — |
 | `me.updateSettings` | `{ licensePlate?, preferredParkingSpotId? }` | `User` | `NOT_FOUND`, `VALIDATION_FAILED` |
-| `me.regenerateIcsToken` | — | `{ icsToken }` | `CONFLICT` |
+| `me.regenerateIcsToken` | — | `{ icsToken }` | — |
 
 `me.get` vrací `icsToken`, protože je to token volajícího a obrazovka nastavení z něj skládá
 adresu feedu.
@@ -353,13 +365,18 @@ prázdné `base` vyhodí — jinak by vznikla URL mířící na kolekci místo n
 dostupné, a nemá to hádat. URL složí klient helperem. Regenerace okamžitě zneplatní starou
 adresu, takže UI musí uživateli říct, že si musí předplatné v kalendáři vyměnit.
 
+Procedura **nedeklaruje `CONFLICT`**. Jediná představitelná kolize je unique constraint na
+čerstvě vygenerovaném náhodném tokenu, což není stav, se kterým by klient uměl něco udělat —
+je to pokyn k opakování. **Task 12 proto musí generovat v retry smyčce uvnitř handleru**, ne
+posílat ven chybu, na kterou UI nemá copy. Zdůvodnění: `doc/decision/0021-*`.
+
 ### Rezervační okno (admin)
 
 | procedura | vstup | výstup | další chyby |
 | --- | --- | --- | --- |
 | `admin.window.get` | — | `ReservationWindowSettings` | — |
 | `admin.window.update` | `{ openDaysBefore?, lockMode? }` | `ReservationWindowSettings` | `VALIDATION_FAILED`, `CONFLICT` |
-| `admin.window.months` | `{ from, to }` (`YYYY-MM`) | `{ months[], settings }` | `VALIDATION_FAILED` |
+| `admin.window.months` | `{ from, to }` (`YYYY-MM`) | `{ months[], settings }` | — |
 
 `admin.window.update` je **náhrada, ne patch**: vstupem je přímo `reservationWindowSettingsSchema`,
 takže vynechané pole spadne na svůj **default** (`openDaysBefore: 7`, `lockMode: 'AUTO'`), ne na
@@ -369,6 +386,9 @@ zdroj" se čte líp než patch, jehož výsledek závisí na neviditelném stavu
 `admin.window.months` vrací měsíce vzestupně a k nim nastavení, pod kterým byly stavy odvozené,
 aby admin záložka vykreslila tabulku i formulář z jedné odpovědi. `from <= to` se kontroluje ve
 schématu — `YYYY-MM` se řadí lexikograficky, takže na to není potřeba datumová aritmetika.
+Délka rozsahu je omezená `MAX_MONTH_WINDOW_SPAN` (24 měsíců) taky ve schématu, takže procedura
+nedeklaruje `VALIDATION_FAILED` — nezbylo jí doménové pravidlo, které by strukturálně platný
+vstup mohl porušit.
 
 Běžný uživatel žádnou z těchhle procedur nevolá; stav okna pro konkrétní den dostane
 v `overview.day`.

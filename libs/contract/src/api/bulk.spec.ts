@@ -6,7 +6,7 @@ import {
   confirmBulkOutputSchema,
   previewBulkOutputSchema,
 } from './bulk';
-import { DATE_A, DATE_B, INVALID_DATE, UUID_B } from './fixtures';
+import { DATE_A, DATE_B, INVALID_DATE, UUID_B } from './__fixtures__/fixtures';
 
 describe('bulkBookingInputSchema', () => {
   it('accepts a list of days inside one month', () => {

@@ -4,6 +4,11 @@
  * Not part of the public API surface — `src/api/index.ts` does not re-export
  * this file. It exists so that thirty procedure tests do not each invent their
  * own uuid and end up asserting against typos.
+ *
+ * It lives in `__fixtures__/` because `tsconfig.lib.json` excludes that folder:
+ * being unreferenced was not enough, the file was still inside the library's
+ * compilation program and would have been emitted into a build (Task 4 review,
+ * N4). The spec tsconfig includes it explicitly.
  */
 
 /** Valid UUIDs. The contract accepts any version (`doc/decision/0016-*`). */

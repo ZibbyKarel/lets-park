@@ -90,3 +90,14 @@ export type BulkUnavailableReason = (typeof BULK_UNAVAILABLE_REASONS)[number];
  * reject days outside the open window.
  */
 export const MAX_BULK_BOOKING_DAYS = 31;
+
+/**
+ * Upper bound on the number of months `admin.window.months` may report on in
+ * one call, counting both endpoints of the inclusive `from`–`to` range.
+ *
+ * Two years is comfortably more than the admin table ever renders at once, and
+ * putting the cap in the contract means the client can *know* the limit instead
+ * of discovering it by being rejected — the same reasoning as
+ * {@link MAX_BULK_BOOKING_DAYS}.
+ */
+export const MAX_MONTH_WINDOW_SPAN = 24;
