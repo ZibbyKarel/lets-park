@@ -1,6 +1,17 @@
 import nx from '@nx/eslint-plugin';
 
 /**
+ * Absolute path of the workspace root.
+ *
+ * Nx runs `eslint .` with the *project* directory as cwd, and every project's
+ * `eslint.config.mjs` re-exports this file. Without an explicit `basePath`,
+ * workspace-relative globs such as `apps/**` or `libs/form/**` would be matched
+ * against project-relative file paths and silently never fire. Every config
+ * object below whose `files` are workspace-relative therefore pins `basePath`.
+ */
+const workspaceRoot = import.meta.dirname;
+
+/**
  * Third-party libraries that application and library code must never import
  * directly. Each one is owned by exactly one wrapper lib, which is the single
  * place in the workspace allowed to import it (see `plan.md`, wrapper table).
@@ -67,6 +78,7 @@ function restrictWrappedLibraries(allowedPackages = []) {
 
 /** Source files of every wrapper lib get their own package unbanned. */
 const wrapperLibOverrides = Object.entries(WRAPPED_LIBRARIES).map(([pkg, { owner }]) => ({
+  basePath: workspaceRoot,
   files: [`${owner}/**/*.ts`, `${owner}/**/*.tsx`, `${owner}/**/*.js`, `${owner}/**/*.jsx`],
   rules: {
     'no-restricted-imports': ['error', restrictWrappedLibraries([pkg])],
@@ -189,6 +201,7 @@ export default [
   },
   // Wrapper layers are mandatory in application and library code.
   {
+    basePath: workspaceRoot,
     files: [
       'apps/**/*.ts',
       'apps/**/*.tsx',
@@ -206,6 +219,7 @@ export default [
   ...wrapperLibOverrides,
   // Structured logging only (nestjs-pino on the backend); no ad-hoc console output.
   {
+    basePath: workspaceRoot,
     files: ['apps/api/**/*.ts', 'libs/**/*.ts', 'libs/**/*.tsx'],
     rules: {
       'no-console': 'error',
@@ -213,6 +227,7 @@ export default [
   },
   // Standalone scripts and tooling are allowed to print to the console.
   {
+    basePath: workspaceRoot,
     files: [
       'tools/**',
       'scripts/**',

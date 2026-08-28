@@ -157,6 +157,13 @@ Dál platí `no-console: error` v `apps/api/**` a `libs/**` – backend loguje p
 `nestjs-pino`. Console je povolená jen v `tools/**`, `scripts/**`, `**/scripts/**`
 a v konfiguračních souborech.
 
+> **Past při úpravách `eslint.config.mjs`:** Nx spouští `eslint .` s **cwd nastaveným na
+> adresář projektu**, ne na root repa. Config objekt, jehož `files` jsou cesty od rootu
+> (`apps/**`, `libs/form/**`), proto musí mít `basePath: workspaceRoot` – jinak se glob
+> porovná s cestou relativní k projektu, nikdy nesedne a pravidlo **tiše nic nedělá**.
+> Po každé změně path-scoped pravidla ho ověř dočasným souborem, ne jen tím, že lint
+> projde.
+
 ---
 
 ## Jak přidat novou lib
