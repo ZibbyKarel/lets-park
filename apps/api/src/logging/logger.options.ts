@@ -54,9 +54,9 @@ export function buildLoggerOptions(env: Pick<ApiEnv, 'LOG_LEVEL' | 'NODE_ENV'>):
         remove: true,
       },
 
-      // Health probes fire every few seconds forever. Logging them at `info`
-      // would bury every real request under probe noise; they are still logged
-      // at `debug`, and a *failing* probe is logged at `warn` by the rule below.
+      // Severity of the per-request line: a 5xx or a thrown error is `error`, a
+      // 4xx is `warn`, everything else `info`. Note this never fires for the
+      // health probes — `exclude` below drops their request logging entirely.
       customLogLevel(_request, response, error) {
         if (error !== undefined || response.statusCode >= 500) {
           return 'error';

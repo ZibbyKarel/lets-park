@@ -29,7 +29,11 @@ import type { ApiEnv } from './env';
 const GLOBAL_PREFIX = 'api';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `bodyParser: false` turns off Nest's own body parser so that the ones
+  // registered below are the only ones. Left on, Nest would register a second
+  // pair during `init()`; they would no-op behind ours, but only because ours
+  // happen to run first — an ordering nobody should have to reason about.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
 
   // From here on, every line Nest emits is a pino JSON record.
   app.useLogger(app.get(Logger));
