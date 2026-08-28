@@ -13,7 +13,7 @@ import * as z from 'zod';
 import { parkingSpotSchema, reservationSchema, userSchema } from '../schemas/entities';
 import { dateOnlySchema, idSchema } from '../schemas/primitives';
 import { monthWindowOverviewSchema } from '../schemas/reservation-window';
-import { authed, contractErrors } from './errors';
+import { authed } from './errors';
 
 /**
  * How one user appears to another user.
@@ -84,8 +84,13 @@ export type DayOverviewOutput = z.infer<typeof dayOverviewOutputSchema>;
 /**
  * Read-only. Never fails on the window — a locked or not-yet-open day is still
  * viewable; the state is reported in `window`, not thrown.
+ *
+ * Declares nothing beyond the inherited `FORBIDDEN` on purpose. There is no
+ * domain rule a structurally valid date can break here: any day is viewable, so
+ * a day outside every window comes back with `canReserve: false` rather than an
+ * error. A malformed date is caught by the input schema, which is oRPC's own
+ * validation failure and not one of our codes.
  */
 export const getDayOverviewContract = authed
   .input(dayOverviewInputSchema)
-  .output(dayOverviewOutputSchema)
-  .errors(contractErrors('VALIDATION_FAILED'));
+  .output(dayOverviewOutputSchema);

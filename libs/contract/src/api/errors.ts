@@ -12,6 +12,7 @@
 
 import type { ErrorMapItem } from '@orpc/contract';
 import { oc } from '@orpc/contract';
+import * as z from 'zod';
 import type { ErrorCode } from '../schemas/errors';
 import { errorDetailsSchema } from '../schemas/errors';
 
@@ -124,3 +125,23 @@ export function contractErrors<const TCodes extends readonly ErrorCode[]>(
  * are additionally admin-only do not need to redeclare it.
  */
 export const authed = oc.errors(contractErrors('FORBIDDEN'));
+
+/**
+ * Input schema for procedures that take no arguments.
+ *
+ * oRPC allows `.input()` to be omitted entirely, but an omitted schema means an
+ * accidental payload is silently ignored, and it leaves the procedure without
+ * the input schema this contract requires of every procedure. Declaring the
+ * absence of input is stricter than not declaring input.
+ *
+ * It accepts `undefined` **and** `{}` on purpose. The RPC transport delivers
+ * `undefined` for an argument-less call, while oRPC's OpenAPI input mapping
+ * merges path/query/body into an object and hands a parameter-less GET an empty
+ * one. `z.void()` would pass the first and reject the second, which would turn
+ * the handler choice in Task 12 into a runtime break here. Anything with a key
+ * in it is still rejected.
+ */
+export const noInputSchema = z.strictObject({}).optional();
+
+/** `undefined` — the only value a caller of a no-input procedure should send. */
+export type NoInput = z.infer<typeof noInputSchema>;

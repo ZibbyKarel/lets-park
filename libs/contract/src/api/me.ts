@@ -6,7 +6,7 @@
 import * as z from 'zod';
 import { userSchema } from '../schemas/entities';
 import { idSchema } from '../schemas/primitives';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors, noInputSchema } from './errors';
 
 /**
  * The caller's own record, `icsToken` included.
@@ -19,7 +19,7 @@ import { authed, contractErrors } from './errors';
 export const myProfileSchema = userSchema;
 export type MyProfile = z.infer<typeof myProfileSchema>;
 
-export const getMyProfileContract = authed.output(myProfileSchema);
+export const getMyProfileContract = authed.input(noInputSchema).output(myProfileSchema);
 
 /**
  * Partial update with two-valued optional fields. The convention, which the
@@ -67,5 +67,6 @@ export type RegenerateIcsTokenOutput = z.infer<typeof regenerateIcsTokenOutputSc
 
 /** Invalidate the current ICS feed URL and issue a new one. Takes no input. */
 export const regenerateIcsTokenContract = authed
+  .input(noInputSchema)
   .output(regenerateIcsTokenOutputSchema)
   .errors(contractErrors('CONFLICT'));

@@ -146,13 +146,40 @@ všechno pod `admin.` vyžaduje `role: 'ADMIN'`, všechno ostatní stačí aktiv
 
 `FORBIDDEN` deklaruje **každá** procedura — sedí na sdíleném builderu `authed`, protože
 deaktivovaný uživatel (`active: false`, tak funguje offboarding) je odmítnutý dřív, než se
-spustí handler. V tabulkách níž se proto neopakuje.
+spustí handler. V tabulkách níž se proto neopakuje; `—` ve sloupci chyb znamená „nic nad rámec
+`FORBIDDEN`".
+
+**Vstupní schéma má každá procedura, i ta bez argumentů.** oRPC dovoluje `.input()` vynechat,
+ale vynechané schéma znamená, že se omylem poslaný payload tiše zahodí. Čtyři procedury bez
+argumentů (`overview` je nemá, jde o `spot.list`, `me.get`, `me.regenerateIcsToken`,
+`admin.window.get`) proto deklarují sdílené `noInputSchema` z `api/errors.ts` — to bere
+`undefined` (jak přijde volání přes RPC) i `{}` (jak přijde GET bez parametrů přes OpenAPI),
+ale cokoliv s klíčem odmítne. V tabulkách je jejich vstup psaný jako `—`.
+
+**Kdy nastane `VALIDATION_FAILED`.** Znamená „požadavek je strukturálně v pořádku, ale porušuje
+doménové pravidlo, na které je potřeba sáhnout do databáze" — ne špatný formát, ten odchytí
+schéma a vrací ho oRPC vlastní chybou. Každá procedura, která ho deklaruje, má konkrétní spouštěč:
+
+| procedura | co ho vyvolá |
+| --- | --- |
+| `reservation.create`, `waitlist.join` | místo existuje, ale je deaktivované |
+| `reservation.previewBulk`, `reservation.confirmBulk` | totéž pro preferované místo uživatele |
+| `me.updateSettings` | preferované místo je deaktivované |
+| `admin.spot.create`, `admin.spot.update` | `group` mimo povolenou sadu skupin parkoviště |
+| `admin.user.update` | změna role, kterou nelze provést (poslední admin) |
+| `admin.window.update` | kombinace `openDaysBefore` a `lockMode`, kterou nelze uplatnit |
+| `admin.window.months` | rozsah `from`–`to` delší, než kolik měsíců lze spočítat najednou |
+
+`overview.day` ho **nedeklaruje** — je to čtení a žádné doménové pravidlo tam strukturálně
+platné datum porušit nemůže (den mimo všechna okna se vrátí s `canReserve: false`, ne chybou).
+Deklarovat kód, který procedura nikdy nevrátí, je podle `doc/decision/0018-*` stejná chyba jako
+vrátit nedeklarovaný.
 
 ### Přehled dne
 
 | procedura | vstup | výstup | další chyby |
 | --- | --- | --- | --- |
-| `overview.day` | `{ date }` | `{ date, window, canReserve, spots[], viewerReservationId }` | `VALIDATION_FAILED` |
+| `overview.day` | `{ date }` | `{ date, window, canReserve, spots[], viewerReservationId }` | — |
 
 Jedním dotazem všechno, co potřebuje obrazovka parkoviště: každé aktivní místo, kdo ho drží,
 kolik lidí je za ním ve frontě, kde stojí volající — **a stav rezervačního okna pro ten den**.
@@ -354,7 +381,9 @@ v `overview.day`.
    `fooOutputSchema`) v souboru podle domény v `api/`. Odvozuj z entit (`.pick()`, `.omit()`,
    `.partial()`), nikdy neopisuj. Typ přes `z.infer`.
 2. **Proceduru** postav na builderu `authed` (nese `FORBIDDEN`), přidej `.input()`, `.output()`
-   a `.errors(contractErrors(...))`. **Procedura bez deklarovaných chyb je skoro jistě špatně.**
+   a `.errors(contractErrors(...))`. **Procedura bez deklarovaných chyb je skoro jistě špatně** —
+   a stejně tak procedura, která deklaruje kód, pro který neumíš pojmenovat spouštěč.
+   `.input()` se **nevynechává**: procedura bez argumentů dostane `noInputSchema`.
 3. **Zapoj ji do `router.ts`** — pod `admin.`, jestli vyžaduje roli.
 4. **Test vedle** (`*.spec.ts`): platný vstup, neplatný vstup, a co má výstup zaručit.
 5. **Doplň `EXPECTED_PROCEDURES` a `EXPECTED_ERROR_CODES` v `api/router.spec.ts`.** Ty dva

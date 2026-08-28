@@ -10,7 +10,7 @@ import * as z from 'zod';
 import { parkingSpotSchema } from '../schemas/entities';
 import { parkingGroupSchema } from '../schemas/enums';
 import { idSchema } from '../schemas/primitives';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors, noInputSchema } from './errors';
 
 export const spotListOutputSchema = z.object({
   spots: z.array(parkingSpotSchema),
@@ -18,7 +18,7 @@ export const spotListOutputSchema = z.object({
 export type SpotListOutput = z.infer<typeof spotListOutputSchema>;
 
 /** Active spots, for pickers and labels. No input: no filters, no paging. */
-export const listSpotsContract = authed.output(spotListOutputSchema);
+export const listSpotsContract = authed.input(noInputSchema).output(spotListOutputSchema);
 
 export const adminListSpotsInputSchema = z.object({
   /** Deactivated spots are kept for their foreign keys; admins can see them. */

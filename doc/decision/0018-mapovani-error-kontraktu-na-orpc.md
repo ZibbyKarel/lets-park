@@ -69,6 +69,11 @@ Nový kód se přidává **ve třech krocích a v tomhle pořadí**: `ERROR_CODE
 `ERROR_DEFINITIONS` (status + zpráva) → `contractErrors(...)` na konkrétních procedurách.
 Test `errors.spec.ts` spadne, když se vynechá druhý krok, `router.spec.ts` když třetí.
 
+Ve stejném souboru bydlí i `noInputSchema` — schéma pro procedury bez argumentů. Není to chyba,
+ale patří k `authed`: je to druhá věc, kterou staví **každá** procedura, a rozdělit dva sdílené
+stavební kameny do dvou souborů by znamenalo, že se na jeden zapomene. Proč se `.input()`
+nevynechává a proč schéma bere `undefined` i `{}`, je u něj v komentáři.
+
 ## Riziko, když je to špatně
 
 Špatně zvolený status je kosmetika — frontend větví na `code`, ne na statusu. Skutečné riziko je

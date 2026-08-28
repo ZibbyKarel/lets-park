@@ -12,9 +12,11 @@ import {
   monthWindowOverviewSchema,
   reservationWindowSettingsSchema,
 } from '../schemas/reservation-window';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors, noInputSchema } from './errors';
 
-export const getReservationWindowSettingsContract = authed.output(reservationWindowSettingsSchema);
+export const getReservationWindowSettingsContract = authed
+  .input(noInputSchema)
+  .output(reservationWindowSettingsSchema);
 
 /**
  * Full replacement of the singleton, not a patch.

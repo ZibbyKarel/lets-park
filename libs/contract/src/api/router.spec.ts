@@ -1,5 +1,6 @@
 import { type AnyContractProcedure, isContractProcedure } from '@orpc/contract';
 import { ERROR_CODES } from '../schemas/errors';
+import { noInputSchema } from './errors';
 import { contract } from './router';
 
 /** Flattens the router into `['a.b.c', procedure]` pairs. */
@@ -61,7 +62,7 @@ const EXPECTED_PROCEDURES = [
  * reservation is allowed in a locked month.
  */
 const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
-  'overview.day': ['FORBIDDEN', 'VALIDATION_FAILED'],
+  'overview.day': ['FORBIDDEN'],
   'reservation.create': [
     'FORBIDDEN',
     'NOT_FOUND',
@@ -129,18 +130,30 @@ describe('contract router', () => {
     }
   });
 
-  it('declares an input schema on every procedure that takes one', () => {
-    // Four procedures genuinely take no argument; every other one must have a
-    // schema, so no procedure can accept an unvalidated payload by accident.
+  it('declares an input schema on every procedure', () => {
+    // No exceptions: the four argument-less procedures declare `noInputSchema`
+    // rather than omitting `.input()`, so nothing can accept an unvalidated
+    // payload by accident.
     const withoutInput = procedures
       .filter(([, procedure]) => procedure['~orpc'].inputSchema === undefined)
       .map(([path]) => path);
-    expect(withoutInput.sort()).toEqual([
-      'admin.window.get',
-      'me.get',
-      'me.regenerateIcsToken',
-      'spot.list',
-    ]);
+    expect(withoutInput).toEqual([]);
+  });
+
+  it('uses the shared no-input schema on the argument-less procedures', () => {
+    for (const path of ['admin.window.get', 'me.get', 'me.regenerateIcsToken', 'spot.list']) {
+      const procedure = procedures.find(([candidate]) => candidate === path)?.[1];
+      expect([path, procedure?.['~orpc'].inputSchema]).toEqual([path, noInputSchema]);
+    }
+  });
+
+  it('accepts an argument-less call and rejects a stray payload', () => {
+    // Both shapes an argument-less call can arrive as: `undefined` over RPC,
+    // `{}` over an OpenAPI GET with no parameters.
+    expect(noInputSchema.safeParse(undefined).success).toBe(true);
+    expect(noInputSchema.safeParse({}).success).toBe(true);
+    expect(noInputSchema.safeParse({ unexpected: 1 }).success).toBe(false);
+    expect(noInputSchema.safeParse(null).success).toBe(false);
   });
 
   it('declares at least one error code on every procedure', () => {
