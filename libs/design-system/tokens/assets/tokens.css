@@ -78,7 +78,7 @@
   --brand-green-700: #00B82A;
   --brand-yellow-700: #E5A800;
 
-  --brand-blue-100: #E2F2FF;
+  --brand-blue-100: var(--brand-light);
   --brand-green-100: #D2F8DC;
   --brand-yellow-100: #FFF4D2;
 
@@ -97,30 +97,30 @@
   --neutral-950: #23221F;
 
   /* --- Semantic surfaces --- */
-  --bg: #FFFFFF;
-  --bg-soft: #FAFAFA;
-  --bg-muted: #F4F4F5;
-  --bg-inverse: #23221F;
+  --bg: var(--neutral-0);
+  --bg-soft: var(--neutral-50);
+  --bg-muted: var(--neutral-100);
+  --bg-inverse: var(--brand-dark);
 
   /* --- Semantic foreground --- */
-  --fg: #15181E;
-  --fg-2: #3F3F46;
-  --fg-3: #71717A;
-  --fg-on-yellow: #23221F;
-  --fg-on-green: #FFFFFF;
-  --fg-on-blue: #FFFFFF;
-  --fg-on-light: #23221F;
-  --fg-on-dark: #FFFFFF;
+  --fg: var(--text);
+  --fg-2: var(--neutral-700);
+  --fg-3: var(--neutral-500);
+  --fg-on-yellow: var(--brand-dark);
+  --fg-on-green: var(--neutral-0);
+  --fg-on-blue: var(--neutral-0);
+  --fg-on-light: var(--brand-dark);
+  --fg-on-dark: var(--neutral-0);
 
   /* --- Lines --- */
-  --border: #E7E7EA;
-  --border-strong: #D1D1D6;
-  --divider: #F4F4F5;
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --divider: var(--neutral-100);
 
   /* --- Status --- */
-  --success: #00DB33;
-  --info: #008FFF;
-  --warning: #FFBE0E;
+  --success: var(--brand-green);
+  --info: var(--brand-blue);
+  --warning: var(--brand-yellow);
   --danger: #E5484D;
   --danger-100: #FCE5E5;
 
@@ -132,7 +132,7 @@
   --palette-car-3: #3b88ff;
 
   /* --- Type families --- */
-  --font-sans: NHaasGroteskDS, "Neue Haas Grotesk", "Helvetica Neue", Inter, Arial, system-ui, sans-serif;
+  --font-sans: "NHaasGroteskDS", "Neue Haas Grotesk", "Helvetica Neue", "Inter", "Arial", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
   /* --- Type scale --- */
@@ -184,7 +184,7 @@
   --radius-lg: 24px;
   --radius-xl: 32px;
   --radius-cta: 360px;
-  --radius-pill: 360px;
+  --radius-pill: var(--radius-cta);
 
   /* --- Shadows --- */
   --shadow-xs: 0 1px 2px rgba(35,34,31,0.04);

@@ -54,6 +54,21 @@ commitnutý, aby appka po `npm ci` fungovala bez extra build kroku, a je vylouč
 z Prettieru, protože věrně kopíruje styl zdrojového `colors_and_type.css`
 (velká písmena v hexu, žádné mezery v `rgba()`), který by Prettier přepsal.
 
+### Aliasy se zachovávají
+
+`colors_and_type.css` část tokenů nedefinuje hodnotou, ale odkazem
+(`--bg: var(--neutral-0)`, `--fg: var(--text)`, `--success: var(--brand-green)`,
+`--radius-pill: var(--radius-cta)`, `--brand-blue-100: var(--brand-light)`).
+Generátor tenhle řetěz **neplošťuje na literál** – vypíše ho jako `var(...)`,
+protože právě přes něj se dělá budoucí téma (přesměruješ cíl a všichni
+konzumenti se posunou s ním).
+
+TS objekty ale drží už rozřešené hodnoty (`SURFACE_COLORS.bg` je řetězec
+`#FFFFFF`, ne odkaz), takže by se data a vypsaný alias mohly rozejít. Hlídá to
+funkce `alias()` v `generate-css.ts`: při generování porovná hodnotu tokenu
+s hodnotou cíle a při neshodě **vyhodí výjimku** místo aby napsala
+`--bg: var(--neutral-0)` pro token, který už bílou nemá.
+
 **Drift test** (`generate-css.spec.ts`) hlídá, že se TS zdroj a commitnutý soubor
 nerozejdou: čte `assets/tokens.css` ze disku a porovnává ho `toBe()` s tím, co by
 `generateTokensCss(DESIGN_TOKENS)` vygenerovalo právě teď. Změníš-li token v TS a
