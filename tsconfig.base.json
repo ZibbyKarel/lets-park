@@ -19,7 +19,8 @@
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"]
+      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"],
+      "@lets-park/design-system-primitives": ["./libs/design-system/primitives/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

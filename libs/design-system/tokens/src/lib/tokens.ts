@@ -1,5 +1,6 @@
 import { CAR_COLOR_PALETTE } from './car-palette';
 import { COLORS } from './colors';
+import { CONTROLS } from './controls';
 import { LAYOUT } from './layout';
 import { MOTION } from './motion';
 import { RADIUS } from './radius';
@@ -22,6 +23,7 @@ export const DESIGN_TOKENS = {
   shadows: SHADOWS,
   motion: MOTION,
   layout: LAYOUT,
+  controls: CONTROLS,
 } as const;
 
 export type DesignTokens = typeof DESIGN_TOKENS;

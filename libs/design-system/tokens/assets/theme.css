@@ -157,6 +157,14 @@
   --ease-in-out: var(--ease-in-out);
 
   /*
+   * `--control-h-*`, `--switch-*` are NOT mapped here either. Tailwind v4 has
+   * no `--height-*` theme namespace (heights come off the spacing scale), and
+   * routing control heights through `--spacing-*` would also mint bogus
+   * `w-control-lg` / `p-control-lg` utilities. Consume them as arbitrary
+   * values instead: `h-[var(--control-h-lg)]`.
+   */
+
+  /*
    * `--container` / `--container-wide` are NOT mapped here. Tailwind v4's
    * `--container-*` theme namespace is for @container query breakpoints
    * (the `@sm`/`@max-md` variants), a different concept from a content

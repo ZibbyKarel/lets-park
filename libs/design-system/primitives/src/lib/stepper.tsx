@@ -1,0 +1,169 @@
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
+
+import { CONTROL_HEIGHT, CONTROL_TEXT, CONTROL_TRANSITION, FOCUS_RING } from './control-size';
+import { cx } from './cx';
+
+export interface StepperProps {
+  /** Controlled value. Leave undefined to let the stepper own its state. */
+  value?: number | undefined;
+  /** Initial value when uncontrolled. Defaults to `min`. */
+  defaultValue?: number | undefined;
+  onValueChange?: ((value: number) => void) | undefined;
+  /** Defaults to `0`. */
+  min?: number | undefined;
+  /** Defaults to `Number.MAX_SAFE_INTEGER`. */
+  max?: number | undefined;
+  /** Increment per press. Defaults to `1`. */
+  step?: number | undefined;
+  /** Accessible name for the whole control. */
+  label: string;
+  /**
+   * Renders the number as text — for a unit or a declension. The returned
+   * string is also what assistive technology reads (`aria-valuetext`).
+   */
+  formatValue?: ((value: number) => string) | undefined;
+  /** Accessible name of the minus button. */
+  decrementLabel?: string | undefined;
+  /** Accessible name of the plus button. */
+  incrementLabel?: string | undefined;
+  disabled?: boolean | undefined;
+  className?: string | undefined;
+}
+
+const STEP_BUTTON_CLASSES =
+  'inline-flex items-center justify-center rounded-md border border-border bg-bg text-md text-fg';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Numeric stepper: minus, value, plus.
+ *
+ * The value is a `role="spinbutton"` rather than a read-only box, so it is
+ * reachable by Tab and adjustable with the arrow keys, Home and End — the two
+ * buttons are a pointer convenience, not the only way in.
+ */
+export function Stepper({
+  value,
+  defaultValue,
+  onValueChange,
+  min = 0,
+  max = Number.MAX_SAFE_INTEGER,
+  step = 1,
+  label,
+  formatValue,
+  decrementLabel = 'Snížit',
+  incrementLabel = 'Zvýšit',
+  disabled = false,
+  className,
+}: StepperProps) {
+  const labelId = useId();
+  const [uncontrolled, setUncontrolled] = useState(defaultValue ?? min);
+  const isControlled = value !== undefined;
+  const current = clamp(isControlled ? value : uncontrolled, min, max);
+  const text = formatValue ? formatValue(current) : String(current);
+
+  const commit = (next: number) => {
+    const clamped = clamp(next, min, max);
+    if (disabled || clamped === current) {
+      return;
+    }
+    if (!isControlled) {
+      setUncontrolled(clamped);
+    }
+    onValueChange?.(clamped);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const handlers: Record<string, () => void> = {
+      ArrowUp: () => commit(current + step),
+      ArrowRight: () => commit(current + step),
+      ArrowDown: () => commit(current - step),
+      ArrowLeft: () => commit(current - step),
+      Home: () => commit(min),
+      End: () => commit(max),
+    };
+    const handler = handlers[event.key];
+    if (handler) {
+      event.preventDefault();
+      handler();
+    }
+  };
+
+  const atMin = current <= min;
+  const atMax = current >= max;
+
+  return (
+    <div className={cx('inline-flex items-center gap-2', className)}>
+      <span id={labelId} className="sr-only">
+        {label}
+      </span>
+      <StepButton
+        label={decrementLabel}
+        disabled={disabled || atMin}
+        onClick={() => commit(current - step)}
+      >
+        −
+      </StepButton>
+      <div
+        role="spinbutton"
+        tabIndex={disabled ? -1 : 0}
+        aria-labelledby={labelId}
+        aria-valuenow={current}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuetext={text}
+        aria-disabled={disabled || undefined}
+        onKeyDown={onKeyDown}
+        className={cx(
+          'inline-flex min-w-24 items-center justify-center rounded-md border border-border font-bold',
+          CONTROL_HEIGHT.lg,
+          CONTROL_TEXT.lg,
+          CONTROL_TRANSITION,
+          FOCUS_RING,
+          disabled ? 'bg-bg-muted text-fg-3' : 'bg-bg text-fg'
+        )}
+      >
+        {text}
+      </div>
+      <StepButton
+        label={incrementLabel}
+        disabled={disabled || atMax}
+        onClick={() => commit(current + step)}
+      >
+        +
+      </StepButton>
+    </div>
+  );
+}
+
+interface StepButtonProps {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}
+
+function StepButton({ label, disabled, onClick, children }: StepButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={cx(
+        STEP_BUTTON_CLASSES,
+        CONTROL_HEIGHT.lg,
+        'w-[var(--control-h-lg)]',
+        CONTROL_TRANSITION,
+        FOCUS_RING,
+        disabled
+          ? 'cursor-not-allowed bg-bg-muted text-border-strong'
+          : 'cursor-pointer hover:border-brand-dark'
+      )}
+    >
+      <span aria-hidden="true">{children}</span>
+    </button>
+  );
+}

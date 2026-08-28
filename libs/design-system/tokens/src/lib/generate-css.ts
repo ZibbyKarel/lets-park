@@ -43,7 +43,17 @@ function alias(targetProperty: string, targetValue: string, aliasValue: string):
  * `generate-css.spec.ts` (to prove the written file is still current).
  */
 export function generateTokensCss(tokens: DesignTokens): string {
-  const { colors, carColorPalette, typography, spacing, radius, shadows, motion, layout } = tokens;
+  const {
+    colors,
+    carColorPalette,
+    typography,
+    spacing,
+    radius,
+    shadows,
+    motion,
+    layout,
+    controls,
+  } = tokens;
   const { brand, neutral, surface, fg, line, status } = colors;
   const { families, faces, fontSize, lineHeight, letterSpacing } = typography;
 
@@ -203,6 +213,20 @@ export function generateTokensCss(tokens: DesignTokens): string {
   /* --- Layout --- */
   --container: ${layout.container.base};
   --container-wide: ${layout.container.wide};
+
+  /* --- Controls ---
+     DERIVED from lets-park-design.dc.html, NOT from colors_and_type.css —
+     see controls.ts and doc/decision/0011-*. */
+  --control-h-sm: ${controls.height.sm};
+  --control-h-md: ${controls.height.md};
+  --control-h-lg: ${controls.height.lg};
+  --control-h-xl: ${controls.height.xl};
+
+  --switch-w: ${controls.switch.trackWidth};
+  --switch-h: ${controls.switch.trackHeight};
+  --switch-pad: ${controls.switch.trackPadding};
+  --switch-knob: ${controls.switch.knobSize};
+  --switch-knob-shadow: ${controls.switch.knobShadow};
 }`;
 
   return `/* ============================================================
