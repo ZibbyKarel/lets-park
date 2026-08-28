@@ -1,7 +1,7 @@
 /**
  * The whole point of `libs/form` is that a real, validated, submittable form
  * can be built from `@lets-park/form` plus design-system primitives without
- * ever importing `react-hook-form` directly (`doc/wrappery.md`). This file's
+ * ever importing `react-hook-form` directly (`doc/wrappers.md`). This file's
  * own import list — `@lets-park/form`, `@lets-park/design-system-primitives`
  * and `zod`, nothing else — *is* that proof, and the last test below reads
  * this file's own source back off disk to make the claim self-checking

@@ -7,7 +7,7 @@
  *
  * This re-export exists so app/feature code never has its own, direct
  * `react-hook-form` import for this symbol — `libs/form` stays the only
- * import site (`doc/wrappery.md`).
+ * import site (`doc/wrappers.md`).
  */
 export { FormProvider } from 'react-hook-form';
 export type { FormProviderProps } from 'react-hook-form';

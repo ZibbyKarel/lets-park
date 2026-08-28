@@ -1,6 +1,6 @@
 /**
  * `@lets-park/form` — the only place in the workspace allowed to import
- * `react-hook-form` (enforced in `eslint.config.mjs`, see `doc/wrappery.md`).
+ * `react-hook-form` (enforced in `eslint.config.mjs`, see `doc/wrappers.md`).
  *
  * The bridge between `libs/contract`'s Zod schemas and the design system's
  * input primitives (`Input`, `Select`, `Checkbox`, ...):
@@ -12,7 +12,7 @@
  * - `FormField` — connects one field's value and Zod error message to one
  *   primitive, without the primitive ever seeing react-hook-form itself.
  *
- * Deliberately narrow: this is the whole API. See `doc/wrappery.md` for why.
+ * Deliberately narrow: this is the whole API. See `doc/wrappers.md` for why.
  */
 export * from './lib/use-app-form';
 export * from './lib/form-field';
