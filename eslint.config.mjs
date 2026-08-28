@@ -168,11 +168,25 @@ const NPM_ALLOWLIST = {
     'next',
     'next/*',
     ...Object.keys(WRAPPED_LIBRARIES).flatMap((pkg) => [pkg, `${pkg}/*`]),
+    // `libs/form`'s Zod resolver for react-hook-form. It is not itself a
+    // wrapped library (nothing else could import it instead — it only makes
+    // sense paired with react-hook-form), so it is not in `WRAPPED_LIBRARIES`,
+    // just allow-listed here alongside it.
+    '@hookform/resolvers',
+    '@hookform/resolvers/*',
+    // `libs/form` types `useAppForm` against a Zod schema (`z.input`/`z.output`)
+    // and its resolver validates with Zod at runtime — it is the one wrapper
+    // whose whole job is bridging Zod to react-hook-form, so it needs Zod
+    // itself, not just the contract lib built on it.
+    'zod',
+    'zod/*',
     // Test-only, same reasoning as `ui` above: the boundary rule cannot tell
     // a spec file from a shipped one, so these have to be allowed for the
-    // whole tag. Needed by `libs/i18n`'s component test (`IntlProvider`).
+    // whole tag. Needed by `libs/i18n`'s component test (`IntlProvider`) and
+    // `libs/form`'s (`userEvent.type`/`.click` on rendered primitives).
     '@testing-library/react',
     '@testing-library/jest-dom',
+    '@testing-library/user-event',
   ],
 
   /**
@@ -206,6 +220,145 @@ const wrapperLibOverrides = Object.entries(WRAPPED_LIBRARIES).map(([pkg, { owner
   },
 }));
 
+/**
+ * `@nx/enforce-module-boundaries`'s `depConstraints`, factored out to a named
+ * constant so `libs/form`'s test-only override below (`formSpecDepConstraints`)
+ * can clone it rather than silently drifting from a second, hand-copied array.
+ * Flat config replaces a rule's whole option object for a later, matching
+ * config block — it does not merge — so any override has to restate every
+ * entry, not just the one it changes (same reasoning as
+ * `restrictWrappedLibraries` above).
+ */
+const DEP_CONSTRAINTS = [
+  // --- type dimension -------------------------------------------
+  // Every project carries exactly one `type:` tag, so this dimension
+  // is where the npm allow-lists live. See NPM_ALLOWLIST above for
+  // why they are not repeated on `scope:` / `ds:`.
+  //
+  // Layering, top to bottom, is acyclic:
+  //   app → feature → ui → util → contract → foundation
+  // `type:util` may depend on `type:contract` (that is what
+  // `libs/api-client` is for), and `type:contract` depends on
+  // `layer:foundation` — not on `type:util` — so the two directions
+  // no longer form a cycle at the tag level (Task 3 review, N3).
+  //
+  // Applications compose everything; nothing may depend on them.
+  {
+    sourceTag: 'type:app',
+    onlyDependOnLibsWithTags: ['*'],
+    allowedExternalImports: NPM_ALLOWLIST.app,
+  },
+  // Feature libs hold domain composition.
+  {
+    sourceTag: 'type:feature',
+    onlyDependOnLibsWithTags: [
+      'type:feature',
+      'type:ui',
+      'type:util',
+      'type:contract',
+      'type:data',
+    ],
+    allowedExternalImports: NPM_ALLOWLIST.feature,
+  },
+  // The design system is domain-free: it must never reach into
+  // feature or application code.
+  {
+    sourceTag: 'type:ui',
+    onlyDependOnLibsWithTags: ['type:ui', 'type:util'],
+    allowedExternalImports: NPM_ALLOWLIST.ui,
+  },
+  {
+    sourceTag: 'type:util',
+    onlyDependOnLibsWithTags: ['type:util', 'type:contract'],
+    allowedExternalImports: NPM_ALLOWLIST.util,
+  },
+  // The contract sits below every wrapper and above the foundation:
+  // Zod schemas plus the oRPC contract builder, nothing else.
+  {
+    sourceTag: 'type:contract',
+    onlyDependOnLibsWithTags: ['layer:foundation'],
+    allowedExternalImports: NPM_ALLOWLIST.contract,
+  },
+  {
+    sourceTag: 'type:data',
+    onlyDependOnLibsWithTags: ['type:data', 'type:util', 'type:contract'],
+    allowedExternalImports: NPM_ALLOWLIST.data,
+  },
+
+  // --- foundation ------------------------------------------------
+  // `libs/shared-types` is the bottom of the graph: it depends on no
+  // workspace lib and on no npm package. Both empty arrays are
+  // load-bearing — `onlyDependOnLibsWithTags: []` rejects every
+  // tagged target, `allowedExternalImports: []` rejects every
+  // package. See doc/decision/0003-* and doc/decision/0017-*.
+  {
+    sourceTag: 'layer:foundation',
+    onlyDependOnLibsWithTags: [],
+    allowedExternalImports: NPM_ALLOWLIST.foundation,
+  },
+
+  // --- scope dimension ------------------------------------------
+  // Keeps frontend-only libs (e.g. libs/i18n, next-intl) out of
+  // apps/api, and backend-only libs out of apps/web.
+  // See doc/decision/0003-date-helpers-in-shared-types.md.
+  {
+    sourceTag: 'scope:web',
+    onlyDependOnLibsWithTags: ['scope:web', 'scope:shared'],
+  },
+  {
+    sourceTag: 'scope:api',
+    onlyDependOnLibsWithTags: ['scope:api', 'scope:shared'],
+  },
+  {
+    sourceTag: 'scope:shared',
+    onlyDependOnLibsWithTags: ['scope:shared'],
+  },
+
+  // --- design-system layer dimension ----------------------------
+  // tokens -> primitives -> compounds, one direction only.
+  // `type:ui` alone cannot express this because all three layers
+  // carry that tag.
+  {
+    sourceTag: 'ds:tokens',
+    onlyDependOnLibsWithTags: ['type:util'],
+  },
+  {
+    sourceTag: 'ds:primitives',
+    onlyDependOnLibsWithTags: ['ds:tokens', 'type:util'],
+  },
+  {
+    sourceTag: 'ds:compounds',
+    onlyDependOnLibsWithTags: ['ds:tokens', 'ds:primitives', 'type:util'],
+  },
+];
+
+/**
+ * `depConstraints` for `libs/form`'s own **test** files only: identical to
+ * `DEP_CONSTRAINTS`, except the `type:util` entry also allows `type:ui`.
+ *
+ * Why this exists: `libs/form`'s test suite demonstrates the wrapper's whole
+ * reason for being — a real, Zod-validated, submittable form built from
+ * `@lets-park/form` plus design-system primitives (`Input`, `Select`,
+ * `Checkbox`), with no direct `react-hook-form` import anywhere in that file
+ * (`doc/decision/0030-*`, Task 18). That demo can only run if the test file
+ * may import `design-system-primitives` (`type:ui`), which the general
+ * `type:util` constraint forbids — composing the design system is supposed to
+ * happen in app/feature code (global constraint 5), and `libs/form`'s own
+ * *shipped* source must stay just as constrained as every other wrapper lib.
+ *
+ * Scoped to `libs/form/**\/*.spec.{ts,tsx}` below, nowhere else: every other
+ * `type:util` project, and `libs/form`'s non-test source, still gets the
+ * unmodified `DEP_CONSTRAINTS`.
+ */
+const formSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
+  constraint.sourceTag === 'type:util'
+    ? {
+        ...constraint,
+        onlyDependOnLibsWithTags: [...constraint.onlyDependOnLibsWithTags, 'type:ui'],
+      }
+    : constraint
+);
+
 export default [
   ...nx.configs['flat/base'],
   ...nx.configs['flat/typescript'],
@@ -230,108 +383,7 @@ export default [
         {
           enforceBuildableLibDependency: true,
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
-          depConstraints: [
-            // --- type dimension -------------------------------------------
-            // Every project carries exactly one `type:` tag, so this dimension
-            // is where the npm allow-lists live. See NPM_ALLOWLIST above for
-            // why they are not repeated on `scope:` / `ds:`.
-            //
-            // Layering, top to bottom, is acyclic:
-            //   app → feature → ui → util → contract → foundation
-            // `type:util` may depend on `type:contract` (that is what
-            // `libs/api-client` is for), and `type:contract` depends on
-            // `layer:foundation` — not on `type:util` — so the two directions
-            // no longer form a cycle at the tag level (Task 3 review, N3).
-            //
-            // Applications compose everything; nothing may depend on them.
-            {
-              sourceTag: 'type:app',
-              onlyDependOnLibsWithTags: ['*'],
-              allowedExternalImports: NPM_ALLOWLIST.app,
-            },
-            // Feature libs hold domain composition.
-            {
-              sourceTag: 'type:feature',
-              onlyDependOnLibsWithTags: [
-                'type:feature',
-                'type:ui',
-                'type:util',
-                'type:contract',
-                'type:data',
-              ],
-              allowedExternalImports: NPM_ALLOWLIST.feature,
-            },
-            // The design system is domain-free: it must never reach into
-            // feature or application code.
-            {
-              sourceTag: 'type:ui',
-              onlyDependOnLibsWithTags: ['type:ui', 'type:util'],
-              allowedExternalImports: NPM_ALLOWLIST.ui,
-            },
-            {
-              sourceTag: 'type:util',
-              onlyDependOnLibsWithTags: ['type:util', 'type:contract'],
-              allowedExternalImports: NPM_ALLOWLIST.util,
-            },
-            // The contract sits below every wrapper and above the foundation:
-            // Zod schemas plus the oRPC contract builder, nothing else.
-            {
-              sourceTag: 'type:contract',
-              onlyDependOnLibsWithTags: ['layer:foundation'],
-              allowedExternalImports: NPM_ALLOWLIST.contract,
-            },
-            {
-              sourceTag: 'type:data',
-              onlyDependOnLibsWithTags: ['type:data', 'type:util', 'type:contract'],
-              allowedExternalImports: NPM_ALLOWLIST.data,
-            },
-
-            // --- foundation ------------------------------------------------
-            // `libs/shared-types` is the bottom of the graph: it depends on no
-            // workspace lib and on no npm package. Both empty arrays are
-            // load-bearing — `onlyDependOnLibsWithTags: []` rejects every
-            // tagged target, `allowedExternalImports: []` rejects every
-            // package. See doc/decision/0003-* and doc/decision/0017-*.
-            {
-              sourceTag: 'layer:foundation',
-              onlyDependOnLibsWithTags: [],
-              allowedExternalImports: NPM_ALLOWLIST.foundation,
-            },
-
-            // --- scope dimension ------------------------------------------
-            // Keeps frontend-only libs (e.g. libs/i18n, next-intl) out of
-            // apps/api, and backend-only libs out of apps/web.
-            // See doc/decision/0003-date-helpers-in-shared-types.md.
-            {
-              sourceTag: 'scope:web',
-              onlyDependOnLibsWithTags: ['scope:web', 'scope:shared'],
-            },
-            {
-              sourceTag: 'scope:api',
-              onlyDependOnLibsWithTags: ['scope:api', 'scope:shared'],
-            },
-            {
-              sourceTag: 'scope:shared',
-              onlyDependOnLibsWithTags: ['scope:shared'],
-            },
-
-            // --- design-system layer dimension ----------------------------
-            // tokens -> primitives -> compounds, one direction only.
-            // `type:ui` alone cannot express this because all three layers
-            // carry that tag.
-            {
-              sourceTag: 'ds:tokens',
-              onlyDependOnLibsWithTags: ['type:util'],
-            },
-            {
-              sourceTag: 'ds:primitives',
-              onlyDependOnLibsWithTags: ['ds:tokens', 'type:util'],
-            },
-            {
-              sourceTag: 'ds:compounds',
-              onlyDependOnLibsWithTags: ['ds:tokens', 'ds:primitives', 'type:util'],
-            },
-          ],
+          depConstraints: DEP_CONSTRAINTS,
         },
       ],
     },
@@ -396,6 +448,28 @@ export default [
     },
   },
   ...wrapperLibOverrides,
+  // See `formSpecDepConstraints` above: only `libs/form`'s own test files may
+  // reach `design-system-primitives` (`type:ui`), to demonstrate the wrapper
+  // building a real form without a direct `react-hook-form` import.
+  // `allowCircularSelfDependency` is needed alongside it because that same
+  // demo imports `@lets-park/form` by its workspace alias from inside
+  // `libs/form` itself (the point being to prove the *public* API is enough),
+  // which the boundary rule otherwise flags as a circular self-dependency.
+  {
+    basePath: workspaceRoot,
+    files: ['libs/form/**/*.spec.ts', 'libs/form/**/*.spec.tsx'],
+    rules: {
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          enforceBuildableLibDependency: true,
+          allowCircularSelfDependency: true,
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          depConstraints: formSpecDepConstraints,
+        },
+      ],
+    },
+  },
   // `libs/shared-types` has to stay dependency-free: it is imported by
   // apps/api, libs/contract and libs/i18n alike. The Nx `type:util` constraint
   // cannot express this, because the same tag covers the wrapper libs, which
