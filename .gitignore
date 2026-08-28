@@ -1,11 +1,68 @@
+# Project-specific
 plan.md
-node_modules/
+.superpowers/
 .playwright-mcp/
-.nx/
+storage-state*.json
+
+# compiled output
 dist/
 tmp/
+out-tsc/
+.next/
+build/
+
+# dependencies
+node_modules/
+
+# Nx
+.nx/
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+
+# test artifacts
+coverage/
+test-output/
+playwright-report/
+test-results/
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# env
 .env
 .env.local
 *.local
-coverage/
-storage-state*.json
+
+# misc
+/.sass-cache
+/connect.lock
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/worktrees
+.claude/settings.local.json
+
+# Next.js
+.next
+out

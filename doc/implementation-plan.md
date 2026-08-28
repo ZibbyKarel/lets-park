@@ -7,6 +7,24 @@ tento dokument je jen jeho rozpad do dispatchovatelných kusů. Při rozporu vyh
 - Rozhodnutí: `doc/decision/`
 - Dokumentace k jednotlivým oblastem: `doc/<oblast>.md`
 
+> **Dvě rozhodnutí uživatele mění `plan.md` a platí pro celý projekt:**
+> `doc/decision/0004-rozsah-mvp-vcetne-funkci-z-designu.md` (rezervační okno se zámkem,
+> hromadná rezervace a preferované místo **patří do MVP**; v konfliktu s `plan.md` vyhrává
+> design) a `doc/decision/0005-npm-scope-lets-park.md` (scope je `@lets-park/*`; kdekoliv
+> `plan.md` píše `@myorg/…`, čti `@lets-park/…`). Přečti obě, než začneš.
+
+### Pořadí provádění
+
+Task čísla nejsou pořadí. Skutečné pořadí a paralelní větve:
+
+| Vlna | Větev A (hlavní strom) | Větev B (worktree) |
+| --- | --- | --- |
+| 1 | 1 → 2 | – |
+| 2 | 3 → 4 → 5 | 6 → 7 → 8 |
+| 3 | 9 → 10 → 11 → 12 → 13 → **30** → 14 → 15 → 16 | 17 → 18 → 19 → 20 → 21 → 22 |
+| 4 | 23 → 24 → **31** → 25 → 26 → 27 | – |
+| 5 | 28 → 29 | – |
+
 ## Global Constraints
 
 Platí pro **každý** úkol; reviewer je dostává v každém dispatchi.
@@ -147,16 +165,29 @@ tomto stroji neběží, takže `docker compose up` neověřuj; napiš to do repo
    - `todayInPrague()`, `startOfDayInPrague()`, porovnání a posun dní v Europe/Prague,
    - české státní svátky (pohyblivé i pevné) pro daný rok – čistá funkce,
    - konstanty domény: `ParkingGroup` (`IT` | `SHARED`), `UserRole` (`USER` | `ADMIN`).
-   - Unit testy včetně přechodu letního času a přelomu roku.
+   - **`isMonthOpen(targetDate, openDaysBefore, lockMode, today)`** – čistá funkce
+     rezervačního okna, přesně dle `doc/decision/0004-*` (`FORCE_OPEN` → true,
+     `FORCE_LOCKED` → false, `AUTO` → `today >= prvníDenMěsíce - openDaysBefore && today <
+     prvníDenMěsíce`), a `monthLockState(...)` vracející
+     `NOT_YET_OPEN` | `OPEN` | `LOCKED`. Vše v Europe/Prague.
+   - Unit testy včetně přechodu letního času, přelomu roku a přelomu měsíce
+     (den před oknem, první den okna, poslední den okna, první den měsíce).
 2. `libs/contract/src/schemas` (tag `type:contract`):
    - Zod v4 schémata entit: `User`, `ParkingSpot`, `Reservation`, `WaitlistEntry`,
-     `AuditLog` – přesně dle doménového modelu v `plan.md`.
+     `AuditLog` – přesně dle doménového modelu v `plan.md`, **plus rozšíření
+     z `doc/decision/0004-*`**:
+     - `User.preferredParkingSpotId` (nullable),
+     - `ReservationWindowSettings` = `{ openDaysBefore: int 1–31 (default 7),
+       lockMode: 'AUTO' | 'FORCE_OPEN' | 'FORCE_LOCKED' (default 'AUTO') }`,
+     - `MonthLockState` = `'NOT_YET_OPEN' | 'OPEN' | 'LOCKED'` + schéma přehledu měsíce
+       (měsíc, rozsah okna od–do, stav).
    - `dateOnlySchema` = `z.iso.date()` + validace rezervačního horizontu (viz `plan.md`
      §Byznys pravidla) postavená nad helpery z `libs/shared-types`.
    - Error kontrakt: schéma error shapu (`code`, `message`, `details?`) a **uzavřený výčet**
      doménových error kódů: `SPOT_ALREADY_RESERVED`, `RESERVATION_LIMIT_REACHED`,
      `PAST_DATE`, `OUT_OF_HORIZON`, `NOT_FOUND`, `FORBIDDEN`, `ALREADY_IN_WAITLIST`,
-     `CANNOT_WAITLIST_OWN_SPOT`, `SPOT_NOT_OCCUPIED`, `VALIDATION_FAILED`, `CONFLICT`.
+     `CANNOT_WAITLIST_OWN_SPOT`, `SPOT_NOT_OCCUPIED`, `VALIDATION_FAILED`, `CONFLICT`,
+     **`RESERVATIONS_LOCKED`** (měsíc je mimo rezervační okno).
    - Typy odvozené výhradně přes `z.infer`.
 3. Unit testy schémat: validní vstupy, nevalidní vstupy, hraniční data (dnešek,
    včerejšek, poslední povolený den horizontu, den o jeden za horizontem, přestupný rok).
@@ -172,7 +203,7 @@ implementace endpointů.
 
 **Fáze 1, bod 1 (procedury).** Navazuje na Task 3.
 
-Entry point `@myorg/contract` (`libs/contract/src/api`). Definuj oRPC kontrakt
+Entry point `@lets-park/contract` (`libs/contract/src/api`). Definuj oRPC kontrakt
 (`@orpc/contract`) se všemi doménovými procedurami a typovanými chybami:
 
 - **Přehled dne** – jedním dotazem: spoty + rezervace + počty ve waitlistu pro daný den.
@@ -180,9 +211,20 @@ Entry point `@myorg/contract` (`libs/contract/src/api`). Definuj oRPC kontrakt
 - **Waitlist** – join, leave.
 - **Správa míst (admin)** – list, create, update, deactivate.
 - **Správa uživatelů (admin)** – list, update (role, aktivita).
-- **Nastavení uživatele** – čtení a změna SPZ.
+- **Nastavení uživatele** – čtení a změna SPZ **a preferovaného parkovacího místa**.
 - **ICS token** – regenerace + helper/konstanta pro sestavení ICS URL
   (ICS feed samotný je mimo oRPC, viz `plan.md` §Contract-first, výjimka).
+- **Rezervační okno** (viz `doc/decision/0004-*`):
+  - čtení a změna nastavení (`openDaysBefore`, `lockMode`) – jen admin,
+  - přehled stavů měsíců (měsíc, rozsah okna, `MonthLockState`) pro admin záložku,
+  - stav okna pro konkrétní den je součástí odpovědi **přehledu dne**, aby FE nemusel
+    dělat druhý dotaz.
+- **Hromadná rezervace** – dvě procedury:
+  - `previewBulk` (vstup: seznam dnů v jednom měsíci) → **read-only návrh**: pro každý den
+    buď přidělené místo (a příznak, zda jde o preferované), nebo pozice ve frontě.
+    Nic nezapisuje.
+  - `confirmBulk` (vstup: tentýž seznam dnů) → provede zápis a vrátí **skutečný** výsledek
+    (může se lišit od návrhu, pokud mezitím někdo místo obsadil).
 
 Každá procedura má vstupní i výstupní schéma a deklarované chybové kódy z Tasku 3.
 Vše přes `z.infer`, nic ručně.
@@ -196,11 +238,11 @@ Doplň `doc/kontrakt.md` o seznam procedur a jejich sémantiku.
 
 ---
 
-## Task 5 — Realtime kontrakt (`@myorg/contract/realtime`)
+## Task 5 — Realtime kontrakt (`@lets-park/contract/realtime`)
 
 **Fáze 1, bod 4.** Navazuje na Task 3 (může běžet po Tasku 4).
 
-Samostatný entry point `@myorg/contract/realtime` (`libs/contract/src/realtime`), který
+Samostatný entry point `@lets-park/contract/realtime` (`libs/contract/src/realtime`), který
 **netahá oRPC závislosti**:
 
 - Zod schémata payloadů eventů: `cell:locked`, `cell:unlocked`,
@@ -210,7 +252,7 @@ Samostatný entry point `@myorg/contract/realtime` (`libs/contract/src/realtime`
 - Helper pro název roomu per den (`roomForDate(date: DateOnly)`).
 - Payloady **referencují sdílená entity schémata** ze `src/schemas` – nic se neduplikuje.
 
-Unit testy schémat + testu, že import `@myorg/contract/realtime` nezavleče `@orpc/*`
+Unit testy schémat + testu, že import `@lets-park/contract/realtime` nezavleče `@orpc/*`
 (např. kontrolou závislostí v build outputu nebo explicitním test-casem na module graph).
 
 Doplň `doc/kontrakt.md` o realtime část a o pravidlo „server vždy validuje příchozí
@@ -296,6 +338,10 @@ Doplň `doc/design-system.md`.
    - indexy na `date`
    - `date` je sloupec typu `DATE` (`@db.Date`), nikdy timestamp
    - `AuditLog.payload` je `Json` (JSONB), tabulka append-only
+   - **`User.preferredParkingSpotId`** – nullable FK na `ParkingSpot`, `onDelete: SetNull`
+   - **`ReservationWindowSettings`** – singleton tabulka (jeden řádek, vynucený
+     constraintem – zdůvodni zvolený způsob v `doc/databaze.md`) s `openDaysBefore`
+     a `lockMode`; seed vytvoří default `7` / `AUTO`
 3. Migrace + seed skript: parkovací místa dle reálného layoutu
    (IT: `E2.92`–`E2.95`; Shared: `E2.96`, `E2.65`, `E2.66`, `E2.61`, `E2.62`) a dev
    uživatelé odpovídající mock OIDC.
@@ -361,8 +407,12 @@ Implementace kontraktu z Tasku 4 přes `@orpc/nest` (`@Implement`):
 
 - **ParkingSpots** – admin CRUD (list, create, update, deactivate).
 - **Users (admin)** – list, změna role, deaktivace (nikdy hard delete).
-- **User settings** – čtení/změna SPZ, regenerace ICS tokenu.
-- **Přehled dne** – jeden dotaz vracející spoty + rezervace + počty ve waitlistu.
+- **User settings** – čtení/změna SPZ a preferovaného místa, regenerace ICS tokenu.
+- **Rezervační okno (admin)** – čtení/změna `openDaysBefore` a `lockMode`, přehled stavů
+  měsíců; změna nastavení jde do AuditLogu. Stav se počítá funkcí `isMonthOpen`
+  z `libs/shared-types` (Task 3), **nikdy se needuplikuje**.
+- **Přehled dne** – jeden dotaz vracející spoty + rezervace + počty ve waitlistu
+  **+ stav rezervačního okna pro daný den**.
 - **AuditLog service** – append-only zápis u všech admin zásahů a mutací; použije ho
   i Task 13.
 
@@ -378,7 +428,13 @@ Dokumentace: `doc/api-moduly.md`.
 
 Byznys pravidla přesně dle `plan.md` §Byznys pravidla:
 
-- rezervovat lze jen dnešek a budoucnost (Europe/Prague), max do konce následujícího měsíce,
+- rezervovat lze jen dnešek a budoucnost (Europe/Prague),
+- **rezervační okno** (nahrazuje pravidlo „max do konce následujícího měsíce", viz
+  `doc/decision/0004-*`): pro běžného uživatele je create rezervace, waitlist join
+  i waitlist leave povolený **jen když je měsíc cílového dne otevřený**
+  (`isMonthOpen` z `libs/shared-types`); jinak kontraktová chyba `RESERVATIONS_LOCKED`.
+  **Zrušení vlastní rezervace je povolené vždy.** Admin není oknem omezen vůbec.
+  Kontrola je na backendu, ne jen v UI.
 - max 1 rezervace na uživatele a den, max 1 rezervace na místo a den,
 - admin ruší cizí rezervace (→ AuditLog s actorem), uživatel jen svoji,
 - zrušení = hard delete + AuditLog,
@@ -393,7 +449,9 @@ Byznys pravidla přesně dle `plan.md` §Byznys pravidla:
 
 **Integrační testy proti reálné Postgres** (`apps/api-e2e`, Docker):
 souběžné zrušení (paralelní transakce), prázdný waitlist, více čekajících,
-čekající s kolizní rezervací týž den, promote + konflikt unique constraintu.
+čekající s kolizní rezervací týž den, promote + konflikt unique constraintu,
+**rezervace v uzamčeném měsíci (user → `RESERVATIONS_LOCKED`, admin → projde),
+zrušení vlastní rezervace v uzamčeném měsíci (projde)**.
 
 > Docker démon na tomto stroji **neběží**. Testy napiš tak, aby se spouštěly proti
 > `docker compose up postgres`, a v reportu jasně napiš, že je nebylo možné lokálně
@@ -476,7 +534,7 @@ Dokumentace: `doc/slack.md`.
 
 - Wrapper nad next-intl (jediné místo, kde se next-intl importuje).
 - **Re-export** date logiky z `libs/shared-types` (viz `doc/decision/0003-*`) pod stabilním
-  API, aby feature kód importoval jen `@myorg/i18n`.
+  API, aby feature kód importoval jen `@lets-park/i18n`.
 - České svátky + víkendy pro zvýraznění v date liště.
 - Formátování dat v češtině (`pondělí 28. září 2026`, `září`, `2026`) – přesně podle
   `doc/design/screens/07-lot.png` a `05-admin-window.png`.
@@ -507,7 +565,7 @@ Dokumentace: `doc/wrappery.md` (zakládá se zde, doplní Tasky 19–22).
 
 **Fáze 4, body 2–3.** Navazuje na Task 18.
 
-- `libs/api-client`: instance oRPC klienta napojená na `@myorg/contract`, auth header
+- `libs/api-client`: instance oRPC klienta napojená na `@lets-park/contract`, auth header
   (access token dodá `libs/auth`, Task 20 – zatím přes injektovatelný provider),
   mapování kontraktových chyb na typované error kódy.
 - `libs/query`: konfigurace TanStack Query v5 clienta (retry, staleTime, error handling
@@ -544,7 +602,7 @@ Doplň `doc/wrappery.md` a `doc/auth.md` o frontendovou část.
 
 **Fáze 4, bod 4.** Navazuje na Task 20.
 
-Wrapper nad `socket.io-client` s typy z `@myorg/contract/realtime`:
+Wrapper nad `socket.io-client` s typy z `@lets-park/contract/realtime`:
 `useRealtimeConnection` (handshake auth token z `libs/auth`, reconnect logika),
 `useCellLock` (heartbeat prodlužování zámku, uvolnění při unmountu/odpojení).
 
@@ -598,6 +656,17 @@ Dokumentace: `doc/frontend.md`.
   (šrafování + ikonka + „právě upravuje …") dle designu.
 - Modály: „Rezervovat místo" (`08-modal-reserve.png`), „Přidat se do fronty"
   (`09-modal-queue.png` – držitel + pořadí ve frontě + „Zrušit rezervaci" pro oprávněné).
+- **Stav rezervačního okna** (viz `doc/decision/0004-*`), přesně dle designu:
+  - banner nad parkovištěm – zelený „Rezervace na … jsou otevřené — zapisovat lze do …",
+    žlutý při uzamčeno; skrytý, když to design skrývá (`14-lot-user-lockstate-off.png`),
+  - v uzamčeném měsíci se volná místa běžnému uživateli zobrazí jako „rezervace uzamčeny"
+    (symbol `⊘`) a **nejsou klikatelná pro rezervaci**; kliknutí otevře vysvětlující modal,
+  - ve frontovém modalu se v uzamčeném měsíci zobrazí žlutá poznámka a akce „Přidat se do
+    fronty" je skrytá; „Zrušit rezervaci" (vlastní) zůstává dostupné,
+  - admin má i po uzamčení plný přístup, včetně `⋯` menu na dlaždici místa
+    (úprava/zrušení cizí rezervace).
+- Tlačítko **„Hromadná rezervace"** v hlavičce – pro běžného uživatele v uzamčeném měsíci
+  skryté a zablokované i na úrovni akce; modal implementuje Task 31.
 - Data přes `libs/query` + `libs/api-client`; realtime přes `libs/realtime-client`.
   **Realtime eventy invalidují/patchují query cache – jeden konzistentní mechanismus,
   žádné ad-hoc lokální stavy.**
@@ -625,7 +694,9 @@ Změna dne mění realtime room i query klíč – ověř testem, že se odhlás
 
 Modal „Nastavení" dle `doc/design/screens/11-settings.png`:
 
-- formulář přes `libs/form` – SPZ,
+- formulář přes `libs/form` – SPZ **a preferované parkovací místo** (select nad aktivními
+  místy, prázdná volba povolena); popisek dle designu: „SPZ se předplní při každé rezervaci
+  místa. Preferované místo použijeme přednostně u hromadné rezervace.",
 - **sekce ICS** (v designu chybí, ale `plan.md` ji vyžaduje): zobrazení a zkopírování
   subscription URL + tlačítko regenerace tokenu s potvrzením (`ConfirmDialog`).
   Vizuálně drž styl designu; zdůvodni umístění v `doc/decision/`.
@@ -641,7 +712,12 @@ Stránka „Správa" se záložkami dle `doc/design/screens/03-admin-users.png`,
 
 - **Přehled parkoviště** – admin pohled na den,
 - **Uživatelé** – `DataTable`, deaktivace, změna role,
-- **Parkovací místa** – `DataTable`, CRUD.
+- **Parkovací místa** – `DataTable`, CRUD,
+- **Rezervační okno** – dle `doc/design/screens/05-admin-window.png`:
+  vlevo karta „Otevření nového měsíce" (stepper „Otevřít X dní předem" + režim zámku
+  Automaticky / Vynutit otevřeno / Vynutit uzamčeno), vpravo karta „Stav měsíců"
+  se seznamem nejbližších měsíců, rozsahem okna a badge
+  Otevřeno / Uzamčeno / Zatím neotevřeno.
 
 Vizuální identita stejná jako zbytek appky.
 
@@ -675,3 +751,64 @@ co potřebuje běžící Docker.
   regenerace ICS tokenu, zálohy Postgres (`pg_dump`), upgrade cesty (Redis adapter a locky,
   BullMQ).
 - Kontrola, že `doc/` je kompletní a konzistentní; index `doc/README.md`.
+
+---
+
+## Task 30 — Hromadná rezervace: backend alokátor a transakce
+
+**Rozšíření dle `doc/decision/0004-*`.** Běží mezi Taskem 13 a 14 (hlavní strom).
+
+Implementace procedur `previewBulk` a `confirmBulk` z Tasku 4.
+
+**Alokátor** (pro každý vybraný den, dny se zpracovávají vzestupně):
+
+1. Pokud má uživatel `preferredParkingSpotId` a to místo je ten den volné → přiděl ho
+   a označ výsledek jako `preferred`.
+2. Jinak vezmi první volné aktivní místo podle deterministického pořadí
+   (skupina `IT` před `SHARED`, uvnitř skupiny podle `label`) – **žádná náhoda**,
+   aby byl náhled a potvrzení konzistentní.
+3. Pokud ten den není volné žádné místo → zařaď do fronty na místo s **nejkratší frontou**
+   (tiebreak podle `label`) a vrať výslednou pozici.
+4. Den, kdy už uživatel rezervaci má, se přeskočí s vysvětlením (pravidlo 1 rezervace
+   na uživatele a den).
+5. Víkendy a české svátky se odmítnou už validací vstupu.
+
+**Rozdíl mezi preview a confirm:**
+
+- `previewBulk` je **read-only** – nesmí nic zapsat ani zamknout.
+- `confirmBulk` běží v **jedné interaktivní transakci** a musí být odolný proti tomu, že se
+  stav mezi náhledem a potvrzením změnil: kolize (`P2002`) neshodí celou dávku, ale ten den
+  spadne do fronty. Výsledek se vrací uživateli, aby viděl, co se skutečně stalo.
+- Rezervační okno se kontroluje pro celý cílový měsíc; běžný uživatel v uzamčeném měsíci
+  dostane `RESERVATIONS_LOCKED` (admin projde).
+- AuditLog zápis za každou vytvořenou rezervaci i waitlist zápis.
+- Broadcasty a Slack notifikace **až po commitu** (stejný hook jako Task 13).
+
+Testy: preview nic nezapíše; deterministické pořadí (dvakrát stejný vstup → stejný výstup);
+preferované místo má přednost; plný den → fronta s korektní pozicí; den s existující
+rezervací se přeskočí; **integrační test proti reálné Postgres**: souběžné `confirmBulk`
+dvou uživatelů na stejné dny neporuší unique constrainty a oba dostanou konzistentní výsledek.
+
+Dokumentace: doplň `doc/waitlist.md` (nebo nový `doc/hromadna-rezervace.md`) o strategii
+alokátoru a o to, proč je preview read-only.
+
+---
+
+## Task 31 — Hromadná rezervace: FE modal
+
+**Rozšíření dle `doc/decision/0004-*`.** Běží po Tasku 24 (hlavní strom).
+
+Modal dle `doc/design/screens/10-modal-bulk.png`, dva kroky:
+
+1. **Výběr dní** – kalendářní mřížka měsíce, sloupce `PO ÚT ST ČT PÁ SO NE`
+   (víkendy vizuálně v zákrytu vpravo). Víkendy a české svátky jsou **nevybratelné**
+   (`libs/i18n`). Pod mřížkou text „Víkendy a svátky nelze vybrat." a „Preferované místo:
+   `<label>`". CTA: „Vyberte dny" → „Vygenerovat rozvrh (N dní)".
+2. **Návrh rozvrhu** – seznam řádků `datum · den v týdnu` + přidělené místo + badge
+   `Rezervováno · preferované` (zelená), `Rezervováno` (modrá) nebo `N. ve frontě` (žlutá).
+   Souhrn „X dní s místem, Y dní ve frontě." CTA „Potvrdit rozvrh", zpět na výběr.
+
+Po potvrzení se výsledek porovná s návrhem – pokud se liší, uživatel to musí vidět
+(ne tichý rozdíl). Invalidace query cache pro dotčené dny.
+
+Pro běžného uživatele v uzamčeném měsíci je vstup do modalu skrytý i zablokovaný.

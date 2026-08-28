@@ -32,9 +32,10 @@ přístupu k prohlížeči.
 
 ## Klíčové hodnoty z designu (proti fallback popisu v `plan.md`)
 
-`plan.md` uvádí jako fallback firemní akcenty `#fcaf00` / `#00e25a` / `#3b88ff`. Skutečný
-design používá **Shoptet DS paletu**; tyto tři barvy se v něm objevují jen jako historické
-varianty. Závazné jsou hodnoty z `ds/colors_and_type.css`:
+Design stojí na **Shoptet DS paletě** (`ds/colors_and_type.css`) — ta je závazná pro celý
+design systém. Trojice `#fcaf00` / `#00e25a` / `#3b88ff` z `plan.md` **platí**, ale jen jako
+`PALETTE` pro barvy aut na obsazených místech (viz `lets-park-design.dc.html`, konstanta
+`PALETTE` na ř. 472). Všechno ostatní — UI, tlačítka, badge, stavy — používá Shoptet DS:
 
 - primární modrá `#008FFF` (hover `#0070D6`), zelená `#00DB33`, žlutá `#FFBE0E`,
   světle modrá `#E2F2FF`, tmavá `#23221F`, text `#15181E`, danger `#E5484D`
@@ -43,8 +44,8 @@ varianty. Závazné jsou hodnoty z `ds/colors_and_type.css`:
 - spacing 4px base (`--space-1` … `--space-32`), radius `2/8/12/16/24/32/360px`
 - stíny `--shadow-xs … --shadow-lg` + `--shadow-blue` / `--shadow-yellow`
 
-Barvy aut na parkovišti (modrá/zelená/žlutá varianta) vycházejí z brand palety, ne
-z fallback hodnot v `plan.md`.
+Barvy aut na parkovišti se berou cyklicky z `PALETTE = ["#fcaf00", "#00e25a", "#3b88ff"]`
+(deterministicky podle uživatele, ne náhodně — jinak by auto měnilo barvu při každém renderu).
 
 ## Pozn. k fontům
 

@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Language
+
+Everything will be written in EN by default.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project state
