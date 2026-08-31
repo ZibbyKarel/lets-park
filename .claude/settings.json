@@ -24,6 +24,11 @@
           {
             "type": "command",
             "command": "/Users/zibar/.local/bin/graphify hook-guard search"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git commit:*)",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/review-before-commit.mjs\""
           }
         ]
       },
@@ -33,6 +38,17 @@
           {
             "type": "command",
             "command": "/Users/zibar/.local/bin/graphify hook-guard read"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-changed.mjs\""
           }
         ]
       }
