@@ -3,6 +3,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { AuthModule } from '../auth/auth.module';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
 import { ContractExceptionFilter } from '../common/filters/contract-exception.filter';
 import { globalThrottlerOptions } from '../common/throttling/throttle-tiers';
 import { DatabaseModule } from '../database/database.module';
@@ -50,6 +53,7 @@ import { AppService } from './app.service';
     ShutdownModule,
     DatabaseModule,
     HealthModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
@@ -57,7 +61,17 @@ import { AppService } from './app.service';
     // Registered as a provider rather than via `app.useGlobalFilters(...)` so
     // that Nest can inject the pino logger into it.
     { provide: APP_FILTER, useClass: ContractExceptionFilter },
+    // Global guards run in registration order, and this order is load-bearing:
+    //
+    // 1. `ThrottlerGuard` — rate limiting must apply to unauthenticated
+    //    traffic too, so it cannot sit behind authentication.
+    // 2. `JwtAuthGuard` — authenticates by default; `@Public()` opts out.
+    // 3. `RolesGuard` — authorizes, and reads the `request.user` that (2) set.
+    //
+    // Registering (3) before (2) would make every `@Roles()` route answer 401.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}
