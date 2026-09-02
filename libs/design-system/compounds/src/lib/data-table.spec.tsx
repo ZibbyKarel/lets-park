@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { DataTable, type DataTableColumn } from './data-table';
@@ -116,6 +116,19 @@ describe('DataTable', () => {
 
       expect(cols).toHaveLength(3);
       expect(cols[1]).toHaveStyle({ width: '96px' });
+    });
+
+    it('applies minWidth to the table element so the card scrolls, not stretches', () => {
+      const { container } = renderTable({ minWidth: '560px' });
+
+      expect(container.querySelector('table')).toHaveStyle({ minWidth: '560px' });
+    });
+
+    it('aligns an end column right, not left', () => {
+      renderTable();
+
+      // `count` is the only column declared with `align: 'end'`.
+      expect(screen.getByRole('columnheader', { name: /Počet/ })).toHaveClass('text-right');
     });
   });
 
@@ -274,6 +287,24 @@ describe('DataTable', () => {
       await user.keyboard('{Enter}');
       expect(labelOrder()).toEqual(['Alfa', 'Beta', 'Gama']);
     });
+
+    it('keeps multi-sort off — a shift-click on a second column replaces the sort, it does not add to it', () => {
+      renderTable();
+
+      fireEvent.click(screen.getByRole('button', { name: /Štítek/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Počet/ }), { shiftKey: true });
+
+      // With `enableMultiSort` left off, TanStack treats the shift-click like
+      // a plain one and replaces the sort outright. Were it on, the shift
+      // press would append a second criterion instead — this component only
+      // ever reports `next[0]`, so the sort would stay on `label` and this
+      // header would never pick it up.
+      expect(screen.getByRole('columnheader', { name: /Počet/ })).toHaveAttribute(
+        'aria-sort',
+        'ascending'
+      );
+      expect(labelOrder()).toEqual(['Beta', 'Alfa', 'Gama']);
+    });
   });
 
   describe('controlled sorting', () => {
@@ -343,6 +374,50 @@ describe('DataTable', () => {
       expect(onSortChange).toHaveBeenCalledWith({ columnId: 'label', direction: 'asc' });
       expect(labelOrder()).toEqual(['Alfa', 'Beta', 'Gama']);
     });
+
+    it('does not carry a controlled press into internal state across a handoff to uncontrolled', async () => {
+      const user = userEvent.setup();
+      const { rerender } = renderTable({ sort: null, onSortChange: jest.fn() });
+
+      // A controlled press only reports; it must not be applied.
+      await user.click(screen.getByRole('button', { name: /Štítek/ }));
+      expect(labelOrder()).toEqual(['Beta', 'Gama', 'Alfa']);
+
+      // The caller drops `sort` entirely: the table becomes uncontrolled and
+      // now renders `internalSort`. That must still be whatever `defaultSort`
+      // left it at (nothing, here) — not whatever the controlled press above
+      // reported, which the internal-state guard never wrote.
+      rerender(
+        <DataTable title="Položky" columns={COLUMNS} data={ITEMS} getRowId={(row) => row.id} />
+      );
+
+      expect(labelOrder()).toEqual(['Beta', 'Gama', 'Alfa']);
+    });
+
+    it('does not re-render when a controlled press is one the caller ignores', async () => {
+      const user = userEvent.setup();
+      let cellRenders = 0;
+      const columns: DataTableColumn<Item>[] = [
+        {
+          id: 'label',
+          header: 'Štítek',
+          cell: (row) => {
+            cellRenders += 1;
+            return row.label;
+          },
+          sortValue: (row) => row.label,
+        },
+      ];
+      renderTable({ columns, sort: null, onSortChange: jest.fn() });
+
+      const before = cellRenders;
+      await user.click(screen.getByRole('button', { name: /Štítek/ }));
+
+      // The caller never moved `sort`, so this must be a no-op render: the
+      // internal-state guard exists precisely to avoid the wasted render pass
+      // that would otherwise re-invoke every cell renderer.
+      expect(cellRenders).toBe(before);
+    });
   });
 
   describe('empty state', () => {
@@ -383,6 +458,15 @@ describe('DataTable', () => {
       renderTable({ data: [] });
 
       expect(screen.getByRole('columnheader', { name: /Štítek/ })).toBeInTheDocument();
+    });
+
+    it('renders its EmptyState at the compact "sm" size, not the roomy default', () => {
+      renderTable({ data: [] });
+
+      const emptyStateRoot = screen.getByText('Žádná data').closest('div');
+
+      expect(emptyStateRoot).toHaveClass('py-8');
+      expect(emptyStateRoot).not.toHaveClass('py-16');
     });
   });
 });

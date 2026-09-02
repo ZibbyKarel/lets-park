@@ -258,6 +258,11 @@ export function DataTable<TData extends DataTableRow>({
         direction: first.desc ? 'desc' : 'asc',
       };
 
+      // Guards a performance property, not a correctness one: `activeSort`
+      // never reads `internalSort` while controlled, so this write would be
+      // dead state, not a wrong one. Skipping it avoids a redundant re-render
+      // on every controlled press the caller ignores — pinned by "does not
+      // re-render when a controlled press is one the caller ignores" below.
       if (!isControlled) {
         setInternalSort(nextSort);
       }

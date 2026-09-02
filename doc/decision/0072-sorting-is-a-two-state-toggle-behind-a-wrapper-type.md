@@ -48,6 +48,8 @@ decisions about that boundary:
   `sortDescFirst` is *inferred from the data*, so a numeric column would open
   descending while a text column next to it opened ascending. Both are pinned
   explicitly, and both pins have a test — mutating either one fails the suite.
+  The third pin, `enableMultiSort` (below), is also tested, so all three of
+  this decision's TanStack pins now have one — not just these two.
 
 ## How
 
@@ -55,7 +57,12 @@ decisions about that boundary:
   — sorting is the only feature turned on. TanStack v9 requires features to be
   declared; nothing else is.
 - `sortDescFirst: false`, `enableSortingRemoval: false`, `enableMultiSort: false`.
-  The design has no multi-column sort.
+  The design has no multi-column sort. All three are pinned **and** tested —
+  mutating any one of them fails the suite (`enableMultiSort`'s test asserts
+  that a shift-click on a second column replaces the sort instead of adding to
+  it, since a shift-click is the only public-API path that can tell the two
+  settings apart — the `onSortingChange` handler already reduces every update
+  to its first entry, so a plain click can't distinguish them).
 - **`sortValue` doubles as the accessor and the sortability flag.** TanStack's
   `column.getCanSort()` is false without an `accessorFn`, so a column with no
   `sortValue` is a display column and *cannot* be sorted even if a caller passes

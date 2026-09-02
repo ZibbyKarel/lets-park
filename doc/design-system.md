@@ -1,4 +1,4 @@
-# Design system – tokens and primitives
+# Design system – tokens, primitives and compounds
 
 Tasks 6, 7 and 8 from `doc/implementation-plan.md`. This document describes the
 two bottom layers of the design system:
@@ -655,6 +655,7 @@ No TanStack type crosses its props.
 | `defaultSort` / `sort` / `onSortChange` | `DataTableSort` / `DataTableSort \| null` / `(s) => void` | uncontrolled |
 | `emptyTitle` | `string` | `'Žádná data'` ("No data") |
 | `emptyDescription` / `emptyAction` | `ReactNode` | – |
+| `className` | `string` | – (merged onto the card's outer `<section>`) |
 
 `DataTableColumn<TData>`: `id`, `header`, `cell: (row) => ReactNode`,
 `sortValue?`, `align?: 'start' | 'end'`, `width?`.
@@ -687,6 +688,7 @@ No TanStack type crosses its props.
 | `action` | `ReactNode` | – (usually one `Button`) |
 | `size` | `'sm' \| 'md'` | `'md'` (`sm` is what `DataTable` uses) |
 | `headingLevel` | `2 \| 3 \| 4` | – (a `<p>` when omitted) |
+| `className` | `string` | – (merged onto the root `<div>`) |
 
 **`headingLevel` is deliberately undefaulted.** Only the page knows its own
 outline, and a component that guesses a level produces the skipped-heading
