@@ -41,11 +41,12 @@
 
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { ErrorCode, ErrorDetails } from '@lets-park/contract';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
+import { RPC_PATH_PREFIX } from '../../orpc/rpc-route';
 import { DomainError } from '../errors/domain-error';
 
 /**
@@ -83,9 +84,64 @@ const PRISMA_RECORD_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 const PRISMA_FOREIGN_KEY_CONSTRAINT = 'P2003';
 
+/** Narrows an unknown to a plain object without asserting its contents. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 /**
- * Normalises P2002's `meta.target`, which Prisma reports as the constraint
- * name, an array of column names, or (with some drivers) a single string.
+ * Reads the constraint out of the driver adapter's own error, which is where
+ * `@prisma/adapter-pg` puts it — and the **only** place it appears.
+ *
+ * Prisma 7 with a driver adapter does not populate the documented `meta.target`
+ * at all. What a real `(parkingSpotId, date)` collision produces is:
+ *
+ * ```
+ * code: 'P2002'
+ * meta: { modelName: 'Reservation', driverAdapterError: { cause: {
+ *          originalCode: '23505', kind: 'UniqueConstraintViolation',
+ *          constraint: { index: 'Reservation_parkingSpotId_date_key' },
+ *          table: 'Reservation' } } }
+ * ```
+ *
+ * `constraint` is a tagged union: Postgres reports the index it violated
+ * (`{ index }`), while other drivers report the columns (`{ fields }`). Both are
+ * read, because both feed the same matcher — an index name is one of the two
+ * forms `targetMatches` already accepts.
+ *
+ * Verified against PostgreSQL 17 in `database-contract.db.spec.ts`, which
+ * asserts this shape *and* that `meta.target` is absent. That spec is the reason
+ * the fallback exists: `PrismaDouble` fabricated a `target` key, so every unit
+ * test of this mapping passed while every real unique violation degraded to
+ * `CONFLICT`.
+ */
+function driverAdapterConstraint(meta: Record<string, unknown> | undefined): string[] {
+  const constraint = asRecord(
+    asRecord(asRecord(meta?.['driverAdapterError'])?.['cause'])?.['constraint']
+  );
+  if (constraint === undefined) {
+    return [];
+  }
+  const index = constraint['index'];
+  if (typeof index === 'string') {
+    return [index];
+  }
+  const fields = constraint['fields'];
+  if (Array.isArray(fields)) {
+    return fields.filter((entry): entry is string => typeof entry === 'string');
+  }
+  return [];
+}
+
+/**
+ * Normalises P2002's constraint identity to a list of names.
+ *
+ * `meta.target` is what Prisma documents — the constraint name, an array of
+ * column names, or a single string — and is what the query-engine-backed client
+ * emits. It is checked first so that this keeps working if the adapter is ever
+ * dropped. The driver-adapter path below it is what actually fires today.
  */
 function uniqueConstraintTarget(meta: Record<string, unknown> | undefined): string[] {
   const target = meta?.['target'];
@@ -95,7 +151,7 @@ function uniqueConstraintTarget(meta: Record<string, unknown> | undefined): stri
   if (typeof target === 'string') {
     return [target];
   }
-  return [];
+  return driverAdapterConstraint(meta);
 }
 
 /**
@@ -117,7 +173,18 @@ function targetMatches(target: string[], table: string, columns: readonly string
   ) {
     return true;
   }
-  // Prisma's own naming for a composite unique index: `Table_col1_col2_key`.
+  // Prisma's own naming for a unique index: `Table_col1_col2_key`, columns in
+  // the order the `@@unique` block declares them. Checked against the generated
+  // migration SQL rather than assumed — all seven unique indexes in this schema
+  // follow it, none carries a `map:` override, and `database-contract.db.spec.ts`
+  // provokes each one against a real server:
+  //
+  //   User_email_key, User_oktaId_key, User_icsToken_key, ParkingSpot_label_key,
+  //   Reservation_parkingSpotId_date_key, Reservation_userId_date_key,
+  //   WaitlistEntry_parkingSpotId_userId_date_key
+  //
+  // A future `@@unique([...], map: "…")` would break this path silently, which
+  // is why the db spec asserts the literal index name and not just the mapping.
   const indexName = `${table}_${columns.join('_')}_key`.toLowerCase();
   return normalised.length === 1 && normalised[0] === indexName;
 }
@@ -171,6 +238,49 @@ export function mapPrismaErrorCode(
     default:
       return undefined;
   }
+}
+
+/**
+ * The RPC protocol's envelope.
+ *
+ * `@orpc/client`'s `RPCLink` deserialises a response by reading `json` out of
+ * this wrapper; a body written at the top level deserialises to `undefined`,
+ * fails oRPC's `isORPCErrorJson`, and the client then **synthesises a code from
+ * the HTTP status** — so a 409 `SPOT_ALREADY_RESERVED` used to arrive as
+ * `CONFLICT`, which is also a member of `ERROR_CODES` and therefore did not fail
+ * closed: the UI would have shown the wrong domain error, confidently. Recorded
+ * as known-and-unguarded in `doc/decision/0039-*`, which routed the fix to
+ * whoever owned `apps/api` next; that is Task 12.
+ *
+ * There is deliberately **no `meta` key**. `meta` is oRPC's list of type
+ * annotations for values JSON cannot carry (dates, bigints, sets); an error body
+ * has none, and oRPC's own serialiser drops the key entirely when the list is
+ * empty (`StandardRPCSerializer#serialize`: `meta_.length === 0 ? undefined :
+ * meta_`), which the client compensates for on the way back in
+ * (`data.meta ?? []`). Emitting `meta: []` here would work too, but this way the
+ * filter's body is byte-identical to what `RPCHandler` produces for the same
+ * error — and "identical to the transport" is a property that can be checked,
+ * whereas "close enough for the deserialiser" is a claim about someone else's
+ * code. `orpc-pipeline.spec.ts` compares the two shapes against a live server.
+ */
+export interface RpcEnvelope<T> {
+  json: T;
+}
+
+function rpcEnvelope<T>(body: T): RpcEnvelope<T> {
+  return { json: body };
+}
+
+/**
+ * True for a request that will be read by an oRPC client.
+ *
+ * Scoped by path rather than applied everywhere on purpose: the health probes
+ * and the ICS feed (Task 14) are read by an orchestrator and by calendar
+ * clients, neither of which knows what a `{ json, meta }` envelope is.
+ */
+function isRpcRequest(request: Request): boolean {
+  const path = request.path;
+  return path === RPC_PATH_PREFIX || path.startsWith(`${RPC_PATH_PREFIX}/`);
 }
 
 /** Builds the wire body for a contract error code. */
@@ -260,7 +370,15 @@ export class ContractExceptionFilter implements ExceptionFilter {
   ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const response = http.getResponse<Response>();
+    // Only contract errors are enveloped. Transport failures keep Nest's shape
+    // even on an RPC path (`doc/decision/0033-*`): the closed enum has no member
+    // for "no such route" or "too many requests", and dressing one up as an
+    // oRPC error would hand the frontend a code it has no copy for. The oRPC
+    // client falls back to the HTTP status for those, which is correct.
+    const wrap = <T>(body: T): T | RpcEnvelope<T> =>
+      isRpcRequest(http.getRequest<Request>()) ? rpcEnvelope(body) : body;
 
     if (exception instanceof DomainError) {
       // Expected: a rule was violated. `warn`, not `error` — this is not a
@@ -269,7 +387,9 @@ export class ContractExceptionFilter implements ExceptionFilter {
         { err: exception, errorCode: exception.code, details: exception.details },
         'Domain rule violated'
       );
-      response.status(exception.status).json(contractErrorBody(exception.code, exception.details));
+      response
+        .status(exception.status)
+        .json(wrap(contractErrorBody(exception.code, exception.details)));
       return;
     }
 
@@ -286,7 +406,7 @@ export class ContractExceptionFilter implements ExceptionFilter {
       );
       // `exception.meta` is not forwarded as `data`: it names constraints and
       // columns, which is server internals.
-      response.status(ERROR_DEFINITIONS[code].status).json(contractErrorBody(code));
+      response.status(ERROR_DEFINITIONS[code].status).json(wrap(contractErrorBody(code)));
       return;
     }
 
@@ -308,7 +428,28 @@ export class ContractExceptionFilter implements ExceptionFilter {
         response.status(status).json(INTERNAL_ERROR_BODY);
         return;
       }
-      this.logger.warn({ err: exception, statusCode: status }, 'Request rejected');
+      // A 4xx the framework produced: no such route, a malformed body, a
+      // throttled caller. Logged **without** `err`, for the same reason the
+      // oversized-body branch below drops it — the stack is ten frames of
+      // `@nestjs/core` router internals with no diagnostic value, and 404 is the
+      // most common status on any public endpoint, so a scanner walking URLs
+      // would otherwise write a multi-kilobyte log line per probe. The method
+      // and path are what actually answer "what were they asking for", and they
+      // are what is kept.
+      //
+      // Unlike `DomainError` above, which keeps its stack: there the frames name
+      // the service and the rule that rejected the request, which is exactly the
+      // question a reader has, and only an authenticated caller can trigger one.
+      const request = http.getRequest<Request>();
+      this.logger.warn(
+        {
+          statusCode: status,
+          method: request.method,
+          path: request.path,
+          reason: exception.message,
+        },
+        'Request rejected'
+      );
       response.status(status).json(body);
       return;
     }

@@ -1,0 +1,409 @@
+# API domain modules
+
+How `apps/api` serves the contract: the transport that carries a procedure, the modules that
+implement one, and the rules each module owns. Written for Task 12's surface — parking spots,
+users, personal settings, the reservation window, the day overview and the audit log. Reservations
+and the waitlist (Task 13) and the ICS feed (Task 17) plug into the same transport and are
+documented with their own tasks.
+
+Companion documents: `doc/contract.md` (the procedures and their schemas), `doc/auth.md` (who the
+caller is and how they are gated), `doc/database.md` (the schema and its constraints),
+`doc/api-operations.md` (logging, health, shutdown, the exception filter).
+
+---
+
+## 1. The transport
+
+Every procedure in `libs/contract` is served over oRPC's **RPC protocol** at
+
+```
+POST /api/rpc/<procedure/path/with/slashes>
+```
+
+so `admin.spot.create` is `POST /api/rpc/admin/spot/create`, with the request body
+`{ "json": <input>, "meta": [] }` and the response `{ "json": <output> }`. That is exactly what
+`libs/api-client`'s `RPCLink` sends and reads; nothing in `apps/web` constructs these URLs by hand.
+
+Three files carry it, all in `apps/api/src/orpc/`:
+
+| File | What it owns |
+| --- | --- |
+| `rpc-route.ts` | `RPC_ROUTE_PREFIX`, `RPC_PATH_PREFIX` (`/api/rpc`) and `rpcRoute(...segments)`. The single definition of where a procedure lives. |
+| `implementer.ts` | `implement(contract).$context<OrpcContext>()` plus the middleware that maps thrown errors. Every procedure is built from it. |
+| `rpc-route-handler.ts` | One `RPCHandler`, mounted with `prefix: RPC_PATH_PREFIX`; `handle()` throws `NotFoundException` when the path matches no procedure. |
+
+**A procedure is reachable only when a Nest route exists for it.** The controller method is where
+authorization lives, so each procedure gets its own `@Post(rpcRoute(...))`:
+
+```ts
+@Roles('ADMIN')
+@Post(rpcRoute('admin', 'spot', 'create'))
+createSpot(
+  @Req() request: Request,
+  @Res() response: Response,
+  @CurrentUser() user: AuthenticatedUser
+): Promise<void> {
+  return this.rpc.handle(request, response, user);
+}
+```
+
+Why one route per procedure rather than one wildcard, and why the RPC protocol rather than
+`@orpc/nest`'s `@Implement`: `doc/decision/0057-*`.
+
+### Keeping the routing table honest
+
+`apps/api/src/orpc/orpc-route-parity.spec.ts` walks the contract router and, for every procedure,
+asserts that
+
+- a Nest route exists at `rpcRoute(...)`'s path, or the procedure is named in
+  `NOT_YET_IMPLEMENTED` (the six Task 13 / Task 17 procedures);
+- the route is a `POST`;
+- the route's `@Roles` metadata is `['ADMIN']` for every `admin.*` procedure, and **absent** for
+  every other one.
+
+A procedure implemented but not mounted, or mounted without its guard, fails this spec. Deleting a
+single `@Roles('ADMIN')` produces `Expected: ["ADMIN"] / Received: undefined` — the check has been
+exercised by removing one, not merely written.
+
+### Authentication and authorization
+
+Unchanged from Task 11 and `doc/auth.md`. `JwtAuthGuard` is global, so every RPC route requires a
+valid Okta token unless marked `@Public()` (none are). `RolesGuard` reads `@Roles('ADMIN')` from
+the route. `@CurrentUser()` yields the `AuthenticatedUser`, which becomes the oRPC context:
+
+```ts
+export interface OrpcContext {
+  readonly user: AuthenticatedUser;
+}
+```
+
+**Nothing in a service reads a user id from the payload.** `me.*` has no user id in its input at
+all; the admin procedures take the *subject's* id and get the *actor's* from the context. There is
+no request shape that lets one user act as another.
+
+### How an error becomes a response
+
+Services throw `DomainError`; Prisma throws its own. Both are translated, and where the translation
+happens depends on where the throw happened:
+
+- **Inside a procedure** — `implementer.ts`'s middleware catches it, `toOrpcError()` maps it to an
+  `ORPCError` with the status from `ERROR_DEFINITIONS`, and oRPC serialises it. Anything it cannot
+  map is rethrown and becomes a logged 500.
+- **Before the procedure** (a guard, the body parser, the throttler) — `ContractExceptionFilter`
+  handles it. On an `/api/rpc` path it wraps a contract body in `{ json: … }` so the client can
+  read the `code`; transport failures keep Nest's shape. See `doc/decision/0058-*` and
+  `doc/decision/0033-*`.
+
+The two paths produce byte-identical bodies for the same contract error, which is asserted in
+`orpc-pipeline.spec.ts` — a `FORBIDDEN` from `RolesGuard` and a `CONFLICT` from a service both
+arrive as `{ "json": { "code": …, "status": … } }`.
+
+**`P2002` is read from the driver adapter, not from `meta.target`.** Prisma documents `target`;
+Prisma 7 with `@prisma/adapter-pg` does not populate it, and puts the violated index under
+`meta.driverAdapterError.cause.constraint.index` instead. Both are read, `target` first. This is
+what lets `Reservation (parkingSpotId, date)` arrive as `SPOT_ALREADY_RESERVED` rather than the
+vague `CONFLICT` every unique violation used to degrade to; the shape is pinned against a real
+server (§9).
+
+**Stack traces are logged and never sent — and a 4xx does not log one either.** A framework 4xx
+(no such route, a malformed body, a throttled caller) is logged at `warn` with the status, method,
+path and reason, and *without* `err`: those frames are `@nestjs/core` router internals that answer
+nothing, and 404 is the most common status on a public endpoint, so a scanner walking URLs would
+otherwise write a multi-kilobyte log line per probe. A `DomainError` keeps its stack, because there
+the frames name the service and the rule that refused; so does every 5xx.
+
+---
+
+## 2. Storage ↔ contract mapping
+
+`apps/api/src/common/prisma-mapping.ts` is the only place a Prisma row becomes a contract object.
+Three conversions are worth knowing:
+
+| Function | Rule |
+| --- | --- |
+| `toTimestamp(date)` | `Date` → ISO 8601 string. For `@db.Timestamptz` columns. |
+| `toDateOnly(date)` | A `@db.Date` column's `Date` → `YYYY-MM-DD`, read with **UTC** getters. |
+| `toDateColumn(value)` | `YYYY-MM-DD` → `new Date('…T00:00:00.000Z')`, for querying a `@db.Date` column. |
+
+**`toDateOnly` is not `toDateOnlyInPrague`.** A `@db.Date` value is midnight UTC with no zone;
+putting it through the Europe/Prague converter moves it forward a day for eight months of the year.
+Both functions are correct for their own input, and `prisma-mapping.spec.ts` pins the distinction
+with an instant where they disagree.
+
+The projections are equally deliberate:
+
+- `toContractUser` — the caller's own profile, **including** `icsToken`.
+- `toAdminUser` — the same minus `icsToken`. An admin listing users has no business holding
+  everyone's calendar credential; the spec asserts the two shapes differ by exactly that key.
+- `toUserSummary` — `{ id, name, licensePlate }`, what other people see on an occupied spot.
+
+---
+
+## 3. `AuditLogService`
+
+`apps/api/src/audit/audit-log.service.ts`. One method:
+
+```ts
+record(entry: AuditEntry, writer: AuditLogWriter = this.prisma.client): Promise<void>
+```
+
+**Append-only is enforced by the database, not by this class.** Two triggers from the init
+migration reject `UPDATE`, `DELETE` and `TRUNCATE` on `AuditLog` (`doc/decision/0027-*`). The
+absence of update/delete methods here is a convenience; the trigger is the guarantee, because a
+service method is a rule anybody can route around with `prisma.client.auditLog.deleteMany`.
+
+**`writer` is a parameter because Task 13 needs it.** Cancelling a reservation and promoting the
+next person in the queue happens in one interactive transaction; the entry claiming it happened
+must roll back with it. Passing `Prisma.TransactionClient` puts the write inside. `AuditLogWriter`
+is `Pick<PrismaClient, 'auditLog'>` — structural, so both clients satisfy it without this module
+naming the transaction type.
+
+`entityType` is narrowed to `AUDIT_ENTITY_TYPES` rather than the contract's `string`: a typo in a
+free string would split one entity's history in two and nothing would fail. `payload` is
+`Prisma.InputJsonObject`, not `Record<string, unknown>` — the column is `JSONB`, and a `Date`, a
+class instance or an `undefined` has no representation in it.
+
+### What is written, and what is never written
+
+| Action | Written by | Payload |
+| --- | --- | --- |
+| `SPOT_UPDATED` | `SpotsService.create` / `update` / `deactivate` | `change: 'created' \| 'updated' \| 'deactivated'`, plus before/after for an update |
+| `USER_UPDATED` | `UsersService.adminUpdate` | `change: 'admin-updated'`, before/after `{ role, active }` |
+| `USER_UPDATED` | `MeService.updateSettings` | `change: 'settings'`, before/after `{ licensePlate, preferredParkingSpotId }` |
+| `USER_UPDATED` | `MeService.regenerateIcsToken` | `change: 'ics-token-regenerated'` — **never the token** |
+| `RESERVATION_WINDOW_UPDATED` | `ReservationWindowService.updateSettings` | before/after `{ openDaysBefore, lockMode }` |
+
+`RESERVATION_WINDOW_UPDATED` is new in Task 12, in both the contract enum and the Prisma enum:
+`doc/decision/0059-*`.
+
+Two omissions are intentional. **The ICS token never appears in a payload** — it is the only
+credential on the personal calendar feed, and an append-only table nobody can redact is the worst
+place for it. **A no-op writes nothing**: deactivating an already-inactive spot returns it
+unchanged and records nothing, because auditing a non-event puts noise into the one table that is
+supposed to answer "what actually changed".
+
+---
+
+## 4. Parking spots
+
+`apps/api/src/spots/`. Routes: `spot.list` (any authenticated user), `admin.spot.list`,
+`admin.spot.create`, `admin.spot.update`, `admin.spot.deactivate`.
+
+**A spot is never deleted** (`doc/decision/0027-*`): `Reservation` and `WaitlistEntry` reference it
+`ON DELETE RESTRICT` and `AuditLog` names it by id. Retiring one is `active: false`.
+
+- **Ordering** is `group` then `label`, everywhere, from one constant. The day overview renders a
+  grid, and a grid whose cells move between two reads of the same day is unusable.
+- **`spot.list` returns active spots only.** `admin.spot.list` takes `includeInactive` and an
+  optional `group`.
+- **A duplicate label is left to the unique index**, not pre-checked: a read-then-write would still
+  lose a race, and the constraint is what actually decides. `P2002` arrives at the client as
+  `CONFLICT`.
+- **Retiring a spot that still has reservations is refused** with `CONFLICT` and
+  `details.reservations`. "Still has" means `date >= today` in Europe/Prague — `>=`, not `>`,
+  because a reservation for *today* is one somebody has already parked on.
+- **`update({ active: false })` is held to the same rule.** Otherwise it would be the way around
+  the check, which is how a spot ends up retired with people still holding it.
+- **`deactivate` is idempotent.**
+
+---
+
+## 5. Users (admin)
+
+`apps/api/src/users/`. Routes: `admin.user.list`, `admin.user.update`.
+
+Users are never created here — they are provisioned from the Okta token on first sign-in
+(`doc/auth.md`) — and never deleted. Offboarding is `active: false`, and a deactivated user is
+refused at the guard with `FORBIDDEN` on their next request.
+
+`search` matches name **or** email, case-insensitive substring. The contract leaves "how" to the
+backend; a substring match on the two fields an admin can see is what a search box implies.
+
+### The two lock-outs, both refused
+
+Neither is recoverable through the API: there is no sign-up, no role bootstrap and no way to
+promote anybody without already being an admin. Somebody would have to open the database by hand.
+
+1. **Removing the last active admin**, by demotion or deactivation → `CONFLICT`.
+2. **Deactivating yourself** → `CONFLICT`, even when other admins remain. The intent is almost
+   always a mis-click on the wrong row, and the cost of being wrong is losing your own session
+   mid-task. Another admin can still do it, which is the right shape for an offboarding anyway.
+
+Demoting *yourself* while another admin exists is allowed — a deliberate step down, with rule 1
+still covering the dangerous version.
+
+**Known race, accepted.** The "last active admin" check is a count followed by an update. Two
+admins demoting each other in the same instant could leave zero. Serialising every role change buys
+nothing against a scenario that needs simultaneous requests from two of the handful of admins on a
+single-instance deployment.
+
+Be clear about what it would cost, though: **there is no way back through the API.** Every route
+that could restore an admin is itself admin-only, and Okta provisions new users as `USER`.
+Recovery requires **direct database access** —
+
+```sql
+UPDATE "User" SET role = 'ADMIN', active = true WHERE email = '…';
+```
+
+— which on a production deployment means someone with database credentials, out of hours, on the
+one day nobody can log in. Recorded here rather than hidden, so the trade-off can be re-taken with
+the real number in view.
+
+---
+
+## 6. Personal settings
+
+`apps/api/src/me/`. Routes: `me.get`, `me.updateSettings`, `me.regenerateIcsToken`.
+
+The subject is always `context.user`. None of the inputs carries a user id.
+
+**`updateSettings` is three-valued** per field: an absent key leaves it alone, `null` clears it, a
+value sets it. `input.licensePlate !== undefined` is what tells "absent" from "clear" — Zod's
+`.optional()` omits an absent key entirely, and JSON cannot transmit `undefined`, so `null` is
+unambiguous. `preferredParkingSpotId` becomes a Prisma `connect` or `disconnect` accordingly.
+
+A preferred spot must exist (`NOT_FOUND`) **and** be active (`VALIDATION_FAILED`). Two codes,
+because they are two situations for the person at the screen: an id that does not exist is a stale
+client, while a retired spot is a real spot they can see was taken out of service.
+
+**`regenerateIcsToken` retries a `P2002` up to `MAX_ICS_TOKEN_ATTEMPTS` (3) times.** The contract
+declares no error on this procedure (`doc/decision/0021-*`): a collision between two 32-byte random
+values is not a state a client can act on, and the UI has no copy for it. An unresolvable collision
+rethrows the real Prisma error and becomes a logged 500 — which is what a 1-in-2²⁵⁶ outcome should
+look like. The old feed URL stops working immediately.
+
+---
+
+## 7. Reservation window
+
+`apps/api/src/reservation-window/`. Routes: `admin.window.get`, `admin.window.update`,
+`admin.window.months`. Also used internally by the day overview.
+
+**Nothing in this module decides whether a month is open.** `monthLockState()` / `isMonthOpen()`
+and `reservationWindowRange()` in `@lets-park/shared-types` (Task 3) transcribe the approved
+design's `monthOpen` function and have their own tests. This service loads the settings, asks
+today's date in Europe/Prague, calls those functions and shapes the answer. Re-deriving the rule
+here — even "just the easy case" — is how the banner and the backend start disagreeing about the
+same day. `reservation-window.service.spec.ts` asserts the delegation directly, comparing every
+month it returns against `monthLockState` called with the same arguments.
+
+`windowFrom` / `windowTo` are **always** the range the AUTO rule would produce, even when
+`lockMode` overrides the state — the UI needs them to explain what the automatic rule would have
+done, and reads `lockMode` to know whether it applies.
+
+**The settings row is upserted, and a missing one reads as the documented defaults.** It is a
+singleton with a fixed id and a `CHECK ("id" = 1)` constraint (`doc/decision/0026-*`), created by
+the seed. A deployment whose seed had not run would otherwise answer `admin.window.get` with a 500,
+and the honest value for "no row yet" is not an error — it is the defaults, which is what the row
+would have contained.
+
+`update` is a **replacement**, not a patch: the contract's input is the settings schema itself, so
+an omitted field has already been filled with its default before it arrives.
+
+---
+
+## 8. Day overview
+
+`apps/api/src/overview/`. Route: `overview.day`, any authenticated user.
+
+One request paints the whole parking screen: the grid, the queue badges, the caller's own position
+and the reservation-window banner. A screen assembled from four round trips can render a day's grid
+against a window it fetched a second earlier, and the two would disagree exactly when it matters —
+at the moment a month opens or closes.
+
+Four reads run in parallel: active spots, the window settings, the day's reservations (with the
+holder's summary) and the day's waitlist **whole**, ordered by `createdAt` then `id`. The queue is
+counted in memory because three of the five per-spot fields come from those same rows — the count,
+whether the caller is queued, and their position. A `groupBy` for the counts plus a second query
+for the position would be two reads of the same data with nothing keeping them consistent, and the
+position *is* the row order — the same order Task 13 promotes in.
+
+### `canReserve`
+
+Whether **this** caller may reserve **this** day, in the order the rules are cheapest to check:
+
+1. A day in the past — no, admin included.
+2. A weekend or a Czech public holiday — no. The lot is a workplace car park (`isBusinessDay`).
+3. An admin — yes. Admins are exempt from the reservation window (`plan.md` §Byznys pravidla,
+   `doc/decision/0004-*`).
+4. Everybody else — `isMonthOpen(date, openDaysBefore, lockMode, today)`.
+
+**The frontend must not re-derive this from `window`.** Rule 3 does not appear anywhere in the
+payload, so a client computing the answer from the window alone would hide the admin exemption.
+
+Deliberately *not* folded in: whether the caller already holds a reservation that day. That is the
+one-per-day rule, enforced by a unique constraint at write time, and the screen can see it directly
+in `viewerReservationId`. Including it would make `canReserve` mean two things at once.
+
+---
+
+## 9. Testing
+
+Unit specs sit beside each service and run against `apps/api/src/testing/prisma-double.ts` — an
+in-memory stand-in for `PrismaService` that copies every row it returns (a live reference would
+make a before/after audit payload compare a row against itself), raises a **real**
+`PrismaClientKnownRequestError` with `code: 'P2002'` and a populated `meta.target` for unique
+violations, and throws on any query shape it does not model, so an untested access pattern fails
+loudly instead of quietly returning `[]`.
+
+Two specs test the composition rather than a service:
+
+- **`orpc-route-parity.spec.ts`** — the routing table against the contract (§1).
+- **`orpc-pipeline.spec.ts`** — the assembled `AppModule` over real HTTP with real tokens from an
+  in-process OIDC issuer. It covers what unit tests structurally cannot: that Nest's body parser
+  and oRPC's codec agree on where the body is, that `@Roles('ADMIN')` actually fires on an oRPC
+  route, that a refused caller's handler never runs, and that a rejection arrives in the RPC
+  envelope from both the filter and oRPC itself.
+
+Four claims were verified by breaking them and watching the tests fail, then restoring:
+
+| Claim removed | Result |
+| --- | --- |
+| The audit write in `SpotsService.create` | 2 failures across the spots spec and the pipeline spec (`Received: Array []`) |
+| The `monthLockState` delegation, replaced by a hand-rolled rule | 2 failures; the delegation test reported `["OPEN", …]` against `["LOCKED", "LOCKED", "NOT_YET_OPEN", …]` |
+| `@Roles('ADMIN')` on `admin.spot.list` | 2 failures; parity `Expected ["ADMIN"], Received undefined`, pipeline `Expected 403, Received 200` |
+| `admin.spot.list`'s implementation swapped for `create`'s, route left mounted | 1 failure; the schema-identity check in the parity spec |
+
+### The database-contract suite
+
+`src/database/database-contract.db.spec.ts` runs against a **real PostgreSQL 17**, and exists
+because of a defect no double could see. `PrismaDouble` fabricated `P2002` with a `meta.target`
+key; `@prisma/adapter-pg` emits no such key, putting the constraint under
+`meta.driverAdapterError.cause.constraint.index` instead. Every unit test of the mapping passed,
+and every real unique violation degraded to the vague `CONFLICT` — including
+`SPOT_ALREADY_RESERVED`, which `plan.md` names as the concurrency guarantee of the whole
+reservation flow. Nothing short of a real connection could have caught it.
+
+The suite provokes each constraint and each trigger against the server, inside transactions that
+are always rolled back, so it leaves the database exactly as it found it — which is also the only
+way to test an append-only table at all. It covers both `Reservation` unique constraints, the
+`WaitlistEntry` one, `ParkingSpot.label`, `User.email`, the `AuditLog` `UPDATE`/`DELETE` triggers,
+and the `CHECK ("id" = 1)` singleton.
+
+```
+docker compose --profile dev up -d
+nx run api:test-db
+```
+
+Nx loads `.env`, so `DATABASE_URL` is already in place for that target; running the config through
+`jest` directly needs it passed.
+
+It is **excluded from `nx run-many -t test`** (`testPathIgnorePatterns` in
+`apps/api/jest.config.cts`) so that suite stays runnable without Docker, and it **refuses to skip
+itself** when `DATABASE_URL` is missing — it fails, with a message saying how to start the
+database. A suite that skips into green is the failure mode this file exists to remove, and the
+refusal has been exercised (`DATABASE_URL= jest --config apps/api/jest.database.config.cts` exits
+1, not 0).
+
+### Still not exercised
+
+- **Concurrency.** Every constraint here is provoked sequentially. That two *simultaneous* requests
+  produce exactly one winner is the behaviour `SPOT_ALREADY_RESERVED` exists for, and proving it
+  needs concurrent transactions rather than consecutive statements. Task 13 owns the reservation
+  flow and is where that test belongs.
+- **`PrismaDouble` itself** has no spec of its own. Its `P2002` shape is now transcribed from the
+  live server and re-asserted there on every `api:test-db` run, so that particular fiction cannot
+  return unnoticed — but the rest of its behaviour is still defined only by the specs that consume
+  it.
+- **The enum migration's effect**, server-side. It has been applied, but nothing asserts
+  `AuditLogAction`'s membership in the database afterwards.

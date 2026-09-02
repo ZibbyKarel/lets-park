@@ -70,6 +70,12 @@
         "passWithNoTests": true
       }
     },
+    "test-db": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "jest --config apps/api/jest.database.config.cts --rootDir apps/api --runInBand"
+      }
+    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {

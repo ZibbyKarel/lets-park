@@ -13,7 +13,12 @@ import type { ApiEnv } from '../env';
 import { validateApiEnv } from '../env';
 import { HealthModule } from '../health/health.module';
 import { buildLoggerOptions } from '../logging/logger.options';
+import { MeModule } from '../me/me.module';
+import { OverviewModule } from '../overview/overview.module';
+import { ReservationWindowModule } from '../reservation-window/reservation-window.module';
 import { ShutdownModule } from '../shutdown/shutdown.module';
+import { SpotsModule } from '../spots/spots.module';
+import { UsersModule } from '../users/users.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -54,6 +59,13 @@ import { AppService } from './app.service';
     DatabaseModule,
     HealthModule,
     AuthModule,
+    // Domain modules (Task 12). Each one mounts its share of the oRPC contract;
+    // `orpc-route-parity.spec.ts` fails if the routes and the contract drift.
+    SpotsModule,
+    UsersModule,
+    MeModule,
+    ReservationWindowModule,
+    OverviewModule,
   ],
   controllers: [AppController],
   providers: [

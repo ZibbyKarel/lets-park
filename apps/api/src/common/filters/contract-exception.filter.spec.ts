@@ -8,6 +8,7 @@
 
 import {
   ArgumentsHost,
+  BadRequestException,
   HttpException,
   HttpStatus,
   InternalServerErrorException,
@@ -15,7 +16,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
-import { errorShapeSchema } from '@lets-park/contract';
+import { ERROR_DEFINITIONS, errorShapeSchema } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
 import { DomainError } from '../errors/domain-error';
 import {
@@ -30,8 +31,14 @@ interface CapturedResponse {
   body: Record<string, unknown>;
 }
 
-/** A minimal Express response double that records what the filter wrote. */
-function createHost(): { host: ArgumentsHost; captured: CapturedResponse } {
+/**
+ * A minimal Express request/response double that records what the filter wrote.
+ *
+ * `path` decides whether the response is expected to carry the RPC envelope. It
+ * defaults to a non-oRPC route so that every assertion written before the
+ * envelope existed still describes the same situation it always did.
+ */
+function createHost(path = '/api/echo'): { host: ArgumentsHost; captured: CapturedResponse } {
   const captured: CapturedResponse = { status: 0, body: {} };
   const response = {
     status(code: number) {
@@ -44,7 +51,10 @@ function createHost(): { host: ArgumentsHost; captured: CapturedResponse } {
     },
   };
   const host = {
-    switchToHttp: () => ({ getResponse: () => response }),
+    switchToHttp: () => ({
+      getResponse: () => response,
+      getRequest: () => ({ path, method: 'POST' }),
+    }),
   } as unknown as ArgumentsHost;
   return { host, captured };
 }
@@ -75,7 +85,13 @@ function serialized(captured: CapturedResponse): string {
 
 describe('mapUniqueConstraintViolation', () => {
   it.each([
-    // Prisma reports `target` as column names with the driver adapters…
+    // `meta.target` as a column list — what Prisma documents, and what the
+    // query-engine client emits. NOT what this project's driver adapter emits;
+    // an earlier version of this comment claimed it was, and that belief is why
+    // the mapping was green while every real violation degraded to CONFLICT.
+    // The shape that actually arrives is in the `driverAdapterError` block
+    // below, transcribed from a live PostgreSQL 17 and re-asserted on every
+    // `nx run api:test-db`.
     [['parkingSpotId', 'date'], 'SPOT_ALREADY_RESERVED'],
     [['userId', 'date'], 'RESERVATION_LIMIT_REACHED'],
     [['parkingSpotId', 'userId', 'date'], 'ALREADY_IN_WAITLIST'],
@@ -96,9 +112,56 @@ describe('mapUniqueConstraintViolation', () => {
     expect(mapUniqueConstraintViolation({ target })).toBe(expected);
   });
 
+  /**
+   * The shape `@prisma/adapter-pg` really sends. There is no `target` key
+   * anywhere in it — `database-contract.db.spec.ts` asserts its absence against
+   * a live server, so these fixtures cannot drift into fiction unnoticed.
+   */
+  function driverAdapterMeta(index: string): Record<string, unknown> {
+    return {
+      modelName: index.split('_')[0],
+      driverAdapterError: {
+        cause: {
+          originalCode: '23505',
+          kind: 'UniqueConstraintViolation',
+          constraint: { index },
+          table: index.split('_')[0],
+        },
+      },
+    };
+  }
+
+  it.each([
+    ['Reservation_parkingSpotId_date_key', 'SPOT_ALREADY_RESERVED'],
+    ['Reservation_userId_date_key', 'RESERVATION_LIMIT_REACHED'],
+    ['WaitlistEntry_parkingSpotId_userId_date_key', 'ALREADY_IN_WAITLIST'],
+    ['User_email_key', 'CONFLICT'],
+    ['ParkingSpot_label_key', 'CONFLICT'],
+  ])('maps the driver adapter’s constraint index %s to %s', (index, expected) => {
+    expect(mapUniqueConstraintViolation(driverAdapterMeta(index))).toBe(expected);
+  });
+
+  it('reads the driver adapter’s `fields` form too, for adapters that report columns', () => {
+    // The `constraint` union's other arm. No driver in this project emits it
+    // today; it costs three lines and removes a whole class of "worked on
+    // Postgres, silent on MySQL".
+    const meta = {
+      driverAdapterError: {
+        cause: { kind: 'UniqueConstraintViolation', constraint: { fields: ['userId', 'date'] } },
+      },
+    };
+    expect(mapUniqueConstraintViolation(meta)).toBe('RESERVATION_LIMIT_REACHED');
+  });
+
   it('degrades to CONFLICT when Prisma reports no target at all', () => {
     expect(mapUniqueConstraintViolation(undefined)).toBe('CONFLICT');
     expect(mapUniqueConstraintViolation({})).toBe('CONFLICT');
+    // A driver-adapter error that is not a unique violation, and a malformed
+    // one: neither may be read as a constraint match.
+    expect(mapUniqueConstraintViolation({ driverAdapterError: null })).toBe('CONFLICT');
+    expect(
+      mapUniqueConstraintViolation({ driverAdapterError: { cause: { constraint: {} } } })
+    ).toBe('CONFLICT');
   });
 
   // The matching is by exact column set. A previous version joined the columns
@@ -259,6 +322,66 @@ describe('ContractExceptionFilter', () => {
 
     expect(captured.status).toBe(404);
     expect(captured.body).toEqual({ statusCode: 404, message: 'No route' });
+  });
+
+  /**
+   * Found by running the API against a real database: four probes at a wrong
+   * path produced four multi-kilobyte log lines, each ten frames of
+   * `@nestjs/core` router internals. The response was always clean, so this is
+   * a logging defect rather than a leak — but 404 is the most common status on
+   * a public endpoint, so any scanner walking URLs fills the log with frames
+   * that answer nothing.
+   */
+  describe('a framework 4xx is logged without its stack', () => {
+    function lastWarn() {
+      const warn = loggerCalls.filter((call) => call.level === 'warn').at(-1);
+      if (warn === undefined) {
+        throw new Error('Nothing was logged at warn.');
+      }
+      return warn.payload as Record<string, unknown>;
+    }
+
+    it('logs a 404 at warn with no `err` key', () => {
+      const { host } = createHost('/api/nope');
+
+      filter.catch(new NotFoundException('Cannot POST /api/nope'), host);
+
+      const payload = lastWarn();
+      expect(payload).not.toHaveProperty('err');
+      expect(JSON.stringify(payload)).not.toContain('@nestjs/core');
+    });
+
+    it('keeps what actually answers "what were they asking for"', () => {
+      const { host } = createHost('/api/nope');
+
+      filter.catch(new NotFoundException('Cannot POST /api/nope'), host);
+
+      expect(lastWarn()).toEqual({
+        statusCode: 404,
+        method: 'POST',
+        path: '/api/nope',
+        reason: 'Cannot POST /api/nope',
+      });
+    });
+
+    it('still logs the stack for a 5xx, where the frames are the diagnosis', () => {
+      const { host } = createHost();
+
+      filter.catch(new HttpException('boom', 500), host);
+
+      const errors = loggerCalls.filter((call) => call.level === 'error');
+      expect(errors.at(-1)?.payload).toHaveProperty('err');
+    });
+
+    it('keeps the stack on a DomainError, where the frames name the rule', () => {
+      // Deliberately different from the branch above: only an authenticated
+      // caller can raise one, and the frames point at the service that refused.
+      const { host } = createHost();
+
+      filter.catch(new DomainError('CONFLICT'), host);
+
+      expect(lastWarn()).toHaveProperty('err');
+    });
   });
 
   it('lets a throttled request keep its 429', () => {
@@ -452,6 +575,77 @@ describe('ContractExceptionFilter', () => {
 
       expect(captured.body).toEqual({ statusCode: 500, message: 'Internal server error' });
       expect(serialized(captured)).not.toContain('connection string');
+    });
+  });
+
+  /**
+   * The guard `doc/decision/0039-*` routed here, and the defect it describes.
+   *
+   * A domain error written at the top level of the body deserialises to
+   * `undefined` in `@orpc/client`, which then synthesises a code from the HTTP
+   * status — so `SPOT_ALREADY_RESERVED` (409) arrived as `CONFLICT`, a member of
+   * `ERROR_CODES` too, and the UI showed the wrong error with full confidence.
+   * These tests fail if the envelope is removed.
+   *
+   * They belong here rather than in `libs/api-client`: that lib is
+   * `type:util`/`scope:web` and the Nx boundaries forbid it from depending on
+   * `apps/api`, which is why the earlier attempt at a tripwire over there had
+   * zero coupling to this file.
+   */
+  describe('the RPC envelope on oRPC routes', () => {
+    const RPC_PATH = '/api/rpc/reservation/create';
+
+    it('wraps a domain error in { json, meta } so the oRPC client can read the code', () => {
+      const { host, captured } = createHost(RPC_PATH);
+
+      filter.catch(new DomainError('SPOT_ALREADY_RESERVED'), host);
+
+      expect(captured.status).toBe(409);
+      expect(captured.body).toEqual({
+        json: {
+          defined: false,
+          code: 'SPOT_ALREADY_RESERVED',
+          status: 409,
+          message: ERROR_DEFINITIONS.SPOT_ALREADY_RESERVED.message,
+        },
+      });
+    });
+
+    it('wraps a Prisma constraint violation the same way', () => {
+      const { host, captured } = createHost(RPC_PATH);
+
+      filter.catch(prismaError('P2002', { target: ['parkingSpotId', 'date'] }), host);
+
+      expect(captured.body).toEqual({
+        json: expect.objectContaining({ code: 'SPOT_ALREADY_RESERVED' }),
+      });
+    });
+
+    it('leaves a transport failure in Nest’s shape, even on an RPC path', () => {
+      // `doc/decision/0033-*`: the closed enum has no member for "too many
+      // requests", and the oRPC client derives a code from the status for these.
+      const { host, captured } = createHost(RPC_PATH);
+
+      filter.catch(new BadRequestException('Validation failed'), host);
+
+      expect(captured.body).toEqual({ statusCode: 400, message: 'Validation failed' });
+    });
+
+    it('leaves a non-oRPC route unwrapped — the ICS feed and the probes are not oRPC clients', () => {
+      const { host, captured } = createHost('/api/calendar/abc.ics');
+
+      filter.catch(new DomainError('NOT_FOUND'), host);
+
+      expect(captured.body).toMatchObject({ code: 'NOT_FOUND' });
+      expect(captured.body).not.toHaveProperty('json');
+    });
+
+    it('does not mistake a path that merely starts with the same characters', () => {
+      const { host, captured } = createHost('/api/rpcsomething/else');
+
+      filter.catch(new DomainError('NOT_FOUND'), host);
+
+      expect(captured.body).not.toHaveProperty('json');
     });
   });
 });

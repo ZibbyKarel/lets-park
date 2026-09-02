@@ -131,6 +131,15 @@ export const AUDIT_LOG_ACTIONS = [
   'WAITLIST_PROMOTED',
   'USER_UPDATED',
   'SPOT_UPDATED',
+  /**
+   * An admin changed `openDaysBefore` or `lockMode`. Added by Task 12, which is
+   * the task that made the change possible: the reservation-window settings are
+   * a singleton whose two fields decide, for every user, whether a month can be
+   * booked at all, and `plan.md` requires that change to be audited. The
+   * existing members all name a row that was created or deleted, so none of them
+   * could describe it (`doc/decision/0059-*`).
+   */
+  'RESERVATION_WINDOW_UPDATED',
 ] as const;
 
 export const auditLogActionSchema = z.enum(AUDIT_LOG_ACTIONS);
