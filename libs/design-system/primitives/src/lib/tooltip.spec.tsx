@@ -203,12 +203,11 @@ describe('Tooltip', () => {
   });
 
   describe('inside an open Modal', () => {
-    // Both Tooltip and Modal's focus trap listen for Escape on `document`.
-    // `stopPropagation()` does nothing to a sibling listener on the same node
-    // — only `stopImmediatePropagation()`, or a capture-phase listener that
-    // runs before the other's bubble-phase one, actually prevents it. One
-    // Escape press must close only the tooltip and leave the modal open,
-    // regardless of which listener happened to be registered first.
+    // The bubble and the modal are both registered with the page-wide layer
+    // set (see dismissable-layer.ts), and the bubble's wrapper sits inside the
+    // modal's dialog. One Escape press must therefore close only the tooltip
+    // and leave the modal open — whichever of the two happened to register
+    // first, and whether the bubble was opened by focus or by hover.
 
     it('closes only the tooltip, not the modal, when it was opened by focus', async () => {
       const user = userEvent.setup();

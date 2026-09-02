@@ -11,6 +11,7 @@ import {
 
 import { FOCUS_RING, INSET_FOCUS_RING } from './control-size';
 import { cx } from './cx';
+import { useDismissableLayer } from './dismissable-layer';
 import { getTabbableElements } from './use-focus-trap';
 
 export type DropdownAlign = 'start' | 'end';
@@ -127,8 +128,16 @@ export function Dropdown({
     itemRefs.current[activeIndex]?.focus();
   }, [open, activeIndex]);
 
-  // Click outside closes. Pointer-only affordance: keyboard users get Escape
-  // and Tab, both handled below.
+  // Escape closes and hands focus back to the trigger — but only when this menu
+  // is the layer the press belongs to. `rootRef`, not the panel, is registered:
+  // it covers the trigger as well, so the menu still counts as holding the
+  // keyboard in the moment between closing and focus landing back.
+  useDismissableLayer({ active: open, elementRef: rootRef, onDismiss: () => close(true) });
+
+  // Click outside closes. Pointer-only affordance, kept out of the layer set
+  // above on purpose: a pointer event names its own target, so every open
+  // overlay can independently and correctly answer "was that outside me?".
+  // Escape names nothing, which is the only reason it needs one arbiter.
   useEffect(() => {
     if (!open) {
       return;
@@ -210,17 +219,10 @@ export function Dropdown({
         event.preventDefault();
         setActiveIndex(lastEnabled);
         break;
-      case 'Escape':
-        event.preventDefault();
-        // Stops the native keydown from bubbling past the menu. Without this,
-        // it would keep travelling — past React's root listener, all the way
-        // to `document` — where a surrounding Modal's own Escape listener
-        // (see `use-focus-trap.ts`) would treat it as "close me" too, closing
-        // both on a single press. The docstring above documents nesting a
-        // menu inside a modal as a supported case, so this has to hold.
-        event.stopPropagation();
-        close(true);
-        break;
+      // Escape is deliberately absent: it is handled once, page-wide, by the
+      // layer set this menu registers with while open (see the hook call
+      // above). Handling it here as well would close the menu on a press the
+      // set had already given to an overlay nested inside it.
       case 'Tab':
         // Tab leaves the whole widget rather than walking the items, which is
         // what makes a menu one stop in the page's tab order.

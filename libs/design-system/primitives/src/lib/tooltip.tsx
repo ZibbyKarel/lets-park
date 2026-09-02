@@ -1,6 +1,7 @@
-import { cloneElement, useEffect, useId, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 
 import { cx } from './cx';
+import { useDismissableLayer } from './dismissable-layer';
 
 export type TooltipPlacement = 'top' | 'bottom';
 
@@ -36,29 +37,19 @@ export interface TooltipProps {
  *
  * **Escape works even when the bubble opened from a hover, not a focus.**
  * WCAG 2.1 SC 1.4.13 requires content shown on hover to be dismissable without
- * moving the pointer or focus. Because of that, the `Escape` listener is
- * attached to `document` for as long as the bubble is visible, rather than to
- * the wrapper: a wrapper-level `onKeyDown` only ever fires for keys delivered
- * to something inside the wrapper, so it would never fire while the pointer is
- * hovering and focus is elsewhere on the page — exactly the case this rule is
- * about.
+ * moving the pointer or focus. A wrapper-level `onKeyDown` only ever fires for
+ * keys delivered to something inside the wrapper, so it would never fire while
+ * the pointer hovers and the keyboard is elsewhere on the page — exactly the
+ * case the rule is about. The bubble is therefore registered with the page-wide
+ * layer set (`useDismissableLayer`), whose single listener sits on `document`.
  *
- * **Registered on the capture phase, not the default bubble phase.** `Modal`'s
- * own focus trap also listens for Escape on `document` (see `use-focus-trap`),
- * so an open tooltip inside an open modal has two Escape listeners on the same
- * node. `stopPropagation()` does not stop a sibling listener on that same
- * node — only `stopImmediatePropagation()` does, and even that only helps if
- * this listener happens to run first, which depends on registration order
- * (i.e. mount order — not something this component controls or should have to
- * reason about). A capture-phase listener sidesteps the ordering question
- * entirely: every capture-phase listener on a node runs, in the browser's
- * fixed event-dispatch order, before *any* bubble-phase listener on that same
- * node, regardless of which was registered first. So this listener always
- * intercepts Escape before `Modal`'s and calls `stopPropagation()`, which
- * — because it runs before the event has even reached its target — stops it
- * from ever reaching the bubble phase where `Modal`'s listener lives. One
- * Escape press closes only the tooltip; the modal needs its own, separate
- * press.
+ * **The tooltip does not always win the press.** Being the newest thing on
+ * screen is not the same as owning the keyboard, and the layer set knows the
+ * difference: a bubble opened inside a modal takes Escape ahead of that modal
+ * (it is nested within it), but a bubble merely hovered while the keyboard is
+ * in an unrelated menu does not take the press away from that menu — it closes
+ * on the press after. Verified by tests in `dismissable-layer.spec.tsx` and
+ * `tooltip.spec.tsx`, both of which fail if the rule is removed.
  *
  * `aria-describedby` is written **onto the child element itself**, merged with
  * any the caller already set. It cannot go on a wrapper: assistive technology
@@ -77,35 +68,16 @@ export interface TooltipProps {
 export function Tooltip({ content, children, placement = 'top', className }: TooltipProps) {
   const bubbleId = useId();
   const [visible, setVisible] = useState(false);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
 
   const show = () => setVisible(true);
   const hide = () => setVisible(false);
 
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    // Document-level, not a wrapper `onKeyDown`: a hover-opened bubble can be
-    // visible while focus sits elsewhere on the page, and a keydown delivered
-    // there would never reach a listener on this wrapper.
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        // Capture phase, so this runs — and can call `stopPropagation` — before
-        // a surrounding Modal's own bubble-phase Escape listener ever gets a
-        // chance to. See the capture-phase note above the component.
-        event.stopPropagation();
-        // `setVisible` directly, not `hide()`: it is the stable identity React
-        // guarantees, so the effect's dependency array can name only `visible`.
-        setVisible(false);
-      }
-    };
-
-    // `true` = capture phase. Deliberate, not a typo — see the docstring.
-    document.addEventListener('keydown', onKeyDown, true);
-
-    return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [visible]);
+  // The wrapper, not the bubble, is what the layer set is given: it contains
+  // the trigger too, so "is the keyboard in this layer?" is true for a tooltip
+  // opened by focus and false for one merely hovered — which is exactly the
+  // distinction the Escape rule turns on.
+  useDismissableLayer({ active: visible, elementRef: wrapperRef, onDismiss: hide });
 
   const existingDescribedBy = children.props['aria-describedby'];
   const describedBy = visible
@@ -114,6 +86,7 @@ export function Tooltip({ content, children, placement = 'top', className }: Too
 
   return (
     <span
+      ref={wrapperRef}
       className="relative inline-flex"
       // React's onFocus/onBlur are focusin/focusout, so they fire for the child
       // as well — the wrapper can own the open/close state without the child

@@ -10,6 +10,7 @@ export * from './lib/radio';
 export * from './lib/select';
 export * from './lib/stepper';
 export * from './lib/switch';
+export * from './lib/dismissable-layer';
 export * from './lib/modal';
 export * from './lib/use-focus-trap';
 export * from './lib/dropdown';

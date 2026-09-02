@@ -1,5 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
+import { useDismissableLayer } from './dismissable-layer';
+
 /**
  * Selector for the elements a browser will put in the tab order. Kept in one
  * place because the focus trap and the "focus the first thing" step must agree
@@ -31,13 +33,24 @@ export interface FocusTrapOptions {
   active: boolean;
   /** Element whose contents are trapped. */
   containerRef: RefObject<HTMLElement | null>;
-  /** Called when Escape is pressed. */
+  /**
+   * Called when Escape is pressed and this trap's container is the innermost
+   * open overlay (see `useDismissableLayer`). Omitting it keeps the container
+   * out of the layer set altogether, so Escape falls through to whatever is
+   * beneath rather than being swallowed.
+   */
   onEscape?: (() => void) | undefined;
 }
 
 /**
  * Confines Tab to `containerRef` and restores focus to whatever was focused
  * before the trap became active once it deactivates.
+ *
+ * Escape is *not* this hook's own business, even though `onEscape` is its
+ * option: it is delegated to the page-wide layer set (`useDismissableLayer`),
+ * because deciding a press between a modal and whatever is open inside it is a
+ * question no single trap can answer from where it stands. The `keydown`
+ * listener below therefore handles Tab and nothing else.
  *
  * **Why a hand-rolled trap rather than `<dialog>.showModal()`.** The native top
  * layer really does trap focus in a browser, and it would be the better
@@ -59,6 +72,15 @@ export function useFocusTrap({ active, containerRef, onEscape }: FocusTrapOption
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
 
+  // Escape is not handled by the trap's own listener below. It belongs to the
+  // page-wide layer set, which is what decides whether this container or
+  // something open inside it owns a given press.
+  useDismissableLayer({
+    active: active && onEscape !== undefined,
+    elementRef: containerRef,
+    onDismiss: () => onEscapeRef.current?.(),
+  });
+
   useEffect(() => {
     if (!active) {
       return;
@@ -79,14 +101,8 @@ export function useFocusTrap({ active, containerRef, onEscape }: FocusTrapOption
     // focus, or the screen reader stays in the page behind it.
     (firstTabbable ?? container).focus();
 
+    // Tab only — see the note about Escape above.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onEscapeRef.current?.();
-
-        return;
-      }
-
       if (event.key !== 'Tab') {
         return;
       }
