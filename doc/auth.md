@@ -1,11 +1,13 @@
 # Authentication and authorization
 
-This document describes how a request from `apps/web` becomes an identified caller in
-`apps/api`: where the token comes from, how it is verified against the issuer's JWKS, how a
+This document describes how a person becomes an identified caller: how `apps/web` signs them
+in against Okta and keeps a session, and how the token that session holds becomes a user in
+`apps/api` — where the token comes from, how it is verified against the issuer's JWKS, how a
 user row appears on somebody's first ever request, and what happens when a signing key
 rotates. The source of truth is the code; when they disagree, trust the code.
 
-Everything here lives in `apps/api/src/auth/`. Env variables are documented in
+The frontend half is `libs/auth`, the wrapper over next-auth v5 / Auth.js, consumed by
+`apps/web`. The backend half is `apps/api/src/auth/`. Env variables are also documented in
 `doc/environment.md`; the error shapes referenced below are in `doc/api-operations.md` and
 `doc/decision/0033-*`.
 
@@ -16,41 +18,83 @@ Everything here lives in `apps/api/src/auth/`. Env variables are documented in
 **Dev, e2e and production run the same code. Only env values differ.**
 
 There is no `NODE_ENV` check, no `isTest` flag, no "skip auth locally" branch anywhere in
-`apps/api/src/auth/**`. Local development points `AUTH_OKTA_ISSUER` at the
+`apps/api/src/auth/**`, and no bypass flag, credentials provider or test-only branch anywhere
+in `libs/auth` (global constraint 8). Local development points `AUTH_OKTA_ISSUER` at the
 `mock-oauth2-server` container from `docker-compose.yml`; production points it at the Okta
-org. The verification code cannot tell the difference and is not permitted to try.
+org. The code cannot tell the difference and is not permitted to try.
 
 This is why the JWKS endpoint is discovered rather than hardcoded (Okta and
-`mock-oauth2-server` publish it at different paths), and why the tests stand up a real OIDC
-issuer instead of stubbing the verifier.
+`mock-oauth2-server` publish it at different paths), why `libs/auth` discovers the
+authorization and token endpoints from the same document, and why the tests stand up a real
+OIDC issuer instead of stubbing the verifier.
 
 ---
 
 ## The pieces
 
-| file | role |
-| --- | --- |
-| `jwks-verifier.service.ts` | OIDC discovery, the single cached `JwksClient`, `getSigningKey()`, `verifyToken()` |
-| `jwt-verify-options.ts` | the one rule set both verification paths apply |
-| `jwt.strategy.ts` | `passport-jwt` plumbing; delegates keys, rules and provisioning |
-| `jwt-auth.guard.ts` | the global default-deny guard; honours `@Public()` |
-| `public.decorator.ts` | `@Public()` — the route-level opt-out |
-| `roles.guard.ts`, `roles.decorator.ts` | `@Roles('ADMIN')` |
-| `current-user.decorator.ts` | `@CurrentUser()` |
-| `authenticated-user.ts` | the `AuthenticatedUser` shape and its runtime check |
-| `failure-log-throttle.ts` | one log line per failure kind per minute, with a suppressed count |
-| `auth-user.service.ts` | just-in-time provisioning, `icsToken`, deactivated → `FORBIDDEN` |
-| `token-claims.ts` | the Zod claim schema, parsed **after** verification |
-| `auth.module.ts` | wiring; exports the verifier and the user service for Task 15 |
+The backend half, `apps/api/src/auth/`:
+
+| file                                    | role                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| `jwks-verifier.service.ts`              | OIDC discovery, the single cached `JwksClient`, `getSigningKey()`, `verifyToken()`     |
+| `jwt-verify-options.ts`                 | the one rule set both verification paths apply                                        |
+| `jwt.strategy.ts`                       | `passport-jwt` plumbing; delegates keys, rules and provisioning                        |
+| `jwt-auth.guard.ts`                     | the global default-deny guard; honours `@Public()`                                    |
+| `public.decorator.ts`                   | `@Public()` — the route-level opt-out                                                 |
+| `roles.guard.ts`, `roles.decorator.ts`  | `@Roles('ADMIN')`                                                                     |
+| `current-user.decorator.ts`             | `@CurrentUser()`                                                                      |
+| `authenticated-user.ts`                 | the `AuthenticatedUser` shape and its runtime check                                   |
+| `failure-log-throttle.ts`               | one log line per failure kind per minute, with a suppressed count                     |
+| `auth-user.service.ts`                  | just-in-time provisioning, `icsToken`, deactivated → `FORBIDDEN`                      |
+| `token-claims.ts`                       | the Zod claim schema, parsed **after** verification                                   |
+| `auth.module.ts`                        | wiring; exports the verifier and the user service for Task 15                         |
+
+The frontend half is one lib, `libs/auth`, with two entry points — `@lets-park/auth` for the
+server and `@lets-park/auth/client` for the browser. See _Using it from the app_.
 
 ---
 
 ## The flow, end to end
 
+### 0. Sign-in and session
+
+`apps/web` never handles a password. Auth.js redirects to the issuer, exchanges the
+authorization code server-side, and keeps the result in an encrypted httpOnly cookie.
+
+```
+browser                    apps/web (Next.js server)          Okta / mock-oauth2-server
+   │                                │                                    │
+   │  GET /any-protected-route      │                                    │
+   ├───────────────────────────────►│                                    │
+   │                                │  middleware → callbacks.authorized │
+   │  302 to the sign-in page       │  (no session → false)              │
+   │◄───────────────────────────────┤                                    │
+   │  signIn('okta')                │                                    │
+   ├───────────────────────────────►│  302 to /authorize (PKCE + state)  │
+   │◄────────────────────────────────────────────────────────────────────┤
+   │  … user authenticates …                                             │
+   ├────────────────────────────────────────────────────────────────────►│
+   │  302 /api/auth/callback/okta   │                                    │
+   ├───────────────────────────────►│  code → /token                     │
+   │                                ├───────────────────────────────────►│
+   │                                │  access_token, refresh_token, id_token
+   │                                │◄───────────────────────────────────┤
+   │                                │  callbacks.jwt seeds the JWT       │
+   │  Set-Cookie: encrypted, httpOnly session                            │
+   │◄───────────────────────────────┤                                    │
+
+later, from the browser:
+   │  GET /api/auth/session (poll, every 300 s)                          │
+   ├───────────────────────────────►│  callbacks.jwt → renew if within   │
+   │                                │  60 s of expiry ───────────────────►│
+   │                                │◄─────────────── new access_token ──┤
+   │  { user, accessToken, expires }│  callbacks.session projects it     │
+   │◄───────────────────────────────┤                                    │
+```
+
 ### 1. Frontend → API
 
-`apps/web` authenticates the person with Auth.js v5 against Okta and holds the resulting
-access token in its session. Every call to the API carries it as
+Every call to the API carries the access token from that session as
 `Authorization: Bearer <jwt>`. Nothing else is accepted — not a cookie, not a query
 parameter. A token in a URL ends up in access logs, `Referer` headers and browser history,
 so `ExtractJwt.fromAuthHeaderAsBearerToken()` is the only extractor configured.
@@ -80,7 +124,7 @@ Registering `RolesGuard` before `JwtAuthGuard` would make every `@Roles()` route
 2. refuses immediately if `alg` is not `RS256`. `{"alg":"none"}` and an HMAC forgery signed
    with the public key an attacker downloaded from the JWKS endpoint both stop here, before
    any network call;
-3. resolves the issuer's `jwks_uri` (see *Discovery* below) and asks the cached `JwksClient`
+3. resolves the issuer's `jwks_uri` (see _Discovery_ below) and asks the cached `JwksClient`
    for the key with that `kid`.
 
 Every failure throws. Nothing in this file returns a fallback key or a truthy result when a
@@ -90,19 +134,19 @@ key could not be fetched.
 
 `jsonwebtoken.verify` checks, against the rules in `jwt-verify-options.ts`:
 
-| rule | value | source |
-| --- | --- | --- |
-| signature | RS256 against the JWKS key | the issuer |
-| `algorithms` | `['RS256']` — an allow-list, never the token's own claim | constant |
-| `issuer` | must equal `AUTH_OKTA_ISSUER` | env |
-| `audience` | must equal `AUTH_OKTA_AUDIENCE` | env |
-| expiry | `ignoreExpiration: false`, no clock tolerance | constant |
+| rule         | value                                                    | source     |
+| ------------ | -------------------------------------------------------- | ---------- |
+| signature    | RS256 against the JWKS key                               | the issuer |
+| `algorithms` | `['RS256']` — an allow-list, never the token's own claim | constant   |
+| `issuer`     | must equal `AUTH_OKTA_ISSUER`                            | env        |
+| `audience`   | must equal `AUTH_OKTA_AUDIENCE`                          | env        |
+| expiry       | `ignoreExpiration: false`, no clock tolerance            | constant   |
 
 **Only then** are the claims parsed, by `authTokenClaimsSchema`. Nothing downstream reads a
 claim that has not been through this.
 
 > **A trap worth knowing about.** `passport-jwt` overwrites `issuer`, `audience`,
-> `algorithms` and `ignoreExpiration` from its *top-level* options — with `undefined` if they
+> `algorithms` and `ignoreExpiration` from its _top-level_ options — with `undefined` if they
 > are absent. Passing them only as `jsonWebTokenOptions`, which looks like the tidy way to
 > share one object, silently switches issuer and audience checking off with no error. The
 > rules are therefore spread at the top level, and two tests
@@ -112,7 +156,7 @@ claim that has not been through this.
 ### 5. Becoming a user
 
 `JwtStrategy.validate()` passes the parsed claims to `AuthUserService.resolve()`. See
-*Just-in-time provisioning* below. The result is an `AuthenticatedUser`, which Passport puts
+_Just-in-time provisioning_ below. The result is an `AuthenticatedUser`, which Passport puts
 on `request.user` and `@CurrentUser()` hands to a handler.
 
 `AuthenticatedUser` is a strict subset of the row: `id`, `oktaId`, `email`, `name`, `role`,
@@ -122,11 +166,11 @@ holding it.
 
 ### 6. What comes back on failure
 
-| situation | status | body |
-| --- | --- | --- |
-| no header, bad signature, expired, wrong `iss`/`aud`, unknown `kid`, unreachable IdP | **401** | `{ statusCode: 401, message: … }` — Nest's transport shape, **no `code` field** |
-| `User.active === false` | **403** | `{ defined: false, code: 'FORBIDDEN', status: 403, message: … }` |
-| `@Roles('ADMIN')` reached by a `USER` | **403** | same as above |
+| situation                                                                                 | status  | body                                                                        |
+| ----------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------- |
+| no header, bad signature, expired, wrong `iss`/`aud`, unknown `kid`, unreachable IdP      | **401** | `{ statusCode: 401, message: … }` — Nest's transport shape, **no `code` field** |
+| `User.active === false`                                                                   | **403** | `{ defined: false, code: 'FORBIDDEN', status: 403, message: … }`            |
+| `@Roles('ADMIN')` reached by a `USER`                                                     | **403** | same as above                                                               |
 
 The split is deliberate and is written up in `doc/decision/0041-*`. In short: an
 authentication failure happens before any procedure exists, so it cannot be one of the
@@ -139,34 +183,207 @@ unchanged by this layer. No log line in `src/auth/**` carries a raw token, a key
 
 ---
 
+## Environment
+
+Five variables. The four read by `apps/web` are validated fail-fast in `apps/web/src/env.ts`;
+`AUTH_OKTA_AUDIENCE` belongs to `apps/api`'s schema. `.env.example` documents all of them.
+
+| variable                 | read by                | used for                                                                                                                                         |
+| ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AUTH_SECRET`            | `apps/web`             | encrypts the Auth.js session cookie. ≥ 32 characters.                                                                                            |
+| `AUTH_OKTA_ISSUER`       | `apps/web`, `apps/api` | the OIDC issuer, shared verbatim by both halves. `apps/web` discovers the authorization and token endpoints from it; `apps/api` discovers the JWKS URI from the same document. |
+| `AUTH_OKTA_AUDIENCE`     | `apps/api`             | the `aud` every bearer must carry. See _The audience the two halves agree on_.                                                                    |
+| `AUTH_OKTA_CLIENT_ID`    | `apps/web`             | the web app's OAuth2 client.                                                                                                                     |
+| `AUTH_OKTA_CLIENT_SECRET`| `apps/web`             | its secret. Server-side only.                                                                                                                    |
+
+There is deliberately **no** `AUTH_TRUST_HOST`, and that absence is load-bearing. Auth.js
+refuses to serve `/api/auth/*` at all unless `trustHost` is true, and computes it as
+`!!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV !== 'production')`. This
+deployment sets none of the first four and runs `NODE_ENV=production`, so the inherited
+default would be `false` **in production and nowhere else** — dev and e2e stay green for
+free, and the first real deploy would answer every `/api/auth/*` request with
+`UntrustedHost: Host must be trusted`. `createAuthConfig` therefore states `trustHost: true`
+outright: it is a property of the deployment topology (single instance, one reverse proxy in
+front), not of an environment, and adding a sixth variable would put the decision back in the
+place this lib's rules keep it out of. `create-auth.spec.ts` drives the real route handler
+under `NODE_ENV=production` with all four web variables removed and asserts a 200.
+
+`AUTH_OKTA_ISSUER` is the **only** Okta URL anywhere in the configuration. The authorization
+and token endpoints are discovered from `${issuer}/.well-known/openid-configuration`
+(`doc/decision/0045-*`), and so is the JWKS URI `apps/api` verifies against
+(`doc/decision/0043-*`). In dev and e2e the value points at the `mock-oauth2-server`
+container; in production at the real org.
+
+The two secrets are read from `process.env` in `apps/web` and passed to `createAuth` as
+arguments. `libs/auth` reads no environment variable of its own — Auth.js's implicit
+`AUTH_SECRET` / `AUTH_OKTA_ID` / `AUTH_OKTA_SECRET` inference is deliberately bypassed so that
+`apps/web/src/env.ts` stays the one schema that decides which variables exist. Neither secret
+carries a `NEXT_PUBLIC_` prefix, which is the only thing that would put it in the browser
+bundle.
+
+### What the Okta org has to be configured to do
+
+Three settings live in the identity provider, not in this repo, and nothing here can enforce
+them. An operator provisioning the org needs all three:
+
+1. **Redirect URI.** `https://<host>/api/auth/callback/okta` must be registered. The path is
+   derived from the provider id, which is why `OKTA_PROVIDER_ID` is a constant and not a
+   literal.
+2. **A Custom Authorization Server as the issuer**, so that the `aud` it mints is one
+   `AUTH_OKTA_AUDIENCE` can be set to. See the next section.
+3. **Refresh-token rotation switched off**, until a `LockService` exists. Concurrent
+   refreshes are coalesced **in-process only**, so with rotation on, a second process or
+   instance renewing at the same moment signs the user out. `doc/decision/0051-*` records the
+   race and the upgrade path; _Concurrent renewals_ below explains it.
+
+## The audience the two halves agree on
+
+`apps/api` validates the bearer against `AUTH_OKTA_AUDIENCE` and rejects any token whose `aud`
+differs. `libs/auth` sends **no** `audience` and no `resource` parameter, at `/authorize` or
+at `/token`, so whatever `aud` ends up in the token is entirely the issuer's choice. That
+makes `AUTH_OKTA_AUDIENCE` a value that has to match the issuer, not a value the two halves
+can be assumed to share.
+
+### Dev and e2e: `default` — observed
+
+This half has been measured, not reasoned. With the Docker daemon running and
+`mock-oauth2-server` up from `docker-compose.yml`, a token request against its `default`
+issuer returned an access token whose decoded claims read
+`{"sub":"lets-park-web","aud":"default","iss":"http://localhost:8080/default","tid":"default",…}`.
+A reviewer independently drove a full `authorization_code` exchange plus a refresh against the
+same container and decoded three separate access tokens; `aud` was `default` in every one.
+That is what `.env.example` sets `AUTH_OKTA_AUDIENCE` to for dev and e2e, so the two halves
+agree there.
+
+The mechanism behind the observation: the container starts with no `JSON_CONFIG`, so its
+`DefaultOAuth2TokenCallback` decides the audience in this order — configured audience, then
+the request's `audience` parameter, then the token request's non-OIDC scopes, else its
+built-in `default`. There is no configured audience, we send no `audience` parameter, and
+Auth.js v5's code exchange sends no `scope` on the token request at all (our refresh POST
+sends only `grant_type` and `refresh_token`). Even a scope-bearing request would come out
+empty, because the callback filters against Nimbus's `OIDCScopeValue`, which covers `openid`,
+`profile`, `email` **and** `offline_access` — every scope we ask for. The last branch applies,
+which is what the decoded tokens show.
+
+### Production: the issuer must be a Custom Authorization Server — a prediction
+
+This half is **reasoning, not measurement**: there is no Okta tenant to point at, so no token
+minted by the real org has been decoded.
+
+A Custom AS (`https://<org>.okta.com/oauth2/<id>`, e.g. `/oauth2/default`) mints access tokens
+whose `aud` is that server's configured audience — `api://default` for Okta's built-in one,
+which is what `AUTH_OKTA_AUDIENCE` should be set to there. Point `AUTH_OKTA_ISSUER` at the
+**Org** Authorization Server instead (`https://<org>.okta.com`, no `/oauth2/...`) and `aud`
+becomes the org URL, so the two halves stop agreeing — in production only. That is the silent
+precondition on this variable, and the reason "which issuer URL" is an auth decision rather
+than a copy-paste.
+
+**The symptom, if it is got wrong:** sign-in itself succeeds, and then every API call and
+every Socket.io handshake answers 401 with `JsonWebTokenError: jwt audience invalid`. Task
+11's own diagnostic advice — "compare `AUTH_OKTA_AUDIENCE` against the `aud` your IdP actually
+mints" — is exactly this check.
+
+**What would settle it:** an end-to-end sign-in against a real Okta org, with one access token
+decoded and its `aud` read. Task 28's Playwright login flow is the first thing in this build
+that drives a real OIDC redirect end to end; pointed at a real tenant, it answers the question,
+and this section should then be rewritten with the value it found. If the value turns out to be
+wrong, the fix stays in `.env.example` — no code changes, which is what keeps "same code, only
+env values differ" true.
+
+## What the browser can see
+
+| value                             | lives in                                              | reaches the browser? |
+| --------------------------------- | ----------------------------------------------------- | -------------------- |
+| refresh token                     | the encrypted httpOnly session cookie                 | **no**               |
+| access token                      | that cookie, and React state after `/api/auth/session` | yes, in memory only  |
+| `AUTH_SECRET`, client secret      | `process.env`, server only                            | **no**               |
+
+Nothing is written to `localStorage`, `sessionStorage`, or a JS-readable cookie. The browser
+needs the access token because `libs/realtime-client` (Task 21) puts it in the Socket.io
+handshake; the refresh token it has no use for, and never receives. Reasoning and how it is
+tested: `doc/decision/0047-*`.
+
+## Refresh token rotation
+
+`offline_access` is requested at sign-in — without it Okta issues no refresh token at all and
+the session would die with the first access token.
+
+Rotation lives in the `jwt` callback:
+
+1. **At sign-in**, `account.access_token` / `expires_at` / `refresh_token` are copied onto the
+   JWT.
+2. **On every later session read**, a token more than 60 s (`REFRESH_SKEW_SECONDS`) from
+   expiry is returned untouched.
+3. **Inside that window**, the refresh token is exchanged at the discovered token endpoint.
+   Renewing _before_ expiry rather than at it is what stops the renewed request from racing
+   the old token's `exp`.
+4. **On failure**, the access and refresh tokens are dropped and `error: 'RefreshTokenError'`
+   is set. The session is not retried while that flag is present.
+
+A tab sitting idle re-reads `/api/auth/session` every 300 s (`SESSION_REFETCH_SECONDS`), which
+is what makes step 3 fire at all — the callback only runs when something asks for the session.
+See `doc/decision/0049-*`.
+
+### Concurrent renewals
+
+One page load reads the session more than once — a root layout, a Server Component and a Route
+Handler each calling `await auth()`, plus the browser's poll. If they land inside the same
+renewal window they all hold the same refresh token, and with rotation enabled the first grant
+invalidates it under the others: they get `invalid_grant`, the session fails closed, and the
+user is signed out mid-session for no visible reason.
+
+Callers presenting the same refresh token therefore share a single in-flight grant. That
+covers every caller in one process, which is the whole single-instance deployment. It does
+**not** cover several processes or instances — that needs the `LockService` abstraction
+`plan.md` mandates, and until it exists **Okta refresh-token rotation must stay switched off**
+on the authorization server, which turns the remaining races into a redundant grant rather
+than a sign-out. Nothing in this repo enforces that setting, which is why it is also listed
+under _What the Okta org has to be configured to do_ above; `doc/decision/0051-*` records the
+race, the residual cases and the upgrade path.
+
+### When it fails
+
+Not a silent 401. Three things happen, in the three places they have to:
+
+- `getAccessToken()` returns `null`, so `createApiClient` omits the `Authorization` header
+  entirely — the API answers "unauthenticated" rather than rejecting a stale token;
+- `callbacks.authorized` returns `false`, so the middleware redirects the next navigation to
+  the sign-in page;
+- `useRequireAuth()` calls `signOut()`, clearing the dead cookie rather than signing in on top
+  of it.
+
+`doc/decision/0048-*` covers why sign-out rather than a retry or a forced `signIn`.
+
+---
+
 ## Diagnosing a 401
 
 Every rejection above reaches the caller as the same bare 401. That is deliberate — telling
-an anonymous caller *why* their token was refused is telling an attacker which half of the
+an anonymous caller _why_ their token was refused is telling an attacker which half of the
 forgery to fix. It does mean the response is useless for diagnosis, so **the logs carry the
 diagnosis instead**.
 
 `JwksVerifierService` classifies every key-lookup failure and logs it with an `authFailure`
 field. Search for that field first:
 
-| `authFailure` | level | what it means | what to do |
-| --- | --- | --- | --- |
-| `issuer-unreachable` | `error` | the discovery endpoint did not answer, or answered non-2xx | is the IdP up? is `AUTH_OKTA_ISSUER` reachable from the API host? |
-| `discovery-rejected` | `error` | it answered, and we refused the document — the `issuer` it declares does not match `AUTH_OKTA_ISSUER`, or `jwks_uri` is on another origin | `AUTH_OKTA_ISSUER` is pointing at the wrong tenant, or the document is not what it should be. The `reason` field names which check failed |
-| `jwks-unavailable` | `error` | discovery worked, fetching the keys did not | usually a partial IdP outage |
-| `jwks-rate-limited` | `error` | more than 12 JWKS fetches in a minute | almost always a flood of tokens with unknown `kid`s; check who is calling |
-| `signing-key-not-found` | `debug` | the JWKS was fetched and has no key with this `kid` | normally somebody else's token. If it is happening to *everyone*, the IdP rotated to a key it is not publishing |
-| `malformed-token` | `debug` | not a JWT, or an algorithm we do not accept | normally background noise on a public endpoint |
+| `authFailure`           | level   | what it means                                                                                                                                          | what to do                                                                                                                             |
+| ----------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `issuer-unreachable`    | `error` | the discovery endpoint did not answer, or answered non-2xx                                                                                             | is the IdP up? is `AUTH_OKTA_ISSUER` reachable from the API host?                                                                       |
+| `discovery-rejected`    | `error` | it answered, and we refused the document — the `issuer` it declares does not match `AUTH_OKTA_ISSUER`, or `jwks_uri` is on another origin              | `AUTH_OKTA_ISSUER` is pointing at the wrong tenant, or the document is not what it should be. The `reason` field names which check failed |
+| `jwks-unavailable`      | `error` | discovery worked, fetching the keys did not                                                                                                            | usually a partial IdP outage                                                                                                           |
+| `jwks-rate-limited`     | `error` | more than 12 JWKS fetches in a minute                                                                                                                  | almost always a flood of tokens with unknown `kid`s; check who is calling                                                              |
+| `signing-key-not-found` | `debug` | the JWKS was fetched and has no key with this `kid`                                                                                                    | normally somebody else's token. If it is happening to _everyone_, the IdP rotated to a key it is not publishing                        |
+| `malformed-token`       | `debug` | not a JWT, or an algorithm we do not accept                                                                                                            | normally background noise on a public endpoint                                                                                         |
 
 Two other 401s do **not** come from that table, because they happen after a key was found:
 
 - **`jsonwebtoken` rejected the token** — bad signature, expired, wrong `iss`, wrong `aud`.
   These are normal and are not logged individually; a request-id'd 401 in the access log is
-  all there is. If *nobody* can log in and there is no `authFailure` line, this is where to
+  all there is. If _nobody_ can log in and there is no `authFailure` line, this is where to
   look: compare `AUTH_OKTA_AUDIENCE` against the `aud` your IdP actually mints.
 - **A valid token with no `email` claim, for a subject that is not yet provisioned.** Logged
-  by `AuthUserService` at `error`: *"Token carries no email claim and the subject is not
-  provisioned; check the IdP scopes"*. This is the first thing to check on a fresh dev
+  by `AuthUserService` at `error`: _"Token carries no email claim and the subject is not
+  provisioned; check the IdP scopes"_. This is the first thing to check on a fresh dev
   environment.
 
 ### Why the levels are what they are
@@ -198,7 +415,7 @@ ERROR  Cannot verify tokens — the issuer or its JWKS is unusable
 
 So an operator sees both the cause and the blast radius. The throttle is keyed by failure
 kind only — never by a `kid`, an issuer or a subject — so its map is bounded at six entries
-and cannot be grown by a caller. A `kid` is reported *inside* a line, truncated to 64
+and cannot be grown by a caller. A `kid` is reported _inside_ a line, truncated to 64
 characters, but never used as a key.
 
 No `Error` object is logged, only its message. A stack adds nothing actionable here and
@@ -216,7 +433,8 @@ route that genuinely cannot carry an `Authorization` header:
 - **the health probes** (`HealthController`). An orchestrator has no bearer token and no way
   to get one; authenticating the probes would report every healthy instance as dead. The
   probes expose no data — liveness returns a constant, readiness returns up/down plus a fixed
-  reason string.
+  reason string. They answer at `/health/live` and `/health/ready`: `configureApp()` passes
+  both to `setGlobalPrefix`'s `exclude`, so they are **not** under `/api/health/*`.
 - **the personal ICS feed** (Task 12). Calendar clients fetch it with no headers at all; it
   authenticates on the secret in its own URL and should also carry `@StrictThrottle()`.
 
@@ -289,20 +507,23 @@ starts signing with a new key, the first token carrying the new `kid` is a cache
 triggers an immediate refetch of the JWKS — and the freshly published key is there. The key
 is picked up by that first request.
 
+Nothing on the frontend is affected either: `libs/auth` never validates a token, it only
+carries one.
+
 The 10-minute `cacheMaxAge` therefore does not govern rotation. It bounds something else: how
-long a key that has been *withdrawn* from the JWKS can still be used, if it is already in the
+long a key that has been _withdrawn_ from the JWKS can still be used, if it is already in the
 cache.
 
 Cache and fetch settings (constants in `jwks-verifier.service.ts`):
 
-| setting | value | why |
-| --- | --- | --- |
-| `cache` | `true` | one JWKS fetch per key, not per request |
-| `cacheMaxAge` | 10 min | bounds a withdrawn key's usable lifetime |
-| `cacheMaxEntries` | 5 | an issuer publishes a handful of keys at most |
-| `rateLimit` / `jwksRequestsPerMinute` | `true` / 12 | an unknown `kid` is a cache miss, so random `kid`s would otherwise let an anonymous caller make the API hammer the IdP |
-| `timeout` | 5 s | an unreachable IdP fails the request quickly |
-| `cacheMaxAgeFallback` | **unset** | see below |
+| setting                                  | value       | why                                                                                                                                    |
+| ---------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `cache`                                  | `true`      | one JWKS fetch per key, not per request                                                                                                |
+| `cacheMaxAge`                            | 10 min      | bounds a withdrawn key's usable lifetime                                                                                               |
+| `cacheMaxEntries`                        | 5           | an issuer publishes a handful of keys at most                                                                                          |
+| `rateLimit` / `jwksRequestsPerMinute`    | `true` / 12 | an unknown `kid` is a cache miss, so random `kid`s would otherwise let an anonymous caller make the API hammer the IdP                  |
+| `timeout`                                | 5 s         | an unreachable IdP fails the request quickly                                                                                           |
+| `cacheMaxAgeFallback`                    | **unset**   | see below                                                                                                                              |
 
 ### Why a cache miss can never become a bypass
 
@@ -318,55 +539,45 @@ trade, and `doc/decision/0043-*` records it so nobody "fixes" it later without r
 
 ---
 
-## How this is tested
+## Using it from the app
 
-Three levels, all of which run without Docker.
+Server side:
 
-**Against a real OIDC issuer.** `apps/api/src/auth/testing/oidc-test-issuer.ts` is an
-in-process HTTP server that serves a genuine discovery document and a genuine JWKS of real
-2048-bit RSA public keys; the tests sign real RS256 tokens against it. Nothing is stubbed —
-signature checking, discovery, caching and rotation are executed, not described. It stands in
-for `mock-oauth2-server` at the same two endpoints, and it publishes its JWKS at `/jwks`
-specifically so that a reintroduced hardcoded Okta path would fail the suite.
+```ts
+// apps/web/src/auth.ts
+export const { handlers, auth, signIn, signOut, getAccessToken } = createAuth({ … });
 
-**Through the assembled application.** `auth-pipeline.spec.ts` boots the **real `AppModule`**
-with the same `configureApp()` that `main.ts` calls, listens on an ephemeral port and drives
-it with `fetch`. That is the only way to observe the properties that matter here — that
-issuer and audience are genuinely checked, that a deactivated user gets 403 and not 401, that
-an undecorated route is protected, that the probes stay reachable — because all of them are
-properties of a composition (Express → throttler → guard → Passport → `jsonwebtoken` →
-filter) rather than of any single function.
+// app/api/auth/[...nextauth]/route.ts
+export const { GET, POST } = handlers;
 
-**Mutation-checked.** Four deliberate defects were introduced and reverted, to confirm the
-suite can actually fail:
+// middleware.ts
+export { auth as middleware } from './src/auth';
 
-| defect introduced | tests that failed |
-| --- | --- |
-| rules passed as `jsonWebTokenOptions` (the `passport-jwt` trap) | wrong issuer, wrong audience |
-| deactivated user throws `UnauthorizedException` instead of `DomainError` | the two unit assertions and the pipeline's 403-body assertion |
-| the P2002 provisioning retry removed | both unit concurrency tests, and the HTTP one |
-| `JwtAuthGuard` defaults to allow instead of deny | 15 of 20 pipeline tests |
-| failure reporting removed from `getSigningKey` | 7 of the 8 diagnosability tests |
-| the log throttle's interval reduced to zero | 3 throttle tests and the "one line, not 25" test |
+// any Server Component / Route Handler / Server Action
+const session = await auth();
+const api = createApiClient({ url: env.NEXT_PUBLIC_API_URL, getAccessToken });
+```
 
-The third of those found a real weakness in the test suite rather than in the code: the
-HTTP-level concurrency test initially passed *with the retry deleted*, because each `fetch`
-costs enough event-loop time that the first request finished provisioning before the second
-had read. The store's insert is now held open so the six requests genuinely race.
+Browser side:
 
-### What is **not** covered here
+```tsx
+'use client';
+import { AuthProvider, useRequireAuth, useAccessTokenProvider } from '@lets-park/auth/client';
 
-- **No real Postgres.** The unique constraints are modelled by
-  `testing/in-memory-user-store.ts`, which raises a genuine
-  `Prisma.PrismaClientKnownRequestError` P2002 with the `meta.target` Postgres produces. The
-  retry logic and the outcome are exercised; that Postgres raises P2002 for these particular
-  indexes is inherited from `schema.prisma` and verified in CI.
-- **No real `mock-oauth2-server`.** The protocol is exercised, that container's exact
-  discovery document and default claim set are not. In particular, **check on the first
-  `docker compose up` that its tokens carry an `email` claim** — if they do not, a first-time
-  dev login will hit the "no email claim" 401 until the client requests the `email` scope.
+// in the app's provider boundary, with the server-read session handed down:
+<AuthProvider session={session}>…</AuthProvider>
 
----
+// in a protected screen:
+const { session, status } = useRequireAuth();
+
+// to give a transport its token:
+const getAccessToken = useAccessTokenProvider();   // stable identity, latest session
+```
+
+`@lets-park/auth` and `@lets-park/auth/client` are separate entry points on purpose: the
+server half pulls in Auth.js's route handlers and `next/server`, which have no place in a
+browser bundle (`doc/decision/0046-*`). A Jest guard fails the build if the client entry ever
+reaches the server modules.
 
 ## Adding an authenticated route
 
@@ -396,6 +607,78 @@ feed(@Param('token') token: string) { … }
 ```
 
 `@Roles()` takes the contract's `UserRole`, so a typo does not compile.
+
+---
+
+## How this is tested
+
+Four levels, none of which needs Docker.
+
+**Against a real OIDC issuer.** `apps/api/src/auth/testing/oidc-test-issuer.ts` is an
+in-process HTTP server that serves a genuine discovery document and a genuine JWKS of real
+2048-bit RSA public keys; the tests sign real RS256 tokens against it. Nothing is stubbed —
+signature checking, discovery, caching and rotation are executed, not described. It stands in
+for `mock-oauth2-server` at the same two endpoints, and it publishes its JWKS at `/jwks`
+specifically so that a reintroduced hardcoded Okta path would fail the suite.
+
+**Through the assembled application.** `auth-pipeline.spec.ts` boots the **real `AppModule`**
+with the same `configureApp()` that `main.ts` calls, listens on an ephemeral port and drives
+it with `fetch`. That is the only way to observe the properties that matter here — that
+issuer and audience are genuinely checked, that a deactivated user gets 403 and not 401, that
+an undecorated route is protected, that the probes stay reachable — because all of them are
+properties of a composition (Express → throttler → guard → Passport → `jsonwebtoken` →
+filter) rather than of any single function.
+
+**The frontend half.** `libs/auth`'s own unit tests stub only `fetch` (`AuthOptions.fetch`,
+the same seam `ApiClientOptions.fetch` already is) and drive the real callbacks, the real
+`SessionProvider`, and a real `createApiClient`. The end-to-end path through a browser is
+Playwright's job in Fáze 7.
+
+**Mutation-checked.** Four deliberate defects were introduced and reverted, to confirm the
+suite can actually fail:
+
+| defect introduced                                                        | tests that failed                                                    |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| rules passed as `jsonWebTokenOptions` (the `passport-jwt` trap)          | wrong issuer, wrong audience                                         |
+| deactivated user throws `UnauthorizedException` instead of `DomainError` | the two unit assertions and the pipeline's 403-body assertion        |
+| the P2002 provisioning retry removed                                     | both unit concurrency tests, and the HTTP one                        |
+| `JwtAuthGuard` defaults to allow instead of deny                         | 15 of 20 pipeline tests                                              |
+| failure reporting removed from `getSigningKey`                           | 7 of the 8 diagnosability tests                                      |
+| the log throttle's interval reduced to zero                              | 3 throttle tests and the "one line, not 25" test                     |
+
+The third of those found a real weakness in the test suite rather than in the code: the
+HTTP-level concurrency test initially passed _with the retry deleted_, because each `fetch`
+costs enough event-loop time that the first request finished provisioning before the second
+had read. The store's insert is now held open so the six requests genuinely race.
+
+### Against the mock OIDC server
+
+`docker-compose.yml` runs `mock-oauth2-server`, and `AUTH_OKTA_ISSUER` in `.env.example`
+points at its `default` issuer. It accepts any `client_id`/`client_secret`, serves a real
+discovery document, and issues real signed JWTs, so the whole flow above is meant to run
+unmodified — including refresh, because `libs/auth` reads the client-authentication method out
+of the discovery document rather than assuming one (`doc/decision/0045-*`).
+
+The container has since been brought up, which answered the `aud` question above. One thing it
+has not answered: which value of `token_endpoint_auth_methods_supported` the container
+publishes, and therefore which of `libs/auth`'s three client-authentication branches is taken
+against it. All three are tested against a stubbed document; the live selection is unobserved.
+
+### What is **not** covered here
+
+- **No real Postgres.** The unique constraints are modelled by
+  `testing/in-memory-user-store.ts`, which raises a genuine
+  `Prisma.PrismaClientKnownRequestError` P2002 with the `meta.target` Postgres produces. The
+  retry logic and the outcome are exercised; that Postgres raises P2002 for these particular
+  indexes is inherited from `schema.prisma` and verified in CI.
+- **No real `mock-oauth2-server` in the suites.** The protocol is exercised, that container's
+  exact discovery document and default claim set are not. In particular, the claims captured
+  while checking `aud` do not settle whether the container's tokens carry an `email` claim —
+  so on the first `docker compose up`, **check for one**: without it, a first-time dev login
+  hits the "no email claim" 401 until the client requests the `email` scope.
+- **No real Okta tenant.** Everything specific to the production org — the Custom-vs-Org
+  audience above, the refresh-token-rotation setting, key rotation against a live IdP — is
+  derived from Okta's documentation and has been reasoned rather than run.
 
 ---
 
