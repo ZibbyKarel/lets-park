@@ -38,6 +38,7 @@ issuer instead of stubbing the verifier.
 | `roles.guard.ts`, `roles.decorator.ts` | `@Roles('ADMIN')` |
 | `current-user.decorator.ts` | `@CurrentUser()` |
 | `authenticated-user.ts` | the `AuthenticatedUser` shape and its runtime check |
+| `failure-log-throttle.ts` | one log line per failure kind per minute, with a suppressed count |
 | `auth-user.service.ts` | just-in-time provisioning, `icsToken`, deactivated → `FORBIDDEN` |
 | `token-claims.ts` | the Zod claim schema, parsed **after** verification |
 | `auth.module.ts` | wiring; exports the verifier and the user service for Task 15 |
@@ -135,6 +136,74 @@ and answering 401 would send them round the Okta login loop forever.
 Stack traces are logged and never sent — that is `ContractExceptionFilter`'s job and is
 unchanged by this layer. No log line in `src/auth/**` carries a raw token, a key, or an
 `icsToken`, and `buildLoggerOptions` already redacts the `authorization` header.
+
+---
+
+## Diagnosing a 401
+
+Every rejection above reaches the caller as the same bare 401. That is deliberate — telling
+an anonymous caller *why* their token was refused is telling an attacker which half of the
+forgery to fix. It does mean the response is useless for diagnosis, so **the logs carry the
+diagnosis instead**.
+
+`JwksVerifierService` classifies every key-lookup failure and logs it with an `authFailure`
+field. Search for that field first:
+
+| `authFailure` | level | what it means | what to do |
+| --- | --- | --- | --- |
+| `issuer-unreachable` | `error` | the discovery endpoint did not answer, or answered non-2xx | is the IdP up? is `AUTH_OKTA_ISSUER` reachable from the API host? |
+| `discovery-rejected` | `error` | it answered, and we refused the document — the `issuer` it declares does not match `AUTH_OKTA_ISSUER`, or `jwks_uri` is on another origin | `AUTH_OKTA_ISSUER` is pointing at the wrong tenant, or the document is not what it should be. The `reason` field names which check failed |
+| `jwks-unavailable` | `error` | discovery worked, fetching the keys did not | usually a partial IdP outage |
+| `jwks-rate-limited` | `error` | more than 12 JWKS fetches in a minute | almost always a flood of tokens with unknown `kid`s; check who is calling |
+| `signing-key-not-found` | `debug` | the JWKS was fetched and has no key with this `kid` | normally somebody else's token. If it is happening to *everyone*, the IdP rotated to a key it is not publishing |
+| `malformed-token` | `debug` | not a JWT, or an algorithm we do not accept | normally background noise on a public endpoint |
+
+Two other 401s do **not** come from that table, because they happen after a key was found:
+
+- **`jsonwebtoken` rejected the token** — bad signature, expired, wrong `iss`, wrong `aud`.
+  These are normal and are not logged individually; a request-id'd 401 in the access log is
+  all there is. If *nobody* can log in and there is no `authFailure` line, this is where to
+  look: compare `AUTH_OKTA_AUDIENCE` against the `aud` your IdP actually mints.
+- **A valid token with no `email` claim, for a subject that is not yet provisioned.** Logged
+  by `AuthUserService` at `error`: *"Token carries no email claim and the subject is not
+  provisioned; check the IdP scopes"*. This is the first thing to check on a fresh dev
+  environment.
+
+### Why the levels are what they are
+
+The four server-side kinds are `error`: nobody can log in and every one of them needs a
+human. `discovery-rejected` in particular is a permanent misconfiguration that will never
+heal on its own. Splitting the four across `warn` and `error` would mean an operator has to
+know which is which before they can find any of them.
+
+The two caller-side kinds are `debug`. A malformed bearer token and a `kid` from another
+issuer are what a public endpoint receives all day; nobody acts on them, and at the default
+`LOG_LEVEL=info` they cost nothing. Logging them at `warn` would also hand an anonymous
+caller a cheap way to fill the log — the same reasoning `ContractExceptionFilter` already
+applies to an oversized request body.
+
+### Why an outage does not flood the log
+
+An IdP outage sends **every** request down this path, so one line per request would be a
+flood — expensive, and it buries the one line that mattered. `FailureLogThrottle` emits the
+first occurrence of each kind immediately, then stays quiet for 60 seconds, counting what it
+swallowed and attaching the count to the next line that gets through:
+
+```
+ERROR  Cannot verify tokens — the issuer or its JWKS is unusable
+       authFailure=issuer-unreachable issuer=https://acme.okta.com/oauth2/default
+       reason="OIDC discovery at … could not be reached: fetch failed"
+       suppressedSinceLastLog=4126
+```
+
+So an operator sees both the cause and the blast radius. The throttle is keyed by failure
+kind only — never by a `kid`, an issuer or a subject — so its map is bounded at six entries
+and cannot be grown by a caller. A `kid` is reported *inside* a line, truncated to 64
+characters, but never used as a key.
+
+No `Error` object is logged, only its message. A stack adds nothing actionable here and
+would be repeated every minute for the length of an outage; this follows the call
+`doc/decision/0035-*` made for the readiness probe.
 
 ---
 
@@ -277,6 +346,8 @@ suite can actually fail:
 | deactivated user throws `UnauthorizedException` instead of `DomainError` | the two unit assertions and the pipeline's 403-body assertion |
 | the P2002 provisioning retry removed | both unit concurrency tests, and the HTTP one |
 | `JwtAuthGuard` defaults to allow instead of deny | 15 of 20 pipeline tests |
+| failure reporting removed from `getSigningKey` | 7 of the 8 diagnosability tests |
+| the log throttle's interval reduced to zero | 3 throttle tests and the "one line, not 25" test |
 
 The third of those found a real weakness in the test suite rather than in the code: the
 HTTP-level concurrency test initially passed *with the retry deleted*, because each `fetch`

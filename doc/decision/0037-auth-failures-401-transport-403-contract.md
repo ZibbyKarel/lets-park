@@ -82,6 +82,14 @@ server** and pins the exact body, and why it was verified by mutation: replacing
 `DomainError` with an `UnauthorizedException` fails three tests, so the assertion is known to
 be capable of failing.
 
+**`@nestjs/passport` is therefore pinned exactly** — `"12.0.0"`, not `"^12.0.0"` — in
+`package.json`. A caret range is precisely how that behaviour change arrives unannounced, on
+somebody else's `npm install`, in a task that has nothing to do with auth. Pinning does not
+prevent the change; it makes it a deliberate act with a diff to review. The reasoning is
+repeated in the class comment of `apps/api/src/auth/jwt-auth.guard.ts`, because that is where
+someone puzzled by the pin will actually be reading. When the pin is lifted, run
+`auth-pipeline.spec.ts` before anything else.
+
 The second risk is a well-meant "unify the error shapes" refactor. If a future task makes the
 401 branch emit `{ defined: false, code: … }`, `apps/web` will switch on a code that
 `errorCodeSchema` rejects. The transport body must stay without `code`.

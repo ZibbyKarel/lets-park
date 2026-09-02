@@ -22,18 +22,45 @@ import { forgeUnsignedToken, signTestToken } from './testing/sign-test-token';
 
 const AUDIENCE = 'api://default';
 
-const silentLogger = {
-  debug: () => undefined,
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-} as unknown as PinoLogger;
+interface LogLine {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  context: Record<string, unknown>;
+  message: string;
+}
 
-function verifierFor(issuer: string, audience = AUDIENCE): JwksVerifierService {
+/**
+ * A logger that records instead of printing, so the tests can assert what an
+ * operator would actually see. Every level is captured — asserting that a
+ * failure is logged at `error` is only meaningful alongside asserting that
+ * another one is *not*.
+ */
+function recordingLogger(): { logger: PinoLogger; lines: LogLine[] } {
+  const lines: LogLine[] = [];
+  const capture =
+    (level: LogLine['level']) =>
+    (context: Record<string, unknown>, message: string): void => {
+      lines.push({ level, context, message });
+    };
+  return {
+    lines,
+    logger: {
+      debug: capture('debug'),
+      info: capture('info'),
+      warn: capture('warn'),
+      error: capture('error'),
+    } as unknown as PinoLogger,
+  };
+}
+
+function verifierFor(
+  issuer: string,
+  audience = AUDIENCE
+): { verifier: JwksVerifierService; lines: LogLine[] } {
   const config = {
     get: (key: string) => (key === 'AUTH_OKTA_ISSUER' ? issuer : audience),
   } as unknown as ConfigService<ApiEnv, true>;
-  return new JwksVerifierService(config, silentLogger);
+  const { logger, lines } = recordingLogger();
+  return { verifier: new JwksVerifierService(config, logger), lines };
 }
 
 describe('JwksVerifierService', () => {
@@ -54,7 +81,7 @@ describe('JwksVerifierService', () => {
 
   describe('a valid token', () => {
     it('verifies and returns the parsed claims', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -74,7 +101,7 @@ describe('JwksVerifierService', () => {
     it('finds the JWKS through discovery, not through a guessed path', async () => {
       // The test issuer publishes at `/jwks`, Okta publishes at `/v1/keys`. A
       // hardcoded suffix in the implementation fails this test.
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -88,7 +115,7 @@ describe('JwksVerifierService', () => {
     });
 
     it('reuses the cached key instead of refetching per request', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -171,13 +198,13 @@ describe('JwksVerifierService', () => {
       ],
       ['a string that is not a JWT at all', () => 'not.a.jwt'],
     ])('refuses %s', async (_name, mint) => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
 
       await expect(verifier.verifyToken(mint())).rejects.toThrow();
     });
 
     it('refuses a token whose signature was stripped', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -190,7 +217,7 @@ describe('JwksVerifierService', () => {
     });
 
     it('refuses a token whose payload was edited after signing', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -213,7 +240,7 @@ describe('JwksVerifierService', () => {
 
   describe('key rotation', () => {
     it('picks up a newly published key without a restart', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const oldToken = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -237,7 +264,7 @@ describe('JwksVerifierService', () => {
     });
 
     it('stops accepting a key that was withdrawn and never cached', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const withdrawn = createSigningKey('key-old');
       issuer.publish([signingKey]);
 
@@ -254,7 +281,7 @@ describe('JwksVerifierService', () => {
 
   describe('an unreachable issuer', () => {
     it('fails closed rather than accepting the token', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       issuer.setAvailable(false);
       const token = signTestToken({
         key: signingKey,
@@ -267,7 +294,7 @@ describe('JwksVerifierService', () => {
     });
 
     it('recovers once the issuer comes back — a failed discovery is not permanent', async () => {
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       issuer.setAvailable(false);
       const token = signTestToken({
         key: signingKey,
@@ -291,7 +318,7 @@ describe('JwksVerifierService', () => {
       // but names somebody else. Trusting it would validate tokens against
       // another org's keys.
       issuer.overrideDiscovery({ issuer: 'https://someone-else.okta.com/oauth2/default' });
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -304,7 +331,7 @@ describe('JwksVerifierService', () => {
 
     it('refuses a document that points jwks_uri at another origin', async () => {
       issuer.overrideDiscovery({ jwks_uri: 'https://evil.example/jwks' });
-      const verifier = verifierFor(issuer.issuer);
+      const { verifier } = verifierFor(issuer.issuer);
       const token = signTestToken({
         key: signingKey,
         issuer: issuer.issuer,
@@ -316,7 +343,7 @@ describe('JwksVerifierService', () => {
     });
 
     it('tolerates a trailing slash on the configured issuer', async () => {
-      const verifier = verifierFor(`${issuer.issuer}/`);
+      const { verifier } = verifierFor(`${issuer.issuer}/`);
       const token = signTestToken({
         key: signingKey,
         issuer: `${issuer.issuer}/`,
@@ -325,6 +352,133 @@ describe('JwksVerifierService', () => {
       });
 
       await expect(verifier.verifyToken(token)).resolves.toMatchObject({ sub: 'okta-1' });
+    });
+  });
+
+  /**
+   * The four operator problems below all reach the *caller* as the same bare
+   * 401 — that is deliberate and asserted in `auth-pipeline.spec.ts`. What is
+   * asserted here is that they are nonetheless told apart in the logs, which
+   * they were not before review found it: this class rethrew silently, and
+   * Passport's `fail(info)` path discards `info`.
+   */
+  describe('diagnosability', () => {
+    function goodToken(): string {
+      return signTestToken({
+        key: signingKey,
+        issuer: issuer.issuer,
+        audience: AUDIENCE,
+        subject: 'okta-1',
+      });
+    }
+
+    it.each([
+      [
+        'issuer-unreachable',
+        async () => {
+          issuer.setAvailable(false);
+        },
+        goodToken,
+      ],
+      [
+        'discovery-rejected',
+        async () => {
+          issuer.overrideDiscovery({ issuer: 'https://someone-else.okta.com/oauth2/default' });
+        },
+        goodToken,
+      ],
+      [
+        'signing-key-not-found',
+        async () => undefined,
+        () =>
+          signTestToken({
+            key: signingKey,
+            issuer: issuer.issuer,
+            audience: AUDIENCE,
+            subject: 'okta-1',
+            kid: 'never-published',
+          }),
+      ],
+      ['malformed-token', async () => undefined, () => 'not.a.jwt'],
+    ])('classifies %s so an operator can tell it apart', async (kind, arrange, mint) => {
+      const { verifier, lines } = verifierFor(issuer.issuer);
+      await arrange();
+
+      await expect(verifier.verifyToken(mint())).rejects.toThrow();
+
+      const failures = lines.filter((line) => line.context['authFailure'] !== undefined);
+      expect(failures).toHaveLength(1);
+      expect(failures[0]?.context).toMatchObject({ authFailure: kind, issuer: issuer.issuer });
+      // The reason has to say something specific, or the classification is the
+      // only thing an operator gets.
+      expect(failures[0]?.context['reason']).toEqual(expect.any(String));
+    });
+
+    it('logs a server-side failure at error and a caller-side one at debug', async () => {
+      const outage = verifierFor(issuer.issuer);
+      issuer.setAvailable(false);
+      await expect(outage.verifier.verifyToken(goodToken())).rejects.toThrow();
+
+      issuer.setAvailable(true);
+      const garbage = verifierFor(issuer.issuer);
+      await expect(garbage.verifier.verifyToken('not.a.jwt')).rejects.toThrow();
+
+      // An IdP outage needs a human; a malformed bearer token is what a public
+      // endpoint receives all day and must not be a log-flood vector.
+      expect(outage.lines.map((line) => line.level)).toContain('error');
+      expect(garbage.lines.map((line) => line.level)).toEqual(['debug']);
+    });
+
+    it('logs the failure once, not once per request, during an outage', async () => {
+      const { verifier, lines } = verifierFor(issuer.issuer);
+      issuer.setAvailable(false);
+      const token = goodToken();
+
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        await expect(verifier.verifyToken(token)).rejects.toThrow();
+      }
+
+      // Every request takes this path during an outage. One line, not 25.
+      const failures = lines.filter((line) => line.context['authFailure'] !== undefined);
+      expect(failures).toHaveLength(1);
+    });
+
+    it('never puts the token, or any part of it, in a log line', async () => {
+      const { verifier, lines } = verifierFor(issuer.issuer);
+      issuer.setAvailable(false);
+      const token = goodToken();
+      const [header, payload, signature] = token.split('.');
+
+      await expect(verifier.verifyToken(token)).rejects.toThrow();
+
+      const serialised = JSON.stringify(lines);
+      for (const part of [token, header, payload, signature]) {
+        expect(serialised).not.toContain(part);
+      }
+      // And no `Error` object, so no stack is repeated every minute of an
+      // outage — the same call `doc/decision/0035-*` made for the probe.
+      expect(serialised).not.toContain('"err"');
+    });
+
+    it('truncates an attacker-controlled kid rather than echoing it whole', async () => {
+      const { verifier, lines } = verifierFor(issuer.issuer);
+      const enormousKid = 'k'.repeat(5000);
+
+      await expect(
+        verifier.verifyToken(
+          signTestToken({
+            key: signingKey,
+            issuer: issuer.issuer,
+            audience: AUDIENCE,
+            subject: 'okta-1',
+            kid: enormousKid,
+          })
+        )
+      ).rejects.toThrow();
+
+      const logged = lines.find((line) => line.context['kid'] !== undefined)?.context['kid'];
+      expect(typeof logged).toBe('string');
+      expect((logged as string).length).toBeLessThanOrEqual(64);
     });
   });
 });
