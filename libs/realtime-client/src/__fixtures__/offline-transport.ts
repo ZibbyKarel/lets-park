@@ -29,7 +29,9 @@
  * problem again — a number this file believes, that nothing checks. Instead
  * {@link discoverPacketTypes} makes the installed client *emit* one of each
  * and reads the codes off its own output, so the fixture cannot disagree with
- * the library it is driving.
+ * the library it is driving. CONNECT_ERROR is the one the client never sends,
+ * so {@link discoverConnectErrorType} identifies it by the effect only it has
+ * — see that function.
  *
  * This file imports `../lib/socket` for **types only**, so it stays loadable
  * from inside a `jest.mock('../lib/socket', …)` factory — which is how the
@@ -63,6 +65,7 @@ interface PacketTypes {
   readonly connect: number;
   readonly event: number;
   readonly ack: number;
+  readonly connectError: number;
 }
 
 let packetTypes: PacketTypes | undefined;
@@ -111,8 +114,71 @@ function discoverPacketTypes(): PacketTypes {
   const ack = expectPacket(sent, 2, 'ACK').type;
 
   probe.disconnect();
-  packetTypes = { connect, event, ack };
+  const connectError = discoverConnectErrorType({ connect, event, ack });
+  packetTypes = { connect, event, ack, connectError };
   return packetTypes;
+}
+
+/**
+ * Finds the CONNECT_ERROR code the same way, except that the client never
+ * *sends* one — it only ever receives it — so there is no outgoing packet to
+ * read it off.
+ *
+ * So it is identified by its **effect** instead, which is the pair of
+ * observations that make CONNECT_ERROR unique among socket.io-parser's seven
+ * packet types (`socket.js` `onpacket`):
+ *
+ * - it makes the socket emit `connect_error`, and
+ * - it makes the socket **inactive** (`socket.active === false`), because the
+ *   CONNECT_ERROR branch calls `destroy()`, which drops the socket's manager
+ *   subscriptions so no reconnect is attempted.
+ *
+ * DISCONNECT also destroys but emits `disconnect`, not `connect_error`; a
+ * CONNECT with no `sid` emits `connect_error` but leaves the socket active.
+ * Only CONNECT_ERROR does both, so the conjunction identifies it exactly —
+ * and it is identified by running the installed client, not by writing `4`
+ * down.
+ */
+function discoverConnectErrorType(known: Omit<PacketTypes, 'connectError'>): number {
+  const taken = [known.connect, known.event, known.ack];
+
+  for (let candidate = 0; candidate <= 6; candidate += 1) {
+    if (taken.includes(candidate)) continue;
+
+    const probe = io('http://packet-type.probe/', {
+      autoConnect: false,
+      forceNew: true,
+      auth: {},
+    }) as RealtimeSocket;
+    const manager = managerOf(probe);
+    manager.open = () => probe;
+    manager._packet = () => undefined;
+
+    let sawConnectError = false;
+    (probe as unknown as { on(ev: string, listener: () => void): void }).on(
+      'connect_error',
+      () => {
+        sawConnectError = true;
+      }
+    );
+
+    probe.connect();
+    manager.emit('open');
+    // The realistic sequence: the socket sent CONNECT, and the server answers
+    // with this candidate packet instead of accepting.
+    manager.emit('packet', { type: candidate, nsp: '/', data: { message: 'probe' } });
+
+    const destroyed = !probe.active;
+    probe.disconnect();
+
+    if (sawConnectError && destroyed) return candidate;
+  }
+
+  throw new Error(
+    'No socket.io-parser packet type both emitted "connect_error" and deactivated the ' +
+      'socket. The fixture can no longer identify CONNECT_ERROR from the installed ' +
+      'client — fix the fixture, not the test.'
+  );
 }
 
 function expectPacket(
@@ -148,6 +214,16 @@ export interface OfflineSocket {
   acceptConnection(sid?: string): void;
   /** The transport dropped: drives the real `Socket.onclose`. */
   drop(reason?: string): void;
+  /**
+   * The server **refused** the handshake — the gateway's namespace middleware
+   * said no, which for this project means the access token was rejected.
+   *
+   * Drives the real `Socket.onpacket` CONNECT_ERROR branch, which calls
+   * `destroy()` before emitting `connect_error`. After this the socket is
+   * inactive and socket.io will never reconnect it: that is the behaviour
+   * `useRealtimeConnection` has to recover from, not a fixture invention.
+   */
+  rejectHandshake(message?: string): void;
   /** The server broadcast an event into a room this socket is in. */
   deliver(event: string, payload: unknown): void;
   /** The server answered the most recent emit of `event` with `payload`. */
@@ -195,6 +271,17 @@ export function attachOfflineTransport(socket: RealtimeSocket): OfflineSocket {
     acceptConnection: (sid = 'offline-sid') =>
       manager.emit('packet', { type: types.connect, nsp: nsp(), data: { sid } }),
     drop: (reason = 'transport close') => manager.emit('close', reason),
+    rejectHandshake: (message = 'Unauthorized') =>
+      // `packet.data.message` is what `Socket.onpacket` reads to build the
+      // `Error` it hands `connect_error`; `packet.data.data` is the optional
+      // extra payload. Neither is read by this lib — the token's rejection is
+      // never logged — but the shape is the server's, so it is sent as the
+      // server sends it.
+      manager.emit('packet', {
+        type: types.connectError,
+        nsp: nsp(),
+        data: { message },
+      }),
     deliver: (event, payload) =>
       manager.emit('packet', { type: types.event, nsp: nsp(), data: [event, payload] }),
     acknowledge: (event, payload) => {

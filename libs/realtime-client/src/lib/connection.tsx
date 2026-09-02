@@ -39,17 +39,57 @@ import type { InvalidPayloadHandler, ServerEventPayload } from './validation';
 /**
  * What the connection looks like to a component.
  *
- * `connecting` covers both the first attempt and every retry: Socket.io's
- * reconnection loop reports failures as `connect_error` and keeps trying, and
- * a UI that distinguished "still connecting" from "retrying after a failure"
- * would be showing the user a difference they cannot act on.
+ * `connecting` covers the first attempt and every **transport** retry:
+ * Socket.io's reconnection loop reports those as `connect_error` and keeps
+ * trying, and a UI that distinguished "still connecting" from "retrying after
+ * a dropped transport" would be showing the user a difference they cannot act
+ * on.
+ *
+ * `rejected` is the case that is genuinely different and used to be hidden
+ * inside `connecting`: the gateway **refused the handshake**. Socket.io sends
+ * a CONNECT_ERROR packet, and `Socket.onpacket` calls `destroy()` before
+ * emitting `connect_error` — the socket loses its manager subscriptions and
+ * will never present a token again. There is nothing left to wait for, so this
+ * lib builds a **new** socket rather than waiting on a dead one; see
+ * {@link REJECTED_RETRY_DELAYS_MS} and {@link RealtimeConnection.reconnect},
+ * and `doc/decision/0061-*`.
  */
-export type RealtimeStatus = 'connecting' | 'connected' | 'disconnected';
+export type RealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'rejected';
+
+/**
+ * How long to wait before rebuilding a socket the gateway refused, one entry
+ * per automatic attempt.
+ *
+ * A refused handshake is almost always a stale access token — the tab was
+ * backgrounded, `libs/auth`'s rotation had not run yet — and rebuilding the
+ * socket re-runs the `auth` callback, which re-reads the provider and so picks
+ * up whatever token exists *now*. That is the recovery.
+ *
+ * It is a short, finite list rather than an unbounded loop because the other
+ * reason a handshake is refused is that this user is genuinely not allowed in,
+ * and re-presenting a credential the gateway just rejected is a request that
+ * cannot succeed. Three attempts spread over ~36 s cover a rotation in flight;
+ * after that the status stays `rejected` until something asks again, which is
+ * what {@link RealtimeConnection.reconnect} is for. The counter resets on every
+ * successful connect.
+ */
+export const REJECTED_RETRY_DELAYS_MS: readonly number[] = [1_000, 5_000, 30_000];
 
 export interface RealtimeConnection {
   /** `null` until the connection effect has run, and while disabled. */
   readonly socket: RealtimeSocket | null;
   readonly status: RealtimeStatus;
+  /**
+   * Throws away the current socket and builds a fresh one, re-running the
+   * handshake `auth` callback — so a token that has been refreshed since is
+   * the one presented.
+   *
+   * This is the affordance behind a "Připojit znovu" control on a `rejected`
+   * status: the automatic attempts are deliberately finite, and this is how a
+   * user who has just signed back in gets a connection without reloading the
+   * page. Referentially stable.
+   */
+  readonly reconnect: () => void;
   /**
    * Reports a payload that failed its schema. Referentially stable, so an
    * effect may depend on it. Calls whatever `onInvalidPayload` the provider
@@ -87,7 +127,9 @@ export interface RealtimeConnectionOptions {
  * `getAccessToken` and `onInvalidPayload` are read through refs, so passing an
  * inline arrow — which every caller will — does not tear the socket down and
  * rebuild it on every render. Only `url`, `path` and `enabled` do that, which
- * is right: they are the connection's identity.
+ * is right: they are the connection's identity — plus one internal
+ * `generation` counter, which is how a refused handshake is recovered from
+ * (see {@link RealtimeStatus} and {@link REJECTED_RETRY_DELAYS_MS}).
  */
 export function useRealtimeConnection(options: RealtimeConnectionOptions): RealtimeConnection {
   const {
@@ -111,6 +153,19 @@ export function useRealtimeConnection(options: RealtimeConnectionOptions): Realt
   const [socket, setSocket] = useState<RealtimeSocket | null>(null);
   const [status, setStatus] = useState<RealtimeStatus>('disconnected');
 
+  // Bumping this rebuilds the socket. It is the only way back from a refused
+  // handshake: `socket.io-client` destroys the socket it refused, so there is
+  // no `connect()` to call — the recovery is a new socket, which re-runs the
+  // `auth` callback and so presents whatever token the provider has now.
+  const [generation, setGeneration] = useState(0);
+  // Consecutive refusals, kept in a ref so it survives the rebuild it causes.
+  const refusalsRef = useRef(0);
+
+  const reconnect = useCallback(() => {
+    refusalsRef.current = 0;
+    setGeneration((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -126,14 +181,44 @@ export function useRealtimeConnection(options: RealtimeConnectionOptions): Realt
       getAccessToken: () => getAccessTokenRef.current(),
     });
 
-    const onConnect = () => setStatus('connected');
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    const onConnect = () => {
+      // A connection that worked means the credential worked, so the next
+      // refusal starts its budget over.
+      refusalsRef.current = 0;
+      setStatus('connected');
+    };
     const onDisconnect = () => setStatus('disconnected');
-    // Socket.io keeps retrying after a failed attempt, so a connect error is
-    // still "connecting" as far as the UI is concerned. The error itself is
-    // deliberately neither logged nor surfaced: for an auth failure it is the
-    // gateway's rejection of the token that just travelled, and this lib does
-    // not put anything from that exchange into a log.
-    const onConnectError = () => setStatus('connecting');
+    // `connect_error` covers two very different failures, and `socket.active`
+    // is what tells them apart — it is `!!socket.subs`, and the CONNECT_ERROR
+    // branch of `Socket.onpacket` calls `destroy()`, which clears `subs`.
+    //
+    //   active  — a transport that could not be established. Socket.io's
+    //             reconnect timer will try again by itself; still `connecting`.
+    //   !active — the gateway refused the handshake and the client destroyed
+    //             the socket. Nothing will ever retry it, so reporting
+    //             `connecting` would pin the UI on a connection that is not
+    //             coming. It is a terminal `rejected`, and the recovery is a
+    //             new socket with a freshly read token.
+    //
+    // The error itself is deliberately neither logged nor surfaced: for an
+    // auth failure it is the gateway's rejection of the token that just
+    // travelled, and this lib does not put anything from that exchange into a
+    // log.
+    const onConnectError = () => {
+      if (next.active) {
+        setStatus('connecting');
+        return;
+      }
+
+      setStatus('rejected');
+      const delay = REJECTED_RETRY_DELAYS_MS[refusalsRef.current];
+      refusalsRef.current += 1;
+      // Out of automatic attempts: stay `rejected` and wait for `reconnect()`.
+      if (delay === undefined) return;
+      retry = setTimeout(() => setGeneration((n) => n + 1), delay);
+    };
 
     next.on('connect', onConnect);
     next.on('disconnect', onDisconnect);
@@ -143,6 +228,7 @@ export function useRealtimeConnection(options: RealtimeConnectionOptions): Realt
     setStatus(next.connected ? 'connected' : 'connecting');
 
     return () => {
+      if (retry !== undefined) clearTimeout(retry);
       next.off('connect', onConnect);
       next.off('disconnect', onDisconnect);
       next.off('connect_error', onConnectError);
@@ -150,15 +236,15 @@ export function useRealtimeConnection(options: RealtimeConnectionOptions): Realt
       setSocket(null);
       setStatus('disconnected');
     };
-  }, [url, path, enabled]);
+  }, [url, path, enabled, generation]);
 
   const reportInvalidPayload = useCallback<InvalidPayloadHandler>((report) => {
     onInvalidPayloadRef.current?.(report);
   }, []);
 
   return useMemo(
-    () => ({ socket, status, reportInvalidPayload }),
-    [socket, status, reportInvalidPayload]
+    () => ({ socket, status, reconnect, reportInvalidPayload }),
+    [socket, status, reconnect, reportInvalidPayload]
   );
 }
 
