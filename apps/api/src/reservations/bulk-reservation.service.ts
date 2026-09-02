@@ -40,16 +40,32 @@
  * A bulk confirmation touches up to 31 `(spot, date)` cells, which is up to 31
  * uncommitted unique keys held at once — Task 13's deadlock risk, multiplied.
  * What removes the cycle is that **every** confirmation acquires those keys in
- * ascending date order (`allocateBulk` sorts, and both write phases preserve
- * that order), and that each date takes at most **one** reservation key: a
- * transaction waiting at date *d* holds no key at date *d*, so two of them
- * cannot each hold what the other wants. Two users submitting the same days in
- * opposite request order therefore serialise instead of deadlocking, which
- * `bulk-concurrency.db.spec.ts` forces and which fails the moment the sort is
- * removed. Full analysis in `doc/decision/0092-*` and `doc/bulk-reservation.md`.
+ * ascending date order, and that each date takes at most **one** reservation
+ * key: a transaction waiting at date *d* holds no key at date *d*, so two of
+ * them cannot each hold what the other wants. Two users submitting the same days
+ * in opposite request order therefore serialise instead of deadlocking.
  *
- * No `FOR UPDATE` is taken and nothing is deleted, so this path also stays out
- * of the cancel/promote cycle documented in `doc/decision/0065-*`.
+ * That order has exactly **one** authority: `allocateBulk`'s
+ * `[...request.dates].sort(compareDateOnly)`, whose output order *is* the row
+ * order of the `INSERT` (`createReservations` maps straight off `plans`). The
+ * service does not sort for it: `assertRequestable` sorts only locally, to name
+ * the earliest offending day in a rejection, and hands the dates back in request
+ * order. Until this fix round there was a second sort there whose returned list
+ * fed the allocator, which meant *either* sort could be deleted with every test
+ * still green — measured, not assumed. See `doc/decision/0092-*` §"One
+ * authority".
+ *
+ * The remaining sort is pinned twice: by `bulk-allocator.spec.ts` ("comes back
+ * in ascending date order, whatever order it was asked in"), and end to end by
+ * `bulk-concurrency.db.spec.ts` › "a forced interleaving inside one multi-row
+ * INSERT", which uses a test-only `BEFORE INSERT` trigger to break a multi-row
+ * `INSERT` between its rows and deadlocks the moment the sort goes.
+ *
+ * No `FOR UPDATE` is taken, so this path stays out of the `FOR UPDATE` half of
+ * the cancel/promote cycle in `doc/decision/0065-*`. It is not completely
+ * outside that path's wait graph — see the deadlock table in
+ * `doc/bulk-reservation.md` for the one narrow cycle that does exist, and which
+ * ends in `CONFLICT`.
  *
  * ## The one race this deliberately does not close
  *
@@ -232,14 +248,21 @@ export class BulkReservationService {
     const created = await this.createReservations(tx, plans, actor.id);
     const createdByDate = new Map(created.map((row) => [toDateOnly(row.date), row]));
 
-    // Days the allocator wanted to assign and could not. Either somebody took
-    // the cell, or the caller acquired a reservation elsewhere that day between
-    // the read above and the insert — two different answers, and only a second
-    // read can tell them apart.
+    // Every day that could still end up on a queue, re-read before it does.
+    //
+    // Two sources, and they need the same second read for the same reason: a day
+    // the allocator wanted to **assign** and could not (either somebody took the
+    // cell, or the caller acquired a reservation elsewhere — indistinguishable at
+    // an `ON CONFLICT DO NOTHING` insert), and a day it planned to **queue**, on
+    // which the caller can equally have acquired a reservation between
+    // `readWorld` and here. Queueing either of them would write an entry for a
+    // user who already holds that day — one that can never be promoted, and one
+    // `WaitlistService.join` refuses at the door.
     const lost = plans.flatMap((plan) =>
       plan.outcome === 'SPOT_ASSIGNED' && !createdByDate.has(plan.date) ? [plan.date] : []
     );
-    const busyElsewhere = await this.datesAlreadyReserved(tx, lost, actor.id);
+    const planned = plans.flatMap((plan) => (plan.outcome === 'QUEUED' ? [plan.date] : []));
+    const busyElsewhere = await this.datesAlreadyReserved(tx, [...lost, ...planned], actor.id);
 
     const targets = this.queueTargets(plans, createdByDate, busyElsewhere);
     const queued = await this.createWaitlistEntries(tx, targets, actor.id);
@@ -512,10 +535,12 @@ export class BulkReservationService {
       if (plan.outcome === 'UNAVAILABLE') {
         continue;
       }
-      if (
-        plan.outcome === 'SPOT_ASSIGNED' &&
-        (createdByDate.has(plan.date) || busyElsewhere.has(plan.date))
-      ) {
+      // Whatever the allocator wanted, a day the caller turns out to already hold
+      // a reservation on is never queued — planned `QUEUED` days included.
+      if (busyElsewhere.has(plan.date)) {
+        continue;
+      }
+      if (plan.outcome === 'SPOT_ASSIGNED' && createdByDate.has(plan.date)) {
         continue;
       }
       targets.set(plan.date, { id: plan.parkingSpotId, label: plan.parkingSpotLabel });
@@ -542,12 +567,15 @@ export class BulkReservationService {
       if (created !== undefined) {
         return { ...plan, reservationId: created.id };
       }
-      if (busyElsewhere.has(plan.date)) {
-        // Somebody — another request of theirs, or a promotion — gave the caller
-        // a reservation that day while this transaction was running. That is the
-        // one-per-day rule, reported with the reason that names it.
-        return { outcome: 'UNAVAILABLE', date: plan.date, reason: 'ALREADY_HAS_RESERVATION' };
-      }
+    }
+
+    if (busyElsewhere.has(plan.date)) {
+      // Somebody — another request of theirs, or a promotion — gave the caller a
+      // reservation that day while this transaction was running. That is the
+      // one-per-day rule, reported with the reason that names it, and it applies
+      // to a day the allocator planned to queue exactly as it does to one it
+      // planned to assign.
+      return { outcome: 'UNAVAILABLE', date: plan.date, reason: 'ALREADY_HAS_RESERVATION' };
     }
 
     const target = targets.get(plan.date);
@@ -641,14 +669,21 @@ export class BulkReservationService {
   // --- request-level rules ---------------------------------------------------
 
   /**
-   * The two conditions that invalidate the **whole** request, and the sorted day
-   * list everything downstream uses.
+   * The two conditions that invalidate the **whole** request, and the day list
+   * everything downstream uses.
    *
    * A day in the past and a closed window are contract errors on the procedure;
    * a weekend, a holiday, a full day and a day the caller is already booked on
    * are per-day facts reported inside a successful response
-   * (`doc/decision/0090-*`). The sort is why the error names the earliest
-   * offending day rather than whichever one the client happened to list first.
+   * (`doc/decision/0090-*`).
+   *
+   * The scan runs in ascending order so the error names the **earliest**
+   * offending day rather than whichever one the client happened to list first —
+   * pinned by `bulk-reservation.db.spec.ts`, "names the earliest offending day,
+   * not the first one listed". That sort is deliberately **local to the scan**:
+   * the list handed back stays in request order, because the write order has
+   * exactly one authority (`allocateBulk`) and a second sort here would make
+   * that one unfalsifiable. See `doc/decision/0092-*` §"One authority".
    */
   private assertRequestable(
     dates: readonly DateOnly[],
@@ -656,18 +691,17 @@ export class BulkReservationService {
     settings: ReservationWindowSettings,
     today: DateOnly
   ): DateOnly[] {
-    const sorted = [...dates].sort(compareDateOnly);
-    if (sorted.length === 0) {
+    if (dates.length === 0) {
       throw new DomainError('VALIDATION_FAILED', {
         message: 'A bulk booking must name at least one day.',
       });
     }
 
-    for (const date of sorted) {
+    for (const date of [...dates].sort(compareDateOnly)) {
       this.policy.assertNotInThePast(date, today);
       this.policy.assertWindowOpen(date, actor, settings, today);
     }
-    return sorted;
+    return [...dates];
   }
 
   /**

@@ -73,6 +73,15 @@ const QUEUED_BEHIND_DAY = '2100-01-21' as DateOnly;
 const AFTER_COMMIT_DAY = '2100-01-22' as DateOnly;
 const CONTESTED_DAYS = ['2100-01-25', '2100-01-26'] as DateOnly[];
 const BUSY_ELSEWHERE_DAYS = ['2100-01-27', '2100-01-28'] as DateOnly[];
+/**
+ * The same race against a day the allocator planned to **queue**.
+ *
+ * In March 2100 rather than January because January 2100 has no unused business
+ * day left, and a case that borrowed another's would pass or fail on Jest's
+ * ordering. The input schema's rule is "one calendar month per request", not
+ * "one month per file", so `[…-03-01, …-03-02]` satisfies it on its own.
+ */
+const QUEUE_BUSY_DAYS = ['2100-03-01', '2100-03-02'] as DateOnly[];
 
 /** Every day this file names, for the fixture guard. */
 const BUSINESS_DAYS = [
@@ -88,6 +97,19 @@ const BUSINESS_DAYS = [
   ...CONTESTED_DAYS,
   ...BUSY_ELSEWHERE_DAYS,
 ];
+
+/** The `details` a rejected call carried. Only a `DomainError` has any. */
+async function detailsOf(work: Promise<unknown>): Promise<unknown> {
+  try {
+    await work;
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return error.details;
+    }
+    throw error;
+  }
+  throw new Error('Expected this call to be rejected, but it succeeded.');
+}
 
 /** The code a rejected call carried, whether it came from us or from Postgres. */
 async function codeOf(work: Promise<unknown>): Promise<string> {
@@ -176,13 +198,19 @@ describe('bulk booking against a real PostgreSQL', () => {
     for (const date of BUSINESS_DAYS) {
       expect(isBusinessDay(date)).toBe(true);
     }
-    // The input schema requires one calendar month, so every fixture is in one.
+    // The input schema requires one calendar month *per request*, so every set
+    // of days a case sends together sits in one.
     expect(new Set([...BUSINESS_DAYS, HOLIDAY, WEEKEND].map((date) => date.slice(0, 7)))).toEqual(
       new Set(['2100-01'])
     );
+    expect(new Set(QUEUE_BUSY_DAYS.map((date) => date.slice(0, 7)))).toEqual(new Set(['2100-03']));
+    for (const date of QUEUE_BUSY_DAYS) {
+      expect(isBusinessDay(date)).toBe(true);
+    }
     // And no case borrows another's day, which is what keeps them independent
     // of the order Jest runs them in.
-    expect(new Set(BUSINESS_DAYS).size).toBe(BUSINESS_DAYS.length);
+    const everyDay = [...BUSINESS_DAYS, ...QUEUE_BUSY_DAYS];
+    expect(new Set(everyDay).size).toBe(everyDay.length);
   });
 
   describe('previewBulk', () => {
@@ -269,6 +297,28 @@ describe('bulk booking against a real PostgreSQL', () => {
       await expect(
         codeOf(harness.bulk.confirm({ dates: past }, actorFor(user), TODAY))
       ).resolves.toBe('PAST_DATE');
+    });
+
+    /**
+     * The only thing `assertRequestable`'s sort is still there for.
+     *
+     * It scans in ascending order so a rejection names the **earliest** offending
+     * day rather than whichever one the client happened to list first — and that
+     * sort is deliberately *local to the scan*: the dates it hands downstream stay
+     * in request order, because the write order has exactly one authority
+     * (`allocateBulk`) and a second sort here would make that one unfalsifiable.
+     * See `doc/decision/0092-*` §"One authority". Remove the `.sort` from the scan
+     * and this case names `2098-01-20` instead.
+     */
+    it('names the earliest offending day, not the first one listed', async () => {
+      const past = ['2098-01-20', '2098-01-06'] as DateOnly[];
+
+      await expect(
+        detailsOf(harness.bulk.preview({ dates: past }, actorFor(user), TODAY))
+      ).resolves.toMatchObject({ date: '2098-01-06' });
+      await expect(
+        detailsOf(harness.bulk.confirm({ dates: past }, actorFor(user), TODAY))
+      ).resolves.toMatchObject({ date: '2098-01-06' });
     });
 
     it('refuses a month that has not opened yet', async () => {
@@ -648,6 +698,121 @@ describe('bulk booking against a real PostgreSQL', () => {
       });
       expect(own.map((row) => row.parkingSpotId)).toEqual([elsewhere.id]);
       expect(result.days[1]?.outcome).toBe('SPOT_ASSIGNED');
+    });
+
+    /**
+     * The same race, against a day the allocator planned to **queue**.
+     *
+     * `datesAlreadyReserved` used to be asked only about the days that *lost* a
+     * spot, so a day the allocator had already decided to queue was never
+     * re-checked. That left a real gap: the lot is full on that day, the caller is
+     * promoted onto it (or books it from another tab) while this transaction is
+     * running, and the confirmation writes them a queue entry for a day they now
+     * hold — an entry that can never be promoted, and the exact state
+     * `WaitlistService.join` refuses at the door.
+     *
+     * Forcing it needs both halves of the batch:
+     *
+     * - **the full day** is what the allocator plans to queue;
+     * - **the contested day** is what makes the transaction *stop* between its
+     *   read and its second read. Without an assigned day there is no reservation
+     *   `INSERT` at all, so nothing blocks and nothing can interleave — which is
+     *   why `waitForBlockedBackend` is here rather than a `Promise.all` and a
+     *   hope. It throws if nothing ever blocks.
+     *
+     * The held transaction is the shape that really produces this in production:
+     * a cancellation frees a spot on the full day and hands it to the caller,
+     * exactly as `WaitlistPromotionService.promote` does.
+     */
+    it('does not queue a planned-QUEUED day the caller acquired a reservation on', async () => {
+      const booker = await seedUser(client);
+      const competitor = await seedUser(client);
+      const [contested, full] = QUEUE_BUSY_DAYS as [DateOnly, DateOnly];
+      await fillTheLot(full);
+
+      // Which spot the confirmation will take on the contested day, learned
+      // without writing anything.
+      const preview = await harness.bulk.preview(
+        { dates: [contested, full] },
+        actorFor(booker),
+        TODAY
+      );
+      const planned = preview.days[0];
+      if (planned?.outcome !== 'SPOT_ASSIGNED') {
+        throw new Error(`Expected the preview to assign ${contested}, got ${planned?.outcome}.`);
+      }
+      if (preview.days[1]?.outcome !== 'QUEUED') {
+        throw new Error(`Expected ${full} to be queued, got ${preview.days[1]?.outcome}.`);
+      }
+      // Somebody else's reservation on the full day, to be cancelled and handed
+      // to the booker while the confirmation is running.
+      const freed = await client.reservation.findFirstOrThrow({
+        where: { date: toDateColumn(full) },
+        select: { id: true, parkingSpotId: true },
+      });
+      harness.publisher.reset();
+
+      const held = holdTransaction(otherClient, async (tx) => {
+        // Blocks the confirmation's reservation insert on the contested day.
+        await tx.reservation.create({
+          data: {
+            parkingSpotId: planned.parkingSpotId,
+            userId: competitor.id,
+            date: toDateColumn(contested),
+          },
+        });
+        // A cancellation and a promotion, on the day the confirmation is about to
+        // queue the booker for.
+        await tx.reservation.delete({ where: { id: freed.id } });
+        await tx.reservation.create({
+          data: {
+            parkingSpotId: freed.parkingSpotId,
+            userId: booker.id,
+            date: toDateColumn(full),
+          },
+        });
+      });
+      await held.ready;
+
+      const confirming = harness.bulk.confirm(
+        { dates: [contested, full] },
+        actorFor(booker),
+        TODAY
+      );
+      await waitForBlockedBackend(client);
+
+      held.release();
+      await held.done;
+      const result = await confirming;
+
+      // The full day is reported as the day they now hold, not as a queue place…
+      expect(result.days[1]).toEqual({
+        outcome: 'UNAVAILABLE',
+        date: full,
+        reason: 'ALREADY_HAS_RESERVATION',
+      });
+      // …and, the part that is a bug rather than a wording choice, no entry was
+      // written for it.
+      expect(
+        await client.waitlistEntry.count({
+          where: { userId: booker.id, date: toDateColumn(full) },
+        })
+      ).toBe(0);
+      // Nor was one broadcast: a queue that did not change is not news.
+      expect(
+        harness.publisher.ofKind('waitlist:updated').filter((event) => event.payload.date === full)
+      ).toEqual([]);
+      // They kept the spot the promotion gave them.
+      expect(
+        await client.reservation.count({ where: { userId: booker.id, date: toDateColumn(full) } })
+      ).toBe(1);
+      // And the contested day behaved as it always did: lost the cell, queued for
+      // it. This is what keeps the case honest — the batch really did run.
+      const lost = result.days[0];
+      if (lost?.outcome !== 'QUEUED') {
+        throw new Error(`Expected ${contested} to be queued, got ${lost?.outcome}.`);
+      }
+      expect(lost.parkingSpotId).toBe(planned.parkingSpotId);
     });
   });
 });

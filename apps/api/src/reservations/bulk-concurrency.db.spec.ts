@@ -5,17 +5,24 @@
  * A bulk confirmation holds up to 31 uncommitted `(parkingSpotId, date)` keys at
  * a time, which is Task 13's deadlock risk multiplied by the size of the batch.
  * What keeps it from being a problem is one line in `bulk-allocator.ts` — the
- * ascending sort — and this file is where that line stops being an argument:
+ * ascending sort, the single authority for the order the rows are written in —
+ * and this file is where that line stops being an argument:
  *
  * - **the brief's case**: two users booking *the same days in opposite request
  *   order* both succeed, and the database agrees with what each of them was
  *   told;
+ * - **the same case, with the statement broken open**: a test-only `BEFORE
+ *   INSERT … FOR EACH ROW` trigger stalls between the rows of the multi-row
+ *   `INSERT`, so each caller is holding one key while reaching for the other.
+ *   They still both succeed — and they stop doing so the moment the sort is
+ *   deleted, which is what makes the sort falsifiable end to end rather than
+ *   only by a unit test;
  * - **the cycle itself**: a competitor that takes the same two cells in the
  *   opposite order really does deadlock against a confirmation, and when it
  *   happens the batch is all-or-nothing and the caller is told `CONFLICT`
  *   rather than being handed a 500.
  *
- * The second case is what makes the first one meaningful. Without it "both
+ * The last case is what makes the first one meaningful. Without it "both
  * succeeded" could just mean the two requests never met.
  *
  * The days are in **February 2100**, which nothing else in the suite touches,
@@ -48,6 +55,55 @@ import {
 const OPPOSITE_DAYS = ['2100-02-01', '2100-02-02', '2100-02-03'] as DateOnly[];
 /** Thursday and Friday of the same week, for the deadlock case. */
 const DEADLOCK_DAYS = ['2100-02-04', '2100-02-05'] as DateOnly[];
+/** The Monday and Tuesday after, for the forced-interleaving case. */
+const INTERLEAVED_DAYS = ['2100-02-08', '2100-02-09'] as DateOnly[];
+
+/** How long the probe trigger stalls on each row it fires for. */
+const PROBE_STALL_SECONDS = 0.3;
+
+/**
+ * A test-only `BEFORE INSERT … FOR EACH ROW` trigger that stalls on the days of
+ * {@link INTERLEAVED_DAYS}, and nothing else.
+ *
+ * This is the yield point a multi-row `INSERT` otherwise does not offer *to
+ * JavaScript*. It is not, as this task's first report claimed, a yield point
+ * PostgreSQL does not have: a multi-row `INSERT` acquires its unique keys row by
+ * row, and this project's own deadlock log catches one mid-statement
+ * (`CONTEXT: while inserting index tuple`). A row-level `BEFORE` trigger fires
+ * between those rows, after the previous row's key is already held — so the
+ * interleaving that forms a cycle *can* be forced from outside the process, with
+ * no change to production code whatsoever.
+ *
+ * Scoped to two days no other case touches, so it cannot slow or perturb
+ * anything else in the run, and dropped in a `finally`.
+ */
+async function withProbeTrigger(work: () => Promise<void>, client: PrismaClient): Promise<void> {
+  const days = INTERLEAVED_DAYS.map((date) => `DATE '${date}'`).join(', ');
+  await client.$executeRawUnsafe(`
+    CREATE OR REPLACE FUNCTION zz_bulk_write_order_probe() RETURNS trigger
+    LANGUAGE plpgsql AS $probe$
+    BEGIN
+      IF NEW."date" IN (${days}) THEN
+        PERFORM pg_sleep(${PROBE_STALL_SECONDS});
+      END IF;
+      RETURN NEW;
+    END;
+    $probe$
+  `);
+  await client.$executeRawUnsafe(`
+    CREATE TRIGGER zz_bulk_write_order_probe
+      BEFORE INSERT ON "Reservation"
+      FOR EACH ROW EXECUTE FUNCTION zz_bulk_write_order_probe()
+  `);
+  try {
+    await work();
+  } finally {
+    await client.$executeRawUnsafe(
+      'DROP TRIGGER IF EXISTS zz_bulk_write_order_probe ON "Reservation"'
+    );
+    await client.$executeRawUnsafe('DROP FUNCTION IF EXISTS zz_bulk_write_order_probe()');
+  }
+}
 
 /** The contract code behind a rejected settlement, whatever kind of error it is. */
 function codeOfRejection(outcome: PromiseSettledResult<unknown>): string {
@@ -133,11 +189,12 @@ describe('two bulk bookings at once', () => {
   }
 
   it('uses fixture days that mean what the cases below assume', () => {
-    for (const date of [...OPPOSITE_DAYS, ...DEADLOCK_DAYS]) {
+    const everyDay = [...OPPOSITE_DAYS, ...DEADLOCK_DAYS, ...INTERLEAVED_DAYS];
+    for (const date of everyDay) {
       expect(isBusinessDay(date)).toBe(true);
     }
     // No case borrows another's day, so they stay independent of run order.
-    expect(new Set([...OPPOSITE_DAYS, ...DEADLOCK_DAYS]).size).toBe(5);
+    expect(new Set(everyDay).size).toBe(everyDay.length);
   });
 
   describe('the same days, requested in opposite order', () => {
@@ -182,6 +239,64 @@ describe('two bulk bookings at once', () => {
           select: { parkingSpotId: true },
         });
         expect(new Set(held.map((row) => row.parkingSpotId)).size).toBe(held.length);
+      }
+    });
+  });
+
+  describe('a forced interleaving inside one multi-row INSERT', () => {
+    /**
+     * The case that makes the ascending sort falsifiable end to end.
+     *
+     * Two real confirmations, the same two days, opposite request order — the
+     * case above — but with {@link withProbeTrigger} stalling each row of the
+     * reservation `INSERT` for {@link PROBE_STALL_SECONDS}. Both callers read the
+     * same world, so both plan the same spot, and the trigger guarantees each of
+     * them is holding its first day's unique key while the other reaches for its
+     * second.
+     *
+     * With the sort in place both write ascending: one takes the earlier day, the
+     * other blocks on it holding nothing, and they serialise. Delete
+     * `allocateBulk`'s `[...request.dates].sort(compareDateOnly)` and they write
+     * in request order — one forwards, one backwards — each holding what the
+     * other wants, and PostgreSQL kills a side with `40P01` → `P2034` →
+     * `CONFLICT`. Measured: 3/3 fulfilled with the sort, 3/3 with one side
+     * rejected without it. See `doc/decision/0092-*` §"One authority".
+     *
+     * `waitForBlockedBackend` is what stops this from being two requests that
+     * never met: it throws if no backend ever waits on a lock, which is exactly
+     * what would happen if the two callers had planned different spots.
+     */
+    it('still lets two opposite-order confirmations through', async () => {
+      const [first, second] = [await seedUser(client), await seedUser(client)];
+      const forwards = INTERLEAVED_DAYS;
+      const backwards = [...INTERLEAVED_DAYS].reverse();
+
+      await withProbeTrigger(async () => {
+        const confirming = harness.bulk.confirm({ dates: forwards }, actorFor(first), TODAY);
+        const competing = otherHarness.bulk.confirm({ dates: backwards }, actorFor(second), TODAY);
+        // Attached now, before the first `await`, so a rejection is never
+        // momentarily unhandled.
+        const settled = Promise.allSettled([confirming, competing]);
+        await waitForBlockedBackend(client);
+
+        const outcomes = await settled;
+        expect(outcomes.map((outcome) => outcome.status)).toEqual(['fulfilled', 'fulfilled']);
+      }, client);
+
+      for (const date of INTERLEAVED_DAYS) {
+        const held = await client.reservation.findMany({
+          where: { date: toDateColumn(date), userId: { in: [first.id, second.id] } },
+          select: { userId: true, parkingSpotId: true },
+        });
+        // Exactly one of the two got the cell. Two rows would mean they planned
+        // different spots and never contended, and the case proved nothing.
+        expect(held).toHaveLength(1);
+        const loser = held[0]?.userId === first.id ? second : first;
+        expect(
+          await client.waitlistEntry.count({
+            where: { userId: loser.id, date: toDateColumn(date) },
+          })
+        ).toBe(1);
       }
     });
   });
