@@ -3,7 +3,9 @@ import { AuditModule } from '../audit/audit.module';
 import { ReservationWindowModule } from '../reservation-window/reservation-window.module';
 import { BulkReservationController } from './bulk-reservation.controller';
 import { BulkReservationService } from './bulk-reservation.service';
-import { DomainEventPublisher, NoopDomainEventPublisher } from './reservation-events';
+import { SlackModule } from '../slack/slack.module';
+import { SlackDomainEventPublisher } from '../slack/slack-domain-event.publisher';
+import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
@@ -25,15 +27,24 @@ import { WaitlistService } from './waitlist.service';
  *
  * ## The provider Tasks 15 and 16 replace
  *
- * `DomainEventPublisher` is bound to {@link NoopDomainEventPublisher} — an
- * abstract class used as the injection token rather than a `Symbol`, so the
- * seam is discoverable from the type and a replacement cannot silently have the
- * wrong shape. Task 15 (Socket.io) and Task 16 (Slack) swap this one line for a
- * real implementation; no call site changes, and nothing about *when* it is
- * called is up to them — the services already publish strictly after commit.
+ * `DomainEventPublisher` is bound to {@link SlackDomainEventPublisher} as of
+ * Task 16 — an abstract class used as the injection token rather than a
+ * `Symbol`, so the seam is discoverable from the type and a replacement cannot
+ * silently have the wrong shape. No call site changed, and nothing about *when*
+ * it is called was up to Task 16: the services already publish strictly after
+ * commit.
+ *
+ * `useExisting`, not `useClass`: the instance must be the one `SlackModule`
+ * built, or Nest would construct a second publisher here and fail to resolve
+ * the collaborators that module deliberately does not export.
+ *
+ * **Task 15 needs this same token for `publish`.** Both branches change this
+ * one line, so it will conflict — on purpose. The resolution is a composite
+ * provider forwarding to both implementations, not a choice between them; see
+ * the class comment on `SlackDomainEventPublisher` for the shape.
  */
 @Module({
-  imports: [AuditModule, ReservationWindowModule],
+  imports: [AuditModule, ReservationWindowModule, SlackModule],
   controllers: [ReservationsController, WaitlistController, BulkReservationController],
   providers: [
     ReservationsService,
@@ -41,7 +52,7 @@ import { WaitlistService } from './waitlist.service';
     BulkReservationService,
     WaitlistPromotionService,
     ReservationPolicy,
-    { provide: DomainEventPublisher, useClass: NoopDomainEventPublisher },
+    { provide: DomainEventPublisher, useExisting: SlackDomainEventPublisher },
   ],
 })
 export class ReservationsModule {}
