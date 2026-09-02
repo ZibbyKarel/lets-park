@@ -2,10 +2,11 @@
  * This application's one Auth.js instance.
  *
  * `libs/auth` owns `next-auth` and reads no environment variable of its own
- * (`doc/auth.md`, §Environment); the four values it needs are read here, from
- * the single schema in `./env.ts`, and passed in as arguments. That is what
- * keeps Auth.js's implicit `AUTH_SECRET` / `AUTH_OKTA_ID` / `AUTH_OKTA_SECRET`
- * inference from picking anything up behind that schema's back.
+ * (`doc/auth.md`, §Environment); the four values it needs are read here and
+ * passed in as arguments. That is what keeps Auth.js's implicit `AUTH_SECRET` /
+ * `AUTH_OKTA_ID` / `AUTH_OKTA_SECRET` inference from picking anything up
+ * behind `webEnvSchema`'s back — the names are declared in one schema and
+ * handed over explicitly, never discovered.
  *
  * Neither secret carries a `NEXT_PUBLIC_` prefix, and this module is imported
  * only from server files (`proxy.ts`, the Auth.js route handler, Server

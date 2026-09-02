@@ -13,7 +13,8 @@
  * and the two differ in more than a name — **`proxy` runs on the Node.js
  * runtime and that is not configurable**, whereas `middleware` still runs on
  * the Edge runtime by default (verified against the Next.js 16 upgrade guide,
- * not from memory; see `doc/decision/0101-*`).
+ * not from memory; see
+ * `doc/decision/0100-the-session-check-lives-in-proxy-ts-on-the-node-runtime.md`).
  *
  * The runtime is the reason this matters here rather than a cosmetic rename.
  * `./auth.ts` reads `AUTH_SECRET` and the OAuth client secret from

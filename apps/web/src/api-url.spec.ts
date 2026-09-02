@@ -7,9 +7,9 @@ import {
 } from './api-url';
 
 /**
- * `NEXT_PUBLIC_API_URL` carries the API's global prefix, and the two things
- * derived from it here do not. Both derivations have a specific, known way of
- * being wrong, so both are pinned.
+ * `NEXT_PUBLIC_API_URL` is the API's base URL and none of the three endpoints
+ * derived from it. Each derivation has a specific, known way of being wrong —
+ * one of them was in fact wrong until a browser said so — so each is pinned.
  */
 describe('apiOriginOf', () => {
   it('drops the API prefix, so Socket.io does not read it as a namespace', () => {
