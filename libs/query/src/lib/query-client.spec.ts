@@ -35,16 +35,26 @@ function testQueryClient(): QueryClient {
   return createQueryClient({ defaultOptions: { queries: { retryDelay: () => 0 } } });
 }
 
-/** Runs one query to completion (success or failure) and reports the attempts. */
+/**
+ * Runs one query to completion (success or failure) and reports the attempts.
+ *
+ * `client.query()`, not `fetchQuery()`: the latter is deprecated in v5 and is
+ * removed in v6 (`@deprecated Use queryClient.query(options) instead` in
+ * `@tanstack/query-core`'s own declarations).
+ */
 async function attemptsFor(api: StubbedApi): Promise<number> {
-  const utils = createApiQueryUtils(api.client);
-  const client = testQueryClient();
-
-  await client
-    .fetchQuery(utils.overview.day.queryOptions({ input: { date: '2026-09-15' } }))
-    .catch(() => undefined);
+  await runDayOverview(api, testQueryClient());
 
   return api.requests.length;
+}
+
+/** Fetches the day overview through a client, swallowing the failure. */
+async function runDayOverview(api: StubbedApi, client: QueryClient): Promise<void> {
+  const utils = createApiQueryUtils(api.client);
+
+  await client
+    .query(utils.overview.day.queryOptions({ input: { date: '2026-09-15' } }))
+    .catch(() => undefined);
 }
 
 function alwaysRespond(response: StubbedResponse): StubbedApi {
@@ -120,12 +130,8 @@ describe('query retry', () => {
 
   it('repeats a request that never reached a server', async () => {
     const api = unreachableApi();
-    const utils = createApiQueryUtils(api.client);
-    const client = testQueryClient();
 
-    await client
-      .fetchQuery(utils.overview.day.queryOptions({ input: { date: '2026-09-15' } }))
-      .catch(() => undefined);
+    await runDayOverview(api, testQueryClient());
 
     expect(api.requests).toHaveLength(1 + MAX_QUERY_RETRIES);
   });
@@ -136,11 +142,8 @@ describe('query retry', () => {
         ? transportErrorResponse(503, 'Service unavailable')
         : { status: 200, body: rpcPayload({ ok: true }) }
     );
-    const utils = createApiQueryUtils(api.client);
 
-    await testQueryClient()
-      .fetchQuery(utils.overview.day.queryOptions({ input: { date: '2026-09-15' } }))
-      .catch(() => undefined);
+    await runDayOverview(api, testQueryClient());
 
     expect(api.requests).toHaveLength(2);
   });

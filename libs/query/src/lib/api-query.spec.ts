@@ -73,13 +73,13 @@ describe('createApiQueryUtils keys', () => {
     const client = createQueryClient();
     const options = utils.overview.day.queryOptions({ input: DAY });
 
-    await client.fetchQuery(options);
+    await client.query(options);
     expect(api.requests).toHaveLength(1);
 
     // Partial match on the branch — this is how a feature invalidates
     // "everything about the day overview" without naming each input.
     await client.invalidateQueries({ queryKey: utils.overview.key() });
-    await client.fetchQuery(options);
+    await client.query(options);
 
     expect(api.requests).toHaveLength(2);
   });
@@ -89,9 +89,9 @@ describe('createApiQueryUtils keys', () => {
     const client = createQueryClient();
     const options = utils.overview.day.queryOptions({ input: DAY });
 
-    await client.fetchQuery(options);
+    await client.query(options);
     await client.invalidateQueries({ queryKey: utils.admin.key() });
-    await client.fetchQuery(options);
+    await client.query(options);
 
     // Still fresh (`staleTime`), so the second fetch is served from cache.
     expect(api.requests).toHaveLength(1);
@@ -102,7 +102,7 @@ describe('createApiQueryUtils delegation', () => {
   it('sends the query through the contract procedure it was built from', async () => {
     const { api, utils } = utilsWith();
 
-    const result = await createQueryClient().fetchQuery(
+    const result = await createQueryClient().query(
       utils.overview.day.queryOptions({ input: DAY })
     );
 
