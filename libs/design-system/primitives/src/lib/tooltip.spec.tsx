@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { Modal } from './modal';
 import { Tooltip } from './tooltip';
 
 describe('Tooltip', () => {
@@ -198,5 +200,73 @@ describe('Tooltip', () => {
 
     expect(input).toHaveFocus();
     expect(input).toHaveAccessibleDescription('Formát REF-4821');
+  });
+
+  describe('inside an open Modal', () => {
+    // Both Tooltip and Modal's focus trap listen for Escape on `document`.
+    // `stopPropagation()` does nothing to a sibling listener on the same node
+    // — only `stopImmediatePropagation()`, or a capture-phase listener that
+    // runs before the other's bubble-phase one, actually prevents it. One
+    // Escape press must close only the tooltip and leave the modal open,
+    // regardless of which listener happened to be registered first.
+
+    it('closes only the tooltip, not the modal, when it was opened by focus', async () => {
+      const user = userEvent.setup();
+
+      function FocusHost() {
+        const [open, setOpen] = useState(true);
+        return (
+          <Modal open={open} onClose={() => setOpen(false)} title="Nastavení" hideCloseButton>
+            <Tooltip content="Zamčeno správcem">
+              <button type="button">Potvrdit</button>
+            </Tooltip>
+          </Modal>
+        );
+      }
+
+      render(<FocusHost />);
+
+      // The focus trap's initial-focus step opens the tooltip via `onFocus`.
+      const trigger = screen.getByRole('button', { name: 'Potvrdit' });
+      expect(trigger).toHaveFocus();
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('closes only the tooltip, not the modal, when it was opened by hover with focus elsewhere', async () => {
+      const user = userEvent.setup();
+
+      function HoverHost() {
+        const [open, setOpen] = useState(true);
+        return (
+          <Modal open={open} onClose={() => setOpen(false)} title="Nastavení">
+            <Tooltip content="Zamčeno správcem">
+              <button type="button">Potvrdit</button>
+            </Tooltip>
+          </Modal>
+        );
+      }
+
+      render(<HoverHost />);
+
+      // The focus trap's initial-focus step lands on the × button, not the
+      // tooltip's trigger — "elsewhere" for the purposes of this test.
+      const closeButton = screen.getByRole('button', { name: 'Zavřít' });
+      expect(closeButton).toHaveFocus();
+
+      const trigger = screen.getByRole('button', { name: 'Potvrdit' });
+      await user.hover(trigger);
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
+      expect(closeButton).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
   });
 });

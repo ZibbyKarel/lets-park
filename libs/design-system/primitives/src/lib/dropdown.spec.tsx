@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { Dropdown, type DropdownItem } from './dropdown';
+import { Modal } from './modal';
 
 const ITEMS: DropdownItem[] = [
   { id: 'settings', label: 'Nastavení' },
@@ -303,5 +305,36 @@ describe('Dropdown', () => {
     // Tab or roving-tabindex focus.
     expect(within(header.closest('div') ?? header).queryAllByRole('button')).toHaveLength(0);
     expect(header).not.toHaveAttribute('tabindex');
+  });
+
+  it('closes only the menu, not a surrounding open Modal, on Escape', async () => {
+    const user = userEvent.setup();
+
+    // Modal's focus trap also listens for Escape on `document` (see
+    // use-focus-trap.ts). This handler only calls `preventDefault()`, not
+    // `stopPropagation()`, so the underlying native keydown is free to keep
+    // bubbling past the menu — past React's root listener — all the way to
+    // `document`, where the modal's own listener would also treat it as "close
+    // me" if nothing stops it first. `onClose` is wired to real state, not a
+    // no-op, so the modal actually unmounts if this fires — a no-op `onClose`
+    // would make this test pass regardless of whether the bug exists.
+    function Host() {
+      const [open, setOpen] = useState(true);
+      return (
+        <Modal open={open} onClose={() => setOpen(false)} title="Nastavení" hideCloseButton>
+          <Dropdown trigger="Karel Z." items={ITEMS} />
+        </Modal>
+      );
+    }
+
+    render(<Host />);
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

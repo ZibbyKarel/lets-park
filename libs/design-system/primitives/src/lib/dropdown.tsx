@@ -212,6 +212,13 @@ export function Dropdown({
         break;
       case 'Escape':
         event.preventDefault();
+        // Stops the native keydown from bubbling past the menu. Without this,
+        // it would keep travelling — past React's root listener, all the way
+        // to `document` — where a surrounding Modal's own Escape listener
+        // (see `use-focus-trap.ts`) would treat it as "close me" too, closing
+        // both on a single press. The docstring above documents nesting a
+        // menu inside a modal as a supported case, so this has to hold.
+        event.stopPropagation();
         close(true);
         break;
       case 'Tab':
