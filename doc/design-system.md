@@ -472,12 +472,14 @@ není ani ve stromu přístupnosti, a nepřidává vlastní zastávku do tab ord
 | `placement` | `'top-right' \| 'bottom-right' \| 'bottom-center'` | `'top-right'` |
 | `label` | `string` | – (jméno oblasti) |
 
-**Ohlašuje se, ale nekrade focus** – to je celý smysl toastu. `role="status"`
-(zdvořilé) pro všechny tóny kromě `danger`, který má `role="alert"` (naléhavé).
-
-`ToastRegion` renderuj **bezpodmínečně a klidně prázdný**: živá oblast, která se
-objeví už s textem uvnitř, se často nepřečte. Sama oblast je `role="region"`,
-ne druhá živá oblast – vnořené živé oblasti některé odečítače přečtou dvakrát.
+**Ohlašuje se, ale nekrade focus** – to je celý smysl toastu. Živou oblastí je
+**samotný `Toast`**: `role="status"` (zdvořilé) pro všechny tóny kromě
+`danger`, který má `role="alert"` (naléhavé) – stejný tvar, jaký používají
+běžné toast knihovny. `ToastRegion` renderuj **bezpodmínečně a klidně
+prázdný** – ne kvůli živé oblasti (sama `role="region"` živá záměrně není, aby
+se zpráva nečetla dvakrát), ale aby aplikace měla stabilní uzel, do kterého
+toasty vkládá. Jestli to skutečný odečítač přečte, tahle testovací sada ověřit
+neumí – jsdom nemá strom přístupnosti, který by to spotřeboval.
 
 Fronta, časovač ani imperativní `toast.success(...)` tu **nejsou** a nebudou:
 je to stav aplikace, ne design systému (`doc/decision/0023-*`).
