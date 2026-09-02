@@ -1,11 +1,4 @@
-import {
-  cloneElement,
-  useEffect,
-  useId,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from 'react';
+import { cloneElement, useEffect, useId, useState, type ReactElement, type ReactNode } from 'react';
 
 import { cx } from './cx';
 
