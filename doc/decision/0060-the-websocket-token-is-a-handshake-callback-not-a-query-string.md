@@ -1,4 +1,4 @@
-# 0057 – The websocket token is a handshake callback, not a query string
+# 0060 – The websocket token is a handshake callback, not a query string
 
 **Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/realtime-client`)
 
@@ -83,8 +83,12 @@ construction makes it fail with `"token": "jwt-first"` where `"jwt-second"` was 
 **The token is only as fresh as the last render.** `useAccessTokenProvider` reads the session
 through a ref written during render, so a reconnect that happens between a token rotation and
 the next commit presents the previous token. Auth.js's five-minute poll against a token
-lifetime measured in tens of minutes makes the window small, and the gateway's rejection
-triggers another reconnect attempt, which re-reads. It is a retry, not a lockout.
+lifetime measured in tens of minutes makes the window small.
+
+That it is "a retry, not a lockout" is **not** free, and the first version of this record
+assumed it wrongly: `socket.io-client` destroys a socket whose handshake was refused, so
+nothing re-reads the provider by itself. `doc/decision/0061-*` is what makes the sentence true
+— `useRealtimeConnection` builds a **new** socket, which runs this callback again.
 
 **A `cb` that is never called hangs the socket open.** Socket.io does not time the `auth`
 callback out; if a provider neither resolved nor rejected, the CONNECT packet would never be

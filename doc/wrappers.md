@@ -518,7 +518,8 @@ shape written down twice.
 | --- | --- |
 | `RealtimeProvider` | the one connection, in context. Rendered once, in `apps/web`'s provider boundary |
 | `useRealtimeConnection` | **creates** the socket — the handshake token, the status, the teardown. `RealtimeProvider` is this plus a context |
-| `useRealtime` | **reads** the connection. Throws outside a provider rather than silently doing nothing |
+| `useRealtime` | **reads** the connection — `{ socket, status, reconnect, reportInvalidPayload }`. Throws outside a provider rather than silently doing nothing |
+| `RealtimeStatus` | `connecting \| connected \| disconnected \| rejected`. `rejected` is a refused handshake: terminal for that socket, and the one status a UI can offer an action on (`reconnect()`) |
 | `useRealtimeEvent` | one server → client event, payload already parsed against its contract schema |
 | `useDayRoom` | joins one day's room, and rejoins it after every reconnect |
 | `useCellLock` | the editing hold: take, renew, release |
@@ -583,8 +584,10 @@ silently switches the wrapper ban off for that lib. `libs/design-system/{primiti
 spread `restrictWrappedLibraries().patterns` back in for exactly that reason.)
 
 `socket.io-parser` was **not** allow-listed either, although the test fixture needs
-Socket.io's numeric packet type codes to feed an inbound packet. It discovers them from the
-installed client instead — see below.
+Socket.io's numeric packet type codes to feed an inbound packet — CONNECT_ERROR included, and
+that one the client never sends. It discovers them from the installed client instead: the
+three the client emits by reading them off its own output, and CONNECT_ERROR by the pair of
+effects only it has (`doc/decision/0061-*`).
 
 ### Five probes, all exercised
 

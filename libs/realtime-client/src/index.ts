@@ -25,6 +25,7 @@ export { DEFAULT_SOCKET_PATH, createRealtimeSocket, toHandshakeAuth } from './li
 export type { RealtimeHandshakeAuth, RealtimeSocket, RealtimeSocketOptions } from './lib/socket';
 
 export {
+  REJECTED_RETRY_DELAYS_MS,
   RealtimeProvider,
   useDayRoom,
   useRealtime,
@@ -39,6 +40,8 @@ export type {
 } from './lib/connection';
 
 export {
+  CELL_LOCK_ACK_ATTEMPTS,
+  CELL_LOCK_ACK_TIMEOUT_MS,
   CELL_LOCK_RENEW_FRACTION,
   MIN_CELL_LOCK_RENEW_DELAY_MS,
   renewDelayMs,

@@ -155,12 +155,9 @@ function discoverConnectErrorType(known: Omit<PacketTypes, 'connectError'>): num
     manager._packet = () => undefined;
 
     let sawConnectError = false;
-    (probe as unknown as { on(ev: string, listener: () => void): void }).on(
-      'connect_error',
-      () => {
-        sawConnectError = true;
-      }
-    );
+    (probe as unknown as { on(ev: string, listener: () => void): void }).on('connect_error', () => {
+      sawConnectError = true;
+    });
 
     probe.connect();
     manager.emit('open');

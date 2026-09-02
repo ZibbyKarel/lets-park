@@ -2,16 +2,28 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    // Deliberately **not** `module: commonjs` (which the generator emits), for
-    // the same reason as `libs/auth/tsconfig.spec.json` and
-    // `libs/query/tsconfig.spec.json` (`doc/decision/0038-*`): this program
-    // reaches `@lets-park/api-client` for the `AccessTokenProvider` type, and
-    // that module's own imports (`@orpc/client`) are ESM-only — no `require`
-    // condition — so `commonjs` cannot resolve their types at all. Inheriting
-    // `esnext` from `tsconfig.base.json` resolves them through the `import`
-    // condition, exactly as `tsconfig.lib.json` already does. Nothing is
-    // emitted here (`--noEmit`) and the tests are transpiled by babel-jest, so
-    // the module format only affects resolution.
+    // Deliberately **not** `module: commonjs` (which the generator emits), the
+    // same way `libs/auth/tsconfig.spec.json` and
+    // `libs/query/tsconfig.spec.json` omit it (`doc/decision/0038-*`). This is
+    // consistency with the two sibling wrapper libs that also reach
+    // `@lets-park/api-client`, plus `bundler` + `esnext` being what actually
+    // bundles this code — **not** a fix for a failure this lib has.
+    //
+    // Stated honestly because the earlier version of this comment claimed a
+    // cause that does not reproduce: it said `commonjs` "cannot resolve"
+    // `@orpc/client`'s types. Probed at TypeScript 6.0.3 with the generator's
+    // `module: commonjs` restored, `tsc --noEmit` exits 0 and
+    // `--traceResolution` shows `@orpc/client` resolving to
+    // `dist/index.d.mts` — because `@orpc/client@1.15.0` puts `types` at the
+    // top of its `exports` map, above the `import`/`default` conditions, so no
+    // condition has to match for the declarations to be found. `libs/query`'s
+    // problem (two copies of one package's declarations) is real but is
+    // `@tanstack/*`-specific and does not arise here.
+    //
+    // Nothing is emitted here (`--noEmit`) and the tests are transpiled by
+    // babel-jest, so the module format only affects resolution — which is why
+    // this deviation is safe either way. Restoring `commonjs` would also pass;
+    // keeping it off is the smaller surprise next to the sibling libs.
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "types": ["jest", "node"]

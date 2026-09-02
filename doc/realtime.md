@@ -89,7 +89,7 @@ would turn a credential with a lifetime of minutes into one with the retention
 period of a log bucket. `extraHeaders` would not have worked either: the browser
 `WebSocket` API cannot set request headers, so Socket.io applies them to the
 polling transport only, and a socket that upgraded would silently stop
-presenting its credential. Full reasoning, and the tests: `doc/decision/0057-*`.
+presenting its credential. Full reasoning, and the tests: `doc/decision/0060-*`.
 
 Nothing about the token is logged — not by this lib, and not on the failure
 paths. `connect_error` deliberately carries nothing onward: for an auth failure
@@ -97,16 +97,53 @@ it is the gateway's rejection of the token that just travelled.
 
 ### Reconnecting
 
-Socket.io's own reconnection settings are left at their defaults — unlimited
-attempts, 1 s growing to 5 s, 0.5 jitter. They are exponential backoff with
-jitter already; restating them would be a second place to keep in sync. The part
-this project has an opinion about is *what a reconnect re-sends*, which is the
-`auth` callback above.
+**A connection can fail in two ways, and they are not the same failure.**
+`connect_error` fires for both, so the handler branches on `socket.active` —
+the library's own `!!socket.subs`, which is the exact field it clears when it
+gives up on a socket.
 
-`RealtimeStatus` is `connecting | connected | disconnected`. A failed attempt
-stays `connecting`, because Socket.io keeps retrying and a UI that distinguished
-"still connecting" from "retrying after a failure" would be showing the user a
-difference they cannot act on.
+| | `socket.active` | status | who retries |
+| --- | --- | --- | --- |
+| the transport could not be established | `true` | `connecting` | Socket.io's own loop |
+| the gateway **refused the handshake** | `false` | `rejected` | this lib, by building a new socket |
+
+For a **transport** failure, Socket.io's reconnection settings are left at their
+defaults — unlimited attempts, 1 s growing to 5 s, 0.5 jitter
+(`doc/decision/0063-*`). They are exponential backoff with jitter already;
+restating them would be a second place to keep in sync. The part this project
+has an opinion about is *what a reconnect re-sends*, which is the `auth`
+callback above.
+
+A **refused handshake** is different, and it is the one this lib has to handle
+itself. Socket.io sends a CONNECT_ERROR packet and `Socket.onpacket` calls
+`destroy()` **before** emitting `connect_error`: the socket loses its manager
+subscriptions and will never present a token again. Nothing retries it, so
+reporting `connecting` would pin the UI on a connection that is not coming —
+the grid silently stops updating, `useCellLock` never leaves `requesting`, and
+only a page reload fixes it.
+
+So a refusal is terminal for *that socket*, and the recovery is a **new** one,
+which re-runs the `auth` callback and therefore presents whatever token the
+provider has now — a stale token after a backgrounded tab is exactly the case
+this covers. Three automatic attempts, at 1 s / 5 s / 30 s
+(`REJECTED_RETRY_DELAYS_MS`), the counter resetting on any successful connect.
+After that the status stays `rejected` until somebody asks again:
+
+```tsx
+const { status, reconnect } = useRealtime();
+// status === 'rejected' → offer the user a control that calls reconnect()
+```
+
+The cap is deliberate where the transport's is not. A refusal is the gateway
+*answering*, and re-presenting a credential it has just rejected — a revoked
+account, a session signed out elsewhere — is a request that cannot succeed.
+`doc/decision/0061-*` has the full reasoning.
+
+`RealtimeStatus` is therefore `connecting | connected | disconnected |
+rejected`. `connecting` still covers both the first attempt and every transport
+retry: a UI distinguishing "still connecting" from "retrying after a dropped
+transport" would be showing the user a difference they cannot act on. `rejected`
+is the one they can.
 
 ---
 
@@ -214,13 +251,32 @@ The renewal is scheduled from the server's `expiresAt`, at
   client is then correct for whatever TTL the gateway is configured with, and
   there is no second number for two tasks to keep in sync;
 - **half**, so a renewal lost in flight still leaves a second attempt inside the
-  same TTL;
+  same TTL — see below for what makes that second attempt exist;
 - **the floor** turns clock skew or an already-past `expiresAt` into one request
   per second instead of a busy loop. `Date.parse('soon')` is `NaN`, and
   `setTimeout(NaN)` fires immediately, forever.
 
 Renewing does not drop the component out of `held` and back to `requesting`:
 the hold was never lost.
+
+**The renewal is sent with an acknowledgement timeout, and that is load-bearing.**
+`socket.emit(event, payload, cb)` has no timeout in Socket.io: a callback whose
+ack never arrives is simply never called. Since the next renewal is scheduled
+from *inside* that callback, one dropped ack would end the heartbeat for good —
+silently, with the form still showing `held` while the server's TTL lapsed and
+somebody else took the cell. So `cell:lock` goes out through
+`socket.timeout(CELL_LOCK_ACK_TIMEOUT_MS)`, which calls the callback with an
+error instead of never calling it:
+
+- one retry (`CELL_LOCK_ACK_ATTEMPTS` = 2 sends), which is the "second attempt
+  inside the same TTL" the half-fraction leaves room for — 5 s + 5 s resolves by
+  ~25 s of a 30 s TTL;
+- a second loss drops the hook to **`idle`**, not a frozen `held`. A UI
+  asserting a hold the server has stopped confirming is the defect, not the
+  mitigation;
+- any acknowledgement resets the budget.
+
+`doc/decision/0062-*`.
 
 ### 2. The hold is given back
 
@@ -259,7 +315,7 @@ broadcast exists to avoid.
 ## What is tested, and what is not
 
 Tests live beside the code: `socket.spec.ts`, `connection.spec.tsx`,
-`cell-lock.spec.tsx`, `validation.spec.ts` (60 tests).
+`cell-lock.spec.tsx`, `validation.spec.ts` (69 tests).
 
 The socket in those tests is a **real** `socket.io-client` socket. Only the
 transport is replaced — `manager.open()` becomes a no-op and `manager._packet()`
@@ -268,7 +324,10 @@ captures what would have gone on the wire — while `Socket.onopen`,
 registry are the library's own code, driven through the manager's real
 `open` / `close` / `packet` events. A reconnect in those tests is the same event
 the reconnect timer fires in production. Even socket.io-parser's numeric packet
-type codes are *discovered* from the installed client rather than written down.
+type codes are *discovered* from the installed client rather than written down —
+including CONNECT_ERROR, which the client never sends and which is therefore
+identified by the pair of effects only it has (it emits `connect_error` **and**
+leaves the socket inactive).
 
 `src/__fixtures__/offline-transport.ts` explains why in more detail. The short
 version: a double may stand in for a dependency's behaviour, never for the shape
@@ -279,7 +338,8 @@ of its protocol.
 | claim | settled by |
 | --- | --- |
 | the gateway reads the token from `handshake.auth.token` | Task 15 |
-| a rejected handshake produces the error the UI expects | Task 15 |
+| a real refused handshake arrives as CONNECT_ERROR and not as a plain disconnect | Task 15 |
+| three attempts over ~36 s is long enough for `libs/auth` to rotate a token | Task 15 + e2e |
 | a real reconnect against a real server re-authenticates | Fáze 7 e2e |
 | the server's lock TTL and this client's renewal actually interleave | Task 15 + e2e |
 | broadcasts arrive only in the day room a client joined | Task 15 |
@@ -304,4 +364,7 @@ inbound payload is parsed.
 - `doc/decision/0022-*` — event naming, one transaction → one event
 - `doc/decision/0023-*` — realtime is a separate entry point; the maps are derived
 - `doc/decision/0047-*` — the access token crosses to the browser; the refresh token does not
-- `doc/decision/0057-*` — the websocket token is a handshake callback, not a query string
+- `doc/decision/0060-*` — the websocket token is a handshake callback, not a query string
+- `doc/decision/0061-*` — a refused handshake is a terminal status, recovered by a new socket
+- `doc/decision/0062-*` — the cell-lock heartbeat uses Socket.io's ack timeout
+- `doc/decision/0063-*` — transport reconnection stays unlimited; only refusals have a ceiling

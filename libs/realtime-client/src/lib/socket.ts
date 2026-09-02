@@ -14,7 +14,7 @@
  * The access token travels in `socket.handshake.auth.token`, **never** in the
  * connection URL's query string. A query string is written to proxy and server
  * access logs verbatim, and an access token in a log file is an access token
- * that outlives its session. `doc/decision/0057-*` records the choice; the ban
+ * that outlives its session. `doc/decision/0060-*` records the choice; the ban
  * is exercised by `socket.spec.ts`, which reads the URI the real client would
  * dial and asserts no token appears in it.
  *
@@ -90,10 +90,17 @@ export interface RealtimeHandshakeAuth {
  * Opens (or, with `autoConnect: false`, prepares) a connection.
  *
  * Reconnection is left at Socket.io's defaults — unlimited attempts, 1 s
- * growing to 5 s with 0.5 jitter — on purpose. They are exponential backoff
- * with jitter already, restating them here would be a second place to keep in
- * sync, and the part of reconnection this project actually has an opinion
- * about is *what a reconnect re-sends*, which is the `auth` callback below.
+ * growing to 5 s with 0.5 jitter — on purpose, and that is a recorded decision
+ * rather than an unexamined default: `doc/decision/0063-*`. They are
+ * exponential backoff with jitter already, restating them here would be a
+ * second place to keep in sync, and the part of reconnection this project
+ * actually has an opinion about is *what a reconnect re-sends*, which is the
+ * `auth` callback below.
+ *
+ * Those defaults govern **transport** failures only. A handshake the gateway
+ * *refuses* is not retried by socket.io at all — it destroys the socket — and
+ * is handled with a deliberately bounded policy one layer up, in
+ * `connection.tsx` (`doc/decision/0061-*`).
  */
 export function createRealtimeSocket(options: RealtimeSocketOptions): RealtimeSocket {
   const {
