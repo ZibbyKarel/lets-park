@@ -17,8 +17,7 @@
  * `jest.preset.js` once a third project needs it; `apps/api/jest.config.cts`
  * already recorded why it did not do that, and the same holds here — the
  * consolidation edits four files this task does not own, three of them while a
- * parallel task is in flight. Flagged in the task report instead; see
- * `doc/decision/0038-*`.
+ * parallel task is in flight. Flagged in the task report instead.
  */
 module.exports = {
   displayName: 'api-client',

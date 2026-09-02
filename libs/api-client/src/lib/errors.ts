@@ -19,6 +19,9 @@
  * therefore reject every real domain error. The check here is on the **code**
  * instead — parsed against `errorCodeSchema`, so a value outside the closed
  * enum can never be presented as a contract error.
+ *
+ * Full reasoning, and a live server-side mismatch this module does not fix:
+ * `doc/decision/0039-*`.
  */
 
 import { ORPCError } from '@orpc/client';

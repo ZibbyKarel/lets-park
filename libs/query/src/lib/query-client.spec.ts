@@ -80,8 +80,7 @@ describe('createQueryClient defaults', () => {
   it('lets a caller override a single default without losing the others', () => {
     const queries = createQueryClient({
       defaultOptions: { queries: { staleTime: 1 } },
-    })
-      .getDefaultOptions().queries;
+    }).getDefaultOptions().queries;
 
     expect(queries?.staleTime).toBe(1);
     expect(queries?.gcTime).toBe(DEFAULT_GC_TIME_MS);
@@ -115,9 +114,7 @@ describe('query retry', () => {
   });
 
   it('does not repeat a throttled request, which carries no contract code', async () => {
-    const api = alwaysRespond(
-      transportErrorResponse(429, 'ThrottlerException: Too Many Requests')
-    );
+    const api = alwaysRespond(transportErrorResponse(429, 'ThrottlerException: Too Many Requests'));
 
     expect(await attemptsFor(api)).toBe(1);
   });

@@ -102,9 +102,7 @@ describe('createApiQueryUtils delegation', () => {
   it('sends the query through the contract procedure it was built from', async () => {
     const { api, utils } = utilsWith();
 
-    const result = await createQueryClient().query(
-      utils.overview.day.queryOptions({ input: DAY })
-    );
+    const result = await createQueryClient().query(utils.overview.day.queryOptions({ input: DAY }));
 
     expect(api.requests[0]?.url).toBe('https://api.test/rpc/overview/day');
     expect(JSON.parse(await (api.requests[0] as Request).text())).toEqual({ json: DAY });

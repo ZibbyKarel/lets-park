@@ -10,12 +10,7 @@
  *
  * See `doc/wrappers.md` for why the direct import is banned everywhere else.
  */
-export type {
-  AccessTokenProvider,
-  ApiClient,
-  ApiClientOptions,
-  ApiFetch,
-} from './lib/api-client';
+export type { AccessTokenProvider, ApiClient, ApiClientOptions, ApiFetch } from './lib/api-client';
 export { createApiClient } from './lib/api-client';
 export type { ContractError } from './lib/errors';
 export { errorStatus, toContractError } from './lib/errors';

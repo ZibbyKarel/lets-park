@@ -14,6 +14,7 @@
     // `import`, the same way `tsconfig.lib.json` already did. Nothing is emitted
     // from this program (`--noEmit`) and the tests are transpiled by babel-jest,
     // so the module format here only affects resolution.
+    // Full reasoning and the exact diagnostic: `doc/decision/0038-*`.
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "types": ["jest", "node"]

@@ -1,6 +1,10 @@
 # api-client
 
-This library was generated with [Nx](https://nx.dev).
+`@lets-park/api-client` — the wrapper lib that owns `@orpc/client`. It is the only place in
+the workspace allowed to import that package.
+
+Usage, the access-token provider and how contract errors are read:
+**`doc/wrappers.md`** (section "`libs/api-client` — the oRPC client").
 
 ## Running unit tests
 

@@ -87,14 +87,17 @@ describe('toContractError', () => {
     });
   });
 
-  it.each(ERROR_CODES)('maps %s, so no code in the closed enum is left unreadable', async (code) => {
-    const error = await failedCall({
-      status: ERROR_DEFINITIONS[code].status,
-      body: rpcPayload(contractErrorBody(code)),
-    });
+  it.each(ERROR_CODES)(
+    'maps %s, so no code in the closed enum is left unreadable',
+    async (code) => {
+      const error = await failedCall({
+        status: ERROR_DEFINITIONS[code].status,
+        body: rpcPayload(contractErrorBody(code)),
+      });
 
-    expect(toContractError(error)?.code).toBe(code);
-  });
+      expect(toContractError(error)?.code).toBe(code);
+    }
+  );
 
   it('leaves `details` undefined when the error carried none', async () => {
     const error = await failedCall({

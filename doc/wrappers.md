@@ -1,10 +1,9 @@
 # Wrapper layers
 
-Task 18 from `doc/implementation-plan.md` (`libs/form`), the first of a run of Tasks 18–22
-that progressively establishes the rest of `WRAPPED_LIBRARIES` (`libs/query`,
-`libs/api-client`, `libs/realtime-client`, `libs/auth`). This document is founded now and
-**gets extended by the later tasks** — each wrapper adds its own section here, not a new
-file.
+Founded by Task 18 (`libs/form`), the first of a run of Tasks 18–22 that progressively
+establishes the rest of `WRAPPED_LIBRARIES`. Task 19 added `libs/api-client` and
+`libs/query`; `libs/realtime-client` and `libs/auth` are still to come. Each wrapper adds its
+own section here, not a new file.
 
 ## What a wrapper lib is and why it's mandatory
 
@@ -14,10 +13,10 @@ exactly one **wrapper lib** — the single place in the whole workspace allowed 
 
 | forbidden package | wrapper lib | tag |
 | --- | --- | --- |
-| `react-hook-form` | `libs/form` (`@lets-park/form`) | `type:util`, `scope:web` |
+| `react-hook-form` | `libs/form` (done, Task 18) | `type:util`, `scope:web` |
 | `@tanstack/react-table` | `libs/design-system/compounds` | `type:ui`, `scope:web`, `ds:compounds` |
-| `@tanstack/react-query` | `libs/query` | `type:util`, `scope:web` |
-| `@orpc/client` | `libs/api-client` | `type:util`, `scope:web` |
+| `@tanstack/react-query` | `libs/query` (done, Task 19) | `type:util`, `scope:web` |
+| `@orpc/client` | `libs/api-client` (done, Task 19) | `type:util`, `scope:web` |
 | `socket.io-client` | `libs/realtime-client` | `type:util`, `scope:web` |
 | `next-auth` | `libs/auth` | `type:util`, `scope:web` |
 | `ical-generator` | `libs/calendar-export` | `type:util`, `scope:api` |
@@ -150,7 +149,7 @@ The same pattern (with tests over `Checkbox` too) is verified in
 `libs/form/src/lib/app-form.spec.tsx` — this example is drawn directly from it, just with the
 parking domain instead of the generic demo schema.
 
-## How to add another wrapper lib (Tasks 19–22)
+## How to add another wrapper lib (Tasks 20–22)
 
 1. **Generate the lib** the same way as any other (`doc/workspace.md`, "How to add a new
    lib"). Tags: `type:util`, `scope:web` (or `scope:api` for `libs/calendar-export`).
@@ -187,3 +186,135 @@ Zod in the tests is always a local `z.object(...)` schema, not an import from
 see `doc/decision/0020-*`) would add a transform to its Jest config that this task doesn't
 need. So there is no fourth copy of the ESM-transform block (`doc/decision/0020-*`, `0025-*`)
 in `libs/form/jest.config.cts`, nor was one needed.
+
+---
+
+## `libs/api-client` — the oRPC client (Task 19)
+
+`@lets-park/api-client` is the only place in the workspace allowed to import `@orpc/client`.
+It exports exactly two things, plus their types:
+
+```ts
+import { createApiClient, toContractError } from '@lets-park/api-client';
+
+const api = createApiClient({
+  url: 'https://example.test/rpc',
+  getAccessToken: () => session?.accessToken,   // libs/auth, Task 20
+});
+
+const overview = await api.overview.day({ date: '2026-09-15' });
+```
+
+`ApiClient` is `ContractRouterClient<Contract>` — **derived from `libs/contract`**, not
+written out. Every procedure, input, output and declared error code is regenerated from the
+Zod schemas on each build, so it cannot drift from the backend the way a hand-written client
+would, and no endpoint that the contract does not declare can be called at all.
+
+### The access token is a provider, not a string
+
+`getAccessToken` is a function (sync or async) and is called **per request**, so a token
+refreshed after the client was constructed is picked up. Returning `null`, `undefined` or
+`''` omits the `Authorization` header entirely rather than sending `Bearer undefined` —
+covered by four cases in `api-client.spec.ts`. `libs/auth` (Task 20) supplies the real
+implementation; until then any caller can inject one.
+
+### Reading errors
+
+```ts
+const error = toContractError(caught);        // ContractError | null
+if (error?.code === 'SPOT_ALREADY_RESERVED') { … }
+```
+
+`toContractError` recognises a domain error by its **code**, parsed through the contract's
+`errorCodeSchema` — deliberately **not** by oRPC's `isDefinedError`, which narrows on the
+`defined` flag that `apps/api` sets to `false` on every domain error it serialises. Using it
+would reject every real domain error this backend produces. Full reasoning, plus a live
+server-side envelope mismatch this wrapper documents but does not fix: `doc/decision/0039-*`.
+
+`null` means "not a domain error" and covers a transport failure, an unknown code, and a plain
+thrown value alike — none of them has localized copy keyed to a code, so all three are
+"something went wrong". `errorStatus(error)` gives the HTTP status, or `undefined` when the
+request never reached a server; that distinction is the entire input to `libs/query`'s retry
+policy.
+
+## `libs/query` — TanStack Query (Task 19)
+
+`@lets-park/query` is the only place allowed to import `@tanstack/react-query`. It re-exports
+the hooks, so a feature component never needs a second import path:
+
+```tsx
+import { createApiQueryUtils, useQuery, useMutation, useQueryClient } from '@lets-park/query';
+import { toContractError } from '@lets-park/api-client';
+
+const utils = createApiQueryUtils(api);        // once, at the app root
+
+function DayOverview() {
+  const { data, error } = useQuery(utils.overview.day.queryOptions({ input: { date } }));
+  if (error) return <Alert code={toContractError(error)?.code} />;
+  return <SpotGrid spots={data.spots} />;
+}
+```
+
+**Query keys are never written by hand.** `createApiQueryUtils` (built on
+`@orpc/tanstack-query`) mirrors the contract router, so each leaf carries `queryKey`,
+`queryOptions`, `mutationOptions` and `call`, and each branch carries `key()` for partial
+matching. Invalidating "everything about the day overview" is
+`invalidateQueries({ queryKey: utils.overview.key() })` — which is exactly what keeps a cache
+entry from being missed because someone spelled its key differently.
+
+### The client and the provider
+
+```tsx
+const queryClient = createQueryClient();       // one per request (SSR) / per session
+<QueryProvider client={queryClient}>{children}</QueryProvider>
+```
+
+`QueryProvider` takes the client as a **required prop** rather than creating it: a client
+created in a component body is re-created on every render, throwing the cache away, and
+Next.js needs one instance per request on the server and one per session in the browser.
+Deciding that is the app's job.
+
+`createQueryClient` carries the project's policy — `staleTime` 30 s, `gcTime` 5 min,
+`refetchOnWindowFocus: false` (realtime invalidation arrives over Socket.io in Task 21, so
+refetching on focus is redundant traffic), `retry: shouldRetryQuery`, and **mutations are not
+retried**. Overrides merge one level deep, so a caller changing one option cannot silently
+drop the rest.
+
+### The retry policy
+
+A **4xx is never retried**; everything else is retried up to `MAX_QUERY_RETRIES` (2). The
+split is by HTTP status rather than by contract code, because it has to cover failures that
+carry no code at all — a throttled request and an unmatched route keep Nest's shape
+(`doc/decision/0033-*`). A rejected reservation or a closed window is a *decision*: repeating
+it produces the same answer three times, delays the error the user needs to see, and spends
+three requests against the throttler. A 5xx and a dropped connection are the transient cases
+retries exist for.
+
+Mutations are not retried because every mutation in this contract writes something a person
+did on purpose; a silent second attempt after an ambiguous failure risks a duplicate write,
+and the unique constraints that prevent double-booking would turn the retry into a *different*
+error than the original.
+
+### Tests
+
+| file | what it verifies |
+| --- | --- |
+| `api-client/src/lib/api-client.spec.ts` | the URL, method and payload a contract procedure puts on the wire; nested admin paths; the `Authorization` header across five provider cases including per-request re-reads |
+| `api-client/src/lib/errors.spec.ts` | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; and the `defined: false` case that `isDefinedError` would reject |
+| `query/src/lib/query-client.spec.ts` | the shipped defaults, override merging, and the retry policy counted in **requests that reached the transport** — one attempt for each of the twelve codes and for a 429, three for a 5xx and for an unreachable server |
+| `query/src/lib/api-query.spec.ts` | key stability (same input, across two util trees), key distinctness, and that a branch key really invalidates its leaves through the cache's own matcher |
+| `query/src/lib/app-usage.spec.tsx` | a real component reading, mutating and invalidating through the wrappers only — plus a test reading its own source to prove neither `@tanstack/*` nor `@orpc/*` was imported to do it |
+
+Every one of these drives a **real** `RPCLink` with only the bottom-most `fetch` stubbed. A
+hand-written fake client would skip the transport, which is precisely where the errors under
+test are produced. That choice is what forces the custom Jest environment in
+`libs/query/jest-environment-web.cjs` (jsdom implements no `fetch`; `doc/decision/0037-*`) and
+the `module` setting in `libs/query/tsconfig.spec.json` (`doc/decision/0038-*`).
+
+### Two allow-list additions, neither of them a wrapped library
+
+`NPM_ALLOWLIST.util` in `eslint.config.mjs` gained `@orpc/tanstack-query` (the bridge
+`libs/query` is built on) and `@orpc/contract` (the `ContractRouterClient` **type**, imported
+type-only by `libs/api-client`). Neither belongs in `WRAPPED_LIBRARIES`, for the same reason
+`@hookform/resolvers` doesn't: nothing could be imported *instead* of them, they only make
+sense paired with a package that is already wrapped.

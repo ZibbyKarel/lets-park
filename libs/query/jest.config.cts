@@ -7,8 +7,7 @@
  * none of this, it ships a `require` condition.
  *
  * The consolidation into `jest.preset.js` that decision 0020 asks for is
- * deliberately still not done here — see `libs/api-client/jest.config.cts` and
- * `doc/decision/0038-*`.
+ * deliberately still not done here — see `libs/api-client/jest.config.cts`.
  */
 const esmOnlyPackages = ['@orpc'];
 

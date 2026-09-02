@@ -29,6 +29,10 @@ libs/
   design-system/
     tokens/     design tokens + Tailwind v4 bridge   tags: type:ui, scope:web, ds:tokens
     primitives/ primitives + Storybook 10             tags: type:ui, scope:web, ds:primitives
+  form/         react-hook-form wrapper              tags: type:util, scope:web
+  i18n/         next-intl wrapper + Czech messages   tags: type:util, scope:web
+  api-client/   oRPC client typed from the contract  tags: type:util, scope:web
+  query/        TanStack Query wrapper + query utils tags: type:util, scope:web
   (the rest is created in later tasks – planned tags below)
 doc/            documentation, decisions, visual design export
 prisma.config.ts  Prisma CLI configuration (schema in libs/database, `.env` from the root)
@@ -196,10 +200,10 @@ only allowed place is the wrapper lib that owns them:
 
 | forbidden package | use instead | only allowed directory |
 | --- | --- | --- |
-| `react-hook-form` | `@lets-park/form` | `libs/form` |
+| `react-hook-form` | `@lets-park/form` | `libs/form` (done) |
 | `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/design-system/compounds` |
-| `@tanstack/react-query` | `@lets-park/query` | `libs/query` |
-| `@orpc/client` | `@lets-park/api-client` | `libs/api-client` |
+| `@tanstack/react-query` | `@lets-park/query` | `libs/query` (done) |
+| `@orpc/client` | `@lets-park/api-client` | `libs/api-client` (done) |
 | `socket.io-client` | `@lets-park/realtime-client` | `libs/realtime-client` |
 | `next-auth` | `@lets-park/auth` | `libs/auth` |
 | `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` |

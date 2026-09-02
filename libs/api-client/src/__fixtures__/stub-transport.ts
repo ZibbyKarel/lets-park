@@ -32,9 +32,7 @@ export interface StubbedTransport {
  * `respond` receives the call index, so a test can return a different answer to
  * the first and second attempt — which is what the retry tests need.
  */
-export function stubTransport(
-  respond: (callIndex: number) => StubbedResponse
-): StubbedTransport {
+export function stubTransport(respond: (callIndex: number) => StubbedResponse): StubbedTransport {
   const requests: Request[] = [];
 
   const fetch: ApiFetch = async (request) => {
