@@ -11,11 +11,7 @@
  * `test-database.ts` for why not skipping is the whole point.
  */
 
-import {
-  ORIGINAL_DATABASE_URL,
-  createTestDatabase,
-  requireDatabaseUrl,
-} from './test-database';
+import { ORIGINAL_DATABASE_URL, createTestDatabase, requireDatabaseUrl } from './test-database';
 
 export default async function globalSetup(): Promise<void> {
   const sourceUrl = requireDatabaseUrl();

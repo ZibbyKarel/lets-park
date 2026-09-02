@@ -15,9 +15,10 @@
  * call a publisher from inside `$transaction`. The transaction callback
  * *returns* the events it would like emitted, and the caller emits them after
  * `await` has resolved — i.e. after `COMMIT`.
- * `waitlist-promotion.db.spec.ts` proves the ordering by having the publisher
- * read the database **on a second connection** and assert the promoted
- * reservation is already visible there, which is only true post-commit.
+ * `reservations.db.spec.ts` ("the after-commit seam") proves the ordering by
+ * having the publisher read the database **on a second connection** and assert
+ * the promoted reservation is already visible there, which is only true
+ * post-commit.
  *
  * ## Why the payloads are the realtime contract's own
  *

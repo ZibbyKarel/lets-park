@@ -142,7 +142,9 @@ describe('ReservationPolicy', () => {
     it('does not apply to an admin, in either direction', () => {
       expect(() => policy.assertMayTakeDay(DISTANT_DAY, ADMIN, AUTO, TODAY)).not.toThrow();
       expect(() => policy.assertMayTakeDay(THIS_MONTH_DAY, ADMIN, AUTO, TODAY)).not.toThrow();
-      expect(() => policy.assertMayTakeDay(OPEN_MONTH_DAY, ADMIN, FORCE_LOCKED, TODAY)).not.toThrow();
+      expect(() =>
+        policy.assertMayTakeDay(OPEN_MONTH_DAY, ADMIN, FORCE_LOCKED, TODAY)
+      ).not.toThrow();
     });
 
     it('honours the admin override in both directions for a normal user', () => {

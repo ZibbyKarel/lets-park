@@ -275,21 +275,23 @@ export class ReservationsService {
       tx
     );
 
-    const promotion = await this.promotion.promote(
-      tx,
-      reservation.parkingSpotId,
-      date,
-      actor.id
-    );
+    const promotion = await this.promotion.promote(tx, reservation.parkingSpotId, date, actor.id);
 
     const cell = { date, parkingSpotId: reservation.parkingSpotId };
     if (promotion === null) {
       return {
-        result: { reservationId: reservation.id, date, parkingSpotId: cell.parkingSpotId, promoted: false },
+        result: {
+          reservationId: reservation.id,
+          date,
+          parkingSpotId: cell.parkingSpotId,
+          promoted: false,
+        },
         // One committed transaction, one event about the cell: the spot is free
         // and stays free. The queue length did not change, so no
         // `waitlist:updated` either — an empty queue is still empty.
-        events: [{ name: 'reservation:cancelled', payload: { ...cell, reservationId: reservation.id } }],
+        events: [
+          { name: 'reservation:cancelled', payload: { ...cell, reservationId: reservation.id } },
+        ],
         notices: [],
       };
     }
@@ -299,7 +301,12 @@ export class ReservationsService {
     });
 
     return {
-      result: { reservationId: reservation.id, date, parkingSpotId: cell.parkingSpotId, promoted: true },
+      result: {
+        reservationId: reservation.id,
+        date,
+        parkingSpotId: cell.parkingSpotId,
+        promoted: true,
+      },
       events: [
         {
           // `reassigned`, never `cancelled` + `created`: the contract's schemas

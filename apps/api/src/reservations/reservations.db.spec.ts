@@ -295,13 +295,16 @@ describe('reservations against a real PostgreSQL', () => {
         codeOf(harness.reservations.cancel({ reservationId: reservation.id }, actorFor(stranger)))
       ).resolves.toBe('FORBIDDEN');
 
-      await harness.reservations.cancel({ reservationId: reservation.id }, actorFor(admin, 'ADMIN'));
+      await harness.reservations.cancel(
+        { reservationId: reservation.id },
+        actorFor(admin, 'ADMIN')
+      );
 
       const audit = await client.auditLog.findMany({ where: { entityId: reservation.id } });
       expect(audit.map((row) => row.action)).toContain('RESERVATION_CANCELLED_BY_ADMIN');
-      expect(audit.find((row) => row.action === 'RESERVATION_CANCELLED_BY_ADMIN')?.actorUserId).toBe(
-        admin.id
-      );
+      expect(
+        audit.find((row) => row.action === 'RESERVATION_CANCELLED_BY_ADMIN')?.actorUserId
+      ).toBe(admin.id);
     });
 
     it('is allowed in a locked month — a closed window stops taking, not giving back', async () => {
@@ -444,7 +447,9 @@ describe('reservations against a real PostgreSQL', () => {
       expect(
         await client.waitlistEntry.findUnique({ where: { id: secondEntry.entry.id } })
       ).not.toBeNull();
-      expect(await client.waitlistEntry.findUnique({ where: { id: nextDay.entry.id } })).not.toBeNull();
+      expect(
+        await client.waitlistEntry.findUnique({ where: { id: nextDay.entry.id } })
+      ).not.toBeNull();
 
       const audit = await client.auditLog.findMany({ where: { entityId: promoted.id } });
       expect(audit.map((row) => row.action)).toEqual(['WAITLIST_PROMOTED']);

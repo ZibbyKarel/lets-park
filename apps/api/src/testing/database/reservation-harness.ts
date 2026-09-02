@@ -150,7 +150,10 @@ export async function seedSpot(client: PrismaClient): Promise<SpotRow> {
 }
 
 /** The `AuthenticatedUser` a controller would hand the service for this row. */
-export function actorFor(user: UserRow, role: AuthenticatedUser['role'] = 'USER'): AuthenticatedUser {
+export function actorFor(
+  user: UserRow,
+  role: AuthenticatedUser['role'] = 'USER'
+): AuthenticatedUser {
   return {
     id: user.id,
     oktaId: user.oktaId,

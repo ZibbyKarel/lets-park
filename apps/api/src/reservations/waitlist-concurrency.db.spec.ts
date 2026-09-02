@@ -221,7 +221,10 @@ describe('two requests at once', () => {
 
       // The rule this is really about: the queue must be served once, not twice.
       const promotions = await client.auditLog.count({
-        where: { action: 'WAITLIST_PROMOTED', payload: { path: ['parkingSpotId'], equals: spot.id } },
+        where: {
+          action: 'WAITLIST_PROMOTED',
+          payload: { path: ['parkingSpotId'], equals: spot.id },
+        },
       });
       expect(promotions).toBe(1);
       expect(

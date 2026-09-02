@@ -103,7 +103,7 @@ Prisma 7 with `@prisma/adapter-pg` does not populate it, and puts the violated i
 `meta.driverAdapterError.cause.constraint.index` instead. Both are read, `target` first. This is
 what lets `Reservation (parkingSpotId, date)` arrive as `SPOT_ALREADY_RESERVED` rather than the
 vague `CONFLICT` every unique violation used to degrade to; the shape is pinned against a real
-server (§9).
+server (§10).
 
 **Stack traces are logged and never sent — and a 4xx does not log one either.** A framework 4xx
 (no such route, a malformed body, a throttled caller) is logged at `warn` with the status, method,
@@ -337,7 +337,32 @@ in `viewerReservationId`. Including it would make `canReserve` mean two things a
 
 ---
 
-## 9. Testing
+## 9. Reservations and the waitlist
+
+`apps/api/src/reservations/`. Routes: `reservation.create`, `reservation.cancel`, `waitlist.join`,
+`waitlist.leave` — all open to any authenticated user, because "may I cancel this?" is a fact about
+a row, not about a route, and lives in the service with the row.
+
+**`doc/waitlist.md` is the document for this module.** It has the cancel + promote sequence diagram,
+why the queue is read `FOR UPDATE`, what happens under concurrency, and what happens after the
+commit. Only the shape is repeated here:
+
+- `ReservationPolicy` — day eligibility: past day, business day, reservation window. The one part of
+  the module that is pure, and the only one with a non-database spec.
+- `ReservationsService` — `create` (guarded insert), `cancel` (delete + audit + promote in one
+  interactive transaction, retried on the two conflicts a retry can clear).
+- `WaitlistPromotionService` — takes a `Prisma.TransactionClient`, never `PrismaService`: the
+  promotion and the cancellation that freed the spot share a fate or neither is correct.
+- `WaitlistService` — `join` / `leave`.
+- `DomainEventPublisher` — the after-commit seam Tasks 15 and 16 replace. Nothing that can block on
+  the network runs inside the transaction.
+
+`reservation.previewBulk` / `reservation.confirmBulk` are Task 14 and remain unmounted; the parity
+spec (§1) keeps them answering 404 rather than something half-built.
+
+---
+
+## 10. Testing
 
 Unit specs sit beside each service and run against `apps/api/src/testing/prisma-double.ts` — an
 in-memory stand-in for `PrismaService` that copies every row it returns (a live reference would
@@ -345,6 +370,11 @@ make a before/after audit payload compare a row against itself), raises a **real
 `PrismaClientKnownRequestError` with `code: 'P2002'` and a populated `meta.target` for unique
 violations, and throws on any query shape it does not model, so an untested access pattern fails
 loudly instead of quietly returning `[]`.
+
+**The reservations module (§9) is the exception, and deliberately so.** Its correctness is
+`FOR UPDATE`, transaction isolation and the exact shape of a `P2002` — none of which a double can
+model, and the last of which this project has already shipped a defect from faking. Everything
+there except `ReservationPolicy` is tested against a real PostgreSQL under `api:test-db`.
 
 Two specs test the composition rather than a service:
 
@@ -378,7 +408,14 @@ The suite provokes each constraint and each trigger against the server, inside t
 are always rolled back, so it leaves the database exactly as it found it — which is also the only
 way to test an append-only table at all. It covers both `Reservation` unique constraints, the
 `WaitlistEntry` one, `ParkingSpot.label`, `User.email`, the `AuditLog` `UPDATE`/`DELETE` triggers,
-and the `CHECK ("id" = 1)` singleton.
+the `CHECK ("id" = 1)` singleton, and — added by Task 13 — the shape of a real **deadlock**
+(`P2034` carrying `40P01`), which the cancellation path retries.
+
+Task 13 added three more `*.db.spec.ts` files under the same target, and with them a
+`globalSetup` that gives the whole run its **own throwaway database**
+(`doc/decision/0062-*`): its concurrency cases have to commit to race at all, and a committed
+`AuditLog` row can never be deleted. The developer's `lets_park` is no longer written to by any of
+this, including the rollback-based suite above.
 
 ```
 docker compose --profile dev up -d
@@ -397,10 +434,10 @@ refusal has been exercised (`DATABASE_URL= jest --config apps/api/jest.database.
 
 ### Still not exercised
 
-- **Concurrency.** Every constraint here is provoked sequentially. That two *simultaneous* requests
-  produce exactly one winner is the behaviour `SPOT_ALREADY_RESERVED` exists for, and proving it
-  needs concurrent transactions rather than consecutive statements. Task 13 owns the reservation
-  flow and is where that test belongs.
+- ~~**Concurrency.**~~ **Closed by Task 13.** `waitlist-concurrency.db.spec.ts` runs real parallel
+  transactions: eight simultaneous creates for one cell produce one reservation and seven
+  `SPOT_ALREADY_RESERVED`, and two forced interleavings cover the queue's row lock and the
+  promotion retry. Both mechanisms were verified by deleting them and watching the suite go red.
 - **`PrismaDouble` itself** has no spec of its own. Its `P2002` shape is now transcribed from the
   live server and re-asserted there on every `api:test-db` run, so that particular fiction cannot
   return unnoticed — but the rest of its behaviour is still defined only by the specs that consume

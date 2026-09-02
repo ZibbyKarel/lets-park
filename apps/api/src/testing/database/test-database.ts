@@ -111,7 +111,10 @@ function assertSafeIdentifier(name: string): void {
  * they name, and neither can run in a transaction — which is why this is a raw
  * `pg` client rather than a Prisma one.
  */
-async function withMaintenanceClient<T>(url: string, work: (client: Client) => Promise<T>): Promise<T> {
+async function withMaintenanceClient<T>(
+  url: string,
+  work: (client: Client) => Promise<T>
+): Promise<T> {
   const client = new Client({ connectionString: withDatabase(url, 'postgres') });
   await client.connect();
   try {
