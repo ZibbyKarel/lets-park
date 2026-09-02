@@ -117,6 +117,11 @@ async function readJsonOrUndefined(response: Response): Promise<unknown> {
  * cache would need a reset hook to be testable, and a reset hook that only
  * tests call is exactly the kind of production-code test seam this project
  * bans elsewhere.
+ *
+ * The token request is coalesced the same way: concurrent callers presenting
+ * the same refresh token share one grant, which is what stops a rotating
+ * authorization server from invalidating the token under its own siblings. See
+ * the comment on the returned function and `doc/decision/0047-*`.
  */
 export function createTokenRefresher(options: TokenRefresherOptions): TokenRefresher {
   const { issuer, clientId, clientSecret } = options;
@@ -154,7 +159,7 @@ export function createTokenRefresher(options: TokenRefresherOptions): TokenRefre
     return { tokenEndpoint, useBasicAuth };
   }
 
-  return async function refresh(refreshToken: string): Promise<RefreshedTokens> {
+  async function exchange(refreshToken: string): Promise<RefreshedTokens> {
     discovery ??= discover();
     let endpoint: { tokenEndpoint: string; useBasicAuth: boolean };
     try {
@@ -214,5 +219,39 @@ export function createTokenRefresher(options: TokenRefresherOptions): TokenRefre
       // *next* renewal from failing with `invalid_grant`.
       refreshToken: typeof rotated === 'string' && rotated !== '' ? rotated : refreshToken,
     };
+  }
+
+  /**
+   * The renewal currently on the wire, if any, keyed by the refresh token that
+   * started it. Cleared as soon as it settles — this coalesces concurrent
+   * callers, it does not cache a result.
+   */
+  let inFlight: { refreshToken: string; result: Promise<RefreshedTokens> } | undefined;
+
+  return function refresh(refreshToken: string): Promise<RefreshedTokens> {
+    // Several requests can read the session inside the same renewal window — a
+    // page whose layout, Server Component and Route Handler each `await auth()`
+    // is three. With refresh-token rotation enabled on the authorization
+    // server, the first grant invalidates the token and the rest come back
+    // `invalid_grant`, which fails the session closed and signs the user out
+    // mid-session. Sharing one in-flight request removes that for callers in
+    // this process, which is all of them on a single-instance deployment.
+    // Residual races and the multi-process case: `doc/decision/0047-*`.
+    if (inFlight?.refreshToken === refreshToken) return inFlight.result;
+
+    const result = exchange(refreshToken);
+    const entry = { refreshToken, result };
+    inFlight = entry;
+
+    // Cleared only if this is still the current entry, so a slow failure cannot
+    // wipe a newer renewal's slot. `.then(f, f)` handles the rejection on this
+    // derived promise; the original is still returned to the caller, which is
+    // what reports the error.
+    const clear = () => {
+      if (inFlight === entry) inFlight = undefined;
+    };
+    result.then(clear, clear);
+
+    return result;
   };
 }

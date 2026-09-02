@@ -445,6 +445,14 @@ makes step 3 happen in an idle tab, since the callback only runs when something 
 session. Auth.js's default is no polling at all, which would let a tab hold a token until it
 expired.
 
+Concurrent callers presenting the same refresh token share **one** grant: one page load can
+read the session several times (layout, Server Component, Route Handler, plus the browser
+poll), and with rotation enabled on the authorization server the first grant would invalidate
+the token under the others, signing the user out mid-session. The coalescing is per process,
+which covers the single-instance target; the cross-process case needs the `LockService`
+abstraction and is recorded, unsolved, in `doc/decision/0047-*` — along with the operational
+consequence that Okta refresh-token rotation should stay off until then.
+
 ### The endpoint and the client authentication method are discovered, not configured
 
 `AUTH_OKTA_ISSUER` is the only Okta URL in the environment, and the refresher reads

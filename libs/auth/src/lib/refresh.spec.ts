@@ -52,6 +52,49 @@ function oidcServer(
   );
 }
 
+/**
+ * Spins the microtask queue until `condition` holds, so a test can wait for a
+ * request to have *gone out* without a real timer or an arbitrary sleep.
+ */
+async function until(condition: () => boolean, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`Timed out waiting for: ${label}`);
+}
+
+/**
+ * An OIDC server whose **token** responses are held open until `release()` is
+ * called, so a second caller can be made to arrive while the first grant is
+ * genuinely in flight. Discovery answers immediately.
+ */
+function gatedOidcServer(answer: Record<string, unknown> = tokenResponse(), status = 200) {
+  const urls: string[] = [];
+  let open: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+
+  const fetch: typeof globalThis.fetch = async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    urls.push(url);
+
+    if (url === DISCOVERY_URL) {
+      return new Response(JSON.stringify(discoveryDocument(ISSUER)), { status: 200 });
+    }
+    await gate;
+    return new Response(JSON.stringify(answer), { status });
+  };
+
+  return {
+    urls,
+    fetch,
+    tokenRequests: () => urls.filter((url) => url === TOKEN_URL).length,
+    release: () => open(),
+  };
+}
+
 function refresherFor(server: ReturnType<typeof oidcServer>) {
   return createTokenRefresher({
     issuer: ISSUER,
@@ -275,6 +318,89 @@ describe('createTokenRefresher', () => {
       const server = oidcServer({ access_token: 'a', expires_in: 'soon' });
 
       await expect(refresherFor(server)(REFRESH_TOKEN)).rejects.toThrow(/expires_in/);
+    });
+  });
+
+  describe('concurrent renewals', () => {
+    function gatedRefresher(server: ReturnType<typeof gatedOidcServer>) {
+      return createTokenRefresher({
+        issuer: ISSUER,
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        fetch: server.fetch,
+      });
+    }
+
+    it('coalesces callers presenting the same refresh token into one grant', async () => {
+      // The race this closes: a page whose layout, Server Component and Route
+      // Handler each `await auth()` inside the renewal window sends three
+      // `refresh_token` grants. With rotation enabled the first invalidates the
+      // token and the rest come back `invalid_grant`, which fails the session
+      // closed and signs the user out mid-session.
+      const server = gatedOidcServer(tokenResponse({ refresh_token: 'rotated' }));
+      const refresh = gatedRefresher(server);
+
+      const first = refresh(REFRESH_TOKEN);
+      // Wait for the grant to be genuinely on the wire, so the second caller
+      // arrives mid-flight rather than in the same tick — coalescing only in
+      // the same tick would not help the real case.
+      await until(() => server.tokenRequests() === 1, 'the first grant to go out');
+      const second = refresh(REFRESH_TOKEN);
+
+      server.release();
+      const [a, b] = await Promise.all([first, second]);
+
+      expect(server.tokenRequests()).toBe(1);
+      expect(a).toEqual(b);
+      expect(a.refreshToken).toBe('rotated');
+    });
+
+    it('does not share a grant between different refresh tokens', async () => {
+      // Two sessions renewing at once are unrelated; sharing would hand one
+      // user's tokens to another.
+      const server = gatedOidcServer();
+      const refresh = gatedRefresher(server);
+
+      const first = refresh(REFRESH_TOKEN);
+      await until(() => server.tokenRequests() === 1, 'the first grant to go out');
+      const second = refresh('a-different-session-refresh-token');
+      await until(() => server.tokenRequests() === 2, 'the second grant to go out');
+
+      server.release();
+      await Promise.all([first, second]);
+
+      expect(server.tokenRequests()).toBe(2);
+    });
+
+    it('coalesces, it does not cache: a later renewal makes its own request', async () => {
+      // Holding the result would mean serving an access token minted for an
+      // earlier moment, and would keep the refresh token in memory after the
+      // request that needed it.
+      const server = oidcServer();
+      const refresh = refresherFor(server);
+
+      await refresh(REFRESH_TOKEN);
+      await refresh(REFRESH_TOKEN);
+
+      expect(server.calls.filter((call) => call.url === TOKEN_URL)).toHaveLength(2);
+    });
+
+    it('clears the slot after a failure, so the next attempt is not stuck on it', async () => {
+      let attempts = 0;
+      const server = stubFetch((url) => {
+        if (url === DISCOVERY_URL) return { body: discoveryDocument(ISSUER) };
+        attempts += 1;
+        return attempts === 1
+          ? { status: 400, body: { error: 'temporarily_unavailable' } }
+          : { body: tokenResponse() };
+      });
+      const refresh = refresherFor(server);
+
+      await expect(refresh(REFRESH_TOKEN)).rejects.toBeInstanceOf(TokenRefreshError);
+      await expect(refresh(REFRESH_TOKEN)).resolves.toMatchObject({
+        accessToken: 'new-access-token',
+      });
+      expect(attempts).toBe(2);
     });
   });
 

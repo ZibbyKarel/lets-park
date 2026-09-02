@@ -173,6 +173,22 @@ A tab sitting idle re-reads `/api/auth/session` every 300 s (`SESSION_REFETCH_SE
 is what makes step 3 fire at all — the callback only runs when something asks for the session.
 See `doc/decision/0045-*`.
 
+### Concurrent renewals
+
+One page load reads the session more than once — a root layout, a Server Component and a Route
+Handler each calling `await auth()`, plus the browser's poll. If they land inside the same
+renewal window they all hold the same refresh token, and with rotation enabled the first grant
+invalidates it under the others: they get `invalid_grant`, the session fails closed, and the
+user is signed out mid-session for no visible reason.
+
+Callers presenting the same refresh token therefore share a single in-flight grant. That
+covers every caller in one process, which is the whole single-instance deployment. It does
+**not** cover several processes or instances — that needs the `LockService` abstraction
+`plan.md` mandates, and until it exists **Okta refresh-token rotation should stay switched
+off** on the authorization server, which turns the remaining races into a redundant grant
+rather than a sign-out. Nothing in this repo enforces that setting; `doc/decision/0047-*`
+records the race, the residual cases and the upgrade path.
+
 ### When it fails
 
 Not a silent 401. Three things happen, in the three places they have to:
