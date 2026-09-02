@@ -19,7 +19,15 @@
  * and composes all of them there.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 import type { DayRoomCommand, ServerToClientEventName } from '@lets-park/contract/realtime';
 import type { AccessTokenProvider } from '@lets-park/api-client';
@@ -82,7 +90,13 @@ export interface RealtimeConnectionOptions {
  * is right: they are the connection's identity.
  */
 export function useRealtimeConnection(options: RealtimeConnectionOptions): RealtimeConnection {
-  const { url, path = DEFAULT_SOCKET_PATH, getAccessToken, enabled = true, onInvalidPayload } = options;
+  const {
+    url,
+    path = DEFAULT_SOCKET_PATH,
+    getAccessToken,
+    enabled = true,
+    onInvalidPayload,
+  } = options;
 
   const getAccessTokenRef = useRef(getAccessToken);
   const onInvalidPayloadRef = useRef(onInvalidPayload);

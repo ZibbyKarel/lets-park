@@ -19,6 +19,17 @@
  * 2. **The hold has to be given back.** On unmount, on `enabled` going false,
  *    and on the cell changing — every one of them is the same effect cleanup,
  *    so there is no path that closes the form without a `cell:unlock`.
+ *
+ *    With one measured exception, which is React's rather than this hook's:
+ *    when the **whole provider tree** is deleted at once, React runs a
+ *    deletion's cleanups parent-first, so `useRealtimeConnection` has already
+ *    disconnected the socket by the time this cleanup runs and there is
+ *    nothing left to say `cell:unlock` on. That is not a leak — a dropped
+ *    socket is exactly how the gateway learns to release a hold, and it is the
+ *    same path a closed tab takes — but it does mean the emit is guaranteed
+ *    for the case that matters (a form closing on a live page) and redundant
+ *    for the case it is not. `cell-lock.spec.tsx` tests the first;
+ *    `connection.spec.tsx` asserts the socket really is closed for the second.
  * 3. **The hold has to be re-taken after a reconnect.** A dropped socket drops
  *    the server's lock with it, so the hook re-requests on the new connection
  *    rather than believing the state it had.
