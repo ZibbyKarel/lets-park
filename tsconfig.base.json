@@ -30,7 +30,8 @@
       "@lets-park/api-client": ["./libs/api-client/src/index.ts"],
       "@lets-park/query": ["./libs/query/src/index.ts"],
       "@lets-park/auth": ["./libs/auth/src/index.ts"],
-      "@lets-park/auth/client": ["./libs/auth/src/client/index.ts"]
+      "@lets-park/auth/client": ["./libs/auth/src/client/index.ts"],
+      "@lets-park/realtime-client": ["./libs/realtime-client/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
