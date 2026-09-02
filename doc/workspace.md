@@ -33,6 +33,9 @@ libs/
   i18n/         next-intl wrapper + Czech messages   tags: type:util, scope:web
   api-client/   oRPC client typed from the contract  tags: type:util, scope:web
   query/        TanStack Query wrapper + query utils tags: type:util, scope:web
+  auth/         next-auth v5 (Auth.js) wrapper
+                (two entry points: @lets-park/auth and @lets-park/auth/client)
+                                      tags: type:util, scope:web
   (the rest is created in later tasks – planned tags below)
 doc/            documentation, decisions, visual design export
 prisma.config.ts  Prisma CLI configuration (schema in libs/database, `.env` from the root)
@@ -50,10 +53,13 @@ Configuration that applies to the whole workspace:
 
 A lib can have more than one entry point: `libs/contract` has
 `@lets-park/contract/realtime` alongside `@lets-park/contract`, so the
-Socket.io half of the contract doesn't pull in `@orpc/contract`. A second
-entry point means a second entry in `paths` in `tsconfig.base.json`, plus **a
-test that proves the isolation**
-(`libs/contract/src/realtime/no-orpc.spec.ts`) — see `doc/decision/0023-*`.
+Socket.io half of the contract doesn't pull in `@orpc/contract`;
+`libs/auth` has `@lets-park/auth/client`, so a browser component doesn't pull
+in Auth.js's server runtime. A second entry point means a second entry in
+`paths` in `tsconfig.base.json`, plus **a test that proves the isolation**
+(`libs/contract/src/realtime/no-orpc.spec.ts`,
+`libs/auth/src/lib/client-boundary.spec.ts`) — see `doc/decision/0023-*` and
+`doc/decision/0042-*`.
 
 Packages are named `@lets-park/<lib>` (see
 `doc/decision/0005-npm-scope-lets-park.md`). The scope is derived from the
@@ -205,7 +211,7 @@ only allowed place is the wrapper lib that owns them:
 | `@tanstack/react-query` | `@lets-park/query` | `libs/query` (done) |
 | `@orpc/client` | `@lets-park/api-client` | `libs/api-client` (done) |
 | `socket.io-client` | `@lets-park/realtime-client` | `libs/realtime-client` |
-| `next-auth` | `@lets-park/auth` | `libs/auth` |
+| `next-auth` | `@lets-park/auth` / `@lets-park/auth/client` | `libs/auth` (done) |
 | `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` |
 | `next-intl` | `@lets-park/i18n` | `libs/i18n` |
 

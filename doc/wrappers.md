@@ -342,3 +342,150 @@ makes sense paired with a package that is already wrapped.
 have handed the contract builder to `libs/form`, `libs/i18n` and every wrapper still to come —
 undoing the narrowness `NPM_ALLOWLIST.contract` is documented to have (`doc/decision/0007-*`).
 `libs/contract` applies the generic and exports `ContractClient` instead: `doc/decision/0040-*`.
+
+## `libs/auth` — next-auth v5 / Auth.js (Task 20)
+
+`@lets-park/auth` is the only place in the workspace allowed to import `next-auth` —
+including `next-auth/react`, `next-auth/jwt` and `next-auth/providers/okta`, all of which the
+`next-auth/*` half of the ban pattern covers. It is a **type:util, scope:web** lib with
+**two** entry points:
+
+| import path | runs where | contains |
+| --- | --- | --- |
+| `@lets-park/auth` | Next.js server runtime | `createAuth`, `createAuthConfig` and its callbacks, `createTokenRefresher`, `createAccessTokenProvider` |
+| `@lets-park/auth/client` | browser | `AuthProvider`, `useRequireAuth`, `useAccessTokenProvider`, and `useSession`/`signIn`/`signOut` re-exported |
+
+The split is the same idea as `@lets-park/contract` / `@lets-park/contract/realtime`: Auth.js's
+server half pulls in route handlers and `next/server`, which have no business in a browser
+bundle. Verified with a temporary `apps/web` page — a Server Component importing
+`@lets-park/auth` beside a `'use client'` component importing `@lets-park/auth/client` — built
+by `nx build web` before being deleted.
+
+### Wiring it up (Task 23 does this for real)
+
+```ts
+// apps/web/src/auth.ts
+import { createAuth } from '@lets-park/auth';
+import { validateWebEnv } from './env';
+
+const env = validateWebEnv();
+
+export const { handlers, auth, signIn, signOut, getAccessToken } = createAuth({
+  issuer: env.AUTH_OKTA_ISSUER,
+  clientId: env.AUTH_OKTA_CLIENT_ID,
+  clientSecret: env.AUTH_OKTA_CLIENT_SECRET,
+  secret: env.AUTH_SECRET,
+  signInPath: '/prihlaseni',            // optional
+});
+
+// apps/web/src/app/api/auth/[...nextauth]/route.ts
+export const { GET, POST } = handlers;
+
+// apps/web/middleware.ts
+export { auth as middleware } from './src/auth';
+```
+
+`createAuth` reads **no** environment variable of its own — Auth.js's `AUTH_SECRET` /
+`AUTH_OKTA_ID` / `AUTH_OKTA_SECRET` inference is deliberately bypassed so that
+`apps/web/src/env.ts` stays the single schema deciding which variables exist. A test
+constructs the instance with all of them deleted from `process.env`.
+
+### The token seam
+
+`createAuth().getAccessToken` **is** the `AccessTokenProvider` that `libs/api-client` was
+built around in Task 19 — that indirection is what keeps the two libs from importing each
+other's third-party package:
+
+```ts
+const api = createApiClient({ url, getAccessToken });   // server
+```
+
+In the browser the same shape comes from a hook, so a long-lived client or Socket.io
+connection is not rebuilt on every session refresh:
+
+```tsx
+const getAccessToken = useAccessTokenProvider();   // stable identity, reads the latest session
+```
+
+Both return `null` — never a stale token — when the session is absent or reports
+`RefreshTokenError`, so `createApiClient` omits the `Authorization` header entirely and the
+API answers "unauthenticated" rather than producing a 401 that looks like a bug.
+
+### What is stored where
+
+| value | where it lives | reaches the browser? |
+| --- | --- | --- |
+| refresh token | encrypted, httpOnly Auth.js session cookie | **no** — `projectSession` does not copy it |
+| access token | the same cookie; React state after `/api/auth/session` | yes, in memory only |
+| `AUTH_SECRET`, client secret | `process.env`, server only | **no** — nothing is `NEXT_PUBLIC_` |
+
+Nothing is written to `localStorage`, `sessionStorage`, or a JS-readable cookie. `next-auth`
+contains no reference to either storage API (`grep -rl localStorage node_modules/next-auth/`
+returns nothing), and a jsdom test renders the real `SessionProvider` with a token in the
+session while spying on `Storage.prototype.setItem`: it is never called, both stores stay
+empty, and `document.cookie` never contains the token.
+
+### Refresh token rotation
+
+Rotation lives in the `jwt` callback (`rotateAccessToken`), which Auth.js runs whenever the
+session is read:
+
+1. At sign-in the `account` carries `access_token`, `expires_at` and `refresh_token`; they are
+   copied onto the JWT. Without them the session is marked failed rather than left tokenless.
+2. On later reads, a token more than `REFRESH_SKEW_SECONDS` (60 s) from expiry is returned
+   untouched — no network call.
+3. Inside the skew, the refresh token is exchanged at the provider's **discovered** token
+   endpoint. A minute of headroom exists because a token renewed exactly at `exp` races its
+   own request.
+4. On failure the access token and refresh token are **dropped** and `error:
+   'RefreshTokenError'` is set. A session already in that state is not retried.
+
+`AuthProvider` polls `/api/auth/session` every `SESSION_REFETCH_SECONDS` (300) — that is what
+makes step 3 happen in an idle tab, since the callback only runs when something asks for the
+session. Auth.js's default is no polling at all, which would let a tab hold a token until it
+expired.
+
+### The endpoint and the client authentication method are discovered, not configured
+
+`AUTH_OKTA_ISSUER` is the only Okta URL in the environment, and the refresher reads
+`${issuer}/.well-known/openid-configuration` for `token_endpoint` — the same document the
+API's JWKS lookup uses (Task 11). It also reads `token_endpoint_auth_methods_supported` and
+picks HTTP Basic or form-body client authentication accordingly: Okta registers web apps with
+`client_secret_basic`, while the Auth.js rotation guide hard-codes Google's
+`client_secret_post`. Both details are what let dev, e2e (`mock-oauth2-server`) and production
+run the same code with only the env value differing. See `doc/decision/0041-*`.
+
+### Failing closed, and never logging a token
+
+A failed refresh does not surface as a silent 401. `isAuthorized` (the middleware callback)
+returns `false` for a session in that state, so the request is redirected to the sign-in page;
+`useRequireAuth` calls `signOut` on the client, clearing the dead cookie rather than signing
+in on top of it. `TokenRefreshError` carries only the HTTP status and the OAuth2 `error` /
+`error_description` fields — a test feeds the endpoint an error body that echoes both tokens
+back and asserts neither appears in the message. Nothing in the lib calls `console.*`
+(`no-console` is an error for `libs/**`).
+
+### No test backdoor
+
+There is no `if (isTest)`, no bypass flag and no credentials provider. The one seam is
+`AuthOptions.fetch`, forwarded to the refresher — the same seam `ApiClientOptions.fetch`
+already is. It replaces the HTTP transport; nothing it can be set to invents a session, skips
+a signature check, or changes which provider is registered. The discovery cache is per
+refresher rather than module-global precisely so that no test-only reset hook was needed.
+
+### Tests
+
+| file | what it verifies |
+| --- | --- |
+| `refresh.spec.ts` | the discovery URL (and a trailing slash on the issuer), the document cached once but not when it failed, Basic vs. form-body client auth, the `refresh_token` grant, `expires_in` → absolute expiry, a rotated vs. preserved refresh token, error mapping, and that neither token appears in the error message |
+| `config.spec.ts` | seeding at sign-in; a healthy token untouched with no provider call; **renewal while the token is still valid**; renewal after expiry; a failed renewal dropping the token; no refresh token → fail closed; a failed session not retried; `projectSession` never emitting the refresh token and unable to leave a stale access token; `isAuthorized` in all three states; provider id, PKCE + state checks, `offline_access`, `strategy: 'jwt'`, no adapter; plus two runs of the configured `jwt` callback with only `fetch` stubbed |
+| `access-token.spec.ts` | the provider on its own, and three cases driving a **real** `createApiClient`: the token arrives as `Bearer …`, an absent session sends no header at all, and the header disappears the moment the refresh fails |
+| `client.spec.tsx` | against the **real** `SessionProvider`/`useSession`: stable provider identity, no browser storage, polling picking up a renewed token, and `useRequireAuth` signing in, signing out, redirecting once, and doing neither while loading |
+| `create-auth.spec.ts` | the v5 `{ handlers: { GET, POST }, auth, signIn, signOut }` shape really constructs, and constructs with every `AUTH_*` variable deleted |
+
+### No allow-list change
+
+`NPM_ALLOWLIST.util` is generated from `WRAPPED_LIBRARIES`, which already contained
+`next-auth`, so this task added **nothing** to `eslint.config.mjs`. `@auth/core` was
+deliberately not allow-listed either: every type this lib needs is re-exported by `next-auth`
+itself (`Session`, `Account`, `NextAuthConfig`) or by `next-auth/jwt` (`JWT`).
