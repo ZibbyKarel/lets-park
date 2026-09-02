@@ -205,10 +205,15 @@ const api = createApiClient({
 const overview = await api.overview.day({ date: '2026-09-15' });
 ```
 
-`ApiClient` is `ContractRouterClient<Contract>` — **derived from `libs/contract`**, not
-written out. Every procedure, input, output and declared error code is regenerated from the
-Zod schemas on each build, so it cannot drift from the backend the way a hand-written client
-would, and no endpoint that the contract does not declare can be called at all.
+`ApiClient` is `ContractClient` — **derived from `libs/contract`**, not written out. Every
+procedure, input, output and declared error code is regenerated from the Zod schemas on each
+build, so it cannot drift from the backend the way a hand-written client would, and no
+endpoint that the contract does not declare can be called at all.
+
+The `ContractRouterClient<Contract>` application lives in `libs/contract` rather than here, so
+that `@orpc/contract` stays allow-listed for `type:contract` alone. `NPM_ALLOWLIST` hangs off
+the `type:` tag, which is shared by every wrapper lib, so granting it to `libs/api-client`
+would have granted it to `libs/form` and `libs/i18n` too — see `doc/decision/0040-*`.
 
 ### The access token is a provider, not a string
 
@@ -228,8 +233,15 @@ if (error?.code === 'SPOT_ALREADY_RESERVED') { … }
 `toContractError` recognises a domain error by its **code**, parsed through the contract's
 `errorCodeSchema` — deliberately **not** by oRPC's `isDefinedError`, which narrows on the
 `defined` flag that `apps/api` sets to `false` on every domain error it serialises. Using it
-would reject every real domain error this backend produces. Full reasoning, plus a live
-server-side envelope mismatch this wrapper documents but does not fix: `doc/decision/0039-*`.
+would reject every real domain error this backend produces. Full reasoning:
+`doc/decision/0039-*`.
+
+> **Known, reproduced and unguarded:** `apps/api`'s filter writes its error body at the top
+> level, but the RPC protocol reads it out of a `{ json, meta }` envelope — so a 409
+> `SPOT_ALREADY_RESERVED` currently arrives as `CONFLICT`, which is also a member of
+> `ERROR_CODES` and therefore does *not* fail closed. **No test watches for this**; the guard
+> that would work belongs in `apps/api`'s filter spec and does not exist yet.
+> `doc/decision/0039-*` states the situation and why `libs/api-client` cannot guard it.
 
 `null` means "not a domain error" and covers a transport failure, an unknown code, and a plain
 thrown value alike — none of them has localized copy keyed to a code, so all three are
@@ -274,6 +286,13 @@ created in a component body is re-created on every render, throwing the cache aw
 Next.js needs one instance per request on the server and one per session in the browser.
 Deciding that is the app's job.
 
+`createQueryClient` is the **only** way to get a client. `@lets-park/query` exports
+`QueryClient` as a *type* only, so `new QueryClient()` is a compile error rather than a
+convention — otherwise app code could construct a client carrying TanStack's defaults (three
+retries on everything, including the 4xx domain errors that are decisions rather than
+hiccups) while still passing the ESLint wrapper ban, since the class would have come from the
+wrapper.
+
 `createQueryClient` carries the project's policy — `staleTime` 30 s, `gcTime` 5 min,
 `refetchOnWindowFocus: false` (realtime invalidation arrives over Socket.io in Task 21, so
 refetching on focus is redundant traffic), `retry: shouldRetryQuery`, and **mutations are not
@@ -300,7 +319,7 @@ error than the original.
 | file | what it verifies |
 | --- | --- |
 | `api-client/src/lib/api-client.spec.ts` | the URL, method and payload a contract procedure puts on the wire; nested admin paths; the `Authorization` header across five provider cases including per-request re-reads |
-| `api-client/src/lib/errors.spec.ts` | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; and the `defined: false` case that `isDefinedError` would reject |
+| `api-client/src/lib/errors.spec.ts` | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; the `defined: false` case that `isDefinedError` would reject; and one test documenting oRPC's own envelope behaviour (which is *not* a guard on `apps/api` — see the note above) |
 | `query/src/lib/query-client.spec.ts` | the shipped defaults, override merging, and the retry policy counted in **requests that reached the transport** — one attempt for each of the twelve codes and for a 429, three for a 5xx and for an unreachable server |
 | `query/src/lib/api-query.spec.ts` | key stability (same input, across two util trees), key distinctness, and that a branch key really invalidates its leaves through the cache's own matcher |
 | `query/src/lib/app-usage.spec.tsx` | a real component reading, mutating and invalidating through the wrappers only — plus a test reading its own source to prove neither `@tanstack/*` nor `@orpc/*` was imported to do it |
@@ -311,10 +330,15 @@ test are produced. That choice is what forces the custom Jest environment in
 `libs/query/jest-environment-web.cjs` (jsdom implements no `fetch`; `doc/decision/0037-*`) and
 the `module` setting in `libs/query/tsconfig.spec.json` (`doc/decision/0038-*`).
 
-### Two allow-list additions, neither of them a wrapped library
+### One allow-list addition, and one deliberately refused
 
-`NPM_ALLOWLIST.util` in `eslint.config.mjs` gained `@orpc/tanstack-query` (the bridge
-`libs/query` is built on) and `@orpc/contract` (the `ContractRouterClient` **type**, imported
-type-only by `libs/api-client`). Neither belongs in `WRAPPED_LIBRARIES`, for the same reason
-`@hookform/resolvers` doesn't: nothing could be imported *instead* of them, they only make
-sense paired with a package that is already wrapped.
+`NPM_ALLOWLIST.util` in `eslint.config.mjs` gained exactly one entry: `@orpc/tanstack-query`,
+the bridge `libs/query` is built on. It does not belong in `WRAPPED_LIBRARIES` for the same
+reason `@hookform/resolvers` doesn't — nothing could be imported *instead* of it, it only
+makes sense paired with a package that is already wrapped.
+
+`@orpc/contract` was **not** added, although `libs/api-client` needs `ContractRouterClient`.
+`NPM_ALLOWLIST` hangs off the `type:` tag, which every wrapper lib shares, so the entry would
+have handed the contract builder to `libs/form`, `libs/i18n` and every wrapper still to come —
+undoing the narrowness `NPM_ALLOWLIST.contract` is documented to have (`doc/decision/0007-*`).
+`libs/contract` applies the generic and exports `ContractClient` instead: `doc/decision/0040-*`.

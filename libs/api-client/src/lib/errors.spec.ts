@@ -14,10 +14,18 @@ import { failingTransport, rpcPayload, stubTransport } from '../__fixtures__/stu
 const URL_BASE = 'https://api.test/rpc';
 
 /**
- * The body `apps/api`'s global filter builds for a domain error
- * (`contractErrorBody()` in `contract-exception.filter.ts`,
- * `doc/decision/0033-*`): oRPC's `ORPCErrorJSON`, with `defined: false` because
- * an error that reached the filter is one the procedure did not declare.
+ * A domain error in oRPC's wire shape, `ORPCErrorJSON`.
+ *
+ * `defined: false` because an error the server did not declare on the procedure
+ * carries that flag — which is every domain error this backend sends
+ * (`doc/decision/0033-*`), and the reason `toContractError` reads the code
+ * rather than that flag.
+ *
+ * This is a **local restatement**, not a shared fixture: nothing here is
+ * imported from `apps/api`, and nothing can be — `libs/api-client` is
+ * `type:util`/`scope:web`, `apps/api` is `type:app`/`scope:api`, and the Nx
+ * boundaries forbid both directions. So this helper proves nothing about what
+ * the server actually sends. See the note on the last test in this file.
  */
 function contractErrorBody(code: ErrorCode, data?: Record<string, unknown>) {
   const definition = ERROR_DEFINITIONS[code];
@@ -148,28 +156,35 @@ describe('toContractError', () => {
   });
 
   /**
-   * A regression guard for a mismatch found by probing the link, not by reading
-   * the code: `apps/api`'s filter writes `contractErrorBody()` at the **top
-   * level** of the response (`response.status(...).json(body)`), but the RPC
-   * protocol reads the payload out of `{ json, meta }`. A top-level body
-   * therefore deserialises to `undefined`, fails oRPC's `isORPCErrorJson`, and
-   * the client falls back to a code synthesised from the HTTP status — losing
-   * the domain code entirely.
+   * Documents a property of `@orpc/client@1.15.0`, and **nothing about
+   * `apps/api`**.
    *
-   * This test pins the *broken* behaviour so that the day the server starts
-   * wrapping the body (or the oRPC handler takes the response over), it fails
-   * loudly and is deleted, rather than the mismatch being discovered in the UI.
-   * See the task report for the raw probe output.
+   * The RPC protocol reads a response payload out of a `{ json, meta }`
+   * envelope. An error body placed at the top level instead deserialises to
+   * `undefined`, fails oRPC's `isORPCErrorJson`, and the client falls back to a
+   * code synthesised from the HTTP status — so the domain code is lost, and at
+   * 409 it is replaced by `CONFLICT`, which is *also* a member of `ERROR_CODES`.
+   * It does not fail closed: the wrong domain error arrives looking valid.
+   *
+   * That matters because `apps/api`'s filter writes its body at the top level
+   * (`response.status(...).json(body)`, `doc/decision/0033-*`). **This test does
+   * not detect that.** Its input is hand-written here, so it will keep passing
+   * unchanged after the server is fixed — a real guard would have to assert
+   * against the filter's actual output, which the Nx boundaries make
+   * unreachable from this lib (`type:util`/`scope:web` may not depend on
+   * `type:app`/`scope:api`). The guard that would work belongs in
+   * `apps/api`'s filter spec, asserting the body **is** enveloped; it does not
+   * exist yet. See `doc/decision/0039-*`, which says so plainly.
+   *
+   * Kept because the oRPC behaviour it pins is load-bearing for
+   * `toContractError` and is not obvious from the package's documentation.
    */
-  it('cannot read a domain code from a body that is not wrapped in the RPC envelope', async () => {
+  it('loses the domain code when a body is not wrapped in the RPC envelope', async () => {
     const error = await failedCall({
       status: 409,
       body: contractErrorBody('SPOT_ALREADY_RESERVED', { reservationId: 'abc' }),
     });
 
-    // 409 happens to map to the common oRPC code `CONFLICT`, which is *also* a
-    // member of `ERROR_CODES` — so this does not even fail closed: it silently
-    // reports the wrong domain error.
     expect(toContractError(error)?.code).toBe('CONFLICT');
     expect(toContractError(error)?.code).not.toBe('SPOT_ALREADY_RESERVED');
   });

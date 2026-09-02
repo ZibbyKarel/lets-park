@@ -35,11 +35,10 @@ export { QueryProvider } from './lib/provider';
 export type { QueryProviderProps } from './lib/provider';
 
 /**
- * TanStack Query's own hooks and client type, re-exported so components wrapped
- * in `QueryProvider` never need a second, direct import of the package.
+ * TanStack Query's own hooks, re-exported so components wrapped in
+ * `QueryProvider` never need a second, direct import of the package.
  */
 export {
-  QueryClient,
   useInfiniteQuery,
   useIsFetching,
   useIsMutating,
@@ -49,8 +48,23 @@ export {
   useSuspenseQuery,
 } from '@tanstack/react-query';
 
+/**
+ * `QueryClient` is exported as a **type only**, deliberately.
+ *
+ * Application code needs to *name* the type — `QueryProvider` takes one as a
+ * prop, and an app-level factory annotates its return — but it must never
+ * construct one. `new QueryClient()` would produce a client with TanStack's
+ * defaults instead of this project's (`createQueryClient`): three retries on
+ * everything, including the 4xx domain errors that are decisions rather than
+ * hiccups, and `refetchOnWindowFocus` on. That bypass would pass the ESLint
+ * wrapper ban, because the class would have come from `@lets-park/query`.
+ *
+ * A type-only export makes it a compile error rather than a convention.
+ * `createQueryClient` is the only way to get an instance.
+ */
 export type {
   DefaultError,
+  QueryClient,
   QueryClientConfig,
   QueryKey,
   UseInfiniteQueryResult,

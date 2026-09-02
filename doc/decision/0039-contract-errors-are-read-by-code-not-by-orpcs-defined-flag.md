@@ -80,22 +80,44 @@ hand-constructed `ORPCError` — including `does not narrow on oRPC's 'defined' 
 exists to fail if someone "simplifies" this to `isDefinedError`, and a sweep over all twelve
 `ERROR_CODES`.
 
-## Risk if this is wrong
-
-There is a **live mismatch this decision does not fix**, found by probing a real link and
-pinned by the test `cannot read a domain code from a body that is not wrapped in the RPC
-envelope`:
+## An unguarded defect in `apps/api` that this decision does not fix
 
 `apps/api`'s filter writes its body at the top level (`response.status(s).json(body)`), but
 the RPC protocol reads the payload out of a `{ json, meta }` envelope. A top-level body
 deserialises to `undefined`, fails oRPC's `isORPCErrorJson`, and the client synthesises a code
 from the HTTP status instead — so a 409 `SPOT_ALREADY_RESERVED` arrives as `CONFLICT`, which
-is *also* a member of `ERROR_CODES` and therefore does not fail closed: the UI would show the
-wrong domain error, confidently.
+is *also* a member of `ERROR_CODES` and therefore does **not** fail closed: the UI would show
+the wrong domain error, confidently. Reproduced against a real `RPCLink` with
+`@orpc/client@1.15.0`, and independently by the Task 19 reviewer.
 
-Fixing that belongs to whoever mounts the oRPC handler in `apps/api`, and it may resolve
-itself — an oRPC `RPCHandler` serialises its own responses, and the filter's hand-built body
-would then never be what is on the wire. Until then the test pins the broken behaviour, so the
-day the envelope appears the test fails loudly and is deleted. **Do not "fix" that test by
-loosening `toContractError` to read a top-level body**: that would make the client accept a
-shape the protocol does not define, and the two sides would drift apart with nothing failing.
+**No test is watching for this.** An earlier version of this record claimed the test
+`libs/api-client/src/lib/errors.spec.ts` → `loses the domain code when a body is not wrapped
+in the RPC envelope` acted as a tripwire that would fail once the server was fixed. That was
+wrong, and it is worth stating why rather than quietly deleting it: that test hand-writes its
+own unwrapped body and restates the filter's body builder locally, so it has **zero coupling
+to `apps/api`** and will keep passing unchanged forever, fixed server or not. It documents a
+property of `@orpc/client` — which is genuinely useful and is why it is kept — and nothing
+about the server.
+
+The coupling cannot be added from `libs/api-client`: it is `type:util`/`scope:web`, `apps/api`
+is `type:app`/`scope:api`, and the Nx boundaries forbid a lib depending on an app *and* web
+reaching api. **The guard that would work belongs in `apps/api`'s filter spec, asserting the
+serialised body is enveloped — a test that fails today.** Writing it was outside Task 19's
+file set; it is routed to whoever owns `apps/api` next.
+
+Fixing the defect itself belongs there too, and it may resolve itself: an oRPC `RPCHandler`
+serialises its own responses, so the filter's hand-built body would never be what is on the
+wire. Until either happens, treat this as **known, reproduced, and unguarded**.
+
+## Risk if this is wrong
+
+**Do not "fix" the mismatch by loosening `toContractError` to read a top-level body.** That
+would make the client accept a shape the protocol does not define, and the two sides would
+drift apart with nothing failing — the same class of problem as the phantom tripwire above,
+one layer down.
+
+The narrower risk in this module is the `null` return collapsing three situations into one. If
+a future requirement needs to distinguish "offline" from "unknown code" (say, to offer a
+retry button only for the first), that is a new return shape, not a widening of
+`ContractError` — a `code` field that might not be a member of `ERROR_CODES` would put the
+`libs/i18n` copy lookup back where this decision took it out of.

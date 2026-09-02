@@ -181,14 +181,14 @@ const NPM_ALLOWLIST = {
     // not in `WRAPPED_LIBRARIES`, just allow-listed here alongside them.
     '@orpc/tanstack-query',
     '@orpc/tanstack-query/*',
-    // `libs/api-client` types its client as `ContractRouterClient<Contract>`,
-    // and that type lives in `@orpc/contract` — the same package `libs/contract`
-    // builds the contract with. The import is **type-only**: nothing of
-    // `@orpc/contract` survives into the wrapper's emitted JavaScript, and the
-    // runtime transport still comes from `@orpc/client`, which only
-    // `libs/api-client` may import (`no-restricted-imports`, below).
-    '@orpc/contract',
-    '@orpc/contract/*',
+    // `@orpc/contract` is deliberately **not** here, even though
+    // `libs/api-client` needs `ContractRouterClient` to type its client. This
+    // list applies to every `type:util` lib at once, so adding it would also
+    // hand the contract builder to `libs/form`, `libs/i18n` and every wrapper
+    // still to come — undoing the narrowness `NPM_ALLOWLIST.contract` is
+    // documented to have. Instead `libs/contract` applies the type itself and
+    // exports the result as `ContractClient` (see `libs/contract/src/api/router.ts`),
+    // which is what a contract lib is for. See `doc/decision/0040-*`.
     // `libs/form` types `useAppForm` against a Zod schema (`z.input`/`z.output`)
     // and its resolver validates with Zod at runtime — it is the one wrapper
     // whose whole job is bridging Zod to react-hook-form, so it needs Zod

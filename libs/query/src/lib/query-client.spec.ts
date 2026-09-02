@@ -86,6 +86,26 @@ describe('createQueryClient defaults', () => {
     expect(queries?.gcTime).toBe(DEFAULT_GC_TIME_MS);
     expect(queries?.refetchOnWindowFocus).toBe(false);
   });
+
+  it('does not hand out `QueryClient` as a constructible value', () => {
+    // `createQueryClient` is the only way to get a client, because a
+    // `new QueryClient()` would silently carry TanStack's defaults (three
+    // retries on everything, `refetchOnWindowFocus` on) past this project's
+    // policy — while still passing the ESLint wrapper ban, since the class
+    // would have come from `@lets-park/query`. `index.ts` therefore exports the
+    // name as a type only.
+    //
+    // TypeScript already rejects `new QueryClient()` at compile time; this
+    // asserts the runtime side of the same fact, so re-adding it to the value
+    // export list fails a test rather than merely widening the API unnoticed.
+    const wrapper = require('../index') as Record<string, unknown>;
+
+    expect(Object.keys(wrapper)).not.toContain('QueryClient');
+    expect(wrapper['QueryClient']).toBeUndefined();
+    // The hooks, by contrast, are values and must stay so.
+    expect(typeof wrapper['useQuery']).toBe('function');
+    expect(typeof wrapper['createQueryClient']).toBe('function');
+  });
 });
 
 describe('query retry', () => {

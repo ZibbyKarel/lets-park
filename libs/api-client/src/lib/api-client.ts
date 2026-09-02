@@ -4,33 +4,35 @@
  * This is the only place in the workspace allowed to import `@orpc/client`
  * (`eslint.config.mjs`, `WRAPPED_LIBRARIES`; `doc/wrappers.md`). Everything else
  * — feature code, `libs/query` — reaches the API through `ApiClient`, whose
- * every procedure, input, output and error code is derived from the contract
- * with `ContractRouterClient`. No endpoint can be called that the contract does
- * not declare, and no shape can be hand-written next to it.
+ * every procedure, input, output and error code is derived from the contract.
+ * No endpoint can be called that the contract does not declare, and no shape
+ * can be hand-written next to it.
  */
 
 import { createORPCClient } from '@orpc/client';
 import { RPCLink } from '@orpc/client/fetch';
 import type { RPCLinkOptions } from '@orpc/client/fetch';
-import type { ContractRouterClient } from '@orpc/contract';
-import type { Contract } from '@lets-park/contract';
+import type { ContractClient } from '@lets-park/contract';
 
 /**
  * The client's per-call context. Empty: every request carries the same bearer
  * token, resolved by {@link ApiClientOptions.getAccessToken}, so there is
  * nothing a call site needs to pass down. Named rather than inlined because
- * `RPCLink` and `createORPCClient` have to agree on it.
+ * `RPCLink` and `createORPCClient` have to agree on it, and it must match the
+ * default `ContractClient` was applied with in `libs/contract`.
  */
 type ApiClientContext = Record<never, never>;
 
 /**
  * Every procedure in `libs/contract`'s router, as a callable client.
  *
- * `ContractRouterClient` derives it from the contract object, so this type is
- * regenerated from the Zod schemas on every build — it can not drift from the
- * backend the way a hand-written client would.
+ * The `ContractRouterClient<Contract>` application lives in `libs/contract`
+ * (exported as `ContractClient`) rather than here, so that `@orpc/contract`
+ * stays allow-listed for the `type:contract` tag alone instead of every
+ * `type:util` lib in the workspace. Either way the type is derived from the Zod
+ * schemas on every build and cannot drift from the backend.
  */
-export type ApiClient = ContractRouterClient<Contract, ApiClientContext>;
+export type ApiClient = ContractClient;
 
 /**
  * The `fetch` implementation the link uses. Exported so a caller (and this
