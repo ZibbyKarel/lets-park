@@ -169,6 +169,14 @@ describe('buildReservationCalendar', () => {
       // is `2026-10-16`.
       expect(event.endDate.toString()).toBe('2026-10-16');
       expect(event.duration.toString()).toBe('P1D');
+      // …and `DTEND` is really written, not merely inferred. `ICAL.Event`
+      // applies the RFC default (start + one day for a DATE value) when the
+      // property is absent, so `endDate` and `duration` above both read
+      // `2026-10-16` / `P1D` even with no `DTEND` in the document at all —
+      // proved by deleting `end:` from the builder and watching only the
+      // line-level check fail. Several clients render a bare `DTSTART;VALUE=DATE`
+      // as a zero-length item, so the property has to be there.
+      expect(onlyEventComponent(ics).getFirstProperty('dtend')).not.toBeNull();
     });
 
     it('carries the Czech summary, description and the spot as the location', () => {
@@ -295,13 +303,28 @@ describe('buildReservationCalendar', () => {
     }, 60_000);
   });
 
-  it('is a pure function of its input: the same feed twice is the same bytes', () => {
+  it('is a pure function of its input: the same feed months apart is the same bytes', () => {
     // This is what lets Express answer a polling client with 304
-    // (`doc/decision/0081-*`). A `DTSTAMP` of `new Date()` would break it, and
-    // nothing else in the suite would notice.
+    // (`doc/decision/0081-*`).
+    //
+    // The clock is moved between the two calls, and that is not decoration:
+    // `ical-generator` formats `DTSTAMP` to whole seconds, so a naive version
+    // of this test — two calls in a row, wall clock — passes even when the
+    // builder uses `new Date()`, because both land in the same second. Verified
+    // by making that exact change and watching this assertion survive.
     const feed = { entries: [entry(), entry({ reservationId: RESERVATION_B, date: '2026-10-16' })] };
 
-    expect(buildReservationCalendar(feed)).toBe(buildReservationCalendar(feed));
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
+      const first = buildReservationCalendar(feed);
+      jest.setSystemTime(new Date('2027-04-04T04:04:04.000Z'));
+      const second = buildReservationCalendar(feed);
+
+      expect(first).toBe(second);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('escapes text a naive template would corrupt', () => {
