@@ -178,35 +178,47 @@ describe('authentication through the assembled application', () => {
   describe('rejections, all of which must be 401 with the transport shape', () => {
     it.each([
       ['no Authorization header', () => undefined],
-      ['a token signed by an unpublished key', () =>
-        signTestToken({
-          key: { ...createSigningKey('impostor'), kid: signingKey.kid },
-          issuer: issuer.issuer,
-          audience: AUDIENCE,
-          subject: 'okta-user',
-        })],
+      [
+        'a token signed by an unpublished key',
+        () =>
+          signTestToken({
+            key: { ...createSigningKey('impostor'), kid: signingKey.kid },
+            issuer: issuer.issuer,
+            audience: AUDIENCE,
+            subject: 'okta-user',
+          }),
+      ],
       ['an expired token', () => tokenFor({ subject: 'okta-user', expiresInSeconds: -60 })],
-      ['a token from another issuer', () =>
-        signTestToken({
-          key: signingKey,
-          issuer: 'https://evil.example/oauth2',
-          audience: AUDIENCE,
-          subject: 'okta-user',
-        })],
-      ['a token for another audience', () =>
-        signTestToken({
-          key: signingKey,
-          issuer: issuer.issuer,
-          audience: 'api://someone-else',
-          subject: 'okta-user',
-        })],
-      ['an unsigned token claiming alg: none', () =>
-        forgeUnsignedToken({
-          sub: 'okta-admin',
-          iss: issuer.issuer,
-          aud: AUDIENCE,
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        })],
+      [
+        'a token from another issuer',
+        () =>
+          signTestToken({
+            key: signingKey,
+            issuer: 'https://evil.example/oauth2',
+            audience: AUDIENCE,
+            subject: 'okta-user',
+          }),
+      ],
+      [
+        'a token for another audience',
+        () =>
+          signTestToken({
+            key: signingKey,
+            issuer: issuer.issuer,
+            audience: 'api://someone-else',
+            subject: 'okta-user',
+          }),
+      ],
+      [
+        'an unsigned token claiming alg: none',
+        () =>
+          forgeUnsignedToken({
+            sub: 'okta-admin',
+            iss: issuer.issuer,
+            aud: AUDIENCE,
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          }),
+      ],
       ['a token with an unknown kid', () => tokenFor({ subject: 'okta-user', kid: 'no-such' })],
       ['a bearer value that is not a JWT', () => 'garbage'],
     ])('refuses %s', async (_name, mint) => {

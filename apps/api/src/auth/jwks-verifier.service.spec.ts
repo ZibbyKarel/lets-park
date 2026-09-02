@@ -158,13 +158,17 @@ describe('JwksVerifierService', () => {
             exp: Math.floor(Date.now() / 1000) + 3600,
           }),
       ],
-      ['a token with an unknown kid', () => signTestToken({
-        key: signingKey,
-        issuer: issuer.issuer,
-        audience: AUDIENCE,
-        subject: 'okta-1',
-        kid: 'never-published',
-      })],
+      [
+        'a token with an unknown kid',
+        () =>
+          signTestToken({
+            key: signingKey,
+            issuer: issuer.issuer,
+            audience: AUDIENCE,
+            subject: 'okta-1',
+            kid: 'never-published',
+          }),
+      ],
       ['a string that is not a JWT at all', () => 'not.a.jwt'],
     ])('refuses %s', async (_name, mint) => {
       const verifier = verifierFor(issuer.issuer);

@@ -29,7 +29,9 @@ export class JwtAuthGuard extends AuthGuard(JWT_STRATEGY_NAME) {
     super();
   }
 
-  override canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
+  override canActivate(
+    context: ExecutionContext
+  ): boolean | Promise<boolean> | Observable<boolean> {
     // `getAllAndOverride` so `@Public()` works on a controller as well as on a
     // single handler, with the handler winning.
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [

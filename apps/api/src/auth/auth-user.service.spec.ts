@@ -221,7 +221,12 @@ describe('AuthUserService', () => {
       ]);
 
       expect(store.createCount).toBe(2);
-      expect(store.all().map((row) => row.oktaId).sort()).toEqual(['okta-1', 'okta-2']);
+      expect(
+        store
+          .all()
+          .map((row) => row.oktaId)
+          .sort()
+      ).toEqual(['okta-1', 'okta-2']);
     });
   });
 });

@@ -184,8 +184,6 @@ interface UserWhereUnique {
 
 interface UserDelegate {
   findUnique(args: { where: UserWhereUnique }): Promise<User | null>;
-  create(args: {
-    data: Pick<User, 'oktaId' | 'email' | 'name' | 'icsToken'>;
-  }): Promise<User>;
+  create(args: { data: Pick<User, 'oktaId' | 'email' | 'name' | 'icsToken'> }): Promise<User>;
   update(args: { where: UserWhereUnique; data: Partial<User> }): Promise<User>;
 }

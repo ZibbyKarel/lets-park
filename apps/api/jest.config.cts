@@ -28,9 +28,7 @@ module.exports = {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
     '^.+\\.mjs$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
-  transformIgnorePatterns: [
-    '/node_modules/(?!(?:@orpc|@nestjs/config|@nestjs/passport|jose)/)',
-  ],
+  transformIgnorePatterns: ['/node_modules/(?!(?:@orpc|@nestjs/config|@nestjs/passport|jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'mjs', 'html'],
   coverageDirectory: '../../coverage/apps/api',
 };

@@ -67,8 +67,7 @@ const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === PRISMA_UNIQUE_CONSTRAINT
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === PRISMA_UNIQUE_CONSTRAINT
   );
 }
 

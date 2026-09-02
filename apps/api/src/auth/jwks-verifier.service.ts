@@ -246,9 +246,7 @@ export class JwksVerifierService {
       );
     }
     if (new URL(document.jwks_uri).origin !== new URL(this.issuer).origin) {
-      throw new Error(
-        `OIDC discovery at ${discoveryUrl} points jwks_uri at a different origin.`
-      );
+      throw new Error(`OIDC discovery at ${discoveryUrl} points jwks_uri at a different origin.`);
     }
 
     return document.jwks_uri;

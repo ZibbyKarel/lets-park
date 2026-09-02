@@ -25,9 +25,7 @@ export const CurrentUser = createParamDecorator(
     const user = (request as unknown as Record<string, unknown>)[REQUEST_USER_PROPERTY];
 
     if (!isAuthenticatedUser(user)) {
-      throw new Error(
-        '@CurrentUser() was used on a route that is not behind JwtAuthGuard.'
-      );
+      throw new Error('@CurrentUser() was used on a route that is not behind JwtAuthGuard.');
     }
 
     return user;

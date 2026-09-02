@@ -28,10 +28,20 @@ const ADMIN: AuthenticatedUser = {
 
 const USER: AuthenticatedUser = { ...ADMIN, oktaId: 'okta-user', role: 'USER' };
 
+/**
+ * Stand-ins for the handler and controller the reflector would read metadata
+ * from. Their bodies are irrelevant — the reflector is stubbed too — but they
+ * must be distinct references, because `getAllAndOverride` is called with both.
+ */
+function handlerStub(): void {
+  return undefined;
+}
+class ControllerStub {}
+
 function contextWith(user: unknown): ExecutionContext {
   return {
-    getHandler: () => function handler() {},
-    getClass: () => class Controller {},
+    getHandler: () => handlerStub,
+    getClass: () => ControllerStub,
     switchToHttp: () => ({ getRequest: () => ({ user }) }),
   } as unknown as ExecutionContext;
 }
