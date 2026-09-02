@@ -1,0 +1,15 @@
+-- Task 12 adds one member to the audit action enum.
+--
+-- The reservation-window settings are a singleton row whose two fields decide,
+-- for every user, whether a month can be booked. `plan.md` requires the change
+-- to be audited, and none of the existing members describes it: they all name a
+-- row that was created or deleted. See `doc/decision/0045-*`.
+--
+-- `ADD VALUE IF NOT EXISTS` rather than a recreate: rewriting the type would
+-- mean dropping and re-adding the `AuditLog.action` column, and that table is
+-- append-only by trigger (`doc/decision/0027-*`) — an UPDATE against it is
+-- rejected by the database.
+--
+-- Postgres 12+ allows ADD VALUE inside a transaction block as long as the new
+-- value is not used in the same transaction; nothing here uses it.
+ALTER TYPE "AuditLogAction" ADD VALUE IF NOT EXISTS 'RESERVATION_WINDOW_UPDATED';

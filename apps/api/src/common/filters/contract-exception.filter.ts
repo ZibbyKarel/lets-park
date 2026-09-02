@@ -41,11 +41,12 @@
 
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { ErrorCode, ErrorDetails } from '@lets-park/contract';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
+import { RPC_PATH_PREFIX } from '../../orpc/rpc-route';
 import { DomainError } from '../errors/domain-error';
 
 /**
@@ -173,6 +174,44 @@ export function mapPrismaErrorCode(
   }
 }
 
+/**
+ * The RPC protocol's envelope.
+ *
+ * `@orpc/client`'s `RPCLink` deserialises a response by reading `json` out of
+ * this wrapper; a body written at the top level deserialises to `undefined`,
+ * fails oRPC's `isORPCErrorJson`, and the client then **synthesises a code from
+ * the HTTP status** — so a 409 `SPOT_ALREADY_RESERVED` used to arrive as
+ * `CONFLICT`, which is also a member of `ERROR_CODES` and therefore did not fail
+ * closed: the UI would have shown the wrong domain error, confidently. Recorded
+ * as known-and-unguarded in `doc/decision/0039-*`, which routed the fix to
+ * whoever owned `apps/api` next; that is Task 12.
+ *
+ * `meta` is oRPC's list of type annotations for values JSON cannot carry (dates,
+ * bigints, sets). An error body has none — every field is a string, a number or
+ * a boolean — so it is empty, which is exactly what oRPC's own serialiser emits
+ * for such a payload. `contract-exception.filter.spec.ts` pins the shape.
+ */
+export interface RpcEnvelope<T> {
+  json: T;
+  meta: [];
+}
+
+function rpcEnvelope<T>(body: T): RpcEnvelope<T> {
+  return { json: body, meta: [] };
+}
+
+/**
+ * True for a request that will be read by an oRPC client.
+ *
+ * Scoped by path rather than applied everywhere on purpose: the health probes
+ * and the ICS feed (Task 14) are read by an orchestrator and by calendar
+ * clients, neither of which knows what a `{ json, meta }` envelope is.
+ */
+function isRpcRequest(request: Request): boolean {
+  const path = request.path;
+  return path === RPC_PATH_PREFIX || path.startsWith(`${RPC_PATH_PREFIX}/`);
+}
+
 /** Builds the wire body for a contract error code. */
 export function contractErrorBody(code: ErrorCode, details?: ErrorDetails): ContractErrorBody {
   const definition = ERROR_DEFINITIONS[code];
@@ -260,7 +299,15 @@ export class ContractExceptionFilter implements ExceptionFilter {
   ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const response = http.getResponse<Response>();
+    // Only contract errors are enveloped. Transport failures keep Nest's shape
+    // even on an RPC path (`doc/decision/0033-*`): the closed enum has no member
+    // for "no such route" or "too many requests", and dressing one up as an
+    // oRPC error would hand the frontend a code it has no copy for. The oRPC
+    // client falls back to the HTTP status for those, which is correct.
+    const wrap = <T>(body: T): T | RpcEnvelope<T> =>
+      isRpcRequest(http.getRequest<Request>()) ? rpcEnvelope(body) : body;
 
     if (exception instanceof DomainError) {
       // Expected: a rule was violated. `warn`, not `error` — this is not a
@@ -269,7 +316,9 @@ export class ContractExceptionFilter implements ExceptionFilter {
         { err: exception, errorCode: exception.code, details: exception.details },
         'Domain rule violated'
       );
-      response.status(exception.status).json(contractErrorBody(exception.code, exception.details));
+      response
+        .status(exception.status)
+        .json(wrap(contractErrorBody(exception.code, exception.details)));
       return;
     }
 
@@ -286,7 +335,7 @@ export class ContractExceptionFilter implements ExceptionFilter {
       );
       // `exception.meta` is not forwarded as `data`: it names constraints and
       // columns, which is server internals.
-      response.status(ERROR_DEFINITIONS[code].status).json(contractErrorBody(code));
+      response.status(ERROR_DEFINITIONS[code].status).json(wrap(contractErrorBody(code)));
       return;
     }
 

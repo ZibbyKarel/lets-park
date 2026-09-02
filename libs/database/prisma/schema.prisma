@@ -60,6 +60,7 @@ enum AuditLogAction {
   WAITLIST_PROMOTED
   USER_UPDATED
   SPOT_UPDATED
+  RESERVATION_WINDOW_UPDATED
 }
 
 // --- Entities --------------------------------------------------------------

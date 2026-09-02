@@ -8,6 +8,7 @@
 
 import {
   ArgumentsHost,
+  BadRequestException,
   HttpException,
   HttpStatus,
   InternalServerErrorException,
@@ -15,7 +16,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
-import { errorShapeSchema } from '@lets-park/contract';
+import { ERROR_DEFINITIONS, errorShapeSchema } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
 import { DomainError } from '../errors/domain-error';
 import {
@@ -30,8 +31,14 @@ interface CapturedResponse {
   body: Record<string, unknown>;
 }
 
-/** A minimal Express response double that records what the filter wrote. */
-function createHost(): { host: ArgumentsHost; captured: CapturedResponse } {
+/**
+ * A minimal Express request/response double that records what the filter wrote.
+ *
+ * `path` decides whether the response is expected to carry the RPC envelope. It
+ * defaults to a non-oRPC route so that every assertion written before the
+ * envelope existed still describes the same situation it always did.
+ */
+function createHost(path = '/api/echo'): { host: ArgumentsHost; captured: CapturedResponse } {
   const captured: CapturedResponse = { status: 0, body: {} };
   const response = {
     status(code: number) {
@@ -44,7 +51,7 @@ function createHost(): { host: ArgumentsHost; captured: CapturedResponse } {
     },
   };
   const host = {
-    switchToHttp: () => ({ getResponse: () => response }),
+    switchToHttp: () => ({ getResponse: () => response, getRequest: () => ({ path }) }),
   } as unknown as ArgumentsHost;
   return { host, captured };
 }
@@ -452,6 +459,79 @@ describe('ContractExceptionFilter', () => {
 
       expect(captured.body).toEqual({ statusCode: 500, message: 'Internal server error' });
       expect(serialized(captured)).not.toContain('connection string');
+    });
+  });
+
+  /**
+   * The guard `doc/decision/0039-*` routed here, and the defect it describes.
+   *
+   * A domain error written at the top level of the body deserialises to
+   * `undefined` in `@orpc/client`, which then synthesises a code from the HTTP
+   * status — so `SPOT_ALREADY_RESERVED` (409) arrived as `CONFLICT`, a member of
+   * `ERROR_CODES` too, and the UI showed the wrong error with full confidence.
+   * These tests fail if the envelope is removed.
+   *
+   * They belong here rather than in `libs/api-client`: that lib is
+   * `type:util`/`scope:web` and the Nx boundaries forbid it from depending on
+   * `apps/api`, which is why the earlier attempt at a tripwire over there had
+   * zero coupling to this file.
+   */
+  describe('the RPC envelope on oRPC routes', () => {
+    const RPC_PATH = '/api/rpc/reservation/create';
+
+    it('wraps a domain error in { json, meta } so the oRPC client can read the code', () => {
+      const { host, captured } = createHost(RPC_PATH);
+
+      filter.catch(new DomainError('SPOT_ALREADY_RESERVED'), host);
+
+      expect(captured.status).toBe(409);
+      expect(captured.body).toEqual({
+        json: {
+          defined: false,
+          code: 'SPOT_ALREADY_RESERVED',
+          status: 409,
+          message: ERROR_DEFINITIONS.SPOT_ALREADY_RESERVED.message,
+        },
+        meta: [],
+      });
+    });
+
+    it('wraps a Prisma constraint violation the same way', () => {
+      const { host, captured } = createHost(RPC_PATH);
+
+      filter.catch(prismaError('P2002', { target: ['parkingSpotId', 'date'] }), host);
+
+      expect(captured.body).toMatchObject({
+        json: { code: 'SPOT_ALREADY_RESERVED' },
+        meta: [],
+      });
+    });
+
+    it('leaves a transport failure in Nest’s shape, even on an RPC path', () => {
+      // `doc/decision/0033-*`: the closed enum has no member for "too many
+      // requests", and the oRPC client derives a code from the status for these.
+      const { host, captured } = createHost(RPC_PATH);
+
+      filter.catch(new BadRequestException('Validation failed'), host);
+
+      expect(captured.body).toEqual({ statusCode: 400, message: 'Validation failed' });
+    });
+
+    it('leaves a non-oRPC route unwrapped — the ICS feed and the probes are not oRPC clients', () => {
+      const { host, captured } = createHost('/api/calendar/abc.ics');
+
+      filter.catch(new DomainError('NOT_FOUND'), host);
+
+      expect(captured.body).toMatchObject({ code: 'NOT_FOUND' });
+      expect(captured.body).not.toHaveProperty('json');
+    });
+
+    it('does not mistake a path that merely starts with the same characters', () => {
+      const { host, captured } = createHost('/api/rpcsomething/else');
+
+      filter.catch(new DomainError('NOT_FOUND'), host);
+
+      expect(captured.body).not.toHaveProperty('json');
     });
   });
 });

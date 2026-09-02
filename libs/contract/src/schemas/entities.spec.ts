@@ -224,6 +224,7 @@ describe('auditLogSchema', () => {
       'WAITLIST_PROMOTED',
       'USER_UPDATED',
       'SPOT_UPDATED',
+      'RESERVATION_WINDOW_UPDATED',
     ]);
     for (const action of AUDIT_LOG_ACTIONS) {
       expect(auditLogActionSchema.safeParse(action).success).toBe(true);
