@@ -186,18 +186,23 @@ export function mapPrismaErrorCode(
  * as known-and-unguarded in `doc/decision/0039-*`, which routed the fix to
  * whoever owned `apps/api` next; that is Task 12.
  *
- * `meta` is oRPC's list of type annotations for values JSON cannot carry (dates,
- * bigints, sets). An error body has none — every field is a string, a number or
- * a boolean — so it is empty, which is exactly what oRPC's own serialiser emits
- * for such a payload. `contract-exception.filter.spec.ts` pins the shape.
+ * There is deliberately **no `meta` key**. `meta` is oRPC's list of type
+ * annotations for values JSON cannot carry (dates, bigints, sets); an error body
+ * has none, and oRPC's own serialiser drops the key entirely when the list is
+ * empty (`StandardRPCSerializer#serialize`: `meta_.length === 0 ? undefined :
+ * meta_`), which the client compensates for on the way back in
+ * (`data.meta ?? []`). Emitting `meta: []` here would work too, but this way the
+ * filter's body is byte-identical to what `RPCHandler` produces for the same
+ * error — and "identical to the transport" is a property that can be checked,
+ * whereas "close enough for the deserialiser" is a claim about someone else's
+ * code. `orpc-pipeline.spec.ts` compares the two shapes against a live server.
  */
 export interface RpcEnvelope<T> {
   json: T;
-  meta: [];
 }
 
 function rpcEnvelope<T>(body: T): RpcEnvelope<T> {
-  return { json: body, meta: [] };
+  return { json: body };
 }
 
 /**

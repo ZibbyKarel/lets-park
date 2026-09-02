@@ -79,6 +79,7 @@ export interface SpotSeed {
 
 export interface UserSeed {
   id?: string;
+  oktaId?: string;
   email?: string;
   name?: string;
   role?: UserRow['role'];
@@ -116,6 +117,18 @@ export class PrismaDouble {
   readonly auditLogs: AuditLogRow[] = [];
   windowSettings: WindowSettingsRow | null = null;
 
+  /**
+   * How many of the next `user.update` calls carrying an `icsToken` should be
+   * rejected with P2002.
+   *
+   * A generated token cannot be made to collide from the outside — that is the
+   * point of 32 bytes of `randomBytes` — so the collision has to be induced at
+   * the layer that would actually detect it: the unique index. This is the same
+   * error Postgres raises, at the same moment, which is what `MeService`'s retry
+   * loop is written against.
+   */
+  icsTokenCollisions = 0;
+
   // --- seeding ------------------------------------------------------------
 
   seedSpot(seed: SpotSeed): ParkingSpotRow {
@@ -139,7 +152,7 @@ export class PrismaDouble {
       name: seed.name ?? `User ${id.slice(0, 4)}`,
       licensePlate: seed.licensePlate ?? null,
       role: seed.role ?? 'USER',
-      oktaId: `okta-${id}`,
+      oktaId: seed.oktaId ?? `okta-${id}`,
       active: seed.active ?? true,
       icsToken: seed.icsToken ?? `token-${id}`,
       preferredParkingSpotId: seed.preferredParkingSpotId ?? null,
@@ -259,14 +272,42 @@ export class PrismaDouble {
           .filter((row) => matchesUserWhere(row, args.where ?? {}))
           .sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email))
           .map(copy),
-      findUnique: async (args: { where: { id?: string; email?: string } }) => {
-        const { id, email } = args.where;
+      findUnique: async (args: { where: { id?: string; email?: string; oktaId?: string } }) => {
+        const { id, email, oktaId } = args.where;
+        if (id === undefined && email === undefined && oktaId === undefined) {
+          return unsupported('a user lookup without id, email or oktaId', args.where);
+        }
         const row = this.users.find(
           (candidate) =>
             (id !== undefined && candidate.id === id) ||
-            (email !== undefined && candidate.email === email)
+            (email !== undefined && candidate.email === email) ||
+            (oktaId !== undefined && candidate.oktaId === oktaId)
         );
         return row === undefined ? null : copy(row);
+      },
+      // Just-in-time provisioning (`AuthUserService`) creates a row for a
+      // subject the database has never seen; the oRPC pipeline test goes through
+      // the real guard, so it goes through this.
+      create: async (args: {
+        data: { oktaId: string; email: string; name: string; icsToken: string };
+      }) => {
+        for (const [column, value] of [
+          ['oktaId', args.data.oktaId],
+          ['email', args.data.email],
+          ['icsToken', args.data.icsToken],
+        ] as const) {
+          if (this.users.some((row) => row[column] === value)) {
+            throw uniqueViolation('User', column);
+          }
+        }
+        return copy(
+          this.seedUser({
+            oktaId: args.data.oktaId,
+            email: args.data.email,
+            name: args.data.name,
+            icsToken: args.data.icsToken,
+          })
+        );
       },
       count: async (args: { where?: UserWhere } = {}) =>
         this.users.filter((row) => matchesUserWhere(row, args.where ?? {})).length,
@@ -276,13 +317,18 @@ export class PrismaDouble {
           throw recordNotFound();
         }
         const { preferredParkingSpot, ...scalars } = args.data;
-        if (
-          scalars.icsToken !== undefined &&
-          this.users.some(
-            (candidate) => candidate.icsToken === scalars.icsToken && candidate.id !== row.id
-          )
-        ) {
-          throw uniqueViolation('User', 'icsToken');
+        if (scalars.icsToken !== undefined) {
+          if (this.icsTokenCollisions > 0) {
+            this.icsTokenCollisions -= 1;
+            throw uniqueViolation('User', 'icsToken');
+          }
+          if (
+            this.users.some(
+              (candidate) => candidate.icsToken === scalars.icsToken && candidate.id !== row.id
+            )
+          ) {
+            throw uniqueViolation('User', 'icsToken');
+          }
         }
         Object.assign(row, scalars, { updatedAt: new Date() });
         if (preferredParkingSpot !== undefined) {
@@ -372,7 +418,9 @@ interface UserWhere {
   OR?: { name?: { contains: string; mode: string }; email?: { contains: string; mode: string } }[];
 }
 
-type UserUpdateData = Partial<Pick<UserRow, 'role' | 'active' | 'licensePlate' | 'icsToken'>> & {
+type UserUpdateData = Partial<
+  Pick<UserRow, 'role' | 'active' | 'licensePlate' | 'icsToken' | 'name' | 'oktaId'>
+> & {
   preferredParkingSpot?: { disconnect: true } | { connect: { id: string } };
 };
 

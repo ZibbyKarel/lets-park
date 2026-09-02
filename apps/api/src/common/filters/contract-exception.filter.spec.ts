@@ -492,7 +492,6 @@ describe('ContractExceptionFilter', () => {
           status: 409,
           message: ERROR_DEFINITIONS.SPOT_ALREADY_RESERVED.message,
         },
-        meta: [],
       });
     });
 
@@ -501,9 +500,8 @@ describe('ContractExceptionFilter', () => {
 
       filter.catch(prismaError('P2002', { target: ['parkingSpotId', 'date'] }), host);
 
-      expect(captured.body).toMatchObject({
-        json: { code: 'SPOT_ALREADY_RESERVED' },
-        meta: [],
+      expect(captured.body).toEqual({
+        json: expect.objectContaining({ code: 'SPOT_ALREADY_RESERVED' }),
       });
     });
 
