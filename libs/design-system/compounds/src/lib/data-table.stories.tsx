@@ -175,7 +175,8 @@ export const ControlledSort: Story = {
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-fg-3">
-          Řazení drží rodič: <code>{sort === null ? 'žádné' : `${sort.columnId} / ${sort.direction}`}</code>
+          Řazení drží rodič:{' '}
+          <code>{sort === null ? 'žádné' : `${sort.columnId} / ${sort.direction}`}</code>
         </p>
         <DataTable {...args} sort={sort} onSortChange={setSort} />
       </div>

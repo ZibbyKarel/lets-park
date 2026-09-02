@@ -7,8 +7,8 @@ two bottom layers of the design system:
 2. **primitives** (`libs/design-system/primitives`) – the smallest components,
    built exclusively from those values.
 
-The third layer (`compounds`, e.g. DataTable) is created in a later task. The
-dependency direction `tokens → primitives → compounds` is enforced by ESLint
+The third layer (`compounds`, e.g. DataTable) is documented at the end of this
+file. The dependency direction `tokens → primitives → compounds` is enforced by ESLint
 (see `doc/workspace.md`, the `ds:*` dimension); **compounds may import
 primitives, never the other way around**.
 
@@ -583,3 +583,166 @@ node) and render a `DismissableLayerProvider` with the returned node around its
 own content. Binding an Escape listener of its own instead is the defect
 `doc/decision/0056-escape-goes-to-the-innermost-open-layer.md` exists to
 prevent.
+
+---
+
+# Compounds (`libs/design-system/compounds`)
+
+The package `@lets-park/design-system/compounds`, tags `type:ui`, `scope:web`,
+`ds:compounds`. **Three components** (Task 22), each with a story and a Jest +
+Testing Library spec alongside it (47 tests across 3 suites).
+
+This is the third layer: it composes primitives into larger, still
+**domain-free** pieces. Compounds may import primitives; primitives must never
+import compounds. The `ds:compounds` entry in `DEP_CONSTRAINTS`
+(`eslint.config.mjs`) enforces the direction.
+
+```
+libs/design-system/compounds/
+  .storybook/           – Storybook 10, port 4401; same shape as the primitives'
+    preview.css           – @source both ../src and ../../primitives/src (see below)
+  src/
+    lib/
+      data-table.tsx      – the admin table; the workspace's only @tanstack/react-table importer
+      empty-state.tsx     – "there is nothing here"
+      confirm-dialog.tsx  – Modal narrowed to one question and two answers
+      *.stories.tsx        – a story for every compound
+      *.spec.tsx            – a spec for every compound
+    index.ts                 – the public API
+```
+
+## Rules that apply across every compound
+
+- **Everything a primitive already decided stays decided.** A compound picks
+  primitives and arranges them; it does not restyle them. `ConfirmDialog` sets
+  no colors at all — it chooses a `Button` variant.
+- **Domain-free, in stories and specs too.** No parking spot, reservation or
+  user appears in this lib, including in fixtures. The sample rows are generic
+  items, even though the screens these were drawn for are exactly those tables.
+- **Czech UI copy arrives as a prop with a default**, never as a hardcoded
+  literal — `emptyTitle = 'Žádná data'`, `confirmLabel = 'Potvrdit'`,
+  `cancelLabel = 'Zrušit'`. Same rule as the primitives' `closeLabel`.
+- **The swap-don't-layer rule from the primitives still applies.** A sorted vs.
+  an unsorted column header supplies its *whole* color set in one branch of the
+  ternary; two unconditional `text-*` utilities would resolve by Tailwind's emit
+  order, not by the order they appear in `className`.
+- **The Storybook `preview.css` names two `@source` directories.** A compound
+  renders primitives, so Tailwind has to scan `../../primitives/src` as well —
+  otherwise every `Button` inside a `ConfirmDialog` renders unstyled.
+
+## Inventory and API
+
+### `DataTable<TData>`
+
+The design's admin table (`doc/design/screens/03-admin-users.png`,
+`04-admin-spots.png`): a bordered card with a title band, an optional filter
+band, and a sortable list.
+
+It is the **wrapper lib** for `@tanstack/react-table` — the single place in the
+workspace allowed to import it (`WRAPPED_LIBRARIES` in `eslint.config.mjs`).
+No TanStack type crosses its props.
+
+| prop | type | default |
+| --- | --- | --- |
+| `columns` | `DataTableColumn<TData>[]` | – (required) |
+| `data` | `TData[]` | – (required) |
+| `getRowId` | `(row: TData) => string` | – (required) |
+| `title` | `string` | – (required; visible card title **and** the table's accessible name) |
+| `description` | `ReactNode` | – |
+| `actions` | `ReactNode` | – (right of the header band: a search field, or a button) |
+| `toolbar` | `ReactNode` | – (a band under the header, for filters) |
+| `minWidth` | `string` | – (below it the card scrolls sideways) |
+| `defaultSort` / `sort` / `onSortChange` | `DataTableSort` / `DataTableSort \| null` / `(s) => void` | uncontrolled |
+| `emptyTitle` | `string` | `'Žádná data'` ("No data") |
+| `emptyDescription` / `emptyAction` | `ReactNode` | – |
+
+`DataTableColumn<TData>`: `id`, `header`, `cell: (row) => ReactNode`,
+`sortValue?`, `align?: 'start' | 'end'`, `width?`.
+
+- **`sortValue` is both the sort accessor and the sortability flag.** Omit it
+  and the column cannot be sorted — its header is plain text rather than a
+  button and carries no `aria-sort`. There is no second boolean that could
+  disagree with it. This mirrors the design, where `Jméno`/`E-mail` are buttons
+  and `Štítek`/`Kategorie`/`Stav dnes` are labels.
+- **Sorting is a two-state toggle**: a new column starts ascending, a press on
+  the sorted column flips it, and there is no third "unsorted" press — that is
+  the design's own `sortDir` logic, and TanStack's opposite defaults
+  (`enableSortingRemoval`, `sortDescFirst`) are pinned explicitly. See
+  `doc/decision/0072-sorting-is-a-two-state-toggle-behind-a-wrapper-type.md`.
+- **It renders a real `<table>`**, not the design's grid of `<div>`s — same
+  picture, but the roles, `aria-sort` and table navigation come from the
+  elements. See `doc/decision/0070-datatable-is-a-real-table-not-a-grid.md`.
+- **`getRowId` is required** rather than defaulting to the array index: an index
+  key re-uses the wrong DOM node the moment the table is re-sorted.
+- With no rows it renders an `EmptyState` in a cell spanning every column, and
+  **keeps the column headers**, so the shape of the table is still readable.
+
+### `EmptyState`
+
+| prop | type | default |
+| --- | --- | --- |
+| `title` | `ReactNode` | – (required) |
+| `description` | `ReactNode` | – |
+| `icon` | `ReactNode` | – (decorative, `aria-hidden`) |
+| `action` | `ReactNode` | – (usually one `Button`) |
+| `size` | `'sm' \| 'md'` | `'md'` (`sm` is what `DataTable` uses) |
+| `headingLevel` | `2 \| 3 \| 4` | – (a `<p>` when omitted) |
+
+**`headingLevel` is deliberately undefaulted.** Only the page knows its own
+outline, and a component that guesses a level produces the skipped-heading
+defect screen-reader users navigate straight into.
+
+### `ConfirmDialog`
+
+| prop | type | default |
+| --- | --- | --- |
+| `open` | `boolean` | – (required) |
+| `title` | `ReactNode` | – (required; the dialog's accessible name) |
+| `description` | `ReactNode` | – (wired to `aria-describedby`) |
+| `onConfirm` / `onCancel` | `() => void` | – (both required) |
+| `confirmLabel` | `string` | `'Potvrdit'` ("Confirm") |
+| `cancelLabel` | `string` | `'Zrušit'` ("Cancel") |
+| `tone` | `'default' \| 'danger'` | `'default'` |
+| `loading` | `boolean` | `false` |
+
+- **Every way out that is not confirmation calls `onCancel`** — the cancel
+  button, Escape, the scrim and the ×, all through one guard, so there is no
+  fourth code path that could forget the `loading` check.
+- **`loading` blocks all four of them.** Cancelling a request that has already
+  left is a promise this component cannot keep.
+- **Focus never starts on the confirming button** (it lands on `Modal`'s ×), so
+  a destructive dialog does not open with the destructive action under the
+  user's Enter key.
+
+`EmptyState` and `ConfirmDialog` have **no model in the design** and are derived
+from its language; what was invented and what was not is recorded in
+`doc/decision/0071-empty-state-and-confirm-dialog-are-invented.md`.
+
+## Storybook
+
+```bash
+npx nx run design-system-compounds:storybook         # dev server, port 4401
+npx nx run design-system-compounds:build-storybook   # static build into dist/
+```
+
+Same hand-written configuration as the primitives', and for the same reasons
+(`doc/decision/0013-storybook-10-without-nx-storybook-and-without-addons.md`).
+A second Storybook rather than more stories in the first one: the two libs are
+separate Nx projects with separate `lint`, `typecheck` and `build-storybook`
+targets, and a shared instance would have to reach across the project boundary
+the `ds:*` tags exist to draw.
+
+## How to add a compound
+
+1. `src/lib/<name>.tsx` – composed from primitives. If it needs a value no
+   primitive and no token supplies, that value is *invented*: say so in a
+   decision record, the way `0071` does.
+2. `src/lib/<name>.stories.tsx` and `src/lib/<name>.spec.tsx` – **at the same
+   time**, not afterward. Fixtures stay domain-free.
+3. Export it from `src/index.ts`.
+4. `npx nx run-many -t lint,typecheck,test -p design-system-compounds` and
+   `npx nx run design-system-compounds:build-storybook`.
+
+If the compound needs a primitive that does not exist, that primitive belongs in
+`libs/design-system/primitives` — not built locally here and left. Building it
+here is acceptable only as a deliberate, recorded step, with promotion flagged.

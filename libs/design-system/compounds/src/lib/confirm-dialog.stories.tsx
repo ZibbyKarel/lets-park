@@ -95,5 +95,7 @@ export const Loading: Story = {
     confirmLabel: 'Smazat',
     loading: true,
   },
-  render: (args) => <ConfirmDialog {...args} open onConfirm={() => undefined} onCancel={() => undefined} />,
+  render: (args) => (
+    <ConfirmDialog {...args} open onConfirm={() => undefined} onCancel={() => undefined} />
+  ),
 };

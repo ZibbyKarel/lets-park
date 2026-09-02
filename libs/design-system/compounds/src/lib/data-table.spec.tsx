@@ -97,9 +97,9 @@ describe('DataTable', () => {
 
       // Three body rows plus the header row.
       expect(screen.getAllByRole('row')).toHaveLength(4);
-      expect([...container.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id'))).toEqual(
-        ['b', 'c', 'a']
-      );
+      expect(
+        [...container.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id'))
+      ).toEqual(['b', 'c', 'a']);
     });
 
     it('renders each cell through its column renderer', () => {
@@ -239,7 +239,12 @@ describe('DataTable', () => {
       renderTable({
         columns: [
           { id: 'label', header: 'Štítek', cell: (row) => row.label },
-          { id: 'note', header: 'Poznámka', cell: (row) => row.note ?? '—', sortValue: (row) => row.note },
+          {
+            id: 'note',
+            header: 'Poznámka',
+            cell: (row) => row.note ?? '—',
+            sortValue: (row) => row.note,
+          },
         ],
       });
 
@@ -282,6 +287,40 @@ describe('DataTable', () => {
       expect(onSortChange).toHaveBeenCalledWith({ columnId: 'label', direction: 'asc' });
       // The caller did not move `sort`, so the order must not have moved either.
       expect(labelOrder()).toEqual(['Beta', 'Gama', 'Alfa']);
+    });
+
+    it('keeps reporting the same request while the caller holds sort still', async () => {
+      const user = userEvent.setup();
+      const onSortChange = jest.fn();
+      renderTable({ sort: null, onSortChange });
+
+      await user.click(screen.getByRole('button', { name: /Štítek/ }));
+      await user.click(screen.getByRole('button', { name: /Štítek/ }));
+
+      // Both presses are computed from the caller's `sort`, so neither drifts
+      // into a direction the caller never asked for.
+      expect(onSortChange).toHaveBeenCalledTimes(2);
+      expect(onSortChange).toHaveBeenNthCalledWith(1, { columnId: 'label', direction: 'asc' });
+      expect(onSortChange).toHaveBeenNthCalledWith(2, { columnId: 'label', direction: 'asc' });
+      expect(labelOrder()).toEqual(['Beta', 'Gama', 'Alfa']);
+    });
+
+    it('follows the caller when the sort prop moves', () => {
+      const { rerender } = renderTable({ sort: { columnId: 'label', direction: 'asc' } });
+
+      expect(labelOrder()).toEqual(['Alfa', 'Beta', 'Gama']);
+
+      rerender(
+        <DataTable
+          title="Položky"
+          columns={COLUMNS}
+          data={ITEMS}
+          getRowId={(row) => row.id}
+          sort={{ columnId: 'label', direction: 'desc' }}
+        />
+      );
+
+      expect(labelOrder()).toEqual(['Gama', 'Beta', 'Alfa']);
     });
 
     it('renders the ordering the caller supplies', () => {

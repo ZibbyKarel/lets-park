@@ -97,10 +97,7 @@ describe('ConfirmDialog', () => {
     it('marks the confirming button busy and disables both buttons', () => {
       renderDialog({ loading: true });
 
-      expect(screen.getByRole('button', { name: 'Potvrdit' })).toHaveAttribute(
-        'aria-busy',
-        'true'
-      );
+      expect(screen.getByRole('button', { name: 'Potvrdit' })).toHaveAttribute('aria-busy', 'true');
       expect(screen.getByRole('button', { name: 'Potvrdit' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Zrušit' })).toBeDisabled();
     });

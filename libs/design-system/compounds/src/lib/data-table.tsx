@@ -285,9 +285,7 @@ export function DataTable<TData extends DataTableRow>({
         {actions !== undefined && <div className="flex items-center gap-2">{actions}</div>}
       </div>
 
-      {toolbar !== undefined && (
-        <div className="border-b border-divider px-6 py-4">{toolbar}</div>
-      )}
+      {toolbar !== undefined && <div className="border-b border-divider px-6 py-4">{toolbar}</div>}
 
       <table className="w-full border-collapse" style={minWidth ? { minWidth } : undefined}>
         {/* The visible copy of this string is the card title above; a screen

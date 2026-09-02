@@ -97,12 +97,7 @@ export function ConfirmDialog({
           <Button variant="secondary" size="lg" onClick={handleCancel} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button
-            variant={CONFIRM_VARIANT[tone]}
-            size="lg"
-            onClick={onConfirm}
-            loading={loading}
-          >
+          <Button variant={CONFIRM_VARIANT[tone]} size="lg" onClick={onConfirm} loading={loading}>
             {confirmLabel}
           </Button>
         </>
