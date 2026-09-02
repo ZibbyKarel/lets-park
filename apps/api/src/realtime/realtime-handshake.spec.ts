@@ -63,10 +63,7 @@ describe('the Socket.io handshake', () => {
       ['no auth payload at all', (): string | undefined => undefined],
       ['an empty string, which the real client never sends', () => ''],
       ['a bearer value that is not a JWT', () => 'garbage'],
-      [
-        'a token signed by an unpublished key',
-        () => harness.tokenFromAnImpostor('okta-alice'),
-      ],
+      ['a token signed by an unpublished key', () => harness.tokenFromAnImpostor('okta-alice')],
       [
         'an expired token',
         () => harness.tokenFor({ subject: 'okta-alice', expiresInSeconds: -60 }),

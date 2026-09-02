@@ -29,7 +29,7 @@ import type { AddressInfo } from 'node:net';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import type { Params } from 'nestjs-pino';
 import type { Options } from 'pino-http';
-import type { OidcTestIssuer, TestSigningKey } from '../../auth/testing/oidc-test-issuer';
+import type { OidcTestIssuer } from '../../auth/testing/oidc-test-issuer';
 import { createSigningKey, startOidcTestIssuer } from '../../auth/testing/oidc-test-issuer';
 import { configureApp } from '../../configure-app';
 import { PrismaService } from '../../database/prisma.service';
@@ -55,7 +55,12 @@ export interface RealtimeTestApp {
   readonly issuer: OidcTestIssuer;
   readonly double: PrismaDouble;
   /** Mints a token this API should accept, unless an option is deliberately wrong. */
-  tokenFor(options: { subject: string; email?: string; name?: string; expiresInSeconds?: number }): string;
+  tokenFor(options: {
+    subject: string;
+    email?: string;
+    name?: string;
+    expiresInSeconds?: number;
+  }): string;
   /** Mints a token signed by a key the issuer never published. */
   tokenFromAnImpostor(subject: string): string;
   close(): Promise<void>;
@@ -134,7 +139,12 @@ export async function startRealtimeTestApp(
     issuer,
     double,
     tokenFor: (tokenOptions) =>
-      signTestToken({ key: signingKey, issuer: issuer.issuer, audience: AUDIENCE, ...tokenOptions }),
+      signTestToken({
+        key: signingKey,
+        issuer: issuer.issuer,
+        audience: AUDIENCE,
+        ...tokenOptions,
+      }),
     tokenFromAnImpostor: (subject) =>
       signTestToken({
         // A different key pair published under the *same* `kid`, so the lookup

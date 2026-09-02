@@ -98,11 +98,7 @@ describe('the realtime gateway', () => {
     await waitFor(() => roomSize(date) > before, `a socket to join ${roomForDate(date)}`);
   }
 
-  async function waitFor(
-    condition: () => boolean,
-    what: string,
-    timeoutMs = 2000
-  ): Promise<void> {
+  async function waitFor(condition: () => boolean, what: string, timeoutMs = 2000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (!condition()) {
       if (Date.now() > deadline) {
@@ -140,7 +136,10 @@ describe('the realtime gateway', () => {
       publish('waitlist:updated', { ...cell, waitlistCount: 3 });
 
       await expect(
-        client.waitForEvent('waitlist:updated', (p: { parkingSpotId: string }) => p.parkingSpotId === cell.parkingSpotId)
+        client.waitForEvent(
+          'waitlist:updated',
+          (p: { parkingSpotId: string }) => p.parkingSpotId === cell.parkingSpotId
+        )
       ).resolves.toEqual({ ...cell, waitlistCount: 3 });
     });
 
@@ -160,9 +159,9 @@ describe('the realtime gateway', () => {
         'waitlist:updated',
         (p: { parkingSpotId: string }) => p.parkingSpotId === cell.parkingSpotId
       );
-      expect(
-        bystander.received.filter((event) => event.name === 'waitlist:updated')
-      ).toHaveLength(0);
+      expect(bystander.received.filter((event) => event.name === 'waitlist:updated')).toHaveLength(
+        0
+      );
     });
 
     it('delivers nothing to a client that subscribed to nothing', async () => {
@@ -269,9 +268,9 @@ describe('the realtime gateway', () => {
       const other = await connectAs(bob);
       const cell = freshCell();
 
-      await expect(
-        client.emitWithAck('cell:lock', { ...cell, extra: 1 }, 400)
-      ).rejects.toThrow(/No acknowledgement/);
+      await expect(client.emitWithAck('cell:lock', { ...cell, extra: 1 }, 400)).rejects.toThrow(
+        /No acknowledgement/
+      );
 
       // The cell must still be free.
       const ack = (await other.emitWithAck('cell:lock', cell)) as CellLockAck;
@@ -290,9 +289,10 @@ describe('the realtime gateway', () => {
       // off the method function, which is where the decorator puts it
       // (`decorators/subscribe-message.decorator.js`), rather than off a name
       // this file guesses.
-      const prototype = Object.getPrototypeOf(
-        harness.app.get(RealtimeGateway)
-      ) as Record<string, unknown>;
+      const prototype = Object.getPrototypeOf(harness.app.get(RealtimeGateway)) as Record<
+        string,
+        unknown
+      >;
       const subscribed = Object.getOwnPropertyNames(prototype)
         // `@WebSocketServer()` puts a `null` on the prototype, and
         // `Reflect.getMetadata` throws on a non-object target.
@@ -601,7 +601,10 @@ describe('the realtime gateway', () => {
         publisher.publish([
           // `roomForDate` throws a `TypeError` on a date that is not a calendar
           // date, which is the realistic way this path raises.
-          { name: 'waitlist:updated', payload: { date: 'nope', parkingSpotId: randomUUID(), waitlistCount: 0 } } as never,
+          {
+            name: 'waitlist:updated',
+            payload: { date: 'nope', parkingSpotId: randomUUID(), waitlistCount: 0 },
+          } as never,
         ])
       ).not.toThrow();
     });

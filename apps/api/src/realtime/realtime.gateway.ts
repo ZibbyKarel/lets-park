@@ -35,7 +35,7 @@
  * `reservations/reservation-events.ts` and `realtime.publisher.ts`.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
 import {
   ConnectedSocket,
@@ -143,11 +143,20 @@ const handshakeAuthSchema = z.looseObject({
   token: z.string().min(1),
 });
 
-/** Why a handshake was refused. Reaches the logs; never the client. */
+/**
+ * Why a handshake was refused. Reaches the logs; **never** the client, which
+ * gets {@link HANDSHAKE_REJECTION_MESSAGE} for all five.
+ */
 type HandshakeRejectionReason =
+  /** `handshake.auth` carried no usable `token`. */
   | 'no-token'
+  /** A token this API was never going to accept. */
   | 'token-rejected'
-  | 'user-refused'
+  /** Verified, but the account is deactivated. */
+  | 'user-deactivated'
+  /** Verified, but it names nobody this API can provision — an IdP scope problem. */
+  | 'user-unprovisionable'
+  /** A defect: the database is down, provisioning kept losing races. */
   | 'unexpected-error';
 
 @Injectable()
@@ -253,10 +262,7 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('day:subscribe')
-  daySubscribe(
-    @ConnectedSocket() client: RealtimeServerSocket,
-    @MessageBody() raw: unknown
-  ): void {
+  daySubscribe(@ConnectedSocket() client: RealtimeServerSocket, @MessageBody() raw: unknown): void {
     const payload = this.accept('day:subscribe', raw);
     if (payload === null) {
       return;
@@ -342,10 +348,7 @@ export class RealtimeGateway
    * does not take its word for it.
    */
   @SubscribeMessage('cell:unlock')
-  cellUnlock(
-    @ConnectedSocket() client: RealtimeServerSocket,
-    @MessageBody() raw: unknown
-  ): void {
+  cellUnlock(@ConnectedSocket() client: RealtimeServerSocket, @MessageBody() raw: unknown): void {
     const cell = this.accept('cell:unlock', raw);
     if (cell === null) {
       return;
@@ -391,36 +394,55 @@ export class RealtimeGateway
       throw this.rejectHandshake('no-token');
     }
 
-    let user: Awaited<ReturnType<AuthUserService['resolve']>>;
+    // Verification and identity resolution are caught **separately**, because
+    // they fail for different reasons and an operator needs to tell them apart.
+    let claims: Awaited<ReturnType<JwksVerifierService['verifyToken']>>;
     try {
-      const claims = await this.verifier.verifyToken(auth.data.token);
-      user = await this.users.resolve(claims);
-    } catch (error) {
-      // `DomainError` is the deactivated-user case and is the one rejection an
-      // *authenticated* caller can reach, so it keeps its stack — the same call
-      // `ContractExceptionFilter` makes for a `DomainError` over HTTP.
-      if (error instanceof DomainError) {
-        this.logger.warn({ err: error, errorCode: error.code }, 'Refused a Socket.io handshake');
-        throw new Error(HANDSHAKE_REJECTION_MESSAGE);
-      }
+      claims = await this.verifier.verifyToken(auth.data.token);
+    } catch {
       // Everything `verifyToken` raises is a token this API was never going to
       // accept: a malformed JWT, an unknown `kid`, a bad signature, a wrong
-      // issuer or audience, an expired token. `JwksVerifierService` has already
-      // classified and rate-limited its own diagnosis, so this line carries no
-      // `err` — forwarding a stack for something an anonymous caller can
-      // trigger at will is the log-flood vector `ContractExceptionFilter`
-      // refuses for the same reason, and a refused handshake is *retried* by
-      // the client at 1 s / 5 s / 30 s.
+      // issuer or audience, an expired token, claims that are not claims.
+      // `JwksVerifierService` has already classified and rate-limited its own
+      // diagnosis, so this line carries no `err` — forwarding a stack for
+      // something an anonymous caller can trigger at will is the log-flood
+      // vector `ContractExceptionFilter` refuses for the same reason, and a
+      // refused handshake is *retried* by the client at 1 s / 5 s / 30 s.
       //
-      // **And no token.** Not the raw JWT, not `handshake.auth`, not the
-      // error's message (a `ZodError` from the claims parse can carry input).
+      // **And no token.** Not the raw JWT, not `handshake.auth`, and not the
+      // error — the claims parse raises a `ZodError` that can carry input,
+      // which is why the caught value is not bound at all.
       throw this.rejectHandshake('token-rejected');
     }
 
-    // The whole object, not a field of it: `data` is written exactly once, by
-    // this middleware, before the socket is connected and before any handler
-    // can read it.
-    socket.data = { user: await this.loadUserSummary(user.id, user.name) };
+    try {
+      const user = await this.users.resolve(claims);
+      // The whole object, not a field of it: `data` is written exactly once, by
+      // this middleware, before the socket is connected and before any handler
+      // can read it.
+      socket.data = { user: await this.loadUserSummary(user.id, user.name) };
+    } catch (error) {
+      // A deactivated user. The one rejection an *authenticated* caller can
+      // reach, so it keeps its stack — the same call `ContractExceptionFilter`
+      // makes for a `DomainError` over HTTP, and for the same reason: the
+      // frames name the rule that refused, and only somebody with a valid token
+      // can trigger one.
+      if (error instanceof DomainError) {
+        throw this.rejectHandshake('user-deactivated', error);
+      }
+      // A verified token that names no provisionable user — the IdP client is
+      // missing the `email` scope. `AuthUserService` has already logged that at
+      // `error` with the subject, so this line adds the socket's side of it and
+      // no stack.
+      if (error instanceof UnauthorizedException) {
+        throw this.rejectHandshake('user-unprovisionable');
+      }
+      // Anything else is a defect — the database is unreachable, provisioning
+      // kept losing races. Logged **with** the stack, because unlike the
+      // branches above nobody can trigger this at will, and reaching it means
+      // something is broken rather than somebody being refused.
+      throw this.rejectHandshake('unexpected-error', error);
+    }
   }
 
   /**
@@ -452,14 +474,33 @@ export class RealtimeGateway
   }
 
   /**
-   * Logs a refusal and builds the error the middleware hands to `next()`.
+   * The **one** place a refusal is logged, and the error the middleware hands
+   * to `next()`.
+   *
+   * One message and one `reason` field for every rejection, so an operator
+   * greps once. The level, and whether the stack travels, is the same call
+   * `ContractExceptionFilter` makes over HTTP for the same situations:
+   *
+   * | reason | level | `err` | why |
+   * | --- | --- | --- | --- |
+   * | `no-token`, `token-rejected` | `debug` | no | the 401 analogue: an anonymous caller can trigger it at will, and the client *retries* a refusal — a stack per attempt is a log-flood vector, and the error can carry the token |
+   * | `user-unprovisionable` | `debug` | no | an operator problem `AuthUserService` has already logged at `error`, with the subject |
+   * | `user-deactivated` | `warn` | yes | a `DomainError`: only a caller with a valid token reaches it, and the frames name the rule |
+   * | `unexpected-error` | `error` | yes | a defect. Nobody can trigger it at will, and the token never travels into the calls that raise it |
    *
    * Returns rather than throws, so every call site reads `throw
-   * this.rejectHandshake(…)` and control flow is obvious to a reader and to
+   * this.rejectHandshake(…)` and the control flow is obvious to a reader and to
    * TypeScript alike.
    */
-  private rejectHandshake(reason: HandshakeRejectionReason): Error {
-    this.logger.debug({ reason }, 'Refused a Socket.io handshake');
+  private rejectHandshake(reason: HandshakeRejectionReason, error?: unknown): Error {
+    const message = 'Refused a Socket.io handshake';
+    if (reason === 'unexpected-error') {
+      this.logger.error({ err: error, reason }, message);
+    } else if (reason === 'user-deactivated') {
+      this.logger.warn({ err: error, reason }, message);
+    } else {
+      this.logger.debug({ reason }, message);
+    }
     return new Error(HANDSHAKE_REJECTION_MESSAGE);
   }
 

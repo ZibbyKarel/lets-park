@@ -163,7 +163,11 @@ export class RealtimeTestClient {
    * and matched by it on the way back — so an ack that arrives for a *different*
    * request cannot satisfy this call.
    */
-  async emitWithAck(name: string, payload: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<unknown> {
+  async emitWithAck(
+    name: string,
+    payload: unknown,
+    timeoutMs = DEFAULT_TIMEOUT_MS
+  ): Promise<unknown> {
     const id = this.nextAckId++;
     const answer = new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -193,10 +197,7 @@ export class RealtimeTestClient {
     timeoutMs = DEFAULT_TIMEOUT_MS
   ): Promise<unknown> {
     const found = await this.until(
-      () =>
-        this.events.find(
-          (event) => event.name === name && matches(event.payload as never)
-        ),
+      () => this.events.find((event) => event.name === name && matches(event.payload as never)),
       timeoutMs,
       `event "${name}" (received: ${this.events.map((e) => e.name).join(', ') || 'nothing'})`
     );
@@ -226,7 +227,11 @@ export class RealtimeTestClient {
       return;
     }
     this.socket.close();
-    await this.until(() => (this.closed ? true : undefined), DEFAULT_TIMEOUT_MS, 'the socket to close');
+    await this.until(
+      () => (this.closed ? true : undefined),
+      DEFAULT_TIMEOUT_MS,
+      'the socket to close'
+    );
   }
 
   private send(packet: Packet): void {
@@ -340,11 +345,7 @@ export class RealtimeTestClient {
     }
   }
 
-  private async until<T>(
-    read: () => T | undefined,
-    timeoutMs: number,
-    what: string
-  ): Promise<T> {
+  private async until<T>(read: () => T | undefined, timeoutMs: number, what: string): Promise<T> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const value = read();

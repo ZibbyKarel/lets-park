@@ -36,11 +36,6 @@ import { WaitlistService } from './waitlist.service';
 @Module({
   imports: [AuditModule, ReservationWindowModule, RealtimeModule],
   controllers: [ReservationsController, WaitlistController],
-  providers: [
-    ReservationsService,
-    WaitlistService,
-    WaitlistPromotionService,
-    ReservationPolicy,
-  ],
+  providers: [ReservationsService, WaitlistService, WaitlistPromotionService, ReservationPolicy],
 })
 export class ReservationsModule {}

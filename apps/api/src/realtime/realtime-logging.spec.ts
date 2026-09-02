@@ -118,4 +118,25 @@ describe('what a refused handshake writes to the log', () => {
 
     expect(refusal?.['reason']).toBe('no-token');
   });
+
+  it('keeps the stack for a deactivated user, whose refusal is a DomainError', async () => {
+    // The asymmetry `ContractExceptionFilter` draws over HTTP, mirrored here:
+    // only a caller with a *valid* token reaches this, so it cannot be used to
+    // flood the log, and the frames name the rule that refused.
+    const gone = seedEmployee(harness.double, { oktaId: 'okta-gone', name: 'Former Employee' });
+    const row = harness.double.users.find((user) => user.id === gone.id);
+    if (row !== undefined) {
+      row.active = false;
+    }
+
+    const lines = await refuseAndCollectLogs(harness.tokenFor({ subject: 'okta-gone' }));
+
+    const refusal = lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((line) => line['message'] === 'Refused a Socket.io handshake');
+
+    expect(refusal?.['reason']).toBe('user-deactivated');
+    expect(refusal?.['level']).toBe('warn');
+    expect(refusal).toHaveProperty('err');
+  });
 });

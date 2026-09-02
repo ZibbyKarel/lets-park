@@ -45,7 +45,11 @@ describe('the realtime module has no environment-dependent behaviour', () => {
   it('ships the files this spec thinks it does', () => {
     // Without this, the whole suite passes vacuously the day somebody moves the
     // gateway into a subdirectory.
-    expect(shippedSources().map((file) => file.name).sort()).toEqual([
+    expect(
+      shippedSources()
+        .map((file) => file.name)
+        .sort()
+    ).toEqual([
       'lock.service.ts',
       'realtime-io.adapter.ts',
       'realtime.gateway.ts',

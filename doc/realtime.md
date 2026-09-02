@@ -3,10 +3,11 @@
 How the browser holds a Socket.io connection to the API, what it may say over
 it, and what it does with what comes back.
 
-**Scope of this document today.** Task 21 built the **client** half
-(`libs/realtime-client`); the gateway is Task 15 and does not exist yet. Every
-section below is therefore about `apps/web`'s side of the socket. Where a claim
-depends on the server, it says so and says which task settles it.
+**Scope of this document.** Task 21 built the **client** half
+(`libs/realtime-client`) and Task 15 built the **gateway**
+(`apps/api/src/realtime`). Both halves are described here: the client sections
+come first because they are what a feature author touches, and §"The gateway"
+below is the server side of every claim they make.
 
 The vocabulary — event names, payload shapes, room naming, which direction an
 event travels — is not defined here. It is defined once, as Zod schemas, in
@@ -19,9 +20,10 @@ the contract first (`doc/contract.md`, "Adding a realtime event").
 ## The shape of it
 
 ```
-apps/web  ──  @lets-park/realtime-client  ──  socket.io-client  ~~~  gateway (Task 15)
-                        │
-                        └── @lets-park/contract/realtime   (event names, payload schemas)
+apps/web ── @lets-park/realtime-client ── socket.io-client ~~~ socket.io ── apps/api/src/realtime
+                      │                                                              │
+                      └──────────── @lets-park/contract/realtime ────────────────────┘
+                                    (event names, payload schemas, roomForDate)
 ```
 
 One socket per browser tab, created by `useRealtimeConnection` inside
@@ -333,27 +335,221 @@ leaves the socket inactive).
 version: a double may stand in for a dependency's behaviour, never for the shape
 of its protocol.
 
-**Not verified here, and by what it would be:**
+**Not verified in `libs/realtime-client`, and where it is now:**
 
 | claim | settled by |
 | --- | --- |
-| the gateway reads the token from `handshake.auth.token` | Task 15 |
-| a real refused handshake arrives as CONNECT_ERROR and not as a plain disconnect | Task 15 |
-| three attempts over ~36 s is long enough for `libs/auth` to rotate a token | Task 15 + e2e |
+| the gateway reads the token from `handshake.auth.token` | ✅ `realtime-handshake.spec.ts` |
+| a real refused handshake arrives as CONNECT_ERROR and not as a plain disconnect | ✅ `realtime-handshake.spec.ts` |
+| the server's lock TTL and this client's renewal actually interleave | ✅ `doc/decision/0110-*` (arithmetic) + `lock.service.spec.ts`; a real round trip is still Fáze 7 |
+| broadcasts arrive only in the day room a client joined | ✅ `realtime.gateway.spec.ts` |
+| a lapsed hold is broadcast, so `held-by-other` cannot stick | ✅ `doc/decision/0111-*` |
+| three attempts over ~36 s is long enough for `libs/auth` to rotate a token | Fáze 7 e2e |
 | a real reconnect against a real server re-authenticates | Fáze 7 e2e |
-| the server's lock TTL and this client's renewal actually interleave | Task 15 + e2e |
-| broadcasts arrive only in the day room a client joined | Task 15 |
+
+---
+
+## The gateway
+
+`apps/api/src/realtime` — a NestJS `@WebSocketGateway` over Socket.io v4.
+
+| file | what it owns |
+| --- | --- |
+| `realtime.gateway.ts` | the handshake, the four commands, the broadcast path |
+| `lock.service.ts` | the editing holds, their TTL and their expiry |
+| `realtime-io.adapter.ts` | how the Socket.io server is constructed; the cluster seam |
+| `realtime.publisher.ts` | the after-commit `DomainEventPublisher` |
+
+### The handshake
+
+`server.use(...)` — namespace middleware, and it has to be: a middleware that
+calls `next(err)` makes socket.io send a **CONNECT_ERROR**, which is the packet
+`libs/realtime-client` branches on. Accepting the connection and then
+disconnecting would look identical from the gateway and completely different in
+a browser. Full reasoning, the source seams it was read from, and what a refusal
+says to the client and to the log: `doc/decision/0112-*`.
+
+The token is verified by **`JwksVerifierService.verifyToken`** — the same single
+`JwksClient` and the same `JwtVerificationRules` the HTTP guard reaches through
+`passport-jwt` (`doc/decision/0042-*`) — and resolved to a user by the same
+`AuthUserService`, so a socket goes through the same just-in-time provisioning
+and the same deactivated-user refusal an HTTP request does. There is no
+`NODE_ENV` branch anywhere under `apps/api/src/realtime`;
+`realtime-no-backdoor.spec.ts` asserts it.
+
+The `UserSummary` a broadcast carries is resolved **once**, during the
+handshake, and kept on `socket.data`. A licence plate changes about as often as
+somebody buys a car; re-reading it on every renewal would be a query per
+heartbeat.
+
+### Every inbound payload is validated
+
+`CLIENT_TO_SERVER_EVENT_SCHEMAS` is the gateway's validation table. Every
+handler reaches it through one `accept()` call — there is no second path from a
+socket frame to a handler body — and the schema is fetched **by lookup**, not by
+a `switch`, so a command added to the contract is validated the moment it is
+added. `realtime.gateway.spec.ts` walks the registry and asserts a
+`@SubscribeMessage` handler exists for every key, because the one thing a lookup
+cannot catch is a command with no handler at all.
+
+A payload that fails is **dropped**: no state changes, and no acknowledgement is
+sent. That last part is deliberate. `cellLockAckSchema` has no error variant, so
+there is nothing honest to answer with — and Nest's adapter only calls a
+client's ack callback for a non-nullish return
+(`@nestjs/platform-socket.io/adapters/io-adapter.js`), so returning nothing
+*is* the silence. On the client that resolves through
+`socket.timeout(CELL_LOCK_ACK_TIMEOUT_MS)` as a lost ack — one retry, then
+`idle` — rather than a form stuck at `requesting` forever.
+
+The failure is logged at `debug` with Zod's path/message list and **not** the
+payload: these payloads name users and dates, and they are attacker-controlled
+input on its way into a log.
+
+### Everything outbound is validated too
+
+Both a broadcast and the `cell:lock` acknowledgement are `safeParse`d against
+the contract's own schema before they leave, in every environment. It costs a
+parse of a five-key object, and Zod strips what the schema does not declare — so
+`lockedBy` leaves the server as `userSummarySchema`'s three-field pick and
+nothing else, whatever shape the object behind it had.
+
+That is not theoretical. The acknowledgement path originally lacked this gate,
+and a spec caught it carrying the whole user row — `email`, `oktaId` and
+`icsToken`, the secret in a personal calendar-feed URL — to *another user's*
+browser. The broadcast on the same path was already safe, which is what made the
+asymmetry visible.
+
+A payload the contract refuses is dropped and logged at `error`. It is never
+thrown: broadcasting runs on the request's way out, after `COMMIT`, and a
+failure to broadcast must not turn a successful cancellation into an error the
+user sees.
+
+### Rooms
+
+`day:subscribe` / `day:unsubscribe` join and leave `roomForDate(date)`, and a
+socket may be in at most `MAX_DAY_ROOMS_PER_SOCKET` (64) of them. The cap exists
+because `dateOnlySchema` accepts any calendar-valid date and the websocket path
+has no `ThrottlerGuard` in front of it, so without one an authenticated socket
+could ask to join millions of rooms.
+
+### The editing hold
+
+`LockService` is an abstract class with one in-memory implementation. Ownership
+is by **user**, with the socket id carried alongside it — not by socket. That is
+what makes a reconnect a renewal rather than a `HELD_BY_OTHER` against yourself,
+and it is what makes the *late* disconnect of a dead socket free nothing when
+its user has already re-taken the hold on a new one.
+
+- **TTL** — `REALTIME_LOCK_TTL_MS`, 30 s. The client's renewal budget fits
+  inside it with 5 s to spare; the arithmetic is `doc/decision/0110-*`.
+- **Renewal** — there is no heartbeat command. A second `cell:lock` from the
+  current holder extends the hold, which is the contract's design.
+- **Expiry** — one timer per hold, rescheduled on renewal, cleared on release.
+  When it fires, `cell:unlocked` is broadcast. This is load-bearing rather than
+  tidy: `useCellLock` sits still on `held-by-other`, so a hold that lapses with
+  nothing said leaves "právě upravuje …" on every other tile until a reload.
+  `doc/decision/0111-*`.
+- **A dropped socket** frees its holds and broadcasts each one, which is why
+  `useCellLock` sends no `cell:unlock` across a connection gap.
+- **`cell:locked` excludes the asker.** It already knows — that is what the
+  acknowledgement is — and a client that heard its own hold as a broadcast would
+  render "somebody else is editing" over its own open form. A *second tab* of
+  the same user is a different socket and does hear it, which is correct.
+
+### Broadcasting after commit
+
+`RealtimeDomainEventPublisher` implements the seam Task 13 left
+(`reservations/reservation-events.ts`). **When** an event is published is not up
+to it: `ReservationsService.cancel` computes events inside the transaction,
+returns them, and publishes past the `await` — outside the retry loop, so a
+cancellation that lost two races publishes once, not three times.
+`reservations.db.spec.ts` §"the after-commit seam" proves the ordering by having
+the publisher read the database on a **second connection**.
+
+`publish` swallows and logs, per that file's stated requirement: a user whose
+reservation *is* cancelled, told it failed because a socket write threw, would
+cancel it again — against a row that no longer exists. The loop is per event, so
+one failing does not silently take the other with it.
+
+`notifyPromotions` is still a no-op; the Slack half is Task 16. When it lands,
+two things will want this one token, and the shape that keeps them honest is a
+publisher that fans out to a list of implementations rather than a Slack call
+bolted onto this class — a realtime broadcast and an outbound HTTP call have
+different failure modes and must not share a `try`.
+
+### Shutdown
+
+The gateway registers `GracefulShutdownService.registerCloser('socket.io', …)`.
+Socket.io does not close itself: a live WebSocket is not an "in-flight request",
+so Nest's HTTP shutdown never touches it and the process would hang until the
+orchestrator's kill timeout. `LockService.onModuleDestroy` clears every pending
+expiry timer in the same window, so none fires into a closing server.
+
+### How the gateway is tested
+
+Over **real WebSockets**, against the assembled `AppModule`, with a real
+in-process OIDC issuer signing real RS256 tokens. The client peer is not
+`socket.io-client` — that is a wrapped library owned by `libs/realtime-client`,
+and the ban covers `apps/**` including specs. It is built instead on the
+protocol's own reference implementation: `engine.io-parser` for the transport
+frames and `socket.io-parser`'s `Encoder`/`Decoder`/`PacketType` for the
+protocol, both direct dependencies of the `socket.io` server under test. So
+CONNECT_ERROR is identified by the parser's own constant rather than by a number
+a fixture believes in — the standard `libs/realtime-client`'s
+`offline-transport.ts` set for the other direction.
 
 ---
 
 ## Single instance, and what changes when that stops being true
 
 The MVP targets one API instance, so Socket.io needs no adapter and no Redis
-(global constraint 8). The upgrade path is a Socket.io adapter on the server
-side; **nothing in `libs/realtime-client` changes when it lands** — rooms,
-event names and payloads are the contract's, and the client already assumes it
-may be talking to a server that has been redeployed under it, which is why every
-inbound payload is parsed.
+(global constraint 8). **Nothing in `libs/realtime-client` changes when that
+stops being true** — rooms, event names and payloads are the contract's, and the
+client already assumes it may be talking to a server that has been redeployed
+under it, which is why every inbound payload is parsed.
+
+Two things on the server do, and both already have a named place to land.
+
+**Broadcasting** breaks first: each process would only reach the sockets
+connected to *it*, so half the browsers watching a day would never hear that a
+spot was taken. The fix is a Socket.io adapter, inside
+`RealtimeIoAdapter.installClusterAdapter` — a no-op today, named rather than
+left as a comment so the change has one call site:
+
+```ts
+// npm i @socket.io/redis-adapter redis
+const pub = createClient({ url: REDIS_URL });
+const sub = pub.duplicate();
+await Promise.all([pub.connect(), sub.connect()]);
+server.adapter(createAdapter(pub, sub));
+```
+
+**The editing hold** breaks in a quieter way: two users on two instances would
+both be granted the same cell, because each process's `Map` is a different
+truth. `LockService` is an abstract class for this reason, and every method
+already has its Redis equivalent — the table is in its own doc comment:
+
+| `LockService` | Redis |
+| --- | --- |
+| `acquire` (new) | `SET cell <holder> NX PX <ttl>` |
+| `acquire` (renewal) | the same `SET` with `XX`, guarded by a Lua compare on the holder |
+| `release` | Lua: `GET` the cell, `DEL` only if the holder matches |
+| `releaseSocket` | a `SET` of cell keys per socket id, walked on disconnect |
+| `onExpired` | keyspace notifications (`Ex`) on the lock key prefix, **paired with a sweep** |
+
+`SET NX PX` is what makes the compare-and-set atomic across instances, and the
+Lua guard on release is what stops one instance dropping another's hold after a
+TTL lapse and a re-acquisition in between. Neither is needed here: a single Node
+process runs those methods to completion without interleaving, so the in-memory
+implementation is not "the Redis one without the network" — it is a genuinely
+simpler thing.
+
+The expiry listener is the part that needs the most care under Redis, because
+keyspace notifications are best-effort and `doc/decision/0111-*` explains why a
+missed expiry is user-visible.
+
+**Neither is implemented, deliberately.** An unused implementation is an
+untested one, and the two would have to land together to be worth anything.
 
 ---
 
@@ -368,3 +564,7 @@ inbound payload is parsed.
 - `doc/decision/0061-*` — a refused handshake is a terminal status, recovered by a new socket
 - `doc/decision/0062-*` — the cell-lock heartbeat uses Socket.io's ack timeout
 - `doc/decision/0063-*` — transport reconnection stays unlimited; only refusals have a ceiling
+- `doc/decision/0110-*` — the cell-lock TTL is 30 s, configurable, and the client's budget fits inside it
+- `doc/decision/0111-*` — a lapsed hold is broadcast, because the client deliberately does not poll
+- `doc/decision/0112-*` — the handshake is namespace middleware, so a refusal is a CONNECT_ERROR
+- `doc/api-modules.md` — where `apps/api/src/realtime` sits among the API's modules
