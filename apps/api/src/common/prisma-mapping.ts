@@ -25,14 +25,27 @@
  * Prague's summer offset. Neither is a time-zone conversion that should happen —
  * the calendar day is already the value.
  *
- * This is the one claim in this file that is not exercised against a real
- * Postgres in this environment (Docker is unavailable); see the task report.
+ * Task 13 exercised this against a real PostgreSQL 17 rather than leaving it as
+ * an argument: `reservations.db.spec.ts` writes a reservation through
+ * {@link toDateColumn} and asserts the stored column reads back as
+ * `YYYY-MM-DDT00:00:00.000Z` — the same calendar day, not the one either side of
+ * it.
  */
 
-import type { AdminUser, ParkingSpot, User, UserSummary } from '@lets-park/contract';
+import type {
+  AdminUser,
+  ParkingSpot,
+  PublicReservation,
+  Reservation,
+  User,
+  UserSummary,
+  WaitlistEntry,
+} from '@lets-park/contract';
 import type {
   ParkingSpot as ParkingSpotRow,
+  Reservation as ReservationRow,
   User as UserRow,
+  WaitlistEntry as WaitlistEntryRow,
   ReservationWindowSettings as ReservationWindowSettingsRow,
 } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
@@ -104,6 +117,47 @@ export function toAdminUser(row: UserRow): AdminUser {
 /** How a user appears to **another user**: three fields, never the token. */
 export function toUserSummary(row: Pick<UserRow, 'id' | 'name' | 'licensePlate'>): UserSummary {
   return { id: row.id, name: row.name, licensePlate: row.licensePlate };
+}
+
+/** A reservation row, whole. What `reservation.create` answers with. */
+export function toContractReservation(row: ReservationRow): Reservation {
+  return {
+    id: row.id,
+    parkingSpotId: row.parkingSpotId,
+    userId: row.userId,
+    date: toDateOnly(row.date),
+    createdAt: toTimestamp(row.createdAt),
+  };
+}
+
+/**
+ * A reservation as everybody who can see the day sees it: the reservation, and
+ * the holder as a {@link toUserSummary}.
+ *
+ * The spot, the day and the holder's id are deliberately absent from
+ * `publicReservationSchema` — every consumer already knows them from context —
+ * so this takes the holder separately rather than joining them back in.
+ */
+export function toPublicReservation(
+  row: ReservationRow,
+  holder: Pick<UserRow, 'id' | 'name' | 'licensePlate'>
+): PublicReservation {
+  return {
+    id: row.id,
+    createdAt: toTimestamp(row.createdAt),
+    user: toUserSummary(holder),
+  };
+}
+
+/** A waitlist row, whole. What `waitlist.join` answers with. */
+export function toContractWaitlistEntry(row: WaitlistEntryRow): WaitlistEntry {
+  return {
+    id: row.id,
+    parkingSpotId: row.parkingSpotId,
+    userId: row.userId,
+    date: toDateOnly(row.date),
+    createdAt: toTimestamp(row.createdAt),
+  };
 }
 
 /**

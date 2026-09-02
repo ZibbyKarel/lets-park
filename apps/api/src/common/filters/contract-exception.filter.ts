@@ -83,6 +83,19 @@ const INTERNAL_ERROR_BODY: TransportErrorBody = {
 const PRISMA_RECORD_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 const PRISMA_FOREIGN_KEY_CONSTRAINT = 'P2003';
+/**
+ * A serialization failure or a deadlock — PostgreSQL `40001` / `40P01`.
+ *
+ * Added by Task 13, which found a real one: two cancellations promoting the same
+ * person out of two different queues deadlock against each other
+ * (`ReservationsService.isRetryableConflict` has the cycle). That path retries,
+ * so this mapping is the *last* resort — but without it a lost race would come
+ * back as a 500, and a 500 tells an operator to look for a defect that is not
+ * there and tells the client not to try again, which is the wrong advice.
+ *
+ * See `doc/decision/0065-*`.
+ */
+export const PRISMA_WRITE_CONFLICT = 'P2034';
 
 /** Narrows an unknown to a plain object without asserting its contents. */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -234,6 +247,11 @@ export function mapPrismaErrorCode(
     case PRISMA_FOREIGN_KEY_CONSTRAINT:
       // Every foreign key in this schema is ON DELETE RESTRICT, so this is
       // always "something still references the row you tried to remove".
+      return 'CONFLICT';
+    case PRISMA_WRITE_CONFLICT:
+      // Literally the contract's definition of `CONFLICT`: "the request lost a
+      // race against a concurrent change". Retrying is the right advice, and it
+      // is what the Czech copy for this code already tells the user.
       return 'CONFLICT';
     default:
       return undefined;
