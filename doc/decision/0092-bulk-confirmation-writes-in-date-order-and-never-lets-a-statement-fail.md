@@ -102,15 +102,27 @@ The conclusion still holds, for a reason that is about the resources:
   On any single date it therefore either holds a reservation key or later wants a queue key — never
   both, because a day that was assigned is not queued and a day that lost its cell holds nothing.
 
-So every wait between the two is one-directional. The concrete wait that does exist — `confirmBulk`'s
-queue `INSERT` blocking on a `WaitlistEntry` key that `promote` has deleted but not yet committed —
-has no return edge, because for `promote` to block on `confirmBulk` in turn it would have to want a
-reservation key that `confirmBulk` holds *on the same date*, and on that date `confirmBulk` holds
-none.
+No cycle forms, but not because a return edge is missing outright — both edges exist, they just
+never attach to the same date at the same time. The forward edge is real: `confirmBulk`'s queue `INSERT` blocking on a
+`WaitlistEntry` key that `promote` has deleted but not yet committed. A return edge is real too, and
+it is concrete, not abstract: `Reservation`'s `@@unique([userId, date])`. `promote` inserting
+`(otherSpot, bulkUser, date)` collides with `confirmBulk`'s own uncommitted `(spot, bulkUser, date)`
+on that index and does block `promote` — measured directly, a probe using this record's own trigger
+technique caught `promote`'s `INSERT INTO "Reservation"` blocked by bulk on that index in four runs
+out of four, and none of the four deadlocked.
 
-Note also that the reverse edge is narrower than it looks: under `READ COMMITTED` a `DELETE` locks
-only rows visible in its snapshot, so `promote`'s `deleteMany` does **not** wait on a queue entry
-`confirmBulk` has inserted uncommitted. It never sees it.
+What keeps the two from forming a cycle is not the absence of a return edge; it is that the two edges
+need **mutually exclusive states on the same date**. The forward edge needs `confirmBulk` to be
+*queueing* that date; the return edge needs `confirmBulk` to have *assigned* that date instead —
+never both, because a day that was assigned is not queued and a day that lost its cell holds nothing.
+`queueTargets` guarantees exactly that, and `cancel` + `promote` never leaves the date either, so the
+wait cannot close the loop through a different day.
+
+Note also that a *third*, hypothetical return edge — `promote`'s `deleteMany` waiting on the queue
+entry `confirmBulk` is inserting uncommitted — does not exist: under `READ COMMITTED` a `DELETE` locks
+only rows visible in its snapshot, so `promote`'s `deleteMany` never sees a row `confirmBulk` has
+inserted uncommitted, and so never waits on it. This is the edge the original hypothesis pointed at;
+it was the wrong one, and the `@@unique([userId, date])` edge above is the one that is actually real.
 
 **Two changes would make this a real cycle, and both are plausible:** a `promote` that ever spans
 more than one date, or a `confirmBulk` that interleaves its two write phases per day (a per-day
@@ -172,7 +184,12 @@ not a bigger attempt count.
   inserts queue entries for the rest, re-reads the queues for their positions, writes the audit
   rows, and returns the events. That second read covers days the allocator planned to **queue** as
   well as days it wanted to assign and lost: both would otherwise write an entry for a user who
-  already holds that day. `preview` runs the same allocation with no transaction and writes nothing.
+  already holds that day. This *narrows* the race to the gap between that read and the queue insert
+  that follows it — it does not close the gap. A promotion that commits in that narrower window
+  still produces one reservation and one queue entry for the same day; see `doc/bulk-reservation.md`
+  §"The race that is deliberately left open" for the measured shape (4/4) and why closing it fully is
+  a design decision, not something this record claims is already done. `preview` runs the same
+  allocation with no transaction and writes nothing.
 - Events are returned from the transaction callback and published by the caller after it commits —
   the Task 13 seam (`DomainEventPublisher`), unchanged.
 - Tests: `bulk-allocator.spec.ts` (preference order, both sorts, tiebreaks),

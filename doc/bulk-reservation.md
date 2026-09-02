@@ -159,17 +159,37 @@ for *that spot* — exactly what would have happened had the read seen the truth
 What is *not* left to chance is what the caller is told: every field of the
 answer is derived from rows the database returned, never from the plan.
 
-One case is **not** left open, and the re-read in the sequence above is why: a
-caller who acquires a reservation on one of the target days while the transaction
-is running — from another tab, or by being promoted off a queue — must not then
-be given a queue entry for that day. Such an entry could never be promoted (one
-reservation per user per day) and is the exact state `waitlist.join` refuses at
-the door. The re-read covers **every** still-unsatisfied day, both the ones that
-lost an assignment and the ones the allocator had already planned to queue; the
-day is reported `UNAVAILABLE / ALREADY_HAS_RESERVATION` instead. Forced, not
-hoped for, by `bulk-reservation.db.spec.ts` ("does not queue a planned-QUEUED day
-the caller acquired a reservation on"), which blocks the transaction on a
-contested day and runs a real cancel-and-promote into the gap.
+One case is **narrowed, not closed** — the re-read in the sequence above shrinks
+it, it does not remove it. A caller who acquires a reservation on one of the
+target days while the transaction is running — from another tab, or by being
+promoted off a queue — should not then also be given a queue entry for that day.
+Such an entry could never be promoted (one reservation per user per day) and is
+the exact state `waitlist.join` refuses at the door. The re-read
+(`datesAlreadyReserved`) covers **every** still-unsatisfied day, both the ones
+that lost an assignment and the ones the allocator had already planned to queue,
+and reports `UNAVAILABLE / ALREADY_HAS_RESERVATION` for anything it catches —
+which is what `bulk-reservation.db.spec.ts` ("does not queue a planned-QUEUED day
+the caller acquired a reservation on") forces and checks.
+
+**What it does not catch:** the re-read runs once, before `createWaitlistEntries`,
+not again immediately before it. A promotion that commits **after** the read but
+**before** the queue insert still leaves the caller with one reservation *and*
+one queue entry for the same day — the exact state the re-read exists to
+prevent. This is not hypothetical: bulk's own queue `INSERT` genuinely blocks on
+`promote`'s uncommitted `WaitlistEntry` delete (the same edge the deadlock
+analysis below names); if `promote` commits while bulk is stalled there, bulk
+resumes and writes the queue entry anyway. Measured 4/4 by forcing that exact
+interleaving with the trigger technique `bulk-concurrency.db.spec.ts` already
+uses elsewhere in this codebase — no test in *this* suite pins it, so it is not
+exercised on every run. The consequence is the same benign, self-limiting one as
+the race left open above: an entry that can never be promoted, not a double
+booking and not lost data.
+
+If this residual is ever worth closing, it has to happen in that narrower gap —
+either re-reading `datesAlreadyReserved` again immediately before
+`createWaitlistEntries`, or serialising `confirmBulk` against `cancel` +
+`promote` on the contested date. Both are design decisions beyond this
+document's scope, not bugs to fix here.
 
 Locking the candidate spots instead would hold a row lock on every spot in the
 lot for the length of the transaction, serialising every other reservation in
@@ -200,13 +220,17 @@ The answer is still "no", for a reason about the resources rather than the locks
 **`cancel` + `promote` is confined to a single date**, and on any single date
 `confirmBulk` either holds a reservation key or later wants a queue key — never
 both, because a day it assigned is not queued and a day that lost its cell holds
-nothing. So the one wait that does exist (bulk's queue `INSERT` blocking on a
-`WaitlistEntry` key `promote` has deleted uncommitted) has no return edge. Two
-changes would create one, and both are plausible: a `promote` that spans more
-than one date, or a `confirmBulk` that interleaves its two write phases per day
-instead of running them as two batches. Full derivation in
-`doc/decision/0092-*` §"`confirmBulk` against `cancel` + promote", including why
-the outcome would be `CONFLICT` and not a 500 even then.
+nothing. The wait that does exist (bulk's queue `INSERT` blocking on a
+`WaitlistEntry` key `promote` has deleted uncommitted) does have a return edge —
+`Reservation`'s `@@unique([userId, date])`, which blocks `promote` when
+`confirmBulk` holds an *assigned* reservation on that date — but never on the
+*same* date as the forward wait, because a date is never both assigned and
+queued at once. Two changes would let the two edges land on the same date and
+close the cycle: a `promote` that spans more than one date, or a `confirmBulk`
+that interleaves its two write phases per day instead of running them as two
+batches. Full derivation in `doc/decision/0092-*` §"`confirmBulk` against
+`cancel` + promote", including why the outcome would be `CONFLICT` and not a
+500 even then.
 
 **How the ordering is falsified.** `bulk-concurrency.db.spec.ts` › "a forced
 interleaving inside one multi-row INSERT" creates a test-only `BEFORE INSERT …
