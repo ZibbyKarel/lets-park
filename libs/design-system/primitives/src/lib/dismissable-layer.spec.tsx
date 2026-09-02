@@ -401,6 +401,25 @@ describe('Escape across overlays nested in JSX but portalled to the same parent'
   });
 });
 
+/** Two modals with no nesting between them: siblings in JSX and in the tree. */
+function TwoModals() {
+  const [first, setFirst] = useState(true);
+  const [second, setSecond] = useState(true);
+
+  return (
+    <div>
+      <Modal open={first} onClose={() => setFirst(false)} title="První" hideCloseButton>
+        <button type="button">Prvek v první</button>
+        <button type="button">Druhý prvek v první</button>
+      </Modal>
+      <Modal open={second} onClose={() => setSecond(false)} title="Druhá" hideCloseButton>
+        <button type="button">Prvek v druhé</button>
+        <button type="button">Druhý prvek v druhé</button>
+      </Modal>
+    </div>
+  );
+}
+
 describe('the layer set under the shapes the review exercised', () => {
   it('gives Escape to a menu inside a modal before the modal itself', async () => {
     const user = userEvent.setup();
@@ -427,24 +446,25 @@ describe('the layer set under the shapes the review exercised', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('treats two modals with no nesting between them as siblings, newest first', async () => {
+  it('lets only the newest of two unrelated modals confine Tab', async () => {
     const user = userEvent.setup();
 
-    function TwoModals() {
-      const [first, setFirst] = useState(true);
-      const [second, setSecond] = useState(true);
+    render(<TwoModals />);
 
-      return (
-        <div>
-          <Modal open={first} onClose={() => setFirst(false)} title="První" hideCloseButton>
-            <button type="button">Prvek v první</button>
-          </Modal>
-          <Modal open={second} onClose={() => setSecond(false)} title="Druhá" hideCloseButton>
-            <button type="button">Prvek v druhé</button>
-          </Modal>
-        </div>
-      );
-    }
+    // Two traps bound at once would fight over every Tab: each would see focus
+    // sitting outside its own container and haul it back, and the press would
+    // move nothing.
+    expect(screen.getByRole('button', { name: 'Prvek v druhé' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Druhý prvek v druhé' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Prvek v druhé' })).toHaveFocus();
+  });
+
+  it('treats two modals with no nesting between them as siblings, newest first', async () => {
+    const user = userEvent.setup();
 
     render(<TwoModals />);
 
