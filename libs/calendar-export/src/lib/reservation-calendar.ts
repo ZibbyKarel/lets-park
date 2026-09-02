@@ -135,10 +135,7 @@ export function buildReservationCalendar(feed: IcsFeed): string {
   return calendar.toString();
 }
 
-function addEvent(
-  calendar: ReturnType<typeof icalGenerator>,
-  entry: IcsCalendarEntry
-): void {
+function addEvent(calendar: ReturnType<typeof icalGenerator>, entry: IcsCalendarEntry): void {
   const start = utcMidnight(entry.date);
   calendar.createEvent({
     id: icsEventUid(entry.reservationId),

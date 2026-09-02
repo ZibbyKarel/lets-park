@@ -3,12 +3,14 @@
 How `apps/api` serves the contract: the transport that carries a procedure, the modules that
 implement one, and the rules each module owns. Written for Task 12's surface — parking spots,
 users, personal settings, the reservation window, the day overview and the audit log. Reservations
-and the waitlist (Task 13) and the ICS feed (Task 17) plug into the same transport and are
-documented with their own tasks.
+and the waitlist (Task 13) plug into the same transport and are documented with their own task. The
+ICS feed (Task 14 — this file said "Task 17", which was wrong) does **not**: it is the single
+controller outside the contract, and it has its own document, `doc/ics.md`, plus §10 below.
 
 Companion documents: `doc/contract.md` (the procedures and their schemas), `doc/auth.md` (who the
 caller is and how they are gated), `doc/database.md` (the schema and its constraints),
-`doc/api-operations.md` (logging, health, shutdown, the exception filter).
+`doc/api-operations.md` (logging, health, shutdown, the exception filter), `doc/ics.md` (the ICS
+feed, the one controller outside the contract).
 
 ---
 
@@ -407,3 +409,36 @@ refusal has been exercised (`DATABASE_URL= jest --config apps/api/jest.database.
   it.
 - **The enum migration's effect**, server-side. It has been applied, but nothing asserts
   `AuditLogAction`'s membership in the database afterwards.
+
+---
+
+## 10. The ICS feed
+
+`apps/api/src/calendar/`. Route: `GET /api/calendar/:icsToken.ics` — **not** a contract procedure,
+and the only route in the application that is not. Full write-up in `doc/ics.md`; what matters when
+reading the rest of this file:
+
+- It is `@Public()` and `@StrictThrottle()`. The 32-byte `randomBytes` token in the path is the
+  whole credential, so this is the one route an unauthenticated stranger can reach with input of
+  their choosing.
+- **Every unservable token is a `404` with a constant body**, including a *deactivated* user's
+  otherwise valid token — the `active: true` filter sits in the `WHERE` clause so that case takes
+  the identical code path. A 401 would let somebody enumerate tokens by response code:
+  `doc/decision/0080-*`.
+- **The response headers are set inside the handler**, after the lookup. `@Header()` decorators run
+  before it, and would have marked every rejection with `Content-Type: text/calendar`.
+- The rendered document is a pure function of the data (`DTSTAMP` is the reservation's `createdAt`),
+  which is what lets Express `ETag` it and answer a poller with `304`: `doc/decision/0081-*`.
+- `ical-generator` is imported **only** by `libs/calendar-export`, enforced by
+  `eslint.config.mjs`'s `WRAPPED_LIBRARIES` and probed from two directions.
+
+### `PrismaDouble` grew two query shapes for it
+
+`user.findFirst({ where: { icsToken, active: true } })` and
+`reservation.findMany({ where: { userId, date: { gte } }, include: { parkingSpot }, orderBy })`.
+
+One correction came with them, and it is the kind this file exists to record: the reservation
+delegate used to sort by date **unconditionally**, so deleting `CalendarService`'s `orderBy` changed
+nothing and every test still passed. It now sorts only when an `orderBy` is passed, refuses any
+ordering it does not model, and otherwise returns insertion order — which is the closest honest
+stand-in for a Postgres that was given no `ORDER BY`.

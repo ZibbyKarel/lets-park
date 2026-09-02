@@ -101,9 +101,7 @@ function sortedByDateThenId<T extends { date: Date; id: string }>(
   if (JSON.stringify(orderBy) !== expected) {
     return unsupported('this reservation ordering', orderBy);
   }
-  return [...rows].sort(
-    (a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id)
-  );
+  return [...rows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
 }
 
 /** Anything this double was not taught is a bug in the test, not an empty result. */

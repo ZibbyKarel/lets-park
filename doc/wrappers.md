@@ -2,8 +2,9 @@
 
 Founded by Task 18 (`libs/form`), the first of a run of Tasks 18–22 that progressively
 establishes the rest of `WRAPPED_LIBRARIES`. Task 19 added `libs/api-client` and
-`libs/query`, Task 20 `libs/auth`, Task 21 `libs/realtime-client`; `libs/calendar-export` is
-still to come. Each wrapper adds its own section here, not a new file.
+`libs/query`, Task 20 `libs/auth`, Task 21 `libs/realtime-client`, Task 14
+`libs/calendar-export` — the one backend wrapper. Each wrapper adds its own section here, not
+a new file.
 
 ## What a wrapper lib is and why it's mandatory
 
@@ -19,7 +20,7 @@ exactly one **wrapper lib** — the single place in the whole workspace allowed 
 | `@orpc/client` | `libs/api-client` (done, Task 19) | `type:util`, `scope:web` |
 | `socket.io-client` | `libs/realtime-client` | `type:util`, `scope:web` |
 | `next-auth` | `libs/auth` | `type:util`, `scope:web` |
-| `ical-generator` | `libs/calendar-export` | `type:util`, `scope:api` |
+| `ical-generator` | `libs/calendar-export` (done, Task 14) | `type:util`, `scope:api` |
 | `next-intl` | `libs/i18n` (done, Task 17) | `type:util`, `scope:web` |
 
 The reason for the ban isn't "save a few characters of import" but three concrete things a
@@ -654,3 +655,96 @@ config is a second, independent consequence of. `tsconfig.spec.json` does drop t
 generator's `module: commonjs`, the same way `libs/auth`'s and `libs/query`'s do
 (`doc/decision/0038-*`): *type* resolution reaches `@orpc/client` through
 `@lets-park/api-client`, and that package has no `require` condition.
+
+---
+
+## `libs/calendar-export` — `ical-generator` (Task 14)
+
+The only wrapper on the **backend** side of the workspace (`scope:api`), and the only one whose
+consumer is `apps/api` rather than `apps/web`.
+
+```ts
+import { buildReservationCalendar } from '@lets-park/calendar-export';
+
+const ics: string = buildReservationCalendar({ entries });   // entries: IcsCalendarEntry[]
+```
+
+That is the entire public surface a caller needs: contract values in, an RFC 5545 document out.
+`ical-generator` does not appear in the signature, in the types, or in `apps/api` at all — which is
+the property step 4 of the recipe above asks for, and `calendar-pipeline.spec.ts` is the running
+example of it (a real HTTP response, built through the wrapper, parsed by an independent library).
+
+The other exports are the pieces a caller may legitimately need to *assert* on:
+`ICS_CALENDAR_NAME`, `ICS_REFRESH_INTERVAL_SECONDS`, `ICS_UID_DOMAIN`, `icsEventSummary`,
+`icsEventDescription`, `icsEventUid`.
+
+### What the wrapper is actually protecting against
+
+Not "a few characters of import". Two concrete, measured things:
+
+1. **`ical-generator`'s `timezone` option is a trap.** Setting `timezone: 'Europe/Prague'` on the
+   calendar — which reads as obviously correct for this application — makes the rendered dates
+   depend on the **server's** `TZ`: under `TZ=America/Los_Angeles` a reservation for `2026-10-15`
+   comes out as `DTSTART;VALUE=DATE:20261014`, and `DTSTAMP` loses its `Z`. One place to get that
+   right is much better than several. `doc/decision/0081-*` has the full table.
+2. **`DTSTAMP` defaults to "now"**, which would make the feed non-deterministic and silently
+   disable the `ETag`/`304` path the endpoint depends on. The wrapper sets it from the
+   reservation's `createdAt` instead.
+
+### Tests
+
+`libs/calendar-export/src/lib/reservation-calendar.spec.ts`, 19 tests. Every assertion reads the
+output back through **`ical.js`** — Mozilla's RFC 5545 parser, a devDependency added for exactly
+this and allow-listed as test-only in `NPM_ALLOWLIST.util`. A test that compares a generator's
+output to a template written by the same author proves the template equals itself.
+
+The three kinds the recipe asks for:
+
+| kind | where |
+| --- | --- |
+| the wrapper can be used | the whole suite calls `buildReservationCalendar` through `@lets-park/calendar-export`'s public API |
+| it behaves according to what it wraps | RFC 5545 conformance: mandatory `VERSION`/`PRODID`, `VALUE=DATE` bounds with an exclusive `DTEND`, `TEXT` escaping of `,` `;` `\`, 75-octet line folding under Czech diacritics, and a parse → re-serialise round trip |
+| app code needs no direct import | `apps/api/src/calendar/` contains no `ical-generator` import; `calendar-pipeline.spec.ts` fetches the real endpoint and parses the bytes |
+
+Two extras that are specific to this wrapper:
+
+- **A cross-time-zone check in child processes.** Flipping `process.env.TZ` inside a Jest test does
+  not work *and does not fail*: `jest-environment-node` gives each file a `process` whose `env` is a
+  copy, so the assignment never reaches the real environment ICU reads, and the test passes without
+  having changed anything. Found because the first draft carried a sanity check comparing the local
+  hour under two zones — and the sanity check is what failed. The suite now renders the same feed in
+  four `node` child processes pinned to `UTC`, `America/Los_Angeles`, `Europe/Prague` and
+  `Pacific/Kiritimati` and asserts one distinct output.
+- **A purity check with the clock moved.** `ical-generator` formats `DTSTAMP` to whole seconds, so
+  two calls in a row are identical even when the builder reads `new Date()`. The test moves the
+  system time between them.
+
+### The boundary, probed
+
+Step 5 of the recipe, in both directions. Inside `libs/calendar-export`, `import ical from
+'ical-generator'` lints clean. From `apps/api/src/probe/` and from `libs/form/src/lib/`, the same
+line produces:
+
+```
+error  'ical-generator' import is restricted from being used by a pattern.
+Do not import "ical-generator" directly — use the wrapper lib @lets-park/calendar-export
+(libs/calendar-export). Only libs/calendar-export may import "ical-generator"
+no-restricted-imports
+```
+
+The scope boundary was probed too, since this is the first `scope:api` wrapper and nothing had
+exercised that direction: `libs/calendar-export` importing `@lets-park/i18n`, and `apps/web`
+importing `@lets-park/calendar-export`, both fail with
+`A project tagged with "scope:api" can only depend on libs tagged with "scope:api", "scope:shared"`
+and its `scope:web` mirror. All probe files were deleted.
+
+**No `eslint.config.mjs` edit was needed for the ban itself.** `WRAPPED_LIBRARIES` already named
+`ical-generator` with `owner: libs/calendar-export`, and `NPM_ALLOWLIST.util` already contained it
+through the `Object.keys(WRAPPED_LIBRARIES).flatMap(...)` spread. The one line added was `ical.js`,
+per step 3 — a test-only helper that stands in for nothing and therefore does not belong in
+`WRAPPED_LIBRARIES`.
+
+The lib-local `eslint.config.mjs` is a bare `[...baseConfig]`. That is deliberate: `baseConfig`
+already contains the generated per-wrapper override, and a lib-local
+`no-restricted-imports` would have **replaced** the root's copy outright and switched the whole
+wrapper ban off for this lib — the hazard `restrictWrappedLibraries` is exported to avoid.

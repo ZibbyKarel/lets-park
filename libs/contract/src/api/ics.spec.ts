@@ -80,9 +80,9 @@ describe('icsCalendarEntrySchema', () => {
     // `z.string()`, this fails.
     expect(icsCalendarEntrySchema.safeParse({ ...valid, date: '2026-02-30' }).success).toBe(false);
     expect(icsCalendarEntrySchema.safeParse({ ...valid, date: '15.10.2026' }).success).toBe(false);
-    expect(icsCalendarEntrySchema.safeParse({ ...valid, reservationId: 'not-a-uuid' }).success).toBe(
-      false
-    );
+    expect(
+      icsCalendarEntrySchema.safeParse({ ...valid, reservationId: 'not-a-uuid' }).success
+    ).toBe(false);
     expect(icsCalendarEntrySchema.safeParse({ ...valid, spotLabel: '' }).success).toBe(false);
     expect(icsCalendarEntrySchema.safeParse({ ...valid, createdAt: '2026-09-01' }).success).toBe(
       false

@@ -218,10 +218,7 @@ describe('buildReservationCalendar', () => {
     });
 
     const events = eventsOf(ics).map((component) => new ICAL.Event(component));
-    expect(events.map((event) => event.startDate.toString())).toEqual([
-      '2026-10-15',
-      '2026-10-16',
-    ]);
+    expect(events.map((event) => event.startDate.toString())).toEqual(['2026-10-15', '2026-10-16']);
     expect(events.map((event) => event.summary)).toEqual([
       'Parkování – E2.92',
       'Parkování – IT-01',
@@ -312,7 +309,9 @@ describe('buildReservationCalendar', () => {
     // of this test — two calls in a row, wall clock — passes even when the
     // builder uses `new Date()`, because both land in the same second. Verified
     // by making that exact change and watching this assertion survive.
-    const feed = { entries: [entry(), entry({ reservationId: RESERVATION_B, date: '2026-10-16' })] };
+    const feed = {
+      entries: [entry(), entry({ reservationId: RESERVATION_B, date: '2026-10-16' })],
+    };
 
     jest.useFakeTimers();
     try {

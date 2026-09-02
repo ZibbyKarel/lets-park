@@ -88,9 +88,17 @@ export class CalendarService {
 
     return reservations.map((reservation) => ({
       reservationId: reservation.id,
-      // `toDateOnly`, never `toDateOnlyInPrague`: the column is `@db.Date`,
-      // i.e. midnight UTC with no zone, and the Prague converter would move it
-      // forward a day for eight months of the year (`doc/api-modules.md` §2).
+      // `toDateOnly`, the `@db.Date` reader: the column has no time and no
+      // zone, and the adapter hands it over as UTC midnight.
+      //
+      // Honest note, because this was probed rather than assumed: swapping in
+      // `toDateOnlyInPrague` here does **not** change the answer and no test
+      // catches it. Prague is UTC+1 or UTC+2 — always ahead — so UTC midnight
+      // is 01:00 or 02:00 on the *same* calendar day. The two functions do
+      // diverge, but only for instants that are not midnight UTC, which a
+      // `@db.Date` never is. `toDateOnly` is still the right call because it
+      // is the one that says what this value is; the point is that it is a
+      // clarity choice here, not a bug fix.
       date: toDateOnly(reservation.date),
       createdAt: reservation.createdAt.toISOString(),
       spotLabel: reservation.parkingSpot.label,

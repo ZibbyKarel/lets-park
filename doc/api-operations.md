@@ -252,17 +252,25 @@ gets `SPOT_ALREADY_RESERVED` (409), not 500. Details and the full mapping table:
 **Rate limiting.** A single throttler is registered: `THROTTLE_LIMIT` requests per
 `THROTTLE_TTL_MS` (default 300 / minute), globally via `APP_GUARD`.
 
-A stricter tier for endpoints **without a session** is prepared but not yet used anywhere –
-it's the `StrictThrottle()` decorator in
+A stricter tier for endpoints **without a session** – the `StrictThrottle()` decorator in
 `apps/api/src/common/throttling/throttle-tiers.ts` (`THROTTLE_STRICT_LIMIT` /
-`THROTTLE_STRICT_TTL_MS`, default 20 / minute). Tasks 11–12 decide which routes it belongs
-on:
+`THROTTLE_STRICT_TTL_MS`, default 20 / minute). **Task 14 applied it, and it is on exactly one
+route**: the personal ICS feed, which is the only endpoint reachable without a token at all
+(`doc/ics.md`).
 
 ```ts
+@Public()
 @StrictThrottle()
-@Get('ics/:token')
-feed() { … }
+@Controller('calendar')
+export class CalendarController { … }
 ```
+
+That it actually fires is verified rather than assumed – `calendar-pipeline.spec.ts` boots an
+application with `THROTTLE_STRICT_LIMIT=2`, gets `200, 200, 429` from the feed in sequence, and
+reads `x-ratelimit-limit: 2` there against `100000` on an RPC route in the same process. Removing
+the decorator fails that test.
+
+The health probes remain `@SkipThrottle()`.
 
 Registering it as a second named throttler is **not possible** – `@nestjs/throttler`
 applies every registered throttler to every route, so the strict limit would end up

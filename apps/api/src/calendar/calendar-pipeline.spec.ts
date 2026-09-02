@@ -376,9 +376,9 @@ describe('the ICS feed through the assembled application', () => {
       const responses = [unknown, offboarded, malformed];
       expect(new Set(responses.map((response) => response.status))).toEqual(new Set([404]));
       expect(new Set(responses.map((response) => response.body)).size).toBe(1);
-      expect(new Set(responses.map((response) => JSON.stringify(stableHeaders(response)))).size).toBe(
-        1
-      );
+      expect(
+        new Set(responses.map((response) => JSON.stringify(stableHeaders(response)))).size
+      ).toBe(1);
       expect(JSON.parse(unknown.body)).toEqual({ statusCode: 404, message: 'Not Found' });
     });
 

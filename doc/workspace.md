@@ -39,6 +39,9 @@ libs/
   realtime-client/
                 socket.io-client wrapper typed from the contract
                                       tags: type:util, scope:web
+  calendar-export/
+                ical-generator wrapper – the personal ICS feed
+                                      tags: type:util, scope:api
   (the rest is created in later tasks – planned tags below)
 doc/            documentation, decisions, visual design export
 prisma.config.ts  Prisma CLI configuration (schema in libs/database, `.env` from the root)
@@ -238,7 +241,7 @@ only allowed place is the wrapper lib that owns them:
 | `@orpc/client` | `@lets-park/api-client` | `libs/api-client` (done) |
 | `socket.io-client` | `@lets-park/realtime-client` | `libs/realtime-client` (done) |
 | `next-auth` | `@lets-park/auth` / `@lets-park/auth/client` | `libs/auth` (done) |
-| `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` |
+| `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` (done) |
 | `next-intl` | `@lets-park/i18n` | `libs/i18n` |
 
 The list lives in `eslint.config.mjs` in a single map, `WRAPPED_LIBRARIES`;

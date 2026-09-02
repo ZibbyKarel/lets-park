@@ -112,7 +112,10 @@ describe('the ICS feed against a real PostgreSQL', () => {
       const row = await inRolledBackTransaction(prisma, async (tx) => {
         const token = unique('ics');
         await seedUser(tx, token, false);
-        return tx.user.findFirst({ where: { icsToken: token, active: true }, select: { id: true } });
+        return tx.user.findFirst({
+          where: { icsToken: token, active: true },
+          select: { id: true },
+        });
       });
 
       // `null`, not a row this code then has to remember to check.
