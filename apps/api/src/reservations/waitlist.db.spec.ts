@@ -1,0 +1,378 @@
+/**
+ * Joining and leaving a queue, against a real PostgreSQL 17.
+ *
+ * The rule that shapes the whole file is that a queue only exists for a spot
+ * somebody **already holds**: every refusal below is a different way of the
+ * caller not being in that position.
+ *
+ * Run with `nx run api:test-db`.
+ */
+
+import type { PrismaClient, User as UserRow, ParkingSpot as SpotRow } from '@lets-park/database';
+import { Prisma } from '@lets-park/database';
+import { mapPrismaErrorCode } from '../common/filters/contract-exception.filter';
+import { DomainError } from '../common/errors/domain-error';
+import { toDateColumn } from '../common/prisma-mapping';
+import type { Harness } from '../testing/database/reservation-harness';
+import {
+  FUTURE_BUSINESS_DAY,
+  FUTURE_WEEKEND_DAY,
+  TODAY,
+  actorFor,
+  buildHarness,
+  connect,
+  holdTransaction,
+  seedSpot,
+  seedUser,
+  setLockMode,
+  waitForBlockedBackend,
+} from '../testing/database/reservation-harness';
+
+async function codeOf(work: Promise<unknown>): Promise<string> {
+  try {
+    await work;
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return error.code;
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return mapPrismaErrorCode(error) ?? `unmapped ${error.code}`;
+    }
+    throw error;
+  }
+  throw new Error('Expected this call to be rejected, but it succeeded.');
+}
+
+describe('the waitlist against a real PostgreSQL', () => {
+  let client: PrismaClient;
+  let otherClient: PrismaClient;
+  let harness: Harness;
+
+  beforeAll(() => {
+    client = connect();
+    otherClient = connect();
+    harness = buildHarness(client);
+  });
+
+  afterAll(async () => {
+    await Promise.all([client.$disconnect(), otherClient.$disconnect()]);
+  });
+
+  beforeEach(async () => {
+    harness.publisher.reset();
+    await setLockMode(client, 'AUTO');
+  });
+
+  /** A spot held by somebody else on {@link FUTURE_BUSINESS_DAY}. */
+  async function occupiedSpot(): Promise<{ spot: SpotRow; holder: UserRow }> {
+    const [holder, spot] = [await seedUser(client), await seedSpot(client)];
+    await harness.reservations.create(
+      { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+      actorFor(holder),
+      TODAY
+    );
+    return { spot, holder };
+  }
+
+  describe('joining', () => {
+    it('queues the caller and reports their position', async () => {
+      const { spot } = await occupiedSpot();
+      const [first, second] = [await seedUser(client), await seedUser(client)];
+
+      const one = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(first),
+        TODAY
+      );
+      harness.publisher.reset();
+      const two = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(second),
+        TODAY
+      );
+
+      expect(one).toMatchObject({
+        position: 1,
+        entry: { parkingSpotId: spot.id, userId: first.id, date: FUTURE_BUSINESS_DAY },
+      });
+      expect(two.position).toBe(2);
+      expect(harness.publisher.ofKind('waitlist:updated')).toEqual([
+        {
+          name: 'waitlist:updated',
+          payload: { date: FUTURE_BUSINESS_DAY, parkingSpotId: spot.id, waitlistCount: 2 },
+        },
+      ]);
+    });
+
+    it('refuses a free spot — reserve it instead', async () => {
+      const [user, spot] = [await seedUser(client), await seedSpot(client)];
+
+      await expect(
+        codeOf(
+          harness.waitlist.join(
+            { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).resolves.toBe('SPOT_NOT_OCCUPIED');
+    });
+
+    it('refuses the holder’s own spot', async () => {
+      const { spot, holder } = await occupiedSpot();
+
+      await expect(
+        codeOf(
+          harness.waitlist.join(
+            { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+            actorFor(holder),
+            TODAY
+          )
+        )
+      ).resolves.toBe('CANNOT_WAITLIST_OWN_SPOT');
+    });
+
+    it('refuses somebody who already has a reservation that day', async () => {
+      const { spot } = await occupiedSpot();
+      const [user, elsewhere] = [await seedUser(client), await seedSpot(client)];
+      await harness.reservations.create(
+        { parkingSpotId: elsewhere.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(user),
+        TODAY
+      );
+
+      // Not a pedantic rule: a promotion could never be honoured for them, so
+      // the queue would accept them and then silently never serve them.
+      await expect(
+        codeOf(
+          harness.waitlist.join(
+            { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).resolves.toBe('RESERVATION_LIMIT_REACHED');
+    });
+
+    it('lets the unique index refuse a second join of the same queue', async () => {
+      const { spot } = await occupiedSpot();
+      const user = await seedUser(client);
+      await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(user),
+        TODAY
+      );
+
+      await expect(
+        codeOf(
+          harness.waitlist.join(
+            { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).resolves.toBe('ALREADY_IN_WAITLIST');
+    });
+
+    it('refuses an unknown spot and a weekend', async () => {
+      const user = await seedUser(client);
+      const { spot } = await occupiedSpot();
+
+      await expect(
+        codeOf(
+          harness.waitlist.join(
+            { parkingSpotId: '00000000-0000-7000-8000-000000000000', date: FUTURE_BUSINESS_DAY },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).resolves.toBe('NOT_FOUND');
+      await expect(
+        codeOf(
+          harness.waitlist.join(
+            { parkingSpotId: spot.id, date: FUTURE_WEEKEND_DAY },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).resolves.toBe('VALIDATION_FAILED');
+    });
+
+    describe('in a locked month', () => {
+      it('refuses a normal user and admits an admin', async () => {
+        const { spot } = await occupiedSpot();
+        const [user, admin] = [await seedUser(client), await seedUser(client)];
+        await setLockMode(client, 'FORCE_LOCKED');
+
+        await expect(
+          codeOf(
+            harness.waitlist.join(
+              { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+              actorFor(user),
+              TODAY
+            )
+          )
+        ).resolves.toBe('RESERVATIONS_LOCKED');
+
+        const admitted = await harness.waitlist.join(
+          { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+          actorFor(admin, 'ADMIN'),
+          TODAY
+        );
+        expect(admitted.position).toBe(1);
+      });
+    });
+
+    it('sees a cancellation that is in flight, and is told the spot is free', async () => {
+      // The reason `join` takes `FOR SHARE` on the reservation row. Without it
+      // this call would read the doomed reservation, queue the caller for a spot
+      // that is about to become free, and leave them waiting forever.
+      const { spot, holder } = await occupiedSpot();
+      const latecomer = await seedUser(client);
+      const reservation = await client.reservation.findUniqueOrThrow({
+        where: {
+          parkingSpotId_date: { parkingSpotId: spot.id, date: toDateColumn(FUTURE_BUSINESS_DAY) },
+        },
+      });
+
+      const held = holdTransaction(otherClient, async (tx) => {
+        await tx.reservation.delete({ where: { id: reservation.id } });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: holder.id,
+            action: 'RESERVATION_CANCELLED',
+            entityType: 'Reservation',
+            entityId: reservation.id,
+            payload: { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+          },
+        });
+      });
+      await held.ready;
+
+      const joining = harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(latecomer),
+        TODAY
+      );
+      await waitForBlockedBackend(client);
+
+      held.release();
+      await held.done;
+
+      await expect(codeOf(joining)).resolves.toBe('SPOT_NOT_OCCUPIED');
+      expect(
+        await client.waitlistEntry.count({
+          where: { parkingSpotId: spot.id, date: toDateColumn(FUTURE_BUSINESS_DAY) },
+        })
+      ).toBe(0);
+    });
+  });
+
+  describe('leaving', () => {
+    it('removes the entry and announces the shorter queue', async () => {
+      const { spot } = await occupiedSpot();
+      const [going, staying] = [await seedUser(client), await seedUser(client)];
+      const entry = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(going),
+        TODAY
+      );
+      await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(staying),
+        TODAY
+      );
+      harness.publisher.reset();
+
+      const result = await harness.waitlist.leave(
+        { waitlistEntryId: entry.entry.id },
+        actorFor(going),
+        TODAY
+      );
+
+      expect(result).toEqual({
+        waitlistEntryId: entry.entry.id,
+        parkingSpotId: spot.id,
+        date: FUTURE_BUSINESS_DAY,
+      });
+      expect(await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })).toBeNull();
+      expect(harness.publisher.ofKind('waitlist:updated')[0]?.payload.waitlistCount).toBe(1);
+    });
+
+    it('refuses somebody else’s entry, and lets an admin remove it', async () => {
+      const { spot } = await occupiedSpot();
+      const [queued, stranger, admin] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedUser(client),
+      ];
+      const entry = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(queued),
+        TODAY
+      );
+
+      await expect(
+        codeOf(
+          harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(stranger), TODAY)
+        )
+      ).resolves.toBe('FORBIDDEN');
+
+      await harness.waitlist.leave(
+        { waitlistEntryId: entry.entry.id },
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+      expect(await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })).toBeNull();
+    });
+
+    it('is blocked in a locked month — unlike cancelling a reservation', async () => {
+      const { spot } = await occupiedSpot();
+      const user = await seedUser(client);
+      const entry = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(user),
+        TODAY
+      );
+      await setLockMode(client, 'FORCE_LOCKED');
+
+      await expect(
+        codeOf(harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(user), TODAY))
+      ).resolves.toBe('RESERVATIONS_LOCKED');
+      expect(
+        await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })
+      ).not.toBeNull();
+
+      // An admin is not restricted by the window, here as everywhere.
+      const admin = await seedUser(client);
+      await harness.waitlist.leave(
+        { waitlistEntryId: entry.entry.id },
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+      expect(await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })).toBeNull();
+    });
+
+    it('answers NOT_FOUND for an entry a promotion already consumed', async () => {
+      const { spot, holder } = await occupiedSpot();
+      const waiter = await seedUser(client);
+      const entry = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(waiter),
+        TODAY
+      );
+      const reservation = await client.reservation.findUniqueOrThrow({
+        where: {
+          parkingSpotId_date: { parkingSpotId: spot.id, date: toDateColumn(FUTURE_BUSINESS_DAY) },
+        },
+      });
+      await harness.reservations.cancel({ reservationId: reservation.id }, actorFor(holder));
+
+      // The truth, and the right thing to tell them: they were promoted rather
+      // than left waiting.
+      await expect(
+        codeOf(harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(waiter), TODAY))
+      ).resolves.toBe('NOT_FOUND');
+    });
+  });
+});

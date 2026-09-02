@@ -33,9 +33,10 @@
  * answers `NOT_FOUND` — which is the truth: they were promoted before they left.
  * If T2 gets there first, T1's locking read simply never sees the row and W2 is
  * promoted instead. Both orderings are correct; without the lock the first one
- * is not. `waitlist-promotion.db.spec.ts` drives exactly this interleaving with
- * two real transactions and a barrier, and the mutation result (lock removed →
- * the test fails) is in the task report.
+ * is not. `waitlist-concurrency.db.spec.ts` ("the row lock on the queue") drives
+ * exactly this interleaving with two real transactions and a barrier, and the
+ * mutation result — `FOR UPDATE` deleted, the departed waiter promoted, the test
+ * red — is pasted in the task report.
  *
  * ## The candidate the queue may not give
  *

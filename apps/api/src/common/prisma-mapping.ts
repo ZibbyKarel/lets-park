@@ -25,8 +25,11 @@
  * Prague's summer offset. Neither is a time-zone conversion that should happen —
  * the calendar day is already the value.
  *
- * This is the one claim in this file that is not exercised against a real
- * Postgres in this environment (Docker is unavailable); see the task report.
+ * Task 13 exercised this against a real PostgreSQL 17 rather than leaving it as
+ * an argument: `reservations.db.spec.ts` writes a reservation through
+ * {@link toDateColumn} and asserts the stored column reads back as
+ * `YYYY-MM-DDT00:00:00.000Z` — the same calendar day, not the one either side of
+ * it.
  */
 
 import type {
