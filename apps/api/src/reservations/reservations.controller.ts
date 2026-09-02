@@ -6,10 +6,9 @@
  * rule about a row, not about a route, so it lives in `ReservationsService`
  * where the row is, and the admin exemption lives there with it.
  *
- * `reservation.previewBulk` / `reservation.confirmBulk` are deliberately absent;
- * they are Task 14, and `orpc-route-parity.spec.ts` still lists them as
- * not-yet-implemented, which is what keeps them answering 404 rather than
- * something half-built.
+ * `reservation.previewBulk` / `reservation.confirmBulk` are not here either, but
+ * they are no longer absent: Task 30 put them on `BulkReservationController`,
+ * next to the service that owns them.
  */
 
 import { Controller, Post, Req, Res } from '@nestjs/common';

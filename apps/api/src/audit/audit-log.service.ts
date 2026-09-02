@@ -102,4 +102,35 @@ export class AuditLogService {
       },
     });
   }
+
+  /**
+   * Appends several entries in one statement.
+   *
+   * Exists for `reservation.confirmBulk`, which can create up to 31 reservations
+   * and queue entries in a single transaction: one `INSERT` per row would be 31
+   * round trips taken while that transaction is already holding uncommitted
+   * unique keys other requests may be blocked on, and the length of that window
+   * is the whole concurrency cost of bulk booking.
+   *
+   * Same shape, same table, same append-only trigger — the only difference from
+   * {@link record} is the number of statements. An empty list writes nothing
+   * rather than issuing a no-op `INSERT`.
+   */
+  async recordMany(
+    entries: readonly AuditEntry[],
+    writer: AuditLogWriter = this.prisma.client
+  ): Promise<void> {
+    if (entries.length === 0) {
+      return;
+    }
+    await writer.auditLog.createMany({
+      data: entries.map((entry) => ({
+        actorUserId: entry.actorUserId,
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        payload: entry.payload,
+      })),
+    });
+  }
 }

@@ -295,21 +295,38 @@ describe('the oRPC transport through the assembled application', () => {
     });
   });
 
-  describe('a procedure the contract declares but nobody has implemented yet', () => {
-    it('is not reachable', async () => {
-      // The bulk pair is Task 14. `reservation.create` used to be the example
-      // here and is now mounted (the case below), which is exactly the drift
-      // `orpc-route-parity.spec.ts` exists to force into the same commit.
-      const response = await call(
-        'reservation.previewBulk',
-        { month: '2026-10', dates: ['2026-10-15'] },
-        tokenFor('okta-user')
-      );
+  describe('a route that is mounted really reaches its service', () => {
+    it('a URL naming no procedure at all is a 404', async () => {
+      // The contract's procedures are now all mounted (`NOT_YET_IMPLEMENTED` in
+      // `orpc-route-parity.spec.ts` is empty), so the "declared but unmounted"
+      // case this used to cover no longer exists. What still has to hold is the
+      // other direction: an RPC path oRPC cannot match is a 404 rather than a
+      // request Nest holds open forever, which is the throw in
+      // `RpcRouteHandler.handle`.
+      const response = await call('reservation.notAProcedure', {}, tokenFor('okta-user'));
 
       expect(response.status).toBe(404);
     });
 
-    it('but Task 13’s reservation route is, and it reaches the service', async () => {
+    it('Task 30’s bulk route reaches the bulk service', async () => {
+      // Same assertion as the case below, for the pair that was unmounted until
+      // Task 30: a domain answer rather than a 404 proves the route exists, the
+      // guard let an ordinary user through, oRPC decoded the body against
+      // `bulkBookingInputSchema`, and `BulkReservationService` got as far as the
+      // window rule.
+      const response = await call(
+        'reservation.previewBulk',
+        { dates: ['2099-01-05'] },
+        tokenFor('okta-user')
+      );
+
+      expect(response.status).toBe(422);
+      expect(response.body).toEqual({
+        json: expect.objectContaining({ code: 'OUT_OF_HORIZON' }),
+      });
+    });
+
+    it('and so does Task 13’s reservation route', async () => {
       // A domain answer rather than a 404 is the whole assertion: the route
       // exists, the guard let an ordinary user through, oRPC decoded the body,
       // and `ReservationsService` got as far as the window rule. 2099-01 is

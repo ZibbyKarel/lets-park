@@ -22,6 +22,7 @@ import { createPrismaClient } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
 import type { PrismaService } from '../../database/prisma.service';
 import type { DomainEvent, WaitlistPromotionNotice } from '../../reservations/reservation-events';
+import { BulkReservationService } from '../../reservations/bulk-reservation.service';
 import { DomainEventPublisher } from '../../reservations/reservation-events';
 import { ReservationPolicy } from '../../reservations/reservation-policy';
 import { ReservationsService } from '../../reservations/reservations.service';
@@ -74,6 +75,7 @@ export interface Harness {
   prisma: PrismaClient;
   reservations: ReservationsService;
   waitlist: WaitlistService;
+  bulk: BulkReservationService;
   window: ReservationWindowService;
   publisher: RecordingPublisher;
 }
@@ -110,6 +112,7 @@ export function buildHarness(client: PrismaClient): Harness {
       publisher
     ),
     waitlist: new WaitlistService(prismaService, window, policy, publisher, audit),
+    bulk: new BulkReservationService(prismaService, window, policy, audit, publisher),
   };
 }
 
@@ -145,8 +148,34 @@ export async function seedUser(
   });
 }
 
-export async function seedSpot(client: PrismaClient): Promise<SpotRow> {
-  return client.parkingSpot.create({ data: { label: unique('SPOT'), group: 'SHARED' } });
+/**
+ * A spot.
+ *
+ * `labelPrefix` exists for the bulk suites, whose whole subject is *which* spot
+ * gets picked: the allocator orders by group then label, so a test that needs a
+ * known order has to control the label. Prefixes are compared on their first
+ * character (`'A'` before `'B'`), never on the counter that follows, because
+ * `…-10` sorts before `…-9`.
+ */
+export async function seedSpot(
+  client: PrismaClient,
+  overrides: { labelPrefix?: string; group?: SpotRow['group'] } = {}
+): Promise<SpotRow> {
+  return client.parkingSpot.create({
+    data: {
+      label: unique(overrides.labelPrefix ?? 'SPOT'),
+      group: overrides.group ?? 'SHARED',
+    },
+  });
+}
+
+/** Points a user's `preferredParkingSpotId` at a spot, or clears it. */
+export async function setPreferredSpot(
+  client: PrismaClient,
+  userId: string,
+  preferredParkingSpotId: string | null
+): Promise<void> {
+  await client.user.update({ where: { id: userId }, data: { preferredParkingSpotId } });
 }
 
 /** The `AuthenticatedUser` a controller would hand the service for this row. */
@@ -190,8 +219,12 @@ export async function setLockMode(
 export const FUTURE_BUSINESS_DAY = '2099-01-05' as DateOnly;
 /** The Tuesday after it, for tests that need two distinct days. */
 export const NEXT_BUSINESS_DAY = '2099-01-06' as DateOnly;
+/** The Wednesday after that, for bulk booking, which needs three. */
+export const THIRD_BUSINESS_DAY = '2099-01-07' as DateOnly;
 /** The Saturday of that week. */
 export const FUTURE_WEEKEND_DAY = '2099-01-03' as DateOnly;
+/** New Year's Day 2099 — a **Thursday**, so it is a holiday and not a weekend. */
+export const FUTURE_HOLIDAY = '2099-01-01' as DateOnly;
 /** A day used as "today" that is safely before {@link FUTURE_BUSINESS_DAY}. */
 export const TODAY = '2098-12-29' as DateOnly;
 

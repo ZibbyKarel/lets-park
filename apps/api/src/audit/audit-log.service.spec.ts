@@ -76,6 +76,6 @@ describe('AuditLogService', () => {
       (name) => name !== 'constructor'
     );
 
-    expect(methods).toEqual(['record']);
+    expect(methods).toEqual(['record', 'recordMany']);
   });
 });
