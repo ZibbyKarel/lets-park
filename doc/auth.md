@@ -89,6 +89,56 @@ Okta must have `https://<host>/api/auth/callback/okta` registered as a redirect 
 is derived from the provider id, which is why `OKTA_PROVIDER_ID` is a constant and not a
 literal.
 
+## The audience the two halves agree on
+
+`apps/api` (Task 11) validates the bearer against `AUTH_OKTA_AUDIENCE` and rejects any token
+whose `aud` differs. `libs/auth` sends **no** `audience` and no `resource` parameter, at
+`/authorize` or at `/token`, so whatever `aud` ends up in the token is entirely the issuer's
+choice. That makes `AUTH_OKTA_AUDIENCE` a value that has to match the issuer, not a value the
+two halves can be assumed to share.
+
+**Dev and e2e: `AUTH_OKTA_AUDIENCE=default`.** `docker-compose.yml` starts
+`mock-oauth2-server` with no `JSON_CONFIG`, so its `DefaultOAuth2TokenCallback` decides the
+audience in this order — configured audience, then the request's `audience` parameter, then
+the token request's non-OIDC scopes, else `["default"]`. There is no configured audience, we
+send no `audience` parameter, and Auth.js v5's code exchange sends no `scope` on the token
+request at all (our refresh POST sends only `grant_type` and `refresh_token`). Even a
+scope-bearing request would come out empty, because the callback filters against Nimbus's
+`OIDCScopeValue`, which covers `openid`, `profile`, `email` **and** `offline_access` — every
+scope we ask for. So the last branch applies and the token carries `aud: ["default"]`.
+
+**Production: the issuer must be a Custom Authorization Server.** A Custom AS
+(`https://<org>.okta.com/oauth2/<id>`, e.g. `/oauth2/default`) mints access tokens whose `aud`
+is that server's configured audience — `api://default` for Okta's built-in one, which is what
+`AUTH_OKTA_AUDIENCE` should be set to there. Point `AUTH_OKTA_ISSUER` at the **Org**
+Authorization Server instead (`https://<org>.okta.com`, no `/oauth2/...`) and `aud` becomes
+the org URL, so the same 401 appears — in production only. That is the silent precondition on
+this variable, and it is the reason to treat "which issuer URL" as an auth decision rather
+than a copy-paste.
+
+> **This is a reasoned prediction, not a verified fact.** No container was running when it was
+> written (`docker info` reports the daemon down on both the implementation and the review
+> machine), so no access token has actually been decoded. The dev/e2e half is derived from
+> `mock-oauth2-server`'s upstream `DefaultOAuth2TokenCallback` plus the installed
+> `@auth/core`; the production half is derived from Okta's documented Custom-vs-Org AS
+> behaviour and has no second source at all.
+>
+> **What would falsify it:** decode the `access_token` from one real sign-in and read `aud`.
+> If dev shows anything other than `default` — or production anything other than the Custom
+> AS's audience — this section and `.env.example` are wrong together, and the symptom will be
+> `401 JsonWebTokenError: jwt audience invalid` on every API call while sign-in itself works.
+>
+> **Task 28 settles it.** Its Playwright login flow is the first thing in this build that runs
+> the real OIDC redirect against `mock-oauth2-server` end to end; a request that reaches an
+> authenticated API route proves the audience matches, and Task 28 should decode one token and
+> replace this callout with the value it found. Task 11's own suggestion — "compare
+> `AUTH_OKTA_AUDIENCE` against the `aud` your IdP actually mints" — is exactly this check.
+>
+> If the value does turn out to be wrong, the fix stays in `.env.example`: mounting a
+> `JSON_CONFIG` on the container so it mints `api://default` is the alternative, and it has the
+> advantage of making the dev and production values identical. Neither option touches code,
+> which is what keeps "same code, only env values differ" true.
+
 ## What the browser can see
 
 | value | lives in | reaches the browser? |
@@ -184,13 +234,19 @@ discovery document, and issues real signed JWTs, so the whole flow above is mean
 unmodified — including refresh, because `libs/auth` reads the client-authentication method
 out of the discovery document rather than assuming one (`doc/decision/0041-*`).
 
-> **Unverified.** The container was not started while Task 20 was implemented (no Docker
-> daemon available in that environment), so the refresh leg has **not** been run against
-> `mock-oauth2-server` end to end. What is verified is the code's behaviour against a stubbed
-> discovery document in all three client-authentication branches. The first task that brings
-> the container up — Task 11 for JWKS, or Fáze 7 for Playwright — should confirm what
-> `token_endpoint_auth_methods_supported` actually contains there and correct this section if
-> the container advertises something unexpected.
+> **Unverified against a running container.** No Docker daemon was available while Task 20 was
+> implemented or reviewed, so nothing below has been observed — only derived from
+> `mock-oauth2-server`'s upstream source and the installed `@auth/core`. Two things for the
+> first task that brings the container up (Task 28 at the latest):
+>
+> 1. **`token_endpoint_auth_methods_supported`** — `libs/auth` picks HTTP Basic or form-body
+>    client authentication from it. All three branches are tested against a stubbed document;
+>    which one the container actually takes is unobserved.
+> 2. **The `aud` claim** — predicted to be `default`, which is what `.env.example` now sets
+>    `AUTH_OKTA_AUDIENCE` to. See "The audience the two halves agree on" above for the
+>    reasoning, what would falsify it, and the one-line fix if it is wrong.
+>
+> Decode one access token from a real sign-in and both questions are answered at once.
 
 `libs/auth`'s own unit tests stub only `fetch` (`AuthOptions.fetch`, the same seam
 `ApiClientOptions.fetch` already is) and drive the real callbacks, the real
