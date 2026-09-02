@@ -42,6 +42,12 @@ export interface AuthProviderProps {
    * The session read on the server, handed down so the first client render
    * matches the server one instead of flashing "loading". `apps/web` passes
    * `await auth()` from its root layout.
+   *
+   * `null` and *absent* are different, and the difference is load-bearing:
+   * `null` states "there is no session, I checked", while omitting the prop
+   * tells Auth.js to start in `loading` and go and fetch one. Passing `null`
+   * for "I don't know" would render every visitor as signed-out for a frame
+   * and send them straight to Okta.
    */
   readonly session?: AuthSession | null;
   /** Override {@link SESSION_REFETCH_SECONDS}. `0` disables polling. */
@@ -59,8 +65,13 @@ export function AuthProvider({
   session,
   refetchIntervalSeconds = SESSION_REFETCH_SECONDS,
 }: AuthProviderProps) {
+  // Spread rather than assigned: `exactOptionalPropertyTypes` makes
+  // `session: undefined` a different type from an absent `session`, and
+  // Auth.js reads exactly that distinction (`props.session !== undefined`).
+  const initialSession = session === undefined ? {} : { session };
+
   return (
-    <SessionProvider session={session ?? null} refetchInterval={refetchIntervalSeconds}>
+    <SessionProvider {...initialSession} refetchInterval={refetchIntervalSeconds}>
       {children}
     </SessionProvider>
   );

@@ -78,10 +78,6 @@ export type TokenRefresher = (refreshToken: string) => Promise<RefreshedTokens>;
  */
 export class TokenRefreshError extends Error {
   override readonly name = 'TokenRefreshError';
-
-  constructor(message: string) {
-    super(message);
-  }
 }
 
 /** `${issuer}/.well-known/openid-configuration`, tolerating a trailing slash. */
@@ -132,16 +128,12 @@ export function createTokenRefresher(options: TokenRefresherOptions): TokenRefre
     const url = discoveryUrl(issuer);
     const response = await fetchImpl(url);
     if (!response.ok) {
-      throw new TokenRefreshError(
-        `OIDC discovery at ${url} failed with HTTP ${response.status}.`
-      );
+      throw new TokenRefreshError(`OIDC discovery at ${url} failed with HTTP ${response.status}.`);
     }
     const document = (await response.json()) as DiscoveryDocument;
     const tokenEndpoint = document.token_endpoint;
     if (typeof tokenEndpoint !== 'string' || tokenEndpoint === '') {
-      throw new TokenRefreshError(
-        `OIDC discovery at ${url} returned no usable "token_endpoint".`
-      );
+      throw new TokenRefreshError(`OIDC discovery at ${url} returned no usable "token_endpoint".`);
     }
 
     // Okta registers web apps with `client_secret_basic` by default, while the
@@ -200,9 +192,7 @@ export function createTokenRefresher(options: TokenRefresherOptions): TokenRefre
 
     if (!response.ok) {
       const details = readErrorFields(await readJsonOrUndefined(response));
-      throw new TokenRefreshError(
-        `Token refresh failed with HTTP ${response.status}${details}.`
-      );
+      throw new TokenRefreshError(`Token refresh failed with HTTP ${response.status}${details}.`);
     }
 
     const tokens = (await response.json()) as Record<string, unknown>;

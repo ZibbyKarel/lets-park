@@ -55,7 +55,7 @@ declare module 'next-auth' {
      * fails as unauthenticated, whereas one carrying an expired token fails
      * with an error the user cannot distinguish from a bug.
      */
-     accessToken?: string;
+    accessToken?: string;
     /** Set when the last refresh attempt failed. See {@link REFRESH_TOKEN_ERROR}. */
     error?: RefreshTokenError;
   }
