@@ -92,6 +92,8 @@ const PRISMA_FOREIGN_KEY_CONSTRAINT = 'P2003';
  * so this mapping is the *last* resort — but without it a lost race would come
  * back as a 500, and a 500 tells an operator to look for a defect that is not
  * there and tells the client not to try again, which is the wrong advice.
+ *
+ * See `doc/decision/0065-*`.
  */
 export const PRISMA_WRITE_CONFLICT = 'P2034';
 

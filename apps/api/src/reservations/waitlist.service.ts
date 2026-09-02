@@ -78,6 +78,14 @@ export class WaitlistService {
    * they already have one, which the unique index would refuse — so the queue
    * would accept them and then silently never promote them. Refusing at the door
    * is the honest version of the same rule (see `joinWaitlistContract`).
+   *
+   * Unlike the other checks in this module, **this one has no index behind
+   * it** — joining a queue never touches `Reservation`'s unique index, so a
+   * reservation acquired elsewhere in the same instant this check passes is
+   * not caught here. That is fine, not a gap: `WaitlistPromotionService`
+   * re-checks eligibility at promotion time and skips such a candidate then,
+   * so the worst case is a queue entry that (correctly) never promotes. See
+   * `doc/waitlist.md` §"What happens under concurrency".
    */
   async join(
     input: JoinWaitlistInput,

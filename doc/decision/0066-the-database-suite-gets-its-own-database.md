@@ -59,7 +59,10 @@ Postgres started from `docker-compose.yml`; a locked-down shared server would ne
 out here rather than discovered later.
 
 **A leaked database survives until the next run.** Bounded — one per killed run, named by a prefix
-that is swept — and preferable to a teardown that throws and masks the real failure.
+that is swept — and preferable to a teardown that throws and masks the real failure. The sweep only
+force-drops a database whose embedded creation timestamp is over an hour old, so two `api:test-db`
+runs started around the same time cannot drop each other's still-in-progress database — only a
+crashed run's leftover is old enough to qualify (`test-database.ts`'s `isStaleTestDatabase`).
 
 **`globalSetup` mutating `DATABASE_URL` is process-wide.** Deliberate: it is what carries the
 isolation to every spec, including Task 12's, which reads the variable itself. Nothing outside this

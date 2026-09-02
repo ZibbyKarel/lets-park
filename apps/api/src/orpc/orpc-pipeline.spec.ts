@@ -312,17 +312,20 @@ describe('the oRPC transport through the assembled application', () => {
     it('but Task 13’s reservation route is, and it reaches the service', async () => {
       // A domain answer rather than a 404 is the whole assertion: the route
       // exists, the guard let an ordinary user through, oRPC decoded the body,
-      // and `ReservationsService` got as far as the window rule. October is not
-      // open on the frozen "today" this suite's settings imply.
+      // and `ReservationsService` got as far as the window rule. 2099-01 is
+      // nowhere near the `openDaysBefore: 7` window seeded in `beforeEach`, so
+      // the service answers `OUT_OF_HORIZON` (422) rather than reserving
+      // anything — asserted on the exact status and code, not merely "not a
+      // 404", so a regression to a 500 (unmapped error) fails this test too.
       const response = await call(
         'reservation.create',
         { parkingSpotId: '11111111-1111-4111-8111-111111111111', date: '2099-01-05' },
         tokenFor('okta-user')
       );
 
-      expect(response.status).not.toBe(404);
+      expect(response.status).toBe(422);
       expect(response.body).toEqual({
-        json: expect.objectContaining({ code: expect.any(String) }),
+        json: expect.objectContaining({ code: 'OUT_OF_HORIZON' }),
       });
     });
   });

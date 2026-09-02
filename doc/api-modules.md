@@ -425,6 +425,13 @@ nx run api:test-db
 Nx loads `.env`, so `DATABASE_URL` is already in place for that target; running the config through
 `jest` directly needs it passed.
 
+The role in `DATABASE_URL` needs `CREATEDB`: `globalSetup` creates the throwaway
+database itself rather than reusing `lets_park` (`doc/decision/0066-*` §Risk).
+The `docker compose --profile dev` Postgres already grants it to the seeded
+role; a role provisioned any other way (a shared server, a hand-rolled local
+Postgres) needs `ALTER ROLE <role> CREATEDB` or the suite fails at
+`globalSetup` with a raw Postgres permission error and no further guidance.
+
 It is **excluded from `nx run-many -t test`** (`testPathIgnorePatterns` in
 `apps/api/jest.config.cts`) so that suite stays runnable without Docker, and it **refuses to skip
 itself** when `DATABASE_URL` is missing — it fails, with a message saying how to start the

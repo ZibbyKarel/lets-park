@@ -369,11 +369,18 @@ export class ReservationsService {
    *
    * A cycle, so PostgreSQL kills one of them. The cross-cell `DELETE` is
    * required by the rule ("their other waitlist entries for that day are
-   * deleted"), and no lock ordering removes it — a transaction cannot know which
-   * cells it will have to reach into until it has read the queue. Retrying is
-   * the documented remedy, and it converges for the same reason the `P2002`
-   * retry does: the winner's reservation is committed by then, so the retry
-   * skips that candidate and never reaches for the other cell at all.
+   * deleted"), and no ordering of the locks *this design* takes removes it — a
+   * transaction cannot know which cells it will have to reach into until it has
+   * read the queue. (An ordering that would remove it exists — locking the
+   * whole day's queue rows in canonical order — but that is functionally the
+   * `pg_advisory_xact_lock` upgrade path documented as the alternative, not a
+   * variant of the current locking.) Retrying is the documented remedy, and it
+   * converges for the same reason the `P2002` retry does: the winner's
+   * reservation is committed by then, so the retry skips that candidate and
+   * never reaches for the other cell at all.
+   *
+   * See `doc/decision/0065-*` for the full deadlock analysis and the
+   * advisory-lock upgrade path.
    *
    * `SPOT_ALREADY_RESERVED` is deliberately **not** retryable: it would mean
    * somebody took the cell this transaction was in the middle of freeing, which

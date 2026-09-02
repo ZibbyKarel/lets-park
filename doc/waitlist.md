@@ -99,7 +99,7 @@ at once and only need to be serialised against the *deleter*.
 
 Three rules, three mechanisms. **None of them is a check in the service.** A
 read-then-write check cannot be made safe against a concurrent writer, so every
-check in this module exists to produce a better error message than the index
+check in this table exists to produce a better error message than the index
 would — never to enforce the rule.
 
 | rule | enforced by | the loser is told |
@@ -113,6 +113,19 @@ The mapping from a violated index to a contract code lives in
 `mapUniqueConstraintViolation` (`contract-exception.filter.ts`) and reads the
 constraint out of `meta.driverAdapterError.cause.constraint.index`, because
 `@prisma/adapter-pg` does not populate Prisma's documented `meta.target` at all.
+
+**One exception:** `waitlist.join` *also* throws `RESERVATION_LIMIT_REACHED`
+up front when the caller already holds a reservation that day
+(`WaitlistService.joinOnce`), and that check has no index behind it — joining a
+queue never touches the `Reservation` table's unique index, so there is nothing
+for a concurrent writer to lose against. It stays a genuine, unenforced
+read-then-write check: if a reservation is acquired elsewhere in the same
+instant this check passes, the join still succeeds. The consequence is benign
+rather than a correctness gap — `WaitlistPromotionService.firstEligible` re-reads
+eligibility at promotion time and skips a candidate who already holds a
+reservation that day, so they are queued but simply never promoted, exactly as
+if the up-front check had caught them. The check exists only to give that person
+an honest error immediately instead of a queue position that can never resolve.
 
 ### The two failures a cancellation retries
 
@@ -139,10 +152,14 @@ DELETE W's queue entries for the day
 ```
 
 A cycle. PostgreSQL detects it and kills one side. This was **found by the test
-suite, not by reasoning**, and it is not removable by lock ordering: a
-transaction cannot know which other cells it will have to reach into until it has
-read its own queue, and the cross-cell `DELETE` is required by the rule
-("their other waitlist entries for that day are deleted").
+suite, not by reasoning**, and no ordering of the locks *this design* takes
+removes it: a transaction cannot know which other cells it will have to reach
+into until it has read its own queue, and the cross-cell `DELETE` is required by
+the rule ("their other waitlist entries for that day are deleted"). An ordering
+that *would* remove it exists — locking the whole day's queue rows in canonical
+order before writing — but that is the `pg_advisory_xact_lock` upgrade path
+documented in `doc/decision/0065-*`, not a variant of the current locking; see
+that record for the full analysis.
 
 **Why the retry terminates.** Each attempt re-reads the queue, and by then the
 reservation that caused the previous failure is committed — so the candidate that

@@ -39,12 +39,16 @@ DELETE W's queue entries for the day
   → waits on B's queue row, held by T2
 ```
 
-**No lock ordering removes it.** The usual remedy — acquire locks in a canonical order — needs each
-transaction to know up front which rows it will touch. Here it cannot: which *other* cells a
-promotion must reach into is decided by which candidate the queue turns out to be headed by, and
-the cross-cell `DELETE` is required by the rule (`plan.md`: "their other waitlist entries for the
-same day are deleted"). Dropping that delete would leave a promoted user visibly queued for spots
-they can no longer be promoted to.
+**No ordering of the locks this design takes removes it.** The usual remedy — acquire locks in a
+canonical order — needs each transaction to know up front which rows it will touch. Here it cannot:
+which *other* cells a promotion must reach into is decided by which candidate the queue turns out to
+be headed by, and the cross-cell `DELETE` is required by the rule (`plan.md`: "their other waitlist
+entries for the same day are deleted"). Dropping that delete would leave a promoted user visibly
+queued for spots they can no longer be promoted to. An ordering that *would* remove the cycle does
+exist — lock the whole day's queue rows in canonical order before writing, rather than only the
+current cell's — but that is not a variant of the current per-cell locking; it is functionally the
+`pg_advisory_xact_lock` upgrade path two paragraphs below, with the same cost (every promotion for
+one day serialised against every other).
 
 **Retrying is the documented remedy and it converges.** After the winner commits, its promoted user
 has a committed reservation, so the retry's eligibility read skips them — and therefore never

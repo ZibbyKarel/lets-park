@@ -28,11 +28,15 @@
  * files read here are the real, committed migrations, so a schema change that
  * would break production breaks this suite too.
  *
- * ## Leaked databases heal themselves
+ * ## Leaked databases heal themselves — but only the actually-dead ones
  *
  * A Jest run killed between setup and teardown leaves its database behind.
- * {@link createTestDatabase} therefore drops every database matching the
- * prefix before creating its own, so the next run cleans up after the last one.
+ * {@link createTestDatabase} therefore drops leftovers matching the prefix
+ * before creating its own, so the next run cleans up after the last one — but
+ * only databases old enough that no real run could still be using them
+ * ({@link isStaleTestDatabase}). Two `api:test-db` runs started around the same
+ * time must not be able to drop each other's still-in-progress database
+ * (`doc/decision/0066-*` §Risk).
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -124,13 +128,45 @@ async function withMaintenanceClient<T>(
   }
 }
 
-/** Drops every leftover from a previous, interrupted run. */
+/**
+ * No real `api:test-db` run takes anywhere near this long. Anything named by
+ * {@link testDatabaseName} older than this cannot belong to a run that is
+ * still going — only to one that crashed without reaching `globalTeardown`.
+ */
+const STALE_TEST_DATABASE_MS = 60 * 60 * 1000; // 1 hour.
+
+/** Matches a name {@link testDatabaseName} could have produced, capturing the timestamp. */
+const TEST_DATABASE_NAME_PATTERN = new RegExp(`^${TEST_DATABASE_PREFIX}\\d+_(\\d+)$`);
+
+/**
+ * True only for a database old enough that no concurrent, still-running suite
+ * could own it — so it is safe to force-drop as a leak from a crashed run.
+ *
+ * This is a name-and-age check rather than "does anything look connected to
+ * it", because a crashed process's connections can linger in `pg_stat_activity`
+ * past the process's own death until TCP keepalive notices — checking
+ * liveness that way would let a genuinely leaked database dodge cleanup, not
+ * protect a concurrent one.
+ */
+function isStaleTestDatabase(datname: string): boolean {
+  const match = TEST_DATABASE_NAME_PATTERN.exec(datname);
+  if (match?.[1] === undefined) {
+    return false; // Not a name this suite generates — leave it alone either way.
+  }
+  const createdAt = Number(match[1]);
+  return Date.now() - createdAt > STALE_TEST_DATABASE_MS;
+}
+
+/** Drops leftovers from a previous, interrupted run — never a concurrent one still in progress. */
 async function dropStaleDatabases(client: Client): Promise<void> {
   const { rows } = await client.query<{ datname: string }>(
     'SELECT datname FROM pg_database WHERE datname LIKE $1',
     [`${TEST_DATABASE_PREFIX}%`]
   );
   for (const { datname } of rows) {
+    if (!isStaleTestDatabase(datname)) {
+      continue; // Could be a concurrent run's database; only age proves it is not.
+    }
     assertSafeIdentifier(datname);
     // `WITH (FORCE)` (PostgreSQL 13+) terminates connections a crashed run left
     // open, which would otherwise make the drop fail and the leak permanent.
