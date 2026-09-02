@@ -117,6 +117,23 @@ record. In the example above, the request carried `authorization: Bearer secret-
 **specific paths** – a new header carrying a secret has to be added by hand
 (`apps/api/src/logging/logger.options.ts`).
 
+**A credential in the URL is a separate job.** The ICS feed
+(`GET /api/calendar/<token>.ics`, `doc/ics.md`) authenticates with a token in the path, and
+a path reaches the log through four routes, not one: `req.url` and `req.params` in the
+request line above, and `path` and `reason` in `ContractExceptionFilter`'s `Request
+rejected` line – `reason` because Nest's 404 message for an unrouted URL is
+`Cannot GET <url>`. All four go through `redactIcsToken`
+(`apps/api/src/logging/redact-ics-token.ts`), which replaces the segment after
+`/api/calendar/` with `[redacted]`, case-insensitively because Express's router matches
+paths case-insensitively. `req.params` is not redacted but **dropped**: what lands there is
+the logging middleware's own catch-all splat, a second copy of the URL in a shape no
+redaction of `url` would reach.
+
+`calendar-logging.spec.ts` is the only spec in the workspace that reads emitted log lines –
+it boots the app at `LOG_LEVEL: 'info'` with a captured destination. Every other spec pins
+`LOG_LEVEL: 'fatal'`, so a claim about log contents that has no test in that file has
+nothing behind it.
+
 **Level of a request line:** 5xx or a thrown error → `error`, 4xx → `warn`, otherwise
 `info`.
 

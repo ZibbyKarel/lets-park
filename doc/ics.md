@@ -269,5 +269,19 @@ Both Outlook and Google apply their own refresh floor and will ignore
 
 Anyone who obtains the URL sees that person's parking days — that is the whole
 security model, and it is why regenerating the token exists. Tell people to treat
-it like a password, and note that the app never logs it (`doc/api-modules.md` §3:
-the audit entry for a regeneration records *that* it happened, never the token).
+it like a password.
+
+The app does not log it. That is now a property with a test behind it rather than
+an intention: the token is in the **URL**, and a URL is the one thing every HTTP
+logger writes by default, so it had to be redacted at four separate sites —
+`req.url` and `req.params` in the per-request line, and `path` and `reason` in
+`ContractExceptionFilter`'s rejection line, the last of which carries the URL
+inside Nest's own `Cannot GET …` message. `redactIcsToken`
+(`apps/api/src/logging/redact-ics-token.ts`) does all four, and
+`calendar-logging.spec.ts` boots the application at `LOG_LEVEL: 'info'`, sends real
+requests and asserts on the bytes pino emitted. It is the only spec in the
+workspace that reads log output; every other one pins `LOG_LEVEL: 'fatal'`, which
+is why the leak survived the first draft of this task.
+
+The audit trail is separate and was always fine: the entry for a regeneration
+records *that* it happened, never the token (`doc/api-modules.md` §3).
