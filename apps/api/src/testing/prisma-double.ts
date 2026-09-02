@@ -316,6 +316,24 @@ export class PrismaDouble {
         );
         return row === undefined ? null : copy(row);
       },
+      // The ICS feed's token lookup (`CalendarService`). It is a `findFirst`
+      // and not a `findUnique` because `active` is not part of the unique key —
+      // which is deliberate there, so an unknown token and a deactivated user's
+      // token take one and the same path. Modelled with the same `active`
+      // filter for that reason: a double that ignored it would let this
+      // project's only unauthenticated endpoint pass its tests while serving
+      // offboarded employees.
+      findFirst: async (args: { where: { icsToken?: string; active?: boolean } }) => {
+        const { icsToken, active } = args.where;
+        if (icsToken === undefined) {
+          return unsupported('a user findFirst without an icsToken', args.where);
+        }
+        const row = this.users.find(
+          (candidate) =>
+            candidate.icsToken === icsToken && (active === undefined || candidate.active === active)
+        );
+        return row === undefined ? null : copy(row);
+      },
       // Just-in-time provisioning (`AuthUserService`) creates a row for a
       // subject the database has never seen; the oRPC pipeline test goes through
       // the real guard, so it goes through this.
@@ -373,7 +391,26 @@ export class PrismaDouble {
 
   private reservationDelegate() {
     return {
-      findMany: async (args: { where: { date: Date }; include?: unknown }) => {
+      findMany: async (args: {
+        where: { date: Date | { gte: Date }; userId?: string };
+        include?: { parkingSpot?: unknown };
+        orderBy?: unknown;
+      }) => {
+        // The ICS feed's query (`CalendarService`): one user's reservations
+        // from a lower date bound, with the spot's label joined in, ordered by
+        // date then id. Modelled rather than waved through, because the feed's
+        // whole content is this result.
+        if (args.where.userId !== undefined) {
+          const bound = args.where.date;
+          if (bound === undefined || !(bound instanceof Object) || !('gte' in bound)) {
+            return unsupported('a per-user reservation query without a `date.gte` bound', args.where);
+          }
+          const gte = bound.gte.getTime();
+          return this.reservations
+            .filter((row) => row.userId === args.where.userId && row.date.getTime() >= gte)
+            .sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id))
+            .map((row) => ({ ...row, parkingSpot: copy(this.requireSpot(row.parkingSpotId)) }));
+        }
         if (!(args.where.date instanceof Date)) {
           return unsupported('a reservation filter other than an exact date', args.where);
         }
@@ -432,6 +469,14 @@ export class PrismaDouble {
         return copy(row);
       },
     };
+  }
+
+  private requireSpot(id: string): ParkingSpotRow {
+    const spot = this.spots.find((row) => row.id === id);
+    if (spot === undefined) {
+      throw new Error(`PrismaDouble: reservation references an unseeded spot ${id}`);
+    }
+    return spot;
   }
 
   private requireUser(id: string): UserRow {
