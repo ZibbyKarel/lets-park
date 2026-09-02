@@ -1,4 +1,4 @@
-# 0062 – The database-backed suite gets its own database, not a rollback
+# 0066 – The database-backed suite gets its own database, not a rollback
 
 **Date:** 2026-09-02 · **Status:** accepted · **Follows on from:** `doc/decision/0027-*`
 

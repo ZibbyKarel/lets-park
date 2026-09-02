@@ -244,7 +244,7 @@ are the only implementation of the rule.
 
 Two rules apply to *everyone*, admin included, because they are facts about the
 day rather than about the window: a day in the past (`PAST_DATE`), and a weekend
-or Czech public holiday (`VALIDATION_FAILED` — see `doc/decision/0060-*`).
+or Czech public holiday (`VALIDATION_FAILED` — see `doc/decision/0064-*`).
 
 ---
 

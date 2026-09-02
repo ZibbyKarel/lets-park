@@ -1,4 +1,4 @@
-# 0060 – A weekend or public holiday is `VALIDATION_FAILED`, not a new error code
+# 0064 – A weekend or public holiday is `VALIDATION_FAILED`, not a new error code
 
 **Date:** 2026-09-02 · **Status:** accepted · **Follows on from:** `doc/decision/0019-*`
 

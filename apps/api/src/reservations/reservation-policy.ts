@@ -36,7 +36,7 @@
  * have widened a closed contract enum shared by every task. It did not need to
  * be: Task 17 already shipped the Czech copy for `VALIDATION_FAILED` as
  * *"Požadavek porušuje pravidlo rezervací (např. víkend nebo svátek)"* — the
- * weekend case is literally the example it names. See `doc/decision/0060-*`.
+ * weekend case is literally the example it names. See `doc/decision/0064-*`.
  */
 
 import { Injectable } from '@nestjs/common';

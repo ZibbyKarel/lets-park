@@ -1,4 +1,4 @@
-# 0061 – A cancellation retries a deadlock, not just the promotion's `P2002`
+# 0065 – A cancellation retries a deadlock, not just the promotion's `P2002`
 
 **Date:** 2026-09-02 · **Status:** accepted · **Affects:** `apps/api/src/reservations/`
 

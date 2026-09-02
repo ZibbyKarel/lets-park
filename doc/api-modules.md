@@ -413,7 +413,7 @@ the `CHECK ("id" = 1)` singleton, and — added by Task 13 — the shape of a re
 
 Task 13 added three more `*.db.spec.ts` files under the same target, and with them a
 `globalSetup` that gives the whole run its **own throwaway database**
-(`doc/decision/0062-*`): its concurrency cases have to commit to race at all, and a committed
+(`doc/decision/0066-*`): its concurrency cases have to commit to race at all, and a committed
 `AuditLog` row can never be deleted. The developer's `lets_park` is no longer written to by any of
 this, including the rollback-based suite above.
 
