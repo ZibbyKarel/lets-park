@@ -171,6 +171,13 @@ The router is a single object, `contract`, in `api/router.ts`. **The grouping
 is an authorization boundary:** everything under `admin.` requires
 `role: 'ADMIN'`; everything else just needs an active user.
 
+That file exports two types alongside it: `Contract` (the router object's own
+type) and **`ContractClient`** — the same router seen from the caller's side,
+i.e. `ContractRouterClient<Contract>` already applied. `libs/api-client` types
+its client as `ContractClient` and never imports `@orpc/contract` itself, which
+keeps that package allow-listed for the `type:contract` tag alone rather than
+for every wrapper lib. See `doc/decision/0040-*`.
+
 **Every** procedure declares `FORBIDDEN` — it sits on the shared `authed`
 builder, because a deactivated user (`active: false`, which is how
 offboarding works) is rejected before any handler runs. It therefore isn't

@@ -1,6 +1,8 @@
 import { type AnyContractProcedure, isContractProcedure } from '@orpc/contract';
+import { DATE_A, TIMESTAMP, UUID_A, UUID_B, UUID_C } from '../__fixtures__/fixtures';
 import { ERROR_CODES } from '../schemas/errors';
 import { noInputSchema } from './errors';
+import type { ContractClient } from './router';
 import { contract } from './router';
 
 /** Flattens the router into `['a.b.c', procedure]` pairs. */
@@ -203,6 +205,40 @@ describe('contract router', () => {
       expect([path, codes.includes('OUT_OF_HORIZON')]).toEqual([path, true]);
       expect([path, codes.includes('RESERVATIONS_LOCKED')]).toEqual([path, true]);
     }
+  });
+
+  it('exports ContractClient covering every procedure with contract-derived types', () => {
+    // `ContractClient` is what `libs/api-client` types its client as, so that
+    // `@orpc/contract` stays allow-listed for `type:contract` alone
+    // (`doc/decision/0040-*`). It is a type, so the check is a compile-time one:
+    // each assignment below stops compiling if the client stops mirroring the
+    // router, or if its input/output stop coming from the Zod schemas.
+    type Client = ContractClient;
+
+    // Same shape as the router: a nested branch resolves to a callable leaf.
+    const createReservation: Client['reservation']['create'] = (() => {
+      throw new Error('not called — this is a type-level assertion');
+    }) as Client['reservation']['create'];
+    const listAdminSpots: Client['admin']['spot']['list'] = (() => {
+      throw new Error('not called — this is a type-level assertion');
+    }) as Client['admin']['spot']['list'];
+
+    // Input and output are the contract's own inferred types, not `any`.
+    type CreateInput = Parameters<typeof createReservation>[0];
+    type CreateOutput = Awaited<ReturnType<typeof createReservation>>;
+    const input: CreateInput = { parkingSpotId: UUID_A, date: DATE_A };
+    const output: CreateOutput = {
+      id: UUID_B,
+      parkingSpotId: UUID_A,
+      userId: UUID_C,
+      date: DATE_A,
+      createdAt: TIMESTAMP,
+    };
+
+    expect(typeof createReservation).toBe('function');
+    expect(typeof listAdminSpots).toBe('function');
+    expect(input.date).toBe(DATE_A);
+    expect(output.parkingSpotId).toBe(UUID_A);
   });
 
   it('puts every admin-only procedure under the admin subtree', () => {

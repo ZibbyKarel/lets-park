@@ -11,6 +11,7 @@
  * picker, `admin.spot.list` for the management table with its filters.
  */
 
+import type { ContractRouterClient } from '@orpc/contract';
 import { confirmBulkContract, previewBulkContract } from './bulk';
 import { getMyProfileContract, regenerateIcsTokenContract, updateMySettingsContract } from './me';
 import { getDayOverviewContract } from './overview';
@@ -77,3 +78,27 @@ export const contract = {
 };
 
 export type Contract = typeof contract;
+
+/**
+ * The whole contract as a **callable client**: every procedure above, with its
+ * input, output and declared error codes derived from the Zod schemas.
+ *
+ * This alias lives here rather than in `libs/api-client` on purpose.
+ * `ContractRouterClient` comes from `@orpc/contract`, and that package is
+ * allow-listed for the `type:contract` tag **only** (`NPM_ALLOWLIST.contract` in
+ * `eslint.config.mjs`, which is deliberately narrow — see
+ * `doc/decision/0007-*`). Applying it here means `libs/api-client` can type its
+ * client without `@orpc/contract` being opened up to every `type:util` lib,
+ * which would also have handed it to `libs/form`, `libs/i18n` and every wrapper
+ * still to come.
+ *
+ * It is a **type**, so nothing of `@orpc/contract` reaches the runtime through
+ * it: the transport still comes from `@orpc/client`, which only
+ * `libs/api-client` may import. Exporting a type from the contract lib is also
+ * what this lib is for — `Contract` itself is already exported the same way.
+ *
+ * `TClientContext` stays at its default (`Record<never, never>`): every request
+ * carries the same bearer token, resolved by the client's own token provider,
+ * so there is nothing a call site needs to thread through.
+ */
+export type ContractClient = ContractRouterClient<Contract>;

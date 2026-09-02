@@ -26,7 +26,9 @@
       "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"],
       "@lets-park/database": ["./libs/database/src/index.ts"],
       "@lets-park/i18n": ["./libs/i18n/src/index.ts"],
-      "@lets-park/form": ["./libs/form/src/index.ts"]
+      "@lets-park/form": ["./libs/form/src/index.ts"],
+      "@lets-park/api-client": ["./libs/api-client/src/index.ts"],
+      "@lets-park/query": ["./libs/query/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
