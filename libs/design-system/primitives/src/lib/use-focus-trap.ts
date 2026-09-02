@@ -165,10 +165,11 @@ export function useFocusTrap({
       }
       trapping = true;
 
-      // Once per activation, not on every resume: when a nested overlay closes,
-      // its own cleanup puts focus back on whatever opened it — which is inside
-      // this container already. Grabbing the first control again here would
-      // overwrite that with a worse answer.
+      // Once per activation, not on every resume. When a nested overlay closes,
+      // its own cleanup puts focus back on whatever opened it — a control
+      // inside this container, and a better answer than "the first one".
+      // Removing this guard fails "returns focus to the control that opened the
+      // overlay, not to the first one".
       if (!hasTakenFocus) {
         hasTakenFocus = true;
 
@@ -188,8 +189,9 @@ export function useFocusTrap({
       }
       trapping = false;
 
-      // Focus is left exactly where it is: the layer that opened above this one
-      // is about to place it, and moving it here would be a race with that.
+      // Tab is released and focus is left exactly where it is. Whichever layer
+      // caused this pause is the one placing focus, and the same holds in
+      // reverse on resume — see the guard in `startTrapping`.
       document.removeEventListener('keydown', onKeyDown);
     };
 

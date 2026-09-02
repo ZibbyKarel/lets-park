@@ -377,6 +377,43 @@ describe('Escape across overlays nested in JSX but portalled to the same parent'
     expect(screen.getByRole('button', { name: 'Prvek ve vnitřním' })).toHaveFocus();
   });
 
+  it('returns focus to the control that opened the overlay, not to the first one', async () => {
+    const user = userEvent.setup();
+
+    function ConfirmOverSettings() {
+      const [outer, setOuter] = useState(true);
+      const [inner, setInner] = useState(false);
+
+      return (
+        <Modal open={outer} onClose={() => setOuter(false)} title="Nastavení" hideCloseButton>
+          <button type="button">Jiný prvek</button>
+          {/* Deliberately not the first control, so "resumed and grabbed the
+              first thing" and "the closing layer put focus back" are two
+              different answers. */}
+          <button type="button" onClick={() => setInner(true)}>
+            Otevřít potvrzení
+          </button>
+
+          <Modal open={inner} onClose={() => setInner(false)} title="Potvrzení" hideCloseButton>
+            <button type="button">Potvrdit</button>
+          </Modal>
+        </Modal>
+      );
+    }
+
+    render(<ConfirmOverSettings />);
+
+    await user.click(screen.getByRole('button', { name: 'Otevřít potvrzení' }));
+    expect(screen.getByRole('button', { name: 'Potvrdit' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Potvrzení' })).not.toBeInTheDocument();
+
+    // Resuming a paused trap must not move focus: the layer that closed owns
+    // putting it back, and it knows the better answer.
+    expect(screen.getByRole('button', { name: 'Otevřít potvrzení' })).toHaveFocus();
+  });
+
   it('hands the trap back to the overlay beneath once the one on top closes', async () => {
     const user = userEvent.setup();
 

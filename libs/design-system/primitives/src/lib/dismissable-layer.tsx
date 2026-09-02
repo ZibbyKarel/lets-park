@@ -82,8 +82,10 @@ export function subscribeToLayers(onChange: () => void): () => void {
 }
 
 function notify() {
-  // Copied first: a subscriber may unsubscribe from inside its own callback
-  // when the change it is being told about is its own overlay closing.
+  // Iterated over a copy so that a subscriber added or removed while the
+  // notification is running cannot change what this pass visits. No current
+  // subscriber does either — this is a guard, not a description of something
+  // that happens.
   for (const subscriber of [...subscribers]) {
     subscriber();
   }
@@ -160,7 +162,10 @@ function topmostLayer(): DismissableLayer | undefined {
  * tie-break — asking "who holds focus?" to decide who controls focus would just
  * be asking a trap to confirm itself. Only trapping layers are considered, so a
  * tooltip or a menu opened inside a modal does not pause that modal's trap; a
- * second modal does.
+ * second modal does. Dropping the `trapsFocus` filter fails "leaves focus in
+ * the overlay on top instead of the one beneath reclaiming it", where tabbing
+ * onto a tooltip trigger inside a modal would otherwise release that modal's
+ * Tab confinement.
  */
 export function isActiveFocusTrap(layer: DismissableLayer): boolean {
   const traps = deepest(layers.filter((candidate) => candidate.trapsFocus));
@@ -285,10 +290,15 @@ export function useDismissableLayer({
   layerRef.current ??= { parent: null, element: null, onDismiss: null, trapsFocus: false };
   const layer = layerRef.current;
 
-  // Written on every render rather than in an effect, so the node is already
-  // truthful the first time an Escape press reads it — a child layer's effects
-  // run before its parent's, and a press can arrive between the two.
-  // Assignment is idempotent, so a repeated render changes nothing.
+  // These have to be true of the node *before* it registers, because
+  // `register` notifies every focus trap synchronously and each one reads
+  // `trapsFocus` and the parent chain on the spot to decide whether to pause.
+  // Writing them during render is the simplest way to guarantee that ordering;
+  // assignment is idempotent, so a repeated render changes nothing. Moving them
+  // into an effect declared *after* the registration effect below fails "lets
+  // only the newest of two unrelated modals confine Tab"; an effect declared
+  // before it stays green, which is why this is a note about ordering rather
+  // than about render-versus-effect.
   layer.parent = parent;
   layer.onDismiss = onDismiss === undefined ? null : dismiss;
   layer.trapsFocus = trapsFocus;
