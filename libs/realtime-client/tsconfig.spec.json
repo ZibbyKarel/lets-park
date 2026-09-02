@@ -1,0 +1,35 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
+    // Deliberately **not** `module: commonjs` (which the generator emits), for
+    // the same reason as `libs/auth/tsconfig.spec.json` and
+    // `libs/query/tsconfig.spec.json` (`doc/decision/0038-*`): this program
+    // reaches `@lets-park/api-client` for the `AccessTokenProvider` type, and
+    // that module's own imports (`@orpc/client`) are ESM-only — no `require`
+    // condition — so `commonjs` cannot resolve their types at all. Inheriting
+    // `esnext` from `tsconfig.base.json` resolves them through the `import`
+    // condition, exactly as `tsconfig.lib.json` already does. Nothing is
+    // emitted here (`--noEmit`) and the tests are transpiled by babel-jest, so
+    // the module format only affects resolution.
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["jest", "node"]
+  },
+  "include": [
+    "src/test-setup.ts",
+    "src/**/__fixtures__/**/*.ts",
+    "src/**/__fixtures__/**/*.tsx",
+    "jest.config.ts",
+    "jest.config.cts",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.tsx",
+    "src/**/*.test.js",
+    "src/**/*.spec.js",
+    "src/**/*.test.jsx",
+    "src/**/*.spec.jsx",
+    "src/**/*.d.ts"
+  ]
+}
