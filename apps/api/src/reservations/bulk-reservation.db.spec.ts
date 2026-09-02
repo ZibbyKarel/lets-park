@@ -72,6 +72,7 @@ const FULL_DAY = '2100-01-20' as DateOnly;
 const QUEUED_BEHIND_DAY = '2100-01-21' as DateOnly;
 const AFTER_COMMIT_DAY = '2100-01-22' as DateOnly;
 const CONTESTED_DAYS = ['2100-01-25', '2100-01-26'] as DateOnly[];
+const BUSY_ELSEWHERE_DAYS = ['2100-01-27', '2100-01-28'] as DateOnly[];
 
 /** Every day this file names, for the fixture guard. */
 const BUSINESS_DAYS = [
@@ -85,6 +86,7 @@ const BUSINESS_DAYS = [
   QUEUED_BEHIND_DAY,
   AFTER_COMMIT_DAY,
   ...CONTESTED_DAYS,
+  ...BUSY_ELSEWHERE_DAYS,
 ];
 
 /** The code a rejected call carried, whether it came from us or from Postgres. */
@@ -575,6 +577,77 @@ describe('bulk booking against a real PostgreSQL', () => {
           where: { userId: booker.id, date: toDateColumn(contested) },
         })
       ).toBe(0);
+    });
+
+    /**
+     * The *other* reason an insert can be skipped, and the reason the
+     * confirmation reads a second time before it queues anybody.
+     *
+     * Here the caller acquires a reservation of their own on the contested day —
+     * another request of theirs, or a promotion — between this transaction's read
+     * and its insert. `ON CONFLICT DO NOTHING` cannot say which of the two unique
+     * indexes it hit, so the two cases are indistinguishable at the insert; only
+     * `datesAlreadyReserved` separates them. Getting it wrong would queue somebody
+     * for a spot they can never be promoted to, on a day they already have one —
+     * exactly what `WaitlistService.join` refuses at the door.
+     */
+    it('reports ALREADY_HAS_RESERVATION, not a queue place, when the caller got a spot elsewhere', async () => {
+      const booker = await seedUser(client);
+      const [contested, spare] = BUSY_ELSEWHERE_DAYS as [DateOnly, DateOnly];
+      // Sorts last, so the allocator will never propose it and the held row is
+      // guaranteed to be on a *different* spot from the planned one.
+      const elsewhere = await seedSpot(client, { labelPrefix: 'ZZZ' });
+
+      const preview = await harness.bulk.preview(
+        { dates: [contested, spare] },
+        actorFor(booker),
+        TODAY
+      );
+      const planned = preview.days[0];
+      if (planned?.outcome !== 'SPOT_ASSIGNED') {
+        throw new Error(`Expected the preview to assign ${contested}, got ${planned?.outcome}.`);
+      }
+      expect(planned.parkingSpotId).not.toBe(elsewhere.id);
+
+      const held = holdTransaction(otherClient, (tx) =>
+        tx.reservation.create({
+          data: {
+            parkingSpotId: elsewhere.id,
+            userId: booker.id,
+            date: toDateColumn(contested),
+          },
+        })
+      );
+      await held.ready;
+
+      const confirming = harness.bulk.confirm(
+        { dates: [contested, spare] },
+        actorFor(booker),
+        TODAY
+      );
+      await waitForBlockedBackend(client);
+
+      held.release();
+      await held.done;
+      const result = await confirming;
+
+      expect(result.days[0]).toEqual({
+        outcome: 'UNAVAILABLE',
+        date: contested,
+        reason: 'ALREADY_HAS_RESERVATION',
+      });
+      expect(
+        await client.waitlistEntry.count({
+          where: { userId: booker.id, date: toDateColumn(contested) },
+        })
+      ).toBe(0);
+      // They kept the one reservation they won elsewhere, and the batch kept the
+      // other day.
+      const own = await client.reservation.findMany({
+        where: { userId: booker.id, date: toDateColumn(contested) },
+      });
+      expect(own.map((row) => row.parkingSpotId)).toEqual([elsewhere.id]);
+      expect(result.days[1]?.outcome).toBe('SPOT_ASSIGNED');
     });
   });
 });
