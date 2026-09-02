@@ -46,6 +46,7 @@ import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { ErrorCode, ErrorDetails } from '@lets-park/contract';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
+import { redactIcsToken } from '../../logging/redact-ics-token';
 import { RPC_PATH_PREFIX } from '../../orpc/rpc-route';
 import { DomainError } from '../errors/domain-error';
 
@@ -459,12 +460,17 @@ export class ContractExceptionFilter implements ExceptionFilter {
       // the service and the rule that rejected the request, which is exactly the
       // question a reader has, and only an authenticated caller can trigger one.
       const request = http.getRequest<Request>();
+      // Both string fields go through `redactIcsToken`, because both carry the
+      // ICS feed's token on the path this branch is *most* likely to run for.
+      // `path` obviously; `reason` less so — Nest's message for an unrouted URL
+      // is `Cannot GET <url>`, so a token one character away from a valid one
+      // (no `.ics`, say) arrives here embedded in the message.
       this.logger.warn(
         {
           statusCode: status,
           method: request.method,
-          path: request.path,
-          reason: exception.message,
+          path: redactIcsToken(request.path),
+          reason: redactIcsToken(exception.message),
         },
         'Request rejected'
       );

@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from '../auth/auth.module';
+import { CalendarModule } from '../calendar/calendar.module';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { ContractExceptionFilter } from '../common/filters/contract-exception.filter';
@@ -70,6 +71,9 @@ import { AppService } from './app.service';
     // Task 13. Reservations, the waitlist, and the auto-promotion that couples
     // them inside one transaction.
     ReservationsModule,
+    // The ICS feed (Task 14). The one controller outside the oRPC contract —
+    // see its class comment and `doc/decision/0080-*`.
+    CalendarModule,
   ],
   controllers: [AppController],
   providers: [

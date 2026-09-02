@@ -117,6 +117,23 @@ record. In the example above, the request carried `authorization: Bearer secret-
 **specific paths** – a new header carrying a secret has to be added by hand
 (`apps/api/src/logging/logger.options.ts`).
 
+**A credential in the URL is a separate job.** The ICS feed
+(`GET /api/calendar/<token>.ics`, `doc/ics.md`) authenticates with a token in the path, and
+a path reaches the log through four routes, not one: `req.url` and `req.params` in the
+request line above, and `path` and `reason` in `ContractExceptionFilter`'s `Request
+rejected` line – `reason` because Nest's 404 message for an unrouted URL is
+`Cannot GET <url>`. All four go through `redactIcsToken`
+(`apps/api/src/logging/redact-ics-token.ts`), which replaces the segment after
+`/api/calendar/` with `[redacted]`, case-insensitively because Express's router matches
+paths case-insensitively. `req.params` is not redacted but **dropped**: what lands there is
+the logging middleware's own catch-all splat, a second copy of the URL in a shape no
+redaction of `url` would reach.
+
+`calendar-logging.spec.ts` is the only spec in the workspace that reads emitted log lines –
+it boots the app at `LOG_LEVEL: 'info'` with a captured destination. Every other spec pins
+`LOG_LEVEL: 'fatal'`, so a claim about log contents that has no test in that file has
+nothing behind it.
+
 **Level of a request line:** 5xx or a thrown error → `error`, 4xx → `warn`, otherwise
 `info`.
 
@@ -252,17 +269,25 @@ gets `SPOT_ALREADY_RESERVED` (409), not 500. Details and the full mapping table:
 **Rate limiting.** A single throttler is registered: `THROTTLE_LIMIT` requests per
 `THROTTLE_TTL_MS` (default 300 / minute), globally via `APP_GUARD`.
 
-A stricter tier for endpoints **without a session** is prepared but not yet used anywhere –
-it's the `StrictThrottle()` decorator in
+A stricter tier for endpoints **without a session** – the `StrictThrottle()` decorator in
 `apps/api/src/common/throttling/throttle-tiers.ts` (`THROTTLE_STRICT_LIMIT` /
-`THROTTLE_STRICT_TTL_MS`, default 20 / minute). Tasks 11–12 decide which routes it belongs
-on:
+`THROTTLE_STRICT_TTL_MS`, default 20 / minute). **Task 14 applied it, and it is on exactly one
+route**: the personal ICS feed, which is the only endpoint reachable without a token at all
+(`doc/ics.md`).
 
 ```ts
+@Public()
 @StrictThrottle()
-@Get('ics/:token')
-feed() { … }
+@Controller('calendar')
+export class CalendarController { … }
 ```
+
+That it actually fires is verified rather than assumed – `calendar-pipeline.spec.ts` boots an
+application with `THROTTLE_STRICT_LIMIT=2`, gets `200, 200, 429` from the feed in sequence, and
+reads `x-ratelimit-limit: 2` there against `100000` on an RPC route in the same process. Removing
+the decorator fails that test.
+
+The health probes remain `@SkipThrottle()`.
 
 Registering it as a second named throttler is **not possible** – `@nestjs/throttler`
 applies every registered throttler to every route, so the strict limit would end up
