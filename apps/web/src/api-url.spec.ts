@@ -1,4 +1,10 @@
-import { API_READINESS_PATH, apiOriginOf, apiReadinessUrl } from './api-url';
+import {
+  API_READINESS_PATH,
+  API_RPC_SEGMENT,
+  apiOriginOf,
+  apiReadinessUrl,
+  apiRpcUrl,
+} from './api-url';
 
 /**
  * `NEXT_PUBLIC_API_URL` carries the API's global prefix, and the two things
@@ -47,5 +53,25 @@ describe('apiReadinessUrl', () => {
 
   it('exposes the path it builds, so the value is assertable on its own', () => {
     expect(API_READINESS_PATH).toBe('/health/ready');
+  });
+});
+
+describe('apiRpcUrl', () => {
+  it('adds the /rpc segment the RPC transport is mounted under', () => {
+    // Measured, not deduced: against the running API, `POST /api/me/get`
+    // answered 404 and `POST /api/rpc/me/get` answered 401 — the route exists
+    // and its guard ran. Handing `NEXT_PUBLIC_API_URL` straight to
+    // `createApiClient` (as `doc/auth.md`'s snippet does) 404s every call.
+    expect(apiRpcUrl('http://localhost:3000/api')).toBe('http://localhost:3000/api/rpc');
+  });
+
+  it('does not double the separator when the configured URL ends in a slash', () => {
+    expect(apiRpcUrl('http://localhost:3000/api/')).toBe('http://localhost:3000/api/rpc');
+  });
+
+  it('keeps the segment assertable against apps/api/src/orpc/rpc-route.ts', () => {
+    // `RPC_ROUTE_PREFIX` there; not importable across the app boundary, so the
+    // two are kept honest by name here and by the live call above.
+    expect(API_RPC_SEGMENT).toBe('rpc');
   });
 });

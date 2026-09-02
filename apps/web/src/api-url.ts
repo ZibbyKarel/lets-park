@@ -1,12 +1,24 @@
 /**
  * The three URLs the browser and the server derive from one env variable.
  *
- * `NEXT_PUBLIC_API_URL` is the **oRPC endpoint**, prefix included
- * (`http://localhost:3000/api`, see `doc/environment.md`). Two other things
- * live on the same deployment and are *not* under that prefix, so both are
- * derived from its origin rather than configured separately — one variable
- * cannot drift from itself.
+ * `NEXT_PUBLIC_API_URL` is the API's **base URL, global prefix included**
+ * (`http://localhost:3000/api`, see `doc/environment.md`). It is not itself
+ * any of the three endpoints the app talks to: the RPC transport sits one
+ * segment below it, and the readiness probe and the websocket sit outside the
+ * prefix entirely. All three are derived here rather than configured
+ * separately — one variable cannot drift from itself.
  */
+
+/**
+ * Path segment under the API's global prefix that carries the oRPC transport.
+ *
+ * Mirrors `RPC_ROUTE_PREFIX` in `apps/api/src/orpc/rpc-route.ts`, which cannot
+ * be imported from here (the module boundary keeps `apps/web` out of
+ * `apps/api`, and rightly: a shared constant would make the *client* the
+ * authority on a *server* mount point). The parity is instead pinned by
+ * `api-url.spec.ts` and measured — see {@link apiRpcUrl}.
+ */
+export const API_RPC_SEGMENT = 'rpc';
 
 /**
  * Path of the API's readiness probe.
@@ -42,4 +54,24 @@ export function apiOriginOf(apiUrl: string): string {
 /** Absolute URL of the API's readiness probe. See {@link API_READINESS_PATH}. */
 export function apiReadinessUrl(apiUrl: string): string {
   return new URL(API_READINESS_PATH, apiOriginOf(apiUrl)).toString();
+}
+
+/**
+ * Base URL for `createApiClient` — the configured API URL plus `/rpc`.
+ *
+ * `RPCLink` appends the procedure's key path in the contract router to this
+ * base, so the base must be everything in front of that key path.
+ * `MeController` is `@Controller('rpc')` with `@Post('me/get')` under the
+ * global prefix `api`, which puts the procedure at `POST /api/rpc/me/get`.
+ *
+ * Handing the configured URL straight to `createApiClient` — which is what
+ * `doc/auth.md`'s illustrative snippet does — therefore calls
+ * `POST /api/me/get`, and **every** request 404s. That is not a deduction:
+ * against the API running on `localhost:3000`, `POST /api/me/get` answered
+ * `404` and `POST /api/rpc/me/get` answered `401 Unauthorized` (i.e. the route
+ * exists and the guard ran). The mistake is invisible in a unit test that
+ * stubs `fetch`, because a stub answers whatever URL it is given.
+ */
+export function apiRpcUrl(apiUrl: string): string {
+  return `${apiUrl.replace(/\/+$/u, '')}/${API_RPC_SEGMENT}`;
 }

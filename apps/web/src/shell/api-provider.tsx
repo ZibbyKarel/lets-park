@@ -23,11 +23,18 @@ import { useAccessTokenProvider } from '@lets-park/auth/client';
 import { createApiClient } from '@lets-park/api-client';
 import { createApiQueryUtils } from '@lets-park/query';
 import type { ApiQueryUtils } from '@lets-park/query';
+import { apiRpcUrl } from '../api-url';
 
 const ApiContext = createContext<ApiQueryUtils | null>(null);
 
 export interface ApiProviderProps {
-  /** `NEXT_PUBLIC_API_URL` — the oRPC endpoint, `/api` prefix included. */
+  /**
+   * `NEXT_PUBLIC_API_URL` — the API's base URL, `/api` prefix included.
+   *
+   * Passed through {@link apiRpcUrl} rather than to `createApiClient`
+   * directly: the RPC transport is mounted a segment below the base, and
+   * skipping that segment 404s every request. See `api-url.ts`.
+   */
   readonly url: string;
   readonly children: ReactNode;
 }
@@ -36,7 +43,7 @@ export function ApiProvider({ url, children }: ApiProviderProps) {
   const getAccessToken = useAccessTokenProvider();
 
   const utils = useMemo(
-    () => createApiQueryUtils(createApiClient({ url, getAccessToken })),
+    () => createApiQueryUtils(createApiClient({ url: apiRpcUrl(url), getAccessToken })),
     [url, getAccessToken]
   );
 
