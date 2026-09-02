@@ -1,5 +1,5 @@
 /**
- * Two dependencies of this app ship ESM only and have to be transpiled on the
+ * Four dependencies of this app ship ESM only and have to be transpiled on the
  * way into Jest's CommonJS runtime:
  *
  * - `@orpc/contract` (`"type": "module"`, `.mjs` only) — reached through
@@ -9,6 +9,11 @@
  * - `@nestjs/config` v12 (`"type": "module"`, `.js`) — imported by every module
  *   that reads validated env, so any test that builds a Nest testing module
  *   hits it.
+ * - `@nestjs/passport` v12 (`"type": "module"`, `.js`) — the `AuthGuard` and
+ *   `PassportStrategy` the auth layer is built on (Task 11).
+ * - `jose` v6 (`"type": "module"`) — not imported by this app directly, but
+ *   `require()`d by `jwks-rsa`, which is CommonJS. Node 24 resolves that on its
+ *   own; Jest's CJS runtime does not, so it needs transpiling too.
  *
  * `libs/contract/jest.config.cts` notes that a third project needing this
  * should move it into `jest.preset.js` rather than copy it again. That file is
@@ -23,7 +28,7 @@ module.exports = {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
     '^.+\\.mjs$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
-  transformIgnorePatterns: ['/node_modules/(?!(?:@orpc|@nestjs/config)/)'],
+  transformIgnorePatterns: ['/node_modules/(?!(?:@orpc|@nestjs/config|@nestjs/passport|jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'mjs', 'html'],
   coverageDirectory: '../../coverage/apps/api',
 };

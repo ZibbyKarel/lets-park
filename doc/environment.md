@@ -47,7 +47,7 @@ shortcut for auth.
 | `NODE_ENV` | `development` \| `test` \| `production` | the standard Node environment switch |
 | `PORT` | integer 1–65535 | the port the NestJS HTTP server listens on |
 | `DATABASE_URL` | absolute URL | the Postgres connection string (`postgresql://user:pass@host:port/db`) |
-| `AUTH_OKTA_ISSUER` | absolute URL | the OIDC issuer whose JWKS API is used to validate incoming JWTs |
+| `AUTH_OKTA_ISSUER` | absolute URL | the OIDC issuer whose JWKS is used to validate incoming JWTs. The JWKS URL itself is **discovered** from `${AUTH_OKTA_ISSUER}/.well-known/openid-configuration`, never hardcoded – see `doc/auth.md` |
 | `AUTH_OKTA_AUDIENCE` | non-empty string | the expected `aud` claim in a JWT |
 | `CORS_ALLOWED_ORIGINS` | comma-separated list of absolute URLs | the CORS allow-list; no wildcard |
 | `LOG_LEVEL` | `fatal`\|`error`\|`warn`\|`info`\|`debug`\|`trace` | the log level for `nestjs-pino` |

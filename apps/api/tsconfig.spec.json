@@ -15,6 +15,10 @@
     "jest.config.cts",
     "src/**/*.test.ts",
     "src/**/*.spec.ts",
-    "src/**/*.d.ts"
+    "src/**/*.d.ts",
+    // Spec-only support code, excluded from `tsconfig.app.json` so it can never
+    // become part of the application program. It is included here so that it is
+    // still typechecked by `nx typecheck`.
+    "src/**/testing/**/*.ts"
   ]
 }
