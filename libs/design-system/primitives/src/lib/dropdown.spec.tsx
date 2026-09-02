@@ -263,6 +263,32 @@ describe('Dropdown', () => {
     expect(screen.getByRole('menu')).toHaveAccessibleName('Uživatelské menu');
   });
 
+  it('renders a separator between groups of items, skipped by the arrow keys', async () => {
+    const user = userEvent.setup();
+    const onSelect = jest.fn();
+    render(
+      <Dropdown
+        trigger="Karel Z."
+        onSelect={onSelect}
+        items={[
+          { id: 'settings', label: 'Nastavení' },
+          { id: 'sep', separator: true },
+          { id: 'signout', label: 'Odhlásit se', danger: true },
+        ]}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+
+    // A separator is not a menu item...
+    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+    expect(screen.getByRole('separator')).toBeInTheDocument();
+
+    // ...and the arrow keys step straight over it.
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Odhlásit se' })).toHaveFocus();
+  });
+
   it('renders a non-focusable header above the items', async () => {
     const user = userEvent.setup();
     renderDropdown({ header: <span>karel@firma.cz</span> });

@@ -48,7 +48,11 @@ export const Default: Story = {
   },
 };
 
-/** Identity header above the items — present in the design's avatar menu. */
+/**
+ * Identity header above the items, with dividers grouping the actions —
+ * the shape the design's avatar menu actually uses: header, divider,
+ * settings/admin, divider, sign-out.
+ */
 export const WithHeader: Story = {
   args: {
     trigger: (
@@ -65,6 +69,13 @@ export const WithHeader: Story = {
         <span className="text-xs text-fg-3">karel.zibar@firma.cz</span>
       </div>
     ),
+    items: [
+      { id: 'sep-1', separator: true },
+      { id: 'settings', label: 'Nastavení' },
+      { id: 'admin', label: 'Správa', trailing: '→' },
+      { id: 'sep-2', separator: true },
+      { id: 'signout', label: 'Odhlásit se', danger: true },
+    ],
   },
 };
 

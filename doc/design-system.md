@@ -400,7 +400,10 @@ Co dělá pro přístupnost:
 | `label` | `string` | jméno triggeru |
 | `align` | `'start' \| 'end'` | `'end'` |
 
-`DropdownItem`: `id`, `label`, `trailing?`, `danger?`, `disabled?`.
+`DropdownItem`: `id`, `separator?`, `label`, `trailing?`, `danger?`, `disabled?`.
+Když je `separator: true`, ostatní pole se ignorují a položka se vykreslí jako
+`DropdownSeparator` (tenká dělicí čára, `role="separator"`) místo `menuitem` —
+šipky ji přeskakují stejně jako zakázané položky.
 
 Trigger je `aria-haspopup="menu"` + `aria-expanded` + `aria-controls`, panel
 `role="menu"`, položky `role="menuitem"`. Klávesnice: `ArrowDown` otevře na

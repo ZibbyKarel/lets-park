@@ -16,10 +16,15 @@ import { getTabbableElements } from './use-focus-trap';
 export type DropdownAlign = 'start' | 'end';
 
 export interface DropdownItem {
-  /** Stable identity. Also what `onSelect` reports. */
+  /** Stable identity. Also what `onSelect` reports — never for a separator. */
   id: string;
-  /** Visible label. */
-  label: ReactNode;
+  /**
+   * Renders a thin dividing rule in place of a selectable item. Every other
+   * field below is ignored when this is `true`.
+   */
+  separator?: boolean | undefined;
+  /** Visible label. Required unless `separator` is `true`. */
+  label?: ReactNode;
   /** Optional trailing content, e.g. an arrow or a shortcut. */
   trailing?: ReactNode | undefined;
   /** Renders the item in the danger tone. */
@@ -91,7 +96,10 @@ export function Dropdown({
 
   /** Indices of the items the keyboard is allowed to land on. */
   const enabledIndexes = useMemo(
-    () => items.map((item, index) => (item.disabled ? -1 : index)).filter((index) => index >= 0),
+    () =>
+      items
+        .map((item, index) => (item.separator || item.disabled ? -1 : index))
+        .filter((index) => index >= 0),
     [items]
   );
 
@@ -271,49 +279,57 @@ export function Dropdown({
         >
           {header ? <div className="px-3 pb-3 pt-2">{header}</div> : null}
 
-          {items.map((item, index) => (
-            <button
-              key={item.id}
-              ref={(node) => {
-                itemRefs.current[index] = node;
-              }}
-              type="button"
-              role="menuitem"
-              // Roving tabindex: only the active item is reachable by Tab, so
-              // the menu is one stop rather than N.
-              tabIndex={index === activeIndex ? 0 : -1}
-              disabled={item.disabled}
-              onClick={() => selectItem(item)}
-              onMouseEnter={() => {
-                if (!item.disabled) {
-                  setActiveIndex(index);
-                }
-              }}
-              className={cx(
-                'flex items-center justify-between gap-3 rounded-sm border-0 bg-transparent',
-                'px-3 py-3 text-left text-sm',
-                'transition duration-[var(--dur-fast)] ease-out',
-                INSET_FOCUS_RING,
-                // Swapped, never layered (see `button.tsx`): the three states
-                // each supply their own text colour rather than stacking.
-                item.disabled
-                  ? 'cursor-not-allowed text-fg-3'
-                  : item.danger
-                    ? 'cursor-pointer text-danger hover:bg-danger-100'
-                    : 'cursor-pointer text-fg hover:bg-bg-muted'
-              )}
-            >
-              <span>{item.label}</span>
-              {item.trailing ? <span className="text-fg-3">{item.trailing}</span> : null}
-            </button>
-          ))}
+          {items.map((item, index) =>
+            item.separator ? (
+              <DropdownSeparator key={item.id} />
+            ) : (
+              <button
+                key={item.id}
+                ref={(node) => {
+                  itemRefs.current[index] = node;
+                }}
+                type="button"
+                role="menuitem"
+                // Roving tabindex: only the active item is reachable by Tab, so
+                // the menu is one stop rather than N.
+                tabIndex={index === activeIndex ? 0 : -1}
+                disabled={item.disabled}
+                onClick={() => selectItem(item)}
+                onMouseEnter={() => {
+                  if (!item.disabled) {
+                    setActiveIndex(index);
+                  }
+                }}
+                className={cx(
+                  'flex items-center justify-between gap-3 rounded-sm border-0 bg-transparent',
+                  'px-3 py-3 text-left text-sm',
+                  'transition duration-[var(--dur-fast)] ease-out',
+                  INSET_FOCUS_RING,
+                  // Swapped, never layered (see `button.tsx`): the three states
+                  // each supply their own text colour rather than stacking.
+                  item.disabled
+                    ? 'cursor-not-allowed text-fg-3'
+                    : item.danger
+                      ? 'cursor-pointer text-danger hover:bg-danger-100'
+                      : 'cursor-pointer text-fg hover:bg-bg-muted'
+                )}
+              >
+                <span>{item.label}</span>
+                {item.trailing ? <span className="text-fg-3">{item.trailing}</span> : null}
+              </button>
+            )
+          )}
         </div>
       ) : null}
     </div>
   );
 }
 
-/** Thin horizontal rule for separating groups of menu items. */
+/**
+ * Thin horizontal rule for separating groups of menu items. Rendered by
+ * `Dropdown` itself for an item with `separator: true` — exported separately
+ * only so its markup exists in one place.
+ */
 export function DropdownSeparator() {
   return <div role="separator" className="mx-1 my-1 h-px bg-divider" />;
 }
