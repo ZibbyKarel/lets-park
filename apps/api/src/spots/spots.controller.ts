@@ -26,10 +26,7 @@ import { SpotsService } from './spots.service';
 export class SpotsController {
   private readonly rpc: RpcRouteHandler;
 
-  constructor(
-    spots: SpotsService,
-    @InjectPinoLogger(SpotsController.name) logger: PinoLogger
-  ) {
+  constructor(spots: SpotsService, @InjectPinoLogger(SpotsController.name) logger: PinoLogger) {
     this.rpc = new RpcRouteHandler(
       {
         spot: {

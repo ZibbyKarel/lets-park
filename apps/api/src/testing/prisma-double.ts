@@ -217,10 +217,12 @@ export class PrismaDouble {
 
   private parkingSpotDelegate() {
     return {
-      findMany: async (args: {
-        where?: { active?: boolean; group?: ParkingSpotRow['group'] };
-        orderBy?: unknown;
-      } = {}) => {
+      findMany: async (
+        args: {
+          where?: { active?: boolean; group?: ParkingSpotRow['group'] };
+          orderBy?: unknown;
+        } = {}
+      ) => {
         const where = args.where ?? {};
         return this.spots
           .filter((row) => where.active === undefined || row.active === where.active)
@@ -357,7 +359,8 @@ export class PrismaDouble {
           return unsupported('a reservation count without a `date.gte` bound', args.where);
         }
         return this.reservations.filter(
-          (row) => row.parkingSpotId === args.where.parkingSpotId && row.date.getTime() >= gte.getTime()
+          (row) =>
+            row.parkingSpotId === args.where.parkingSpotId && row.date.getTime() >= gte.getTime()
         ).length;
       },
     };

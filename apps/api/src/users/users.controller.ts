@@ -20,10 +20,7 @@ import { UsersService } from './users.service';
 export class UsersController {
   private readonly rpc: RpcRouteHandler;
 
-  constructor(
-    users: UsersService,
-    @InjectPinoLogger(UsersController.name) logger: PinoLogger
-  ) {
+  constructor(users: UsersService, @InjectPinoLogger(UsersController.name) logger: PinoLogger) {
     this.rpc = new RpcRouteHandler(
       {
         admin: {

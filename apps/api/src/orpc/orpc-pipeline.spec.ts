@@ -160,7 +160,11 @@ describe('the oRPC transport through the assembled application', () => {
 
   describe('@Roles(ADMIN) on an oRPC route', () => {
     it('refuses an ordinary user with the contract’s FORBIDDEN, in the RPC envelope', async () => {
-      const response = await call('admin.spot.list', { includeInactive: true }, tokenFor('okta-user'));
+      const response = await call(
+        'admin.spot.list',
+        { includeInactive: true },
+        tokenFor('okta-user')
+      );
 
       expect(response.status).toBe(403);
       // Written by `ContractExceptionFilter` (the guard runs before the oRPC

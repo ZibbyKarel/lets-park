@@ -245,11 +245,7 @@ describe('DayOverviewService', () => {
         date: '2026-10-15',
       });
 
-      const result = await overview.getDay(
-        { date: '2026-10-15' },
-        authenticated(viewer.id),
-        TODAY
-      );
+      const result = await overview.getDay({ date: '2026-10-15' }, authenticated(viewer.id), TODAY);
 
       expect(result.canReserve).toBe(true);
       expect(result.viewerReservationId).not.toBeNull();

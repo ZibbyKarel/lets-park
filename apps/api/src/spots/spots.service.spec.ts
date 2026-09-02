@@ -13,7 +13,10 @@ describe('SpotsService', () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: new Date(`${TODAY}T09:00:00.000Z`) });
     double = new PrismaDouble();
-    spots = new SpotsService(double.asPrismaService(), new AuditLogService(double.asPrismaService()));
+    spots = new SpotsService(
+      double.asPrismaService(),
+      new AuditLogService(double.asPrismaService())
+    );
   });
 
   afterEach(() => {

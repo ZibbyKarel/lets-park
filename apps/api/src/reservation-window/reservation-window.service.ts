@@ -109,9 +109,10 @@ export class ReservationWindowService {
    * The range is bounded by `MAX_MONTH_WINDOW_SPAN` in the contract's schema, so
    * the loop below cannot run away.
    */
-  async listMonths(input: ListMonthWindowsInput, today = todayInPrague()): Promise<
-    ListMonthWindowsOutput
-  > {
+  async listMonths(
+    input: ListMonthWindowsInput,
+    today = todayInPrague()
+  ): Promise<ListMonthWindowsOutput> {
     const settings = await this.getSettings();
     const months: MonthWindowOverview[] = [];
 

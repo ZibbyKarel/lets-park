@@ -18,10 +18,7 @@ import { MeService } from './me.service';
 export class MeController {
   private readonly rpc: RpcRouteHandler;
 
-  constructor(
-    me: MeService,
-    @InjectPinoLogger(MeController.name) logger: PinoLogger
-  ) {
+  constructor(me: MeService, @InjectPinoLogger(MeController.name) logger: PinoLogger) {
     this.rpc = new RpcRouteHandler(
       {
         me: {

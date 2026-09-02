@@ -8,7 +8,10 @@ describe('UsersService', () => {
 
   beforeEach(() => {
     double = new PrismaDouble();
-    users = new UsersService(double.asPrismaService(), new AuditLogService(double.asPrismaService()));
+    users = new UsersService(
+      double.asPrismaService(),
+      new AuditLogService(double.asPrismaService())
+    );
   });
 
   describe('adminList', () => {
@@ -116,15 +119,17 @@ describe('UsersService', () => {
         const admin = double.seedUser({ role: 'ADMIN' });
         double.seedUser({ role: 'ADMIN' });
 
-        await expect(users.adminUpdate({ id: admin.id, role: 'USER' }, admin)).resolves.toMatchObject(
-          { role: 'USER' }
-        );
+        await expect(
+          users.adminUpdate({ id: admin.id, role: 'USER' }, admin)
+        ).resolves.toMatchObject({ role: 'USER' });
       });
 
       it('writes no audit entry for a refused change', async () => {
         const admin = double.seedUser({ role: 'ADMIN' });
 
-        await expect(users.adminUpdate({ id: admin.id, role: 'USER' }, admin)).rejects.toBeDefined();
+        await expect(
+          users.adminUpdate({ id: admin.id, role: 'USER' }, admin)
+        ).rejects.toBeDefined();
 
         expect(double.auditLogs).toHaveLength(0);
       });

@@ -49,9 +49,9 @@ describe('MeService', () => {
       const spot = double.seedSpot({ label: 'A1' });
       const user = double.seedUser({ preferredParkingSpotId: spot.id });
 
-      await expect(me.updateSettings({ preferredParkingSpotId: null }, user.id)).resolves.toMatchObject(
-        { preferredParkingSpotId: null }
-      );
+      await expect(
+        me.updateSettings({ preferredParkingSpotId: null }, user.id)
+      ).resolves.toMatchObject({ preferredParkingSpotId: null });
       await expect(
         me.updateSettings({ preferredParkingSpotId: spot.id }, user.id)
       ).resolves.toMatchObject({ preferredParkingSpotId: spot.id });

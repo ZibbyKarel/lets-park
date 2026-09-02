@@ -28,7 +28,12 @@ import type {
   ReservationWindowSettings,
 } from '@lets-park/contract';
 import type { DateOnly } from '@lets-park/shared-types';
-import { compareDateOnly, isBusinessDay, isMonthOpen, todayInPrague } from '@lets-park/shared-types';
+import {
+  compareDateOnly,
+  isBusinessDay,
+  isMonthOpen,
+  todayInPrague,
+} from '@lets-park/shared-types';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { toDateColumn, toTimestamp, toUserSummary } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
