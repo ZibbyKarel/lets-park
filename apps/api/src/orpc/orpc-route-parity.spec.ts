@@ -26,24 +26,23 @@ import { ROLES_KEY } from '../auth/roles.decorator';
 import { MeController } from '../me/me.controller';
 import { OverviewController } from '../overview/overview.controller';
 import { ReservationWindowController } from '../reservation-window/reservation-window.controller';
+import { ReservationsController } from '../reservations/reservations.controller';
+import { WaitlistController } from '../reservations/waitlist.controller';
 import { SpotsController } from '../spots/spots.controller';
 import { UsersController } from '../users/users.controller';
 import { RPC_ROUTE_PREFIX } from './rpc-route';
 
 /**
- * The procedures Tasks 13 and 17 own. Listing them here rather than deriving
- * "everything else" is deliberate: when Task 13 lands, this list shrinks in the
- * same commit that adds the routes, and the assertions below force that to
+ * The procedures still to come. Listing them here rather than deriving
+ * "everything else" is deliberate: a task that lands shrinks this list in the
+ * same commit that adds its routes, and the assertions below force that to
  * happen together.
+ *
+ * Task 13 removed the four single-day procedures from it. What is left is the
+ * bulk pair, which is Task 14 — and it has to stay listed, because a bulk route
+ * answering 404 is much better than one answering half a booking.
  */
-const NOT_YET_IMPLEMENTED = [
-  'reservation.create',
-  'reservation.cancel',
-  'reservation.previewBulk',
-  'reservation.confirmBulk',
-  'waitlist.join',
-  'waitlist.leave',
-];
+const NOT_YET_IMPLEMENTED = ['reservation.previewBulk', 'reservation.confirmBulk'];
 
 const CONTROLLERS = [
   SpotsController,
@@ -51,6 +50,8 @@ const CONTROLLERS = [
   MeController,
   ReservationWindowController,
   OverviewController,
+  ReservationsController,
+  WaitlistController,
 ];
 
 interface RegisteredRoute {
@@ -193,9 +194,15 @@ describe('the RPC routing table', () => {
     function implementedProcedures(): [string, unknown][] {
       const stub = undefined as never;
       return CONTROLLERS.flatMap((Controller) => {
-        const instance = new Controller(stub, stub) as unknown as {
+        // The controllers do not all take the same number of collaborators, and
+        // the list is going to keep growing, so the constructor is called
+        // through a widened type with a stub per longest arity. Extra arguments
+        // to a shorter constructor are simply ignored by JavaScript, and none of
+        // these constructors reads what it is handed — see the note above.
+        const construct = Controller as unknown as new (...args: never[]) => {
           rpc: { router: unknown };
         };
+        const instance = new construct(stub, stub, stub);
         return routerLeaves(instance.rpc.router);
       });
     }

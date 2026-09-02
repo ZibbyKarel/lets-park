@@ -16,6 +16,7 @@ import { buildLoggerOptions } from '../logging/logger.options';
 import { MeModule } from '../me/me.module';
 import { OverviewModule } from '../overview/overview.module';
 import { ReservationWindowModule } from '../reservation-window/reservation-window.module';
+import { ReservationsModule } from '../reservations/reservations.module';
 import { ShutdownModule } from '../shutdown/shutdown.module';
 import { SpotsModule } from '../spots/spots.module';
 import { UsersModule } from '../users/users.module';
@@ -66,6 +67,9 @@ import { AppService } from './app.service';
     MeModule,
     ReservationWindowModule,
     OverviewModule,
+    // Task 13. Reservations, the waitlist, and the auto-promotion that couples
+    // them inside one transaction.
+    ReservationsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,0 +1,361 @@
+/**
+ * Single-day reservations: taking a spot, and giving it back.
+ *
+ * The whole risk of this task is in {@link ReservationsService.cancel}. Creating
+ * is a guarded insert; cancelling is a delete that may hand the freed spot
+ * straight to somebody else, inside one transaction, while other requests are
+ * doing the same thing to neighbouring rows.
+ *
+ * ## Three concurrency guarantees, and which mechanism provides each
+ *
+ * | rule | mechanism |
+ * | --- | --- |
+ * | one reservation per spot per day | unique index `Reservation (parkingSpotId, date)` |
+ * | one reservation per user per day | unique index `Reservation (userId, date)` |
+ * | the queue is served in order, once | `SELECT … FOR UPDATE` in `WaitlistPromotionService` |
+ *
+ * None of the three is a check in this file, and that is deliberate. A
+ * read-then-write check cannot be made safe against a concurrent writer, so
+ * every check below is a way of producing a *better error message* than the
+ * index would, never the thing that enforces the rule. Where the two disagree
+ * — because a writer committed between the read and the write — the index wins
+ * and `mapUniqueConstraintViolation` turns its `P2002` into the same contract
+ * code the check would have produced.
+ *
+ * ## Why cancellation retries
+ *
+ * The one place a `P2002` is genuinely *transient* is promotion. The queue is
+ * locked and the candidate's other reservations are read inside the
+ * transaction, but a reservation for that candidate can still be committed by
+ * another request between the read and the promoting insert — a second
+ * cancellation, on a different spot, whose queue that same person heads.
+ *
+ * Retrying the whole transaction is the answer rather than catching the error
+ * inside it: a failed statement aborts a Postgres transaction, so there is no
+ * "continue with the next candidate" available without savepoints, which the
+ * Prisma client does not expose.
+ *
+ * **The retry terminates.** Each attempt re-reads the queue, and the reservation
+ * that caused the previous attempt to fail is by then committed — so the
+ * candidate that lost is skipped by {@link WaitlistPromotionService}'s own
+ * eligibility read, and the attempt makes strictly more progress than the last.
+ * With N people queued for a cell, at most N candidates can be eliminated this
+ * way. {@link MAX_CANCEL_ATTEMPTS} bounds it anyway, because a bound that
+ * depends on an argument about somebody else's code is not a bound.
+ *
+ * **When the retry itself loses**, the caller gets `CONFLICT` — a declared error
+ * on `reservation.cancel`, and a 409, so the client is told it lost a race and
+ * may try again, rather than being told the server broke. What it does *not* do
+ * is cancel without promoting: a partial outcome is exactly what one transaction
+ * exists to rule out.
+ *
+ * ## Nothing that can block on the network happens inside the transaction
+ *
+ * The callback returns the events it wants emitted; they are published after
+ * `await` resolves. See `reservation-events.ts`.
+ */
+
+import { Injectable } from '@nestjs/common';
+import type {
+  CancelReservationInput,
+  CancelReservationOutput,
+  CreateReservationInput,
+  CreateReservationOutput,
+} from '@lets-park/contract';
+import type { Prisma } from '@lets-park/database';
+import { Prisma as PrismaNamespace } from '@lets-park/database';
+import type { DateOnly } from '@lets-park/shared-types';
+import { todayInPrague } from '@lets-park/shared-types';
+import { AuditLogService } from '../audit/audit-log.service';
+import type { AuthenticatedUser } from '../auth/authenticated-user';
+import { DomainError } from '../common/errors/domain-error';
+import { mapUniqueConstraintViolation } from '../common/filters/contract-exception.filter';
+import {
+  toContractReservation,
+  toDateColumn,
+  toDateOnly,
+  toPublicReservation,
+} from '../common/prisma-mapping';
+import { PrismaService } from '../database/prisma.service';
+import { ReservationWindowService } from '../reservation-window/reservation-window.service';
+import type { DomainEvent, WaitlistPromotionNotice } from './reservation-events';
+import { DomainEventPublisher } from './reservation-events';
+import { ReservationPolicy } from './reservation-policy';
+import { WaitlistPromotionService } from './waitlist-promotion.service';
+
+/**
+ * How many times a cancellation may lose the promotion race before answering
+ * `CONFLICT`.
+ *
+ * Three, not one: a single retry is enough for the two-cancellation race that
+ * actually happens, and the extra attempts cost nothing unless a cell's queue is
+ * being drained from several directions at once. Not unbounded, because the
+ * transaction holds row locks and a request that never gives up is a request
+ * that holds them forever.
+ */
+export const MAX_CANCEL_ATTEMPTS = 3;
+
+/**
+ * Transaction options for the cancel path.
+ *
+ * `timeout` is raised above Prisma's 5 s default because this transaction can
+ * legitimately *wait*: `FOR UPDATE` blocks against a concurrent `waitlist.leave`
+ * on the same rows, and the insert blocks on the unique index against a
+ * concurrent create for the same cell. `maxWait` is how long to wait for a
+ * connection from the pool, which is a different and much shorter thing.
+ */
+const CANCEL_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 15_000 } as const;
+
+/** What one cancel attempt produced, before anything is broadcast. */
+interface CancelOutcome {
+  result: CancelReservationOutput;
+  events: DomainEvent[];
+  notices: WaitlistPromotionNotice[];
+}
+
+@Injectable()
+export class ReservationsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly window: ReservationWindowService,
+    private readonly policy: ReservationPolicy,
+    private readonly promotion: WaitlistPromotionService,
+    private readonly audit: AuditLogService,
+    private readonly publisher: DomainEventPublisher
+  ) {}
+
+  /**
+   * Reserves one spot for one day.
+   *
+   * The spot lookup is a real check (a retired or non-existent spot has no
+   * constraint to violate — the foreign key would only say `CONFLICT`), the two
+   * one-per-day rules are not: they are left to the unique indexes, which is
+   * what makes two simultaneous requests for the last free spot produce one
+   * reservation and one `SPOT_ALREADY_RESERVED` rather than two reservations.
+   */
+  async create(
+    input: CreateReservationInput,
+    actor: AuthenticatedUser,
+    today: DateOnly = todayInPrague()
+  ): Promise<CreateReservationOutput> {
+    const settings = await this.window.getSettings();
+    this.policy.assertMayTakeDay(input.date, actor, settings, today);
+
+    const spot = await this.prisma.client.parkingSpot.findUnique({
+      where: { id: input.parkingSpotId },
+      select: { id: true, active: true },
+    });
+    if (spot === null || !spot.active) {
+      throw new DomainError('NOT_FOUND', { message: 'No such active parking spot.' });
+    }
+
+    // The reservation and the audit entry that records it share a transaction:
+    // a reservation nobody can account for is exactly what the audit log exists
+    // to prevent. No locks are taken and no queue is read, so this is short.
+    const reservation = await this.prisma.client.$transaction(async (tx) => {
+      // `include` rather than a second read: the broadcast needs the holder's
+      // plate, and `AuthenticatedUser` deliberately does not carry one (it is a
+      // token claim short of the row). One statement, one consistent answer.
+      const row = await tx.reservation.create({
+        data: {
+          parkingSpotId: input.parkingSpotId,
+          userId: actor.id,
+          date: toDateColumn(input.date),
+        },
+        include: { user: { select: { id: true, name: true, licensePlate: true } } },
+      });
+      await this.audit.record(
+        {
+          actorUserId: actor.id,
+          action: 'RESERVATION_CREATED',
+          entityType: 'Reservation',
+          entityId: row.id,
+          payload: { parkingSpotId: row.parkingSpotId, date: input.date },
+        },
+        tx
+      );
+      return row;
+    });
+
+    this.publisher.publish([
+      {
+        name: 'reservation:created',
+        payload: {
+          date: input.date,
+          parkingSpotId: reservation.parkingSpotId,
+          reservation: toPublicReservation(reservation, reservation.user),
+        },
+      },
+    ]);
+
+    return toContractReservation(reservation);
+  }
+
+  /**
+   * Cancels a reservation and, in the same transaction, hands the freed spot to
+   * the first eligible person queued for it.
+   *
+   * **No window check.** Ruling window-1: a user may always give a spot back,
+   * including in a locked month, and the promotion that follows is a system
+   * action which the window never applied to either. That is not an omission,
+   * it is why `cancelReservationContract` declares no window errors at all.
+   */
+  async cancel(
+    input: CancelReservationInput,
+    actor: AuthenticatedUser
+  ): Promise<CancelReservationOutput> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const outcome = await this.prisma.client.$transaction(
+          (tx) => this.cancelOnce(tx, input, actor),
+          CANCEL_TRANSACTION_OPTIONS
+        );
+
+        // Past `await`, so past `COMMIT`. Nothing above this line may talk to
+        // Slack or Socket.io; nothing below it is inside a transaction.
+        this.publisher.publish(outcome.events);
+        this.publisher.notifyPromotions(outcome.notices);
+        return outcome.result;
+      } catch (error) {
+        if (!this.isRetryablePromotionConflict(error)) {
+          throw error;
+        }
+        if (attempt >= MAX_CANCEL_ATTEMPTS) {
+          throw this.exhaustedRetries();
+        }
+      }
+    }
+  }
+
+  /** One attempt. Everything here runs inside `tx`; nothing here does I/O off-box. */
+  private async cancelOnce(
+    tx: Prisma.TransactionClient,
+    input: CancelReservationInput,
+    actor: AuthenticatedUser
+  ): Promise<CancelOutcome> {
+    // Locked, not merely read: two requests cancelling the same reservation must
+    // not both go on to promote. The loser blocks here, then finds the row gone.
+    const [reservation] = await tx.$queryRaw<
+      { id: string; parkingSpotId: string; userId: string; date: Date }[]
+    >`
+      SELECT "id", "parkingSpotId", "userId", "date"
+      FROM "Reservation"
+      WHERE "id" = ${input.reservationId}::uuid
+      FOR UPDATE
+    `;
+    if (reservation === undefined) {
+      throw new DomainError('NOT_FOUND', { message: 'No such reservation.' });
+    }
+
+    const isOwner = reservation.userId === actor.id;
+    if (!isOwner && actor.role !== 'ADMIN') {
+      throw new DomainError('FORBIDDEN', {
+        message: 'Only the holder of a reservation, or an admin, may cancel it.',
+      });
+    }
+
+    const date = toDateOnly(reservation.date);
+    await tx.reservation.delete({ where: { id: reservation.id } });
+
+    await this.audit.record(
+      {
+        actorUserId: actor.id,
+        action: isOwner ? 'RESERVATION_CANCELLED' : 'RESERVATION_CANCELLED_BY_ADMIN',
+        entityType: 'Reservation',
+        entityId: reservation.id,
+        payload: {
+          parkingSpotId: reservation.parkingSpotId,
+          date,
+          holderUserId: reservation.userId,
+        },
+      },
+      tx
+    );
+
+    const promotion = await this.promotion.promote(
+      tx,
+      reservation.parkingSpotId,
+      date,
+      actor.id
+    );
+
+    const cell = { date, parkingSpotId: reservation.parkingSpotId };
+    if (promotion === null) {
+      return {
+        result: { reservationId: reservation.id, date, parkingSpotId: cell.parkingSpotId, promoted: false },
+        // One committed transaction, one event about the cell: the spot is free
+        // and stays free. The queue length did not change, so no
+        // `waitlist:updated` either — an empty queue is still empty.
+        events: [{ name: 'reservation:cancelled', payload: { ...cell, reservationId: reservation.id } }],
+        notices: [],
+      };
+    }
+
+    const waitlistCount = await tx.waitlistEntry.count({
+      where: { parkingSpotId: reservation.parkingSpotId, date: toDateColumn(date) },
+    });
+
+    return {
+      result: { reservationId: reservation.id, date, parkingSpotId: cell.parkingSpotId, promoted: true },
+      events: [
+        {
+          // `reassigned`, never `cancelled` + `created`: the contract's schemas
+          // say so, and a client that saw both would flash the cell empty.
+          name: 'reservation:reassigned',
+          payload: {
+            ...cell,
+            cause: 'WAITLIST_PROMOTION',
+            previousReservationId: reservation.id,
+            reservation: toPublicReservation(promotion.reservation, promotion.user),
+            fromWaitlistEntryId: promotion.waitlistEntryId,
+          },
+        },
+        // A different fact about the same cell: the queue got shorter.
+        { name: 'waitlist:updated', payload: { ...cell, waitlistCount } },
+      ],
+      notices: [
+        {
+          userId: promotion.user.id,
+          parkingSpotId: reservation.parkingSpotId,
+          date,
+          reservationId: promotion.reservation.id,
+        },
+      ],
+    };
+  }
+
+  /**
+   * True for the one `P2002` a *retry* can actually clear: the promoted
+   * candidate acquired a reservation elsewhere on that day while this
+   * transaction was running.
+   *
+   * Deliberately narrow. `SPOT_ALREADY_RESERVED` here would mean somebody else
+   * took the cell this transaction was in the middle of freeing, which the
+   * unique index makes impossible while our delete is uncommitted — if it ever
+   * did happen it would be a defect, and retrying a defect just makes it slower.
+   */
+  private isRetryablePromotionConflict(error: unknown): boolean {
+    return (
+      error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      mapUniqueConstraintViolation(error.meta) === 'RESERVATION_LIMIT_REACHED'
+    );
+  }
+
+  /**
+   * The error the caller sees when the attempts run out.
+   *
+   * `CONFLICT` rather than the raw `RESERVATION_LIMIT_REACHED`: the caller does
+   * not have a reservation-limit problem — somebody they have never heard of
+   * does, and telling them "you already have a reservation that day" would be
+   * false. `CONFLICT` is declared on `reservation.cancel`, is also a 409, and
+   * its Czech copy ("někdo jiný mezitím provedl stejnou změnu — zkuste to
+   * prosím znovu") is exactly the situation.
+   */
+  private exhaustedRetries(): DomainError {
+    return new DomainError('CONFLICT', {
+      message: 'The freed spot could not be handed on; another request kept winning the race.',
+      details: { attempts: MAX_CANCEL_ATTEMPTS },
+    });
+  }
+}
