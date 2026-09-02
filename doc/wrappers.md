@@ -350,6 +350,11 @@ including `next-auth/react`, `next-auth/jwt` and `next-auth/providers/okta`, all
 `next-auth/*` half of the ban pattern covers. It is a **type:util, scope:web** lib with
 **two** entry points:
 
+> The dependency is pinned **exactly** to `next-auth@5.0.0-beta.32`, and that is not an
+> oversight to tidy up: Auth.js has never moved the `latest` tag off v4, so `latest` installs
+> v4, `^5.0.0` matches nothing, and `@next` installs a v4 prerelease. Read
+> `doc/decision/0046-*` before changing that line.
+
 | import path | runs where | contains |
 | --- | --- | --- |
 | `@lets-park/auth` | Next.js server runtime | `createAuth`, `createAuthConfig` and its callbacks, `createTokenRefresher`, `createAccessTokenProvider` |
