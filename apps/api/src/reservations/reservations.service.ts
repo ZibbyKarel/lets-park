@@ -207,18 +207,28 @@ export class ReservationsService {
     input: CancelReservationInput,
     actor: AuthenticatedUser
   ): Promise<CancelReservationOutput> {
+    const outcome = await this.committedCancel(input, actor);
+
+    // Past `await`, so past `COMMIT` — and deliberately outside the retry loop.
+    // Nothing above this line may talk to Slack or Socket.io; nothing below it
+    // is inside a transaction, and a publisher that threw here must not be
+    // mistaken for a lost race and re-run a cancellation that has committed.
+    this.publisher.publish(outcome.events);
+    this.publisher.notifyPromotions(outcome.notices);
+    return outcome.result;
+  }
+
+  /** {@link cancel}'s transaction, retried. Returns only once something committed. */
+  private async committedCancel(
+    input: CancelReservationInput,
+    actor: AuthenticatedUser
+  ): Promise<CancelOutcome> {
     for (let attempt = 1; ; attempt += 1) {
       try {
-        const outcome = await this.prisma.client.$transaction(
+        return await this.prisma.client.$transaction(
           (tx) => this.cancelOnce(tx, input, actor),
           CANCEL_TRANSACTION_OPTIONS
         );
-
-        // Past `await`, so past `COMMIT`. Nothing above this line may talk to
-        // Slack or Socket.io; nothing below it is inside a transaction.
-        this.publisher.publish(outcome.events);
-        this.publisher.notifyPromotions(outcome.notices);
-        return outcome.result;
       } catch (error) {
         if (!this.isRetryableConflict(error)) {
           throw error;
