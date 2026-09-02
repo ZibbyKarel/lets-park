@@ -280,7 +280,14 @@ describe('two bulk bookings at once', () => {
         await waitForBlockedBackend(client);
 
         const outcomes = await settled;
-        expect(outcomes.map((outcome) => outcome.status)).toEqual(['fulfilled', 'fulfilled']);
+        // Reported with the contract code rather than as a bare status, so that
+        // when this does fail the output says *why* — `rejected CONFLICT` is the
+        // deadlock, and it is the whole point of the case.
+        expect(
+          outcomes.map((outcome) =>
+            outcome.status === 'fulfilled' ? 'fulfilled' : `rejected ${codeOfRejection(outcome)}`
+          )
+        ).toEqual(['fulfilled', 'fulfilled']);
       }, client);
 
       for (const date of INTERLEAVED_DAYS) {
