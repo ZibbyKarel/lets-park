@@ -1,0 +1,51 @@
+import { API_READINESS_PATH, apiOriginOf, apiReadinessUrl } from './api-url';
+
+/**
+ * `NEXT_PUBLIC_API_URL` carries the API's global prefix, and the two things
+ * derived from it here do not. Both derivations have a specific, known way of
+ * being wrong, so both are pinned.
+ */
+describe('apiOriginOf', () => {
+  it('drops the API prefix, so Socket.io does not read it as a namespace', () => {
+    expect(apiOriginOf('http://localhost:3000/api')).toBe('http://localhost:3000');
+  });
+
+  it('keeps a non-default port', () => {
+    expect(apiOriginOf('https://api.example.test:8443/api')).toBe('https://api.example.test:8443');
+  });
+
+  it('drops a default port, as an origin has no port when it is the scheme default', () => {
+    expect(apiOriginOf('https://api.example.test/api')).toBe('https://api.example.test');
+  });
+
+  it('throws on a value that is not an absolute URL', () => {
+    // `webEnvSchema` validates this with `z.url()` before a server serves
+    // anything, so reaching here means the schema was bypassed — which is
+    // exactly why this throws rather than returning something plausible.
+    // Matched on the message rather than on `TypeError`: the URL parser that
+    // throws belongs to whichever realm provides `URL`, and an `instanceof`
+    // check across realms is a false negative waiting to happen.
+    expect(() => apiOriginOf('/api')).toThrow(/Invalid URL/);
+  });
+});
+
+describe('apiReadinessUrl', () => {
+  it('points at /health/ready and NOT at /api/health/ready', () => {
+    // `configureApp()` passes the health prefix to `setGlobalPrefix`'s
+    // `exclude`, so the probes sit at the server root. Appending the path to
+    // the configured URL — prefix included — is the mistake that produces a
+    // health check which is red on a healthy deployment.
+    expect(apiReadinessUrl('http://localhost:3000/api')).toBe('http://localhost:3000/health/ready');
+    expect(apiReadinessUrl('http://localhost:3000/api')).not.toContain('/api/health');
+  });
+
+  it('is unaffected by how deep the configured prefix is', () => {
+    expect(apiReadinessUrl('https://example.test/some/deep/prefix')).toBe(
+      'https://example.test/health/ready'
+    );
+  });
+
+  it('exposes the path it builds, so the value is assertable on its own', () => {
+    expect(API_READINESS_PATH).toBe('/health/ready');
+  });
+});
