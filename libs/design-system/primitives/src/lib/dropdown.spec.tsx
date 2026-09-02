@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { Dropdown, type DropdownItem } from './dropdown';
@@ -36,13 +36,13 @@ describe('Dropdown', () => {
     const user = userEvent.setup();
     renderDropdown();
 
-    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    const trigger = screen.getByRole('button', { name: 'Karel Z.' });
+    await user.click(trigger);
 
-    expect(screen.getByRole('button', { name: 'Karel Z.' })).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    );
-    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const menu = screen.getByRole('menu');
+    expect(menu).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-controls', menu.id);
     expect(screen.getAllByRole('menuitem')).toHaveLength(3);
   });
 
@@ -126,11 +126,16 @@ describe('Dropdown', () => {
     const user = userEvent.setup();
     renderDropdown();
 
-    await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+    const trigger = screen.getByRole('button', { name: 'Karel Z.' });
+    await user.click(trigger);
     await user.keyboard('{Escape}');
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Karel Z.' })).toHaveFocus();
+    expect(trigger).toHaveFocus();
+    // A screen-reader user must be told the menu is actually gone, not just
+    // that it visually disappeared.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
   });
 
   it('closes on Tab and lets focus continue past the widget, not into it', async () => {
@@ -194,9 +199,13 @@ describe('Dropdown', () => {
     renderDropdown();
 
     await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
-    await user.click(screen.getByRole('button', { name: 'Před' }));
+    const outsideButton = screen.getByRole('button', { name: 'Před' });
+    await user.click(outsideButton);
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    // "Without stealing focus": the click's own target keeps focus rather than
+    // the dropdown redirecting it anywhere (e.g. back to its trigger).
+    expect(outsideButton).toHaveFocus();
   });
 
   it('closes again when the trigger is clicked a second time', async () => {
@@ -260,8 +269,13 @@ describe('Dropdown', () => {
 
     await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
 
-    expect(screen.getByText('karel@firma.cz')).toBeInTheDocument();
+    const header = screen.getByText('karel@firma.cz');
+    expect(header).toBeInTheDocument();
     // The header must not become a menu item, or arrow keys would stop on it.
     expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+    // Non-focusable, not merely "not a menuitem": nothing inside it can take
+    // Tab or roving-tabindex focus.
+    expect(within(header.closest('div') ?? header).queryAllByRole('button')).toHaveLength(0);
+    expect(header).not.toHaveAttribute('tabindex');
   });
 });
