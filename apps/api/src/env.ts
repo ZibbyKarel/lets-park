@@ -67,6 +67,7 @@ export const ENV_DEFAULTS = {
   THROTTLE_STRICT_LIMIT: 20,
   BODY_LIMIT: '100kb',
   HEALTH_DB_TIMEOUT_MS: 3_000,
+  REALTIME_LOCK_TTL_MS: 30_000,
 } as const;
 
 export const apiEnvSchema = z.object({
@@ -109,6 +110,25 @@ export const apiEnvSchema = z.object({
    * hung Postgres produces a hung probe instead of a failing one.
    */
   HEALTH_DB_TIMEOUT_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.HEALTH_DB_TIMEOUT_MS),
+
+  // --- Realtime (Task 15) -------------------------------------------------
+
+  /**
+   * How long a cell's editing hold lasts before it lapses, in milliseconds.
+   *
+   * 30 s, and the number is not free: `libs/realtime-client` renews at
+   * `CELL_LOCK_RENEW_FRACTION` (0.5) of the remaining time and gives a renewal
+   * `CELL_LOCK_ACK_ATTEMPTS` (2) attempts of `CELL_LOCK_ACK_TIMEOUT_MS` (5 s)
+   * each, so a renewal falling due at ~15 s resolves by ~25 s — inside the same
+   * TTL, with margin. A TTL much below ~15 s would leave the client giving up
+   * after the hold had already lapsed. See `doc/decision/0110-*`.
+   *
+   * It is configurable rather than a constant so that tests can run the *same*
+   * gateway code against a short TTL: there is no test branch in the realtime
+   * path, only a different value here — the rule `apps/api/src/auth` follows for
+   * `AUTH_OKTA_ISSUER`.
+   */
+  REALTIME_LOCK_TTL_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.REALTIME_LOCK_TTL_MS),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
