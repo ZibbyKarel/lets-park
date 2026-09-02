@@ -59,6 +59,7 @@ import type {
   ServerToClientEvents,
 } from '@lets-park/contract/realtime';
 import {
+  CLIENT_TO_SERVER_ACK_SCHEMAS,
   CLIENT_TO_SERVER_EVENT_SCHEMAS,
   SERVER_TO_CLIENT_EVENT_SCHEMAS,
   roomForDate,
@@ -324,11 +325,11 @@ export class RealtimeGateway
     const expiresAt = grant.expiresAt.toISOString();
 
     if (grant.outcome === 'HELD_BY_OTHER') {
-      return { result: 'HELD_BY_OTHER', lockedBy: grant.holder, expiresAt };
+      return this.acknowledge({ result: 'HELD_BY_OTHER', lockedBy: grant.holder, expiresAt });
     }
 
     this.emitCellLocked({ ...cell, lockedBy: grant.holder, expiresAt }, client);
-    return { result: 'ACQUIRED', expiresAt };
+    return this.acknowledge({ result: 'ACQUIRED', expiresAt });
   }
 
   /**
@@ -438,7 +439,16 @@ export class RealtimeGateway
       where: { id: userId },
       select: { id: true, name: true, licensePlate: true },
     });
-    return row ?? { id: userId, name, licensePlate: null };
+    if (row === null) {
+      return { id: userId, name, licensePlate: null };
+    }
+    // The three fields, named. Not `row` and not a spread: the `select` above
+    // is a *query* narrowing, and the object it produces is one refactor (or
+    // one stand-in that does not honour `select`) away from carrying `email`,
+    // `oktaId` and `icsToken` into a payload bound for another user's browser.
+    // The outbound schemas strip them either way — this is so there is nothing
+    // to strip.
+    return { id: row.id, name: row.name, licensePlate: row.licensePlate };
   }
 
   /**
@@ -530,6 +540,39 @@ export class RealtimeGateway
     // behind the typed wrappers below. Those wrappers are what callers use, and
     // they pin the payload to the contract's own inferred type.
     (target.emit as (name: string, data: unknown) => void)(event, parsed.data);
+  }
+
+  /**
+   * Validates an acknowledgement on the way out, the way a broadcast is.
+   *
+   * **This is not belt-and-braces, it is the belt.** `cellLockAckSchema` is a
+   * closed shape and Zod strips what it does not declare, so `lockedBy` leaves
+   * this server as `userSummarySchema`'s three-field pick and nothing else —
+   * regardless of what shape the `UserSummary` handed to `LockService` actually
+   * had. The ack crosses to *another user's* browser, and `userSchema` next to
+   * it carries `email`, `oktaId` and `icsToken`, the secret in a personal
+   * calendar-feed URL.
+   *
+   * A spec caught this: with a Prisma stand-in whose `select` is not honoured,
+   * the acknowledgement carried the whole user row. The broadcast on the same
+   * path was already safe, because {@link emitToDay} validates — which is what
+   * made the asymmetry visible and is the reason the ack now goes through the
+   * same gate.
+   *
+   * A payload the contract refuses is dropped rather than sent: the client's
+   * `parseAck` would refuse it anyway, and an unacknowledged `cell:lock`
+   * resolves there as a lost ack rather than as a corrupt one.
+   */
+  private acknowledge(ack: CellLockAck): CellLockAck | undefined {
+    const parsed = CLIENT_TO_SERVER_ACK_SCHEMAS['cell:lock'].safeParse(ack);
+    if (!parsed.success) {
+      this.logger.error(
+        { issues: parsed.error.issues.map((issue) => issue.message) },
+        'Refused to acknowledge cell:lock with a payload the contract does not describe'
+      );
+      return undefined;
+    }
+    return parsed.data;
   }
 
   /**
