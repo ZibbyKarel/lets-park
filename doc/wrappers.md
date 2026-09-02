@@ -695,8 +695,9 @@ Not "a few characters of import". Two concrete, measured things:
 
 `libs/calendar-export/src/lib/reservation-calendar.spec.ts`, 19 tests. Every assertion reads the
 output back through **`ical.js`** — Mozilla's RFC 5545 parser, a devDependency added for exactly
-this and allow-listed as test-only in `NPM_ALLOWLIST.util`. A test that compares a generator's
-output to a template written by the same author proves the template equals itself.
+this and allowed only in this lib's spec files (`calendarExportSpecDepConstraints`). A test that
+compares a generator's output to a template written by the same author proves the template equals
+itself.
 
 The three kinds the recipe asks for:
 
@@ -740,9 +741,28 @@ and its `scope:web` mirror. All probe files were deleted.
 
 **No `eslint.config.mjs` edit was needed for the ban itself.** `WRAPPED_LIBRARIES` already named
 `ical-generator` with `owner: libs/calendar-export`, and `NPM_ALLOWLIST.util` already contained it
-through the `Object.keys(WRAPPED_LIBRARIES).flatMap(...)` spread. The one line added was `ical.js`,
-per step 3 — a test-only helper that stands in for nothing and therefore does not belong in
-`WRAPPED_LIBRARIES`.
+through the `Object.keys(WRAPPED_LIBRARIES).flatMap(...)` spread.
+
+What *was* added is the test-only reader, `ical.js` — and where it goes matters. Step 3 of the
+recipe says to put a package on the tag's allow-list, and the first draft did: one line on
+`NPM_ALLOWLIST.util`. But that list applies to **every** `type:util` project at once, so the entry
+also handed an RFC 5545 parser to the shipped source of six unrelated wrapper libs. It is now
+scoped to `libs/calendar-export/**/*.spec.ts` via `calendarExportSpecDepConstraints`, the same
+shape `libs/form` already uses for its own test-only widening. Probed in both directions:
+
+```
+# libs/calendar-export/src/lib/reservation-calendar.ts — shipped source
+error  A project tagged with "type:util" is not allowed to import "ical.js"
+       @nx/enforce-module-boundaries
+
+# libs/calendar-export/src/lib/reservation-calendar.spec.ts — unchanged
+Successfully ran target lint for project calendar-export
+```
+
+Follow the scoped form for the next test-only package too. Step 3's tag-wide list is right for a
+package the whole tag legitimately uses (`tslib`, `react`); it is wrong for one that only ever
+appears in a spec, and `@testing-library/*` sits on `NPM_ALLOWLIST.ui`/`.util` today only because
+those specs are spread across many projects rather than one.
 
 The lib-local `eslint.config.mjs` is a bare `[...baseConfig]`. That is deliberate: `baseConfig`
 already contains the generated per-wrapper override, and a lib-local

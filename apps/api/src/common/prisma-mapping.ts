@@ -20,10 +20,17 @@
  * the text `YYYY-MM-DD` (its `normalize_date` is the identity function), and
  * Prisma turns that into a `Date` at **UTC** midnight. {@link toDateOnly} reads
  * it back with UTC getters for that reason: using local getters would move the
- * day by one for any process running west of Greenwich, and using
- * `toDateOnlyInPrague` would move it by one for every day of the year in
- * Prague's summer offset. Neither is a time-zone conversion that should happen —
- * the calendar day is already the value.
+ * day by one for any process running west of Greenwich. No time-zone conversion
+ * should happen at all here — the calendar day is already the value.
+ *
+ * `toDateOnlyInPrague` would in fact return the same day for every `@db.Date`,
+ * and an earlier version of this comment claiming otherwise was wrong: Prague is
+ * UTC+1 or UTC+2, always *ahead* of UTC, so UTC midnight is 01:00 or 02:00 on
+ * the **same** Prague day and is never moved forward. (Measured across both DST
+ * Sundays, a leap day, a new year and both offsets; the two functions diverge
+ * only for instants that are not midnight UTC, which a `@db.Date` never is.)
+ * `toDateOnly` is the right call because it is the one that says what this value
+ * is, not because the other would give a wrong date.
  *
  * This is the one claim in this file that is not exercised against a real
  * Postgres in this environment (Docker is unavailable); see the task report.

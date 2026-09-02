@@ -4,13 +4,6 @@
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
     "moduleResolution": "bundler",
-    // `ical.js` (test-only) publishes `export default` in its declarations but a
-    // plain CommonJS namespace at runtime, with no `__esModule` marker and no
-    // `default` key. Without this flag ts-jest emits `require("ical.js").default`,
-    // which is `undefined` — the import typechecks and then explodes at run time.
-    // With it, TypeScript's `__importDefault` wraps the namespace, and the types
-    // and the runtime agree.
-    "esModuleInterop": true,
     "types": ["jest", "node"]
   },
   "include": [

@@ -127,10 +127,18 @@ Three conversions are worth knowing:
 | `toDateOnly(date)` | A `@db.Date` column's `Date` → `YYYY-MM-DD`, read with **UTC** getters. |
 | `toDateColumn(value)` | `YYYY-MM-DD` → `new Date('…T00:00:00.000Z')`, for querying a `@db.Date` column. |
 
-**`toDateOnly` is not `toDateOnlyInPrague`.** A `@db.Date` value is midnight UTC with no zone;
-putting it through the Europe/Prague converter moves it forward a day for eight months of the year.
-Both functions are correct for their own input, and `prisma-mapping.spec.ts` pins the distinction
-with an instant where they disagree.
+**`toDateOnly` is not `toDateOnlyInPrague`.** They are different functions for different inputs:
+`toDateOnly` reads a zoneless calendar day out of a `@db.Date`, `toDateOnlyInPrague` converts an
+instant to the day it fell on in Prague. `prisma-mapping.spec.ts` pins the distinction with an
+instant where they disagree.
+
+For the `@db.Date` direction specifically, they happen to **agree**, and it is worth saying so
+plainly rather than leaving a vague warning in place. Prague is UTC+1 or UTC+2 — always *ahead* of
+UTC — so the UTC midnight a `@db.Date` produces is 01:00 or 02:00 on the **same** calendar day in
+Prague; the day is never moved forward. (Measured, not reasoned: both DST Sundays, a leap day, a
+new year and both offsets all agree.) `toDateOnly` is still the right call here because it is the
+one that says what the value *is* — a calendar day, not an instant — but that is a clarity choice,
+not a bug fix, and code that used the other one would not be wrong about any date.
 
 The projections are equally deliberate:
 

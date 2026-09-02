@@ -8,14 +8,6 @@
     // into CommonJS for Jest (see `jest.config.cts`), which means it has to be
     // willing to read `.js`/`.mjs` in the first place.
     "allowJs": true,
-    // `ical.js` (a test-only devDependency, used by the calendar pipeline spec
-    // to parse the served feed with an independent RFC 5545 implementation)
-    // declares `export default` but ships a plain CommonJS namespace with no
-    // `__esModule` marker and no `default` key. Without this flag ts-jest emits
-    // `require("ical.js").default`, which is `undefined` at run time while the
-    // import typechecks. Spec files only — `tsconfig.app.json` is untouched, so
-    // nothing shipped changes shape.
-    "esModuleInterop": true,
     "types": ["jest", "node"]
   },
   "include": [

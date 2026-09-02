@@ -211,16 +211,11 @@ const NPM_ALLOWLIST = {
     '@testing-library/react',
     '@testing-library/jest-dom',
     '@testing-library/user-event',
-    // `ical.js` — Mozilla's RFC 5545 parser, a **devDependency** used only by
-    // `libs/calendar-export`'s specs (and `apps/api`'s calendar pipeline spec,
-    // which is `type:app` and needs no entry). It is the independent reader
-    // that makes those tests worth anything: a test that asserts our own
-    // generated string back at us proves the template matches itself, not that
-    // a calendar client can parse it. Deliberately **not** in
-    // `WRAPPED_LIBRARIES` — it stands in for nothing, ships in nothing, and
-    // there is no wrapper anybody should use instead. Same reasoning, and the
-    // same limitation, as the `@testing-library/*` entries directly above.
-    'ical.js',
+    // `ical.js` is deliberately **not** here, even though `libs/calendar-export`'s
+    // specs need it: this list applies to every `type:util` lib at once, so an
+    // entry would reach shipped source in six unrelated wrappers. It is scoped
+    // to the spec files that actually use it — see
+    // `calendarExportSpecDepConstraints` below.
   ],
 
   /**
@@ -412,6 +407,35 @@ const formSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
     : constraint
 );
 
+/**
+ * `depConstraints` for `libs/calendar-export`'s own **test** files only:
+ * identical to `DEP_CONSTRAINTS`, except the `type:util` entry also allows
+ * `ical.js`.
+ *
+ * Why this exists: `ical.js` is Mozilla's RFC 5545 parser, a **devDependency**,
+ * and it is the independent reader that makes those specs worth anything — a
+ * test that asserts our own generated string back at us proves the template
+ * matches itself, not that a calendar client can parse the feed. Nothing
+ * shipped imports it, and `libs/calendar-export`'s own shipped source must not:
+ * `ical-generator` writes the feed, `ical.js` only reads it back in a test.
+ *
+ * Scoped rather than added to `NPM_ALLOWLIST.util`, which is where it started:
+ * that list applies to every `type:util` project at once, so an entry there
+ * reaches the shipped source of six unrelated wrapper libs that have no
+ * business parsing calendars. Same shape as `formSpecDepConstraints` above.
+ *
+ * `apps/api`'s calendar pipeline spec also uses it and needs no entry — it is
+ * `type:app`, whose allow-list is broad by design.
+ */
+const calendarExportSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
+  constraint.sourceTag === 'type:util'
+    ? {
+        ...constraint,
+        allowedExternalImports: [...constraint.allowedExternalImports, 'ical.js'],
+      }
+    : constraint
+);
+
 export default [
   ...nx.configs['flat/base'],
   ...nx.configs['flat/typescript'],
@@ -519,6 +543,22 @@ export default [
           allowCircularSelfDependency: true,
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
           depConstraints: formSpecDepConstraints,
+        },
+      ],
+    },
+  },
+  // See `calendarExportSpecDepConstraints` above: `ical.js` is a test-only
+  // reader, allowed in this lib's specs and nowhere else in `type:util`.
+  {
+    basePath: workspaceRoot,
+    files: ['libs/calendar-export/**/*.spec.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          enforceBuildableLibDependency: true,
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          depConstraints: calendarExportSpecDepConstraints,
         },
       ],
     },
