@@ -69,7 +69,10 @@ import { todayInPrague } from '@lets-park/shared-types';
 import { AuditLogService } from '../audit/audit-log.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { DomainError } from '../common/errors/domain-error';
-import { mapUniqueConstraintViolation } from '../common/filters/contract-exception.filter';
+import {
+  PRISMA_WRITE_CONFLICT,
+  mapUniqueConstraintViolation,
+} from '../common/filters/contract-exception.filter';
 import {
   toContractReservation,
   toDateColumn,
@@ -217,7 +220,7 @@ export class ReservationsService {
         this.publisher.notifyPromotions(outcome.notices);
         return outcome.result;
       } catch (error) {
-        if (!this.isRetryablePromotionConflict(error)) {
+        if (!this.isRetryableConflict(error)) {
           throw error;
         }
         if (attempt >= MAX_CANCEL_ATTEMPTS) {
@@ -325,18 +328,50 @@ export class ReservationsService {
   }
 
   /**
-   * True for the one `P2002` a *retry* can actually clear: the promoted
-   * candidate acquired a reservation elsewhere on that day while this
-   * transaction was running.
+   * True for a failure a *retry* can actually clear. There are exactly two, and
+   * both come from promotion.
    *
-   * Deliberately narrow. `SPOT_ALREADY_RESERVED` here would mean somebody else
-   * took the cell this transaction was in the middle of freeing, which the
-   * unique index makes impossible while our delete is uncommitted — if it ever
-   * did happen it would be a defect, and retrying a defect just makes it slower.
+   * **`P2002` on `Reservation (userId, date)`** — the promoted candidate
+   * acquired a reservation elsewhere on that day between this transaction's
+   * eligibility read and its insert.
+   *
+   * **`P2034`, a deadlock** (`40P01`). Found by
+   * `waitlist-concurrency.db.spec.ts`, not by reasoning, and worth spelling out
+   * because it is not obvious. Two cancellations on different spots, same day,
+   * whose queues are headed by the same person:
+   *
+   * ```
+   * T1 (spot A)                            T2 (spot B)
+   * FOR UPDATE on A's queue  ✓             FOR UPDATE on B's queue  ✓
+   * INSERT reservation for W ✓
+   *                                        INSERT reservation for W  → waits on
+   *                                          T1's uncommitted (userId, date) key
+   * DELETE W's queue entries for the day
+   *   → waits on B's queue row, held by T2
+   * ```
+   *
+   * A cycle, so PostgreSQL kills one of them. The cross-cell `DELETE` is
+   * required by the rule ("their other waitlist entries for that day are
+   * deleted"), and no lock ordering removes it — a transaction cannot know which
+   * cells it will have to reach into until it has read the queue. Retrying is
+   * the documented remedy, and it converges for the same reason the `P2002`
+   * retry does: the winner's reservation is committed by then, so the retry
+   * skips that candidate and never reaches for the other cell at all.
+   *
+   * `SPOT_ALREADY_RESERVED` is deliberately **not** retryable: it would mean
+   * somebody took the cell this transaction was in the middle of freeing, which
+   * the unique index makes impossible while our delete is uncommitted. If it
+   * ever happened it would be a defect, and retrying a defect only makes it
+   * slower.
    */
-  private isRetryablePromotionConflict(error: unknown): boolean {
+  private isRetryableConflict(error: unknown): boolean {
+    if (!(error instanceof PrismaNamespace.PrismaClientKnownRequestError)) {
+      return false;
+    }
+    if (error.code === PRISMA_WRITE_CONFLICT) {
+      return true;
+    }
     return (
-      error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
       error.code === 'P2002' &&
       mapUniqueConstraintViolation(error.meta) === 'RESERVATION_LIMIT_REACHED'
     );
