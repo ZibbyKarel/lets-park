@@ -109,7 +109,7 @@ export function buildHarness(client: PrismaClient): Harness {
       audit,
       publisher
     ),
-    waitlist: new WaitlistService(prismaService, window, policy, publisher),
+    waitlist: new WaitlistService(prismaService, window, policy, publisher, audit),
   };
 }
 

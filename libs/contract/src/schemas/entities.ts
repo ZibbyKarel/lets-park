@@ -140,6 +140,19 @@ export const AUDIT_LOG_ACTIONS = [
    * could describe it (`doc/decision/0059-*`).
    */
   'RESERVATION_WINDOW_UPDATED',
+  /**
+   * Somebody was put into a spot's queue for a day. Added by Task 30, which
+   * needed it: bulk booking creates queue entries on the user's behalf, and
+   * `plan.md` requires every row a mutation creates to be accounted for.
+   *
+   * The existing members could not describe it — `WAITLIST_PROMOTED` is the
+   * *opposite* event (an entry being consumed), and the reservation members name
+   * a different table. Both procedures that create a queue entry write it
+   * (`waitlist.join` and `reservation.confirmBulk`): an audit action whose
+   * presence depends on which endpoint the row arrived through is not an audit
+   * trail. See `doc/decision/0091-*`.
+   */
+  'WAITLIST_JOINED',
 ] as const;
 
 export const auditLogActionSchema = z.enum(AUDIT_LOG_ACTIONS);
