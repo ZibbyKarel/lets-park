@@ -41,6 +41,12 @@ function tick(): Promise<void> {
   return Promise.resolve();
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 export interface UserSeed {
   id?: string;
   oktaId: string;
@@ -56,6 +62,21 @@ export class InMemoryUserStore {
 
   /** Every `create` this store has performed. The concurrency assertion. */
   createCount = 0;
+
+  /**
+   * Milliseconds an insert waits before it commits.
+   *
+   * A microtask tick is enough to interleave callers that are already inside
+   * this process (`auth-user.service.spec.ts`). It is **not** enough when the
+   * callers arrive over real HTTP: each `fetch` costs enough event-loop time
+   * that the first request finishes provisioning before the second has read,
+   * so the race never happens and the concurrency assertion holds trivially.
+   * That was caught by a mutation test — deleting the P2002 retry left the
+   * HTTP-level concurrency test green. Holding the insert open for a few
+   * milliseconds puts every concurrent request inside `create` at once, which
+   * is the situation the retry exists for.
+   */
+  createDelayMs = 0;
 
   constructor(seeds: UserSeed[] = []) {
     for (const seed of seeds) {
@@ -96,6 +117,9 @@ export class InMemoryUserStore {
       },
       create: async ({ data }) => {
         await tick();
+        if (this.createDelayMs > 0) {
+          await sleep(this.createDelayMs);
+        }
         const row: User = {
           id: randomUUID(),
           licensePlate: null,

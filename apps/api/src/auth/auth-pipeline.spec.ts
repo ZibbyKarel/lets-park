@@ -272,11 +272,24 @@ describe('authentication through the assembled application', () => {
         name: 'Burst',
       });
 
-      const responses = await Promise.all(
-        Array.from({ length: 6 }, () => get('/api/protected', token))
-      );
+      // Without this the test is worthless: over real HTTP the first request
+      // finishes provisioning before the second has even read, so no race
+      // occurs and the assertion holds however the code is written. A mutation
+      // test proved exactly that — deleting the P2002 retry left this green.
+      // Holding the insert open puts all six requests inside `create` at once.
+      store.createDelayMs = 25;
+      try {
+        const responses = await Promise.all(
+          Array.from({ length: 6 }, () => get('/api/protected', token))
+        );
 
-      expect(responses.map((response) => response.status)).toEqual([200, 200, 200, 200, 200, 200]);
+        expect(responses.map((response) => response.status)).toEqual([
+          200, 200, 200, 200, 200, 200,
+        ]);
+      } finally {
+        store.createDelayMs = 0;
+      }
+
       expect(store.createCount).toBe(before + 1);
       expect(store.all().filter((row) => row.oktaId === 'okta-burst')).toHaveLength(1);
     });
