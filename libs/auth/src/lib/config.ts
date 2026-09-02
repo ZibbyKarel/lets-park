@@ -53,6 +53,30 @@ export interface AuthOptions {
    */
   readonly sessionMaxAgeSeconds?: number;
   /**
+   * Whether to trust the `Host` header of incoming requests. Defaults to
+   * `true`, which is the right answer for this deployment and has to be stated
+   * rather than inherited.
+   *
+   * Auth.js refuses to serve `/api/auth/*` at all when this is false —
+   * `assertConfig` in `@auth/core` returns `UntrustedHost` and every request
+   * comes back 500 with "Host must be trusted". Its default is computed from
+   * the environment:
+   *
+   * ```js
+   * config.trustHost ??= !!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES
+   *                         ?? NODE_ENV !== 'production')
+   * ```
+   *
+   * This app sets none of the first four and runs `NODE_ENV=production` behind
+   * a reverse proxy, so the default would be `false` **in production only** —
+   * dev and e2e stay green for free, and nobody could sign in after the first
+   * real deploy. Leaving it to `AUTH_TRUST_HOST` would also contradict this
+   * lib's own rule that no environment variable is read behind
+   * `apps/web/src/env.ts`'s back; `true` is a property of the deployment
+   * topology (single instance, one proxy in front), not of an environment.
+   */
+  readonly trustHost?: boolean;
+  /**
    * Override the `fetch` used for OIDC discovery and token refresh. Mirrors
    * `ApiClientOptions.fetch` in `libs/api-client`: a transport seam for tests
    * and SSR, not an authentication switch — nothing it can be set to skips a
@@ -198,6 +222,9 @@ export function createAuthConfig(options: AuthOptions): NextAuthConfig {
 
   return {
     secret: options.secret,
+    // Stated, never inherited from the environment. See `AuthOptions.trustHost`
+    // for why the inherited default is `false` in production and only there.
+    trustHost: options.trustHost ?? true,
     // No adapter and no database: the session lives entirely in the encrypted
     // cookie. `jwt` is Auth.js's default in that case, stated anyway because
     // the callbacks below only make sense under it.

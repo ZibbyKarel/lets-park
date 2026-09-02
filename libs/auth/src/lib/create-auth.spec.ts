@@ -8,7 +8,7 @@
  * environment behind `apps/web/src/env.ts`'s back.
  */
 
-import { createAuth } from '../index';
+import { createAuth, createAuthConfig } from '../index';
 import type { AuthOptions } from '../index';
 
 const OPTIONS: AuthOptions = {
@@ -28,6 +28,39 @@ const INFERRED_VARIABLES = [
   'AUTH_OKTA_SECRET',
   'AUTH_OKTA_ISSUER',
 ];
+
+/**
+ * The four variables whose presence would otherwise make `trustHost` true, plus
+ * `NODE_ENV`. Removing all of them and setting `NODE_ENV=production` reproduces
+ * the deployment `apps/web` will actually run in (Task 29): a container behind
+ * a reverse proxy, on none of the hosting platforms Auth.js special-cases.
+ */
+const TRUST_HOST_VARIABLES = ['AUTH_URL', 'NEXTAUTH_URL', 'AUTH_TRUST_HOST', 'VERCEL', 'CF_PAGES'];
+
+/**
+ * Runs `body` with the environment a production container has: `NODE_ENV`
+ * production and every `trustHost`-granting variable absent.
+ */
+async function inProductionEnvironment(body: () => Promise<void>): Promise<void> {
+  const names = [...TRUST_HOST_VARIABLES, 'NODE_ENV'];
+  const saved = new Map(names.map((name) => [name, process.env[name]]));
+  // `@types/node` marks `NODE_ENV` readonly to discourage writing it in shipped
+  // code, which is right — but the whole point here is to stand in the shoes of
+  // a production container, and Auth.js reads it from `process.env` at
+  // construction time, so there is no other way in. Restored in `finally`.
+  const mutableEnv = process.env as Record<string, string | undefined>;
+  for (const name of TRUST_HOST_VARIABLES) delete mutableEnv[name];
+  mutableEnv['NODE_ENV'] = 'production';
+
+  try {
+    await body();
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete mutableEnv[name];
+      else mutableEnv[name] = value;
+    }
+  }
+}
 
 describe('createAuth', () => {
   it('produces the App Router surface: handlers, auth, signIn, signOut', () => {
@@ -63,5 +96,42 @@ describe('createAuth', () => {
         else process.env[name] = value;
       }
     }
+  });
+
+  it('serves /api/auth/session in a production container instead of refusing the host', async () => {
+    // The regression this guards: Auth.js computes `trustHost` from
+    // `AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV !== 'production'`
+    // (`@auth/core/lib/utils/env.js`) and, when it is false, `assertConfig`
+    // returns `UntrustedHost` and **every** `/api/auth/*` request 500s with
+    // "Host must be trusted" (`@auth/core/lib/utils/assert.js`). None of the
+    // first four is set in this project's deployment, so without an explicit
+    // `trustHost` the failure appears in production and *only* there — dev and
+    // e2e stay green because `NODE_ENV !== 'production'`.
+    //
+    // This drives the real route handler rather than reading the config field,
+    // so it fails the same way a browser would.
+    await inProductionEnvironment(async () => {
+      const { handlers } = createAuth(OPTIONS);
+
+      // `handlers.GET` is typed for a `NextRequest`, but next-auth only passes
+      // it through to `@auth/core`'s `Auth()`, which reads the standard
+      // `Request` surface. `reqWithEnvURL` touches `nextUrl` only when
+      // `AUTH_URL`/`NEXTAUTH_URL` is set, and this environment has neither.
+      const request = new Request('https://lets-park.example/api/auth/session');
+      const response = await handlers.GET(request as never);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).not.toContain('Host must be trusted');
+    });
+  });
+});
+
+describe('createAuthConfig, trustHost', () => {
+  it('states trustHost rather than letting the environment decide', () => {
+    expect(createAuthConfig(OPTIONS).trustHost).toBe(true);
+  });
+
+  it('can still be turned off explicitly', () => {
+    expect(createAuthConfig({ ...OPTIONS, trustHost: false }).trustHost).toBe(false);
   });
 });

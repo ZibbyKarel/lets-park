@@ -59,6 +59,18 @@ them):
 | `AUTH_OKTA_CLIENT_ID` | the web app's OAuth2 client. |
 | `AUTH_OKTA_CLIENT_SECRET` | its secret. Server-side only. |
 
+There is deliberately **no** `AUTH_TRUST_HOST`, and that absence is load-bearing. Auth.js
+refuses to serve `/api/auth/*` at all unless `trustHost` is true, and computes it as
+`!!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV !== 'production')`. This
+deployment sets none of the first four and runs `NODE_ENV=production`, so the inherited
+default would be `false` **in production and nowhere else** — dev and e2e stay green for
+free, and the first real deploy would answer every `/api/auth/*` request with
+`UntrustedHost: Host must be trusted`. `createAuthConfig` therefore states `trustHost: true`
+outright: it is a property of the deployment topology (single instance, one reverse proxy in
+front), not of an environment, and adding a fifth variable would put the decision back in the
+place this lib's rules keep it out of. `create-auth.spec.ts` drives the real route handler
+under `NODE_ENV=production` with all four variables removed and asserts a 200.
+
 `AUTH_OKTA_ISSUER` is the **only** Okta URL anywhere in the configuration. The authorization
 and token endpoints are discovered from `${issuer}/.well-known/openid-configuration`, and so
 is the JWKS URI the API will use — see `doc/decision/0041-*`. In dev and e2e the value points
