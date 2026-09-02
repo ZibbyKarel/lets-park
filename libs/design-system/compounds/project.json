@@ -1,0 +1,39 @@
+{
+  "name": "design-system-compounds",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/design-system/compounds/src",
+  "projectType": "library",
+  "tags": ["type:ui", "scope:web", "ds:compounds"],
+  "// implicitDependencies": "Compounds import primitives in TS, so Nx infers that edge on its own. Tokens are consumed only through CSS custom properties (see .storybook/preview.css) — there is no TS import, so that edge has to be declared or `nx affected` would not re-run this project after a token change.",
+  "implicitDependencies": ["design-system-tokens"],
+  "// targets": "to see all targets run: nx show project design-system-compounds --web",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/design-system/compounds/tsconfig.lib.json",
+          "tsc --noEmit -p libs/design-system/compounds/tsconfig.spec.json",
+          "tsc --noEmit -p libs/design-system/compounds/tsconfig.storybook.json"
+        ],
+        "parallel": false
+      }
+    },
+    "storybook": {
+      "continuous": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "storybook dev --port 4401 --no-open",
+        "cwd": "libs/design-system/compounds"
+      }
+    },
+    "build-storybook": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/storybook/design-system-compounds"],
+      "options": {
+        "command": "storybook build --output-dir ../../../dist/storybook/design-system-compounds",
+        "cwd": "libs/design-system/compounds"
+      }
+    }
+  }
+}
