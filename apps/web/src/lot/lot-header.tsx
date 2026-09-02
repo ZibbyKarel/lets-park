@@ -29,13 +29,7 @@ export interface LotHeaderProps {
   readonly onBulk: () => void;
 }
 
-export function LotHeader({
-  date,
-  counts,
-  sectionTitle,
-  showBulk,
-  onBulk,
-}: LotHeaderProps) {
+export function LotHeader({ date, counts, sectionTitle, showBulk, onBulk }: LotHeaderProps) {
   const t = useTranslations('lot');
 
   return (

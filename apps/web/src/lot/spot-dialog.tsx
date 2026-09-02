@@ -122,7 +122,11 @@ export function SpotDialog({
       eyebrow={t('modalEyebrow', { label: spot.label })}
       title={title}
       description={description}
-      closeLabel={t('close')}
+      // The design's modal has no × in the corner — its only close control is
+      // the footer button — and drawing both would put two controls with the
+      // same accessible name, doing the same thing, in the same dialog.
+      // Escape and the scrim still close it; `Modal` keeps both regardless.
+      hideCloseButton
       // Nothing here is unsaved input — the dialog holds no form (see the
       // module docs) — so a stray click on the scrim throws no work away.
       closeOnScrimClick

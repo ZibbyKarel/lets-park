@@ -286,7 +286,8 @@ export function LotScreen() {
           leaveWaitlist.mutate({ waitlistEntryId: entryId });
         }}
         onCancelReservation={() => {
-          const reservationId = day.spots.find((row) => row.spot.id === openSpotId)?.reservation?.id;
+          const reservationId = day.spots.find((row) => row.spot.id === openSpotId)?.reservation
+            ?.id;
           if (reservationId === undefined) return;
           cancelReservation.mutate({ reservationId });
         }}

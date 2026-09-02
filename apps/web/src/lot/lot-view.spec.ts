@@ -177,14 +177,18 @@ describe('toSpotView', () => {
     expect(toSpotView(taken, context({ isAdmin: true })).showAdminMenu).toBe(true);
     expect(toSpotView(taken, context({ isAdmin: false })).showAdminMenu).toBe(false);
     expect(toSpotView(spotRow(), context({ isAdmin: true })).showAdminMenu).toBe(false);
-    expect(
-      toSpotView(taken, context({ isAdmin: true, locks: lock(OTHER) })).showAdminMenu
-    ).toBe(false);
+    expect(toSpotView(taken, context({ isAdmin: true, locks: lock(OTHER) })).showAdminMenu).toBe(
+      false
+    );
   });
 
   it('carries the waitlist through in every appearance', () => {
     const row = { waitlistCount: 2, viewerWaitlistEntryId: 'w-1', viewerWaitlistPosition: 2 };
-    for (const ctx of [context(), context({ canReserve: false }), context({ locks: lock(OTHER) })]) {
+    for (const ctx of [
+      context(),
+      context({ canReserve: false }),
+      context({ locks: lock(OTHER) }),
+    ]) {
       const view = toSpotView(spotRow(row), ctx);
       expect(view.waitlistCount).toBe(2);
       expect(view.viewerWaitlistEntryId).toBe('w-1');

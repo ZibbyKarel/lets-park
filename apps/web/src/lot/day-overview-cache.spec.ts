@@ -193,9 +193,9 @@ describe('applyWaitlistUpdated', () => {
 
   it('patches a drop to zero', () => {
     const before = day({ spots: [row('spot-a', { waitlistCount: 2 })] });
-    expect(applyWaitlistUpdated(before, { ...event, waitlistCount: 0 }).spots[0]?.waitlistCount).toBe(
-      0
-    );
+    expect(
+      applyWaitlistUpdated(before, { ...event, waitlistCount: 0 }).spots[0]?.waitlistCount
+    ).toBe(0);
   });
 
   it('ignores an unchanged count, by reference', () => {
