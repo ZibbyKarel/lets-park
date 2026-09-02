@@ -1,0 +1,235 @@
+# Bulk reservation: the allocator, the preview and the transaction
+
+`apps/api/src/reservations/bulk-*`. Two procedures — `reservation.previewBulk`
+and `reservation.confirmBulk` — that take a set of days inside one calendar
+month and give every one of them a spot, a queue place, or a reason why not.
+
+The single-day flow and the queue mechanics it hangs off are in
+[`doc/waitlist.md`](./waitlist.md); this document is about what is different
+when a request carries up to 31 days at once, which is: the allocator, the
+preview/confirm split, and the shape of the transaction.
+
+---
+
+## The two procedures
+
+| | `previewBulk` | `confirmBulk` |
+| --- | --- | --- |
+| writes | **nothing** — no reservation, no queue entry, no audit row | reservations, queue entries, audit rows |
+| transaction | none | one interactive transaction for the whole batch |
+| broadcasts | none | `reservation:created` / `waitlist:updated`, **after** commit |
+| answer shape | `days[]` + `summary` | the same, plus `reservationId` / `waitlistEntryId` per day |
+| errors | `PAST_DATE`, `OUT_OF_HORIZON`, `RESERVATIONS_LOCKED`, `VALIDATION_FAILED` | those, plus `CONFLICT` |
+
+The shapes match on purpose: the month grid lays the proposal and the result
+side by side and shows where reality differed.
+
+### Why the preview writes nothing
+
+It is a *proposal*, and a proposal that reserved anything would be a booking
+with an extra step. Three consequences follow, and all three are the point:
+
+- **No holds.** A previewed spot is not held for the user. Two people can
+  preview the same day and both be shown the same spot; whoever confirms first
+  gets it. Holding would mean either a lock held across a user's thinking time,
+  or a "draft reservation" table with an expiry sweeper — Task 4 considered and
+  rejected exactly that (`doc/decision/0019-*`), and this is what "no draft"
+  means at the service layer.
+- **No audit noise.** Looking at a month is not an auditable act.
+- **It is cheap and idempotent.** Two identical previews return identical
+  answers, which is asserted rather than assumed
+  (`bulk-reservation.db.spec.ts`, "gives the same answer for the same input,
+  twice").
+
+The preview is not a promise, and the API never pretends otherwise: every field
+of the confirmation is built from rows the database actually returned.
+
+---
+
+## The allocator
+
+`bulk-allocator.ts` is **pure** — it takes a snapshot of the world and returns a
+plan. It reads no database, opens no transaction and has no clock. That is what
+lets the preview and the confirmation share one definition of "what should
+happen" while differing only in whether anything is written, and it is what makes
+the preference order testable by an ordinary unit test.
+
+### Per day, in this order
+
+1. **Not a business day** → `UNAVAILABLE / NOT_A_BUSINESS_DAY`. First because it
+   is the most durable fact: a Saturday is still a Saturday next month, whereas
+   "every spot is taken" is true for an afternoon. Note that inside a bulk
+   request this is a *per-day fact*, not a rejected request — see
+   `doc/decision/0090-*`.
+2. **The user already holds a reservation that day** → `UNAVAILABLE /
+   ALREADY_HAS_RESERVATION`. Above the queue branch on purpose: queueing
+   somebody who already has a spot creates an entry that can never be promoted
+   (one reservation per user per day), which is what `waitlist.join` refuses at
+   the door.
+3. **No active spots at all** → `UNAVAILABLE / NO_SPOTS_AVAILABLE`.
+4. **The preferred spot, if free** → `SPOT_ASSIGNED`, `isPreferredSpot: true`.
+5. **The first free spot** in canonical order → `SPOT_ASSIGNED`.
+6. **Otherwise the shortest queue** → `QUEUED`, with the position the user would
+   take (or the one they already hold).
+
+`preferredParkingSpotId` comes from the user's profile and is a bulk-only
+preference — the single-day flow never applies it. A retired spot is simply
+absent from the candidate list, so a stale preference degrades to step 5.
+
+### The two orderings, and why the allocator re-derives both
+
+- **Spots**: group (`IT` before `SHARED`, taken from the declaration order of
+  `PARKING_GROUPS`), then `label`. Re-sorted here rather than trusted from the
+  caller so that a `findMany` which lost its `orderBy` cannot silently change
+  which spot a bulk booking picks.
+- **Days**: ascending. This is not cosmetic — it is the lock ordering that keeps
+  two concurrent confirmations from deadlocking (`doc/decision/0092-*`). The
+  plan therefore comes back in date order, and the *service* puts it back into
+  request order for the response, because the contract promises request order
+  while the writes have to stay in date order.
+
+**The shortest-queue tiebreak is the label alone**, deliberately not
+group-then-label. Choosing a queue is not choosing where to park: every candidate
+is already taken, so the `IT`-before-`SHARED` preference has nothing to say, and
+reusing the assignment order would silently make queueing prefer IT spots, which
+nobody asked for. The tiebreak exists so that two identical requests produce the
+same plan.
+
+---
+
+## The transaction
+
+One interactive transaction per confirmation, `{ maxWait: 5_000, timeout:
+15_000 }`, in this sequence:
+
+```
+read the world (spots, that month's reservations, that month's queues)
+  → allocate (pure)
+  → INSERT reservations         … ON CONFLICT DO NOTHING RETURNING *
+  → work out which days lost their spot
+  → INSERT waitlist entries     … ON CONFLICT DO NOTHING RETURNING *
+  → re-read the affected queues for real positions
+  → INSERT audit rows (one per reservation, one per queue entry)
+  → return the events
+                              ── commit ──
+publish reservation:created / waitlist:updated
+```
+
+Three properties hold it together, all three argued in full in
+`doc/decision/0092-*`:
+
+**Writes go in ascending date order.** Two confirmations acquire their
+uncommitted unique keys in the same sequence, so no cycle can form between them.
+Request order would deadlock two users who select the same week from opposite
+ends.
+
+**No statement is allowed to fail.** `createManyAndReturn({ skipDuplicates:
+true })` is `INSERT … ON CONFLICT DO NOTHING RETURNING …`: a day whose spot was
+taken since the read simply does not come back, and the service reads the
+difference. PostgreSQL aborts a whole transaction on a failed statement and
+Prisma exposes no savepoints, so this is the only way one impossible day does
+not throw away the other thirty.
+
+**There is no retry.** A batch that loses a genuine write conflict (`P2034`)
+fails whole and the caller is told `CONFLICT` — never a 500
+(`doc/decision/0065-*` owns that mapping). Re-running a 31-day batch would
+re-read the world and produce a *different* plan, which is a second request the
+user did not make.
+
+### The race that is deliberately left open
+
+There is no `SELECT … FOR UPDATE` and no `FOR SHARE`. The gap between the read
+and the write stays open, and it is benign because it is **self-correcting**:
+the state can only move against the plan (a free spot becomes taken; a taken one
+becoming free again cannot help, because promotion is what frees it and
+promotion has its own queue). A day that loses its spot falls onto the waitlist
+for *that spot* — exactly what would have happened had the read seen the truth.
+
+What is *not* left to chance is what the caller is told: every field of the
+answer is derived from rows the database returned, never from the plan.
+
+Locking the candidate spots instead would hold a row lock on every spot in the
+lot for the length of the transaction, serialising every other reservation in
+the building behind one bulk booking — and it would put `confirmBulk` back
+inside the lock-ordering cycle `doc/waitlist.md` documents for cancellation.
+
+### Deadlock analysis
+
+| pair | can they deadlock? | why |
+| --- | --- | --- |
+| `confirmBulk` × `confirmBulk` | no | both take reservation keys in ascending date order, at most one per date; the sequences are prefixes of one total order |
+| `confirmBulk` × `reservation.create` | no | a single-day create takes exactly one key — one key cannot be half of a cycle |
+| `confirmBulk` × `cancel` + promote | no | the cancel path's cycle (`doc/decision/0065-*`) is built from `FOR UPDATE` on reservation rows and a delete; bulk takes neither, and only ever inserts |
+| `confirmBulk` × anything unordered | **yes** | a writer that takes two of the same cells in the opposite order deadlocks. `bulk-concurrency.db.spec.ts` builds exactly that competitor and PostgreSQL reports `40P01`; the batch is all-or-nothing and the caller gets `CONFLICT` |
+
+The last row is what makes the first one meaningful: without a demonstrated
+cycle, "both callers succeeded" could just mean the two requests never met.
+
+**Recorded limit.** Deleting the ascending sort leaves the entire database suite
+green, because each transaction's reservations go in as a single multi-row
+`INSERT` — the interleaving that forms a cycle cannot be forced from outside the
+process. The sort is pinned by a unit test instead (`bulk-allocator.spec.ts`,
+"comes back in ascending date order, whatever order it was asked in"). The
+single-statement insert is the *reason* the sort is hard to falsify end to end,
+not a reason to drop it: split the batch into per-day statements — a retry loop,
+a savepoint, a per-day hook — and the ordering becomes the only thing between two
+users and a deadlock.
+
+---
+
+## What is a whole-request error and what is a per-day fact
+
+| condition | result |
+| --- | --- |
+| any selected day is in the past | `PAST_DATE` (everyone, admins included) |
+| the month has not opened yet | `OUT_OF_HORIZON` |
+| the month is locked for this caller | `RESERVATIONS_LOCKED` — an admin is exempt |
+| the batch is empty or spans two calendar months | `VALIDATION_FAILED` |
+| weekend or Czech public holiday | per-day `UNAVAILABLE / NOT_A_BUSINESS_DAY` |
+| the caller already holds a reservation that day | per-day `UNAVAILABLE / ALREADY_HAS_RESERVATION` |
+| no active spots exist | per-day `UNAVAILABLE / NO_SPOTS_AVAILABLE` |
+
+The window is checked once for the **whole target month**, which is why a batch
+may not span two of them. The split between the two columns is the contract's,
+not this module's — see `BULK_UNAVAILABLE_REASONS` and `doc/decision/0090-*`.
+
+---
+
+## After the commit
+
+Events are *returned* from the transaction callback and published by the caller
+once it has committed — the same `DomainEventPublisher` seam the single-day flow
+uses (`doc/waitlist.md` §"What happens after the commit"). One
+`reservation:created` per reservation actually created, one `waitlist:updated`
+per queue entry actually created; a day that changed nothing broadcasts nothing.
+
+Every created reservation gets a `RESERVATION_CREATED` audit row and every
+created queue entry a `WAITLIST_JOINED` one (`doc/decision/0091-*`), written by
+`AuditLogService.recordMany` inside the same transaction as the rows they
+describe.
+
+---
+
+## Testing
+
+| what | where | how it runs |
+| --- | --- | --- |
+| preference order, both sortings, tiebreaks, positions | `bulk-allocator.spec.ts` | `nx run api:test` |
+| routes exist and run their own contract procedure | `orpc-route-parity.spec.ts` | `nx run api:test` |
+| preview writes nothing; confirm writes rows, audit and broadcasts; window and past-day rejections; forced mid-transaction races | `bulk-reservation.db.spec.ts` | `nx run api:test-db` |
+| two callers in opposite order; a hand-built deadlock | `bulk-concurrency.db.spec.ts` | `nx run api:test-db` |
+
+The database suites follow the rules `doc/waitlist.md` §Testing sets out: real
+PostgreSQL, no `PrismaDouble`, a throwaway database per run
+(`doc/decision/0066-*`), and `api:test-db` exits 1 rather than skipping when
+`DATABASE_URL` is absent.
+
+Two conventions specific to these files, because spots are global in that
+database but days are not:
+
+- each case owns a **named, mutually exclusive** set of days (January and
+  February **2100**), and a fixture guard asserts no day is shared — so nothing
+  depends on Jest's ordering;
+- no case asserts *which* spot the allocator picked from the shared lot. Where
+  the spot matters, the case either seeds its own or reads the choice out of a
+  preview first.

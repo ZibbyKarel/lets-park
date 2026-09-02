@@ -10,6 +10,15 @@ The business rules are in `doc/api-modules.md` and in `plan.md`
 §Byznys pravidla; the rules that decide *who may write which day* are in
 `ReservationPolicy` and summarised under [Who the window applies to](#who-the-window-applies-to).
 
+**Bulk booking is the other half of this module and has its own document:**
+[`doc/bulk-reservation.md`](./bulk-reservation.md). `reservation.confirmBulk`
+can create up to a month's worth of reservations and queue entries in one
+transaction, and it does it with a different set of trade-offs from the ones
+below — no `FOR UPDATE`, no retry, and `ON CONFLICT DO NOTHING` instead of a
+failed statement. Both paths write into the same tables and rely on the same
+unique indexes, so read that one before changing anything here that touches the
+queue.
+
 ---
 
 ## Cancel + promote, as a sequence
@@ -263,6 +272,15 @@ Two rules apply to *everyone*, admin included, because they are facts about the
 day rather than about the window: a day in the past (`PAST_DATE`), and a weekend
 or Czech public holiday (`VALIDATION_FAILED` — see `doc/decision/0064-*`).
 
+Bulk booking follows the same table with one difference in shape: the window is
+checked **once for the whole target month** (which is why a batch may not span
+two), and a weekend inside the selection is reported per day rather than
+refusing the request (`doc/decision/0090-*`).
+
+Joining a queue — by either path — writes a `WAITLIST_JOINED` audit row in the
+same transaction as the entry (`doc/decision/0091-*`). Entries are hard-deleted
+on promotion or cancellation, so the log is what is left of who asked for what.
+
 ---
 
 ## Testing
@@ -273,6 +291,7 @@ or Czech public holiday (`VALIDATION_FAILED` — see `doc/decision/0064-*`).
 | create / cancel / promote / window | `reservations.db.spec.ts` | `nx run api:test-db` |
 | join / leave | `waitlist.db.spec.ts` | `nx run api:test-db` |
 | the races | `waitlist-concurrency.db.spec.ts` | `nx run api:test-db` |
+| bulk booking | `bulk-*.spec.ts` — see `doc/bulk-reservation.md` §Testing | both |
 
 `api:test-db` needs `docker compose --profile dev up -d` and **does not skip**
 when `DATABASE_URL` is absent — it exits 1 from `globalSetup`.
