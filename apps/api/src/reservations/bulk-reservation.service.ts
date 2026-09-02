@@ -51,6 +51,25 @@
  * No `FOR UPDATE` is taken and nothing is deleted, so this path also stays out
  * of the cancel/promote cycle documented in `doc/decision/0065-*`.
  *
+ * ## The one race this deliberately does not close
+ *
+ * `waitlist.join` takes `SELECT … FOR SHARE` on the reservation of the cell it
+ * is queueing for, so a caller cannot be queued for a spot a concurrent
+ * cancellation is in the middle of freeing. Bulk booking does **not**: locking
+ * one reservation row per selected day would add up to 31 more locks to a
+ * transaction whose lock footprint is the whole reason this file is careful, and
+ * would put it back into the cancel path's wait graph.
+ *
+ * The consequence is bounded and self-correcting. A day the allocator decided to
+ * queue can, in the window between the read and the insert, have its spot freed
+ * — leaving the caller queued for a spot that is free. They are not stuck: the
+ * spot is visible on the day screen and they can simply reserve it, and if
+ * somebody else takes it first the queue entry becomes meaningful again. Days
+ * that queue because they *lost* a race are not affected at all: they queue for
+ * the spot whose insert was refused, which is occupied by definition. Same
+ * shape of documented, benign gap as `WaitlistService.join`'s
+ * `RESERVATION_LIMIT_REACHED` pre-check — see `doc/bulk-reservation.md`.
+ *
  * ## Nothing that can block on the network happens inside the transaction
  *
  * Same seam as Task 13: the callback returns its events, and they are published
@@ -78,7 +97,7 @@ import { toDateColumn, toDateOnly, toPublicReservation } from '../common/prisma-
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
 import type { AllocatableSpot, DayState } from './bulk-allocator';
-import { allocateBulk, shortestQueue } from './bulk-allocator';
+import { allocateBulk } from './bulk-allocator';
 import type { DomainEvent } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
@@ -222,7 +241,7 @@ export class BulkReservationService {
     );
     const busyElsewhere = await this.datesAlreadyReserved(tx, lost, actor.id);
 
-    const targets = this.queueTargets(plans, world, createdByDate, busyElsewhere);
+    const targets = this.queueTargets(plans, createdByDate, busyElsewhere);
     const queued = await this.createWaitlistEntries(tx, targets, actor.id);
     const queues = await this.readQueues(tx, targets);
 
@@ -467,38 +486,39 @@ export class BulkReservationService {
   /**
    * Which spot each still-unsatisfied day should queue for.
    *
-   * Two sources: days the allocator already decided to queue, and days it wanted
-   * to assign but whose cell was taken in the meantime — the brief's rule, "a
-   * collision does not fail the batch, that day falls onto the waitlist". A day
-   * the caller turns out to already hold a reservation on is deliberately **not**
-   * here: they could never be promoted out of that queue.
+   * Two sources, and the second one is the interesting half:
+   *
+   * - a day the allocator already decided to queue keeps the spot it chose (the
+   *   shortest queue, tiebroken by label);
+   * - a day it wanted to **assign** and lost queues for *that same spot* — the
+   *   brief's rule, "a collision does not fail the batch, that day falls onto
+   *   the waitlist". The spot it lost is the one spot on that day this
+   *   transaction knows for certain is occupied: the insert was skipped, which
+   *   only happens when a row is already there. Re-running the shortest-queue
+   *   rule over the stale snapshot would instead have queued the caller behind
+   *   a spot that looked free a moment ago and may still be.
+   *
+   * A day the caller turns out to already hold a reservation on is deliberately
+   * absent: they could never be promoted out of that queue.
    */
   private queueTargets(
     plans: readonly BulkDayPlan[],
-    world: World,
     createdByDate: ReadonlyMap<DateOnly, CreatedReservation>,
     busyElsewhere: ReadonlySet<DateOnly>
   ): Map<DateOnly, QueueTarget> {
     const targets = new Map<DateOnly, QueueTarget>();
 
     for (const plan of plans) {
-      if (plan.outcome === 'QUEUED') {
-        targets.set(plan.date, { id: plan.parkingSpotId, label: plan.parkingSpotLabel });
+      if (plan.outcome === 'UNAVAILABLE') {
         continue;
       }
-      if (plan.outcome !== 'SPOT_ASSIGNED') {
+      if (
+        plan.outcome === 'SPOT_ASSIGNED' &&
+        (createdByDate.has(plan.date) || busyElsewhere.has(plan.date))
+      ) {
         continue;
       }
-      if (createdByDate.has(plan.date) || busyElsewhere.has(plan.date)) {
-        continue;
-      }
-      // The cell was taken between the read and the insert. The same rule the
-      // allocator uses picks the queue, from the same snapshot.
-      const state = world.stateByDate.get(plan.date);
-      const fallback = state === undefined ? undefined : shortestQueue(world.spots, state);
-      if (fallback !== undefined) {
-        targets.set(plan.date, { id: fallback.id, label: fallback.label });
-      }
+      targets.set(plan.date, { id: plan.parkingSpotId, label: plan.parkingSpotLabel });
     }
 
     return targets;

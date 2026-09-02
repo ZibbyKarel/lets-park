@@ -135,7 +135,7 @@ function positionIn(queue: readonly string[], userId: string): number {
  * without it the answer would depend on the order the rows came back in, and the
  * preview would stop predicting the confirmation.
  */
-export function shortestQueue(
+function shortestQueue(
   spots: readonly AllocatableSpot[],
   day: DayState
 ): AllocatableSpot | undefined {
