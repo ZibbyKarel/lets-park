@@ -24,6 +24,10 @@ module.exports = {
   displayName: 'api',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
+  // `*.db.spec.ts` needs a real PostgreSQL and belongs to `api:test-db`
+  // (`jest.database.config.cts`). This target has to stay runnable without
+  // Docker, and those tests refuse to skip themselves when it is missing.
+  testPathIgnorePatterns: ['/node_modules/', '\\.db\\.spec\\.ts$'],
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
     '^.+\\.mjs$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],

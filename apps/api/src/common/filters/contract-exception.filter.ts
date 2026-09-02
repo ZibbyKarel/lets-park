@@ -84,9 +84,64 @@ const PRISMA_RECORD_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 const PRISMA_FOREIGN_KEY_CONSTRAINT = 'P2003';
 
+/** Narrows an unknown to a plain object without asserting its contents. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 /**
- * Normalises P2002's `meta.target`, which Prisma reports as the constraint
- * name, an array of column names, or (with some drivers) a single string.
+ * Reads the constraint out of the driver adapter's own error, which is where
+ * `@prisma/adapter-pg` puts it — and the **only** place it appears.
+ *
+ * Prisma 7 with a driver adapter does not populate the documented `meta.target`
+ * at all. What a real `(parkingSpotId, date)` collision produces is:
+ *
+ * ```
+ * code: 'P2002'
+ * meta: { modelName: 'Reservation', driverAdapterError: { cause: {
+ *          originalCode: '23505', kind: 'UniqueConstraintViolation',
+ *          constraint: { index: 'Reservation_parkingSpotId_date_key' },
+ *          table: 'Reservation' } } }
+ * ```
+ *
+ * `constraint` is a tagged union: Postgres reports the index it violated
+ * (`{ index }`), while other drivers report the columns (`{ fields }`). Both are
+ * read, because both feed the same matcher — an index name is one of the two
+ * forms `targetMatches` already accepts.
+ *
+ * Verified against PostgreSQL 17 in `database-contract.db.spec.ts`, which
+ * asserts this shape *and* that `meta.target` is absent. That spec is the reason
+ * the fallback exists: `PrismaDouble` fabricated a `target` key, so every unit
+ * test of this mapping passed while every real unique violation degraded to
+ * `CONFLICT`.
+ */
+function driverAdapterConstraint(meta: Record<string, unknown> | undefined): string[] {
+  const constraint = asRecord(
+    asRecord(asRecord(meta?.['driverAdapterError'])?.['cause'])?.['constraint']
+  );
+  if (constraint === undefined) {
+    return [];
+  }
+  const index = constraint['index'];
+  if (typeof index === 'string') {
+    return [index];
+  }
+  const fields = constraint['fields'];
+  if (Array.isArray(fields)) {
+    return fields.filter((entry): entry is string => typeof entry === 'string');
+  }
+  return [];
+}
+
+/**
+ * Normalises P2002's constraint identity to a list of names.
+ *
+ * `meta.target` is what Prisma documents — the constraint name, an array of
+ * column names, or a single string — and is what the query-engine-backed client
+ * emits. It is checked first so that this keeps working if the adapter is ever
+ * dropped. The driver-adapter path below it is what actually fires today.
  */
 function uniqueConstraintTarget(meta: Record<string, unknown> | undefined): string[] {
   const target = meta?.['target'];
@@ -96,7 +151,7 @@ function uniqueConstraintTarget(meta: Record<string, unknown> | undefined): stri
   if (typeof target === 'string') {
     return [target];
   }
-  return [];
+  return driverAdapterConstraint(meta);
 }
 
 /**
@@ -118,7 +173,18 @@ function targetMatches(target: string[], table: string, columns: readonly string
   ) {
     return true;
   }
-  // Prisma's own naming for a composite unique index: `Table_col1_col2_key`.
+  // Prisma's own naming for a unique index: `Table_col1_col2_key`, columns in
+  // the order the `@@unique` block declares them. Checked against the generated
+  // migration SQL rather than assumed — all seven unique indexes in this schema
+  // follow it, none carries a `map:` override, and `database-contract.db.spec.ts`
+  // provokes each one against a real server:
+  //
+  //   User_email_key, User_oktaId_key, User_icsToken_key, ParkingSpot_label_key,
+  //   Reservation_parkingSpotId_date_key, Reservation_userId_date_key,
+  //   WaitlistEntry_parkingSpotId_userId_date_key
+  //
+  // A future `@@unique([...], map: "…")` would break this path silently, which
+  // is why the db spec asserts the literal index name and not just the mapping.
   const indexName = `${table}_${columns.join('_')}_key`.toLowerCase();
   return normalised.length === 1 && normalised[0] === indexName;
 }
@@ -362,7 +428,28 @@ export class ContractExceptionFilter implements ExceptionFilter {
         response.status(status).json(INTERNAL_ERROR_BODY);
         return;
       }
-      this.logger.warn({ err: exception, statusCode: status }, 'Request rejected');
+      // A 4xx the framework produced: no such route, a malformed body, a
+      // throttled caller. Logged **without** `err`, for the same reason the
+      // oversized-body branch below drops it — the stack is ten frames of
+      // `@nestjs/core` router internals with no diagnostic value, and 404 is the
+      // most common status on any public endpoint, so a scanner walking URLs
+      // would otherwise write a multi-kilobyte log line per probe. The method
+      // and path are what actually answer "what were they asking for", and they
+      // are what is kept.
+      //
+      // Unlike `DomainError` above, which keeps its stack: there the frames name
+      // the service and the rule that rejected the request, which is exactly the
+      // question a reader has, and only an authenticated caller can trigger one.
+      const request = http.getRequest<Request>();
+      this.logger.warn(
+        {
+          statusCode: status,
+          method: request.method,
+          path: request.path,
+          reason: exception.message,
+        },
+        'Request rejected'
+      );
       response.status(status).json(body);
       return;
     }

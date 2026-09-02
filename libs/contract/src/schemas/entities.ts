@@ -137,7 +137,7 @@ export const AUDIT_LOG_ACTIONS = [
    * a singleton whose two fields decide, for every user, whether a month can be
    * booked at all, and `plan.md` requires that change to be audited. The
    * existing members all name a row that was created or deleted, so none of them
-   * could describe it (`doc/decision/0045-*`).
+   * could describe it (`doc/decision/0047-*`).
    */
   'RESERVATION_WINDOW_UPDATED',
 ] as const;

@@ -3,7 +3,7 @@
 -- The reservation-window settings are a singleton row whose two fields decide,
 -- for every user, whether a month can be booked. `plan.md` requires the change
 -- to be audited, and none of the existing members describes it: they all name a
--- row that was created or deleted. See `doc/decision/0045-*`.
+-- row that was created or deleted. See `doc/decision/0047-*`.
 --
 -- `ADD VALUE IF NOT EXISTS` rather than a recreate: rewriting the type would
 -- mean dropping and re-adding the `AuditLog.action` column, and that table is

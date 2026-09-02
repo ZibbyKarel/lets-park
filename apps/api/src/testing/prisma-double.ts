@@ -39,10 +39,39 @@ import type { PrismaService } from '../database/prisma.service';
 
 const CLIENT_VERSION = '7.10.0';
 
+/**
+ * A `P2002` in the shape `@prisma/adapter-pg` actually produces.
+ *
+ * This function used to emit `meta: { target: [...] }`, which is what Prisma
+ * *documents* and what the query-engine client emits — but not what this
+ * project's driver adapter emits. Nothing here failed; the filter's mapping was
+ * green against a shape reality never sends, so every real unique violation
+ * degraded to `CONFLICT` and `SPOT_ALREADY_RESERVED` could not fire at all.
+ *
+ * The shape below is transcribed from a live PostgreSQL 17 and is re-asserted
+ * against one on every `nx run api:test-db`
+ * (`src/database/database-contract.db.spec.ts`). If Prisma changes it, that
+ * suite fails and this constructor is what has to be corrected — which is the
+ * arrangement that was missing.
+ */
 function uniqueViolation(table: string, column: string): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError(
     `Unique constraint failed on the fields: (\`${column}\`)`,
-    { code: 'P2002', clientVersion: CLIENT_VERSION, meta: { target: [`${table}_${column}_key`] } }
+    {
+      code: 'P2002',
+      clientVersion: CLIENT_VERSION,
+      meta: {
+        modelName: table,
+        driverAdapterError: {
+          cause: {
+            originalCode: '23505',
+            kind: 'UniqueConstraintViolation',
+            constraint: { index: `${table}_${column}_key` },
+            table,
+          },
+        },
+      },
+    }
   );
 }
 

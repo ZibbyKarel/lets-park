@@ -98,8 +98,19 @@ The two paths produce byte-identical bodies for the same contract error, which i
 `orpc-pipeline.spec.ts` — a `FORBIDDEN` from `RolesGuard` and a `CONFLICT` from a service both
 arrive as `{ "json": { "code": …, "status": … } }`.
 
-Prisma's `P2002` is mapped by `meta.target`, so a duplicate spot label is a `CONFLICT` rather than
-a 500. Stack traces are logged and never sent.
+**`P2002` is read from the driver adapter, not from `meta.target`.** Prisma documents `target`;
+Prisma 7 with `@prisma/adapter-pg` does not populate it, and puts the violated index under
+`meta.driverAdapterError.cause.constraint.index` instead. Both are read, `target` first. This is
+what lets `Reservation (parkingSpotId, date)` arrive as `SPOT_ALREADY_RESERVED` rather than the
+vague `CONFLICT` every unique violation used to degrade to; the shape is pinned against a real
+server (§9).
+
+**Stack traces are logged and never sent — and a 4xx does not log one either.** A framework 4xx
+(no such route, a malformed body, a throttled caller) is logged at `warn` with the status, method,
+path and reason, and *without* `err`: those frames are `@nestjs/core` router internals that answer
+nothing, and 404 is the most common status on a public endpoint, so a scanner walking URLs would
+otherwise write a multi-kilobyte log line per probe. A `DomainError` keeps its stack, because there
+the frames name the service and the rule that refused; so does every 5xx.
 
 ---
 
@@ -224,7 +235,19 @@ still covering the dangerous version.
 **Known race, accepted.** The "last active admin" check is a count followed by an update. Two
 admins demoting each other in the same instant could leave zero. Serialising every role change buys
 nothing against a scenario that needs simultaneous requests from two of the handful of admins on a
-single-instance deployment; the recovery is a one-line SQL update. Recorded here rather than hidden.
+single-instance deployment.
+
+Be clear about what it would cost, though: **there is no way back through the API.** Every route
+that could restore an admin is itself admin-only, and Okta provisions new users as `USER`.
+Recovery requires **direct database access** —
+
+```sql
+UPDATE "User" SET role = 'ADMIN', active = true WHERE email = '…';
+```
+
+— which on a production deployment means someone with database credentials, out of hours, on the
+one day nobody can log in. Recorded here rather than hidden, so the trade-off can be re-taken with
+the real number in view.
 
 ---
 
@@ -332,17 +355,55 @@ Two specs test the composition rather than a service:
   route, that a refused caller's handler never runs, and that a rejection arrives in the RPC
   envelope from both the filter and oRPC itself.
 
-Three claims were verified by breaking them and watching the tests fail, then restoring:
+Four claims were verified by breaking them and watching the tests fail, then restoring:
 
 | Claim removed | Result |
 | --- | --- |
 | The audit write in `SpotsService.create` | 2 failures across the spots spec and the pipeline spec (`Received: Array []`) |
 | The `monthLockState` delegation, replaced by a hand-rolled rule | 2 failures; the delegation test reported `["OPEN", …]` against `["LOCKED", "LOCKED", "NOT_YET_OPEN", …]` |
 | `@Roles('ADMIN')` on `admin.spot.list` | 2 failures; parity `Expected ["ADMIN"], Received undefined`, pipeline `Expected 403, Received 200` |
+| `admin.spot.list`'s implementation swapped for `create`'s, route left mounted | 1 failure; the schema-identity check in the parity spec |
 
-**Not verified against a real database.** Docker is unavailable on the development machine, so no
-test in this task has run against Postgres. Specifically unexercised: the `AuditLog` append-only
-triggers actually rejecting an `UPDATE`/`DELETE`, the `CHECK ("id" = 1)` constraint on the settings
-singleton, and `P2002`'s real `meta.target` shape as produced by `@prisma/adapter-pg` (the double
-reproduces the shape the mapping expects, which is an assumption about the adapter, not a
-measurement of it).
+### The database-contract suite
+
+`src/database/database-contract.db.spec.ts` runs against a **real PostgreSQL 17**, and exists
+because of a defect no double could see. `PrismaDouble` fabricated `P2002` with a `meta.target`
+key; `@prisma/adapter-pg` emits no such key, putting the constraint under
+`meta.driverAdapterError.cause.constraint.index` instead. Every unit test of the mapping passed,
+and every real unique violation degraded to the vague `CONFLICT` — including
+`SPOT_ALREADY_RESERVED`, which `plan.md` names as the concurrency guarantee of the whole
+reservation flow. Nothing short of a real connection could have caught it.
+
+The suite provokes each constraint and each trigger against the server, inside transactions that
+are always rolled back, so it leaves the database exactly as it found it — which is also the only
+way to test an append-only table at all. It covers both `Reservation` unique constraints, the
+`WaitlistEntry` one, `ParkingSpot.label`, `User.email`, the `AuditLog` `UPDATE`/`DELETE` triggers,
+and the `CHECK ("id" = 1)` singleton.
+
+```
+docker compose --profile dev up -d
+nx run api:test-db
+```
+
+Nx loads `.env`, so `DATABASE_URL` is already in place for that target; running the config through
+`jest` directly needs it passed.
+
+It is **excluded from `nx run-many -t test`** (`testPathIgnorePatterns` in
+`apps/api/jest.config.cts`) so that suite stays runnable without Docker, and it **refuses to skip
+itself** when `DATABASE_URL` is missing — it fails, with a message saying how to start the
+database. A suite that skips into green is the failure mode this file exists to remove, and the
+refusal has been exercised (`DATABASE_URL= jest --config apps/api/jest.database.config.cts` exits
+1, not 0).
+
+### Still not exercised
+
+- **Concurrency.** Every constraint here is provoked sequentially. That two *simultaneous* requests
+  produce exactly one winner is the behaviour `SPOT_ALREADY_RESERVED` exists for, and proving it
+  needs concurrent transactions rather than consecutive statements. Task 13 owns the reservation
+  flow and is where that test belongs.
+- **`PrismaDouble` itself** has no spec of its own. Its `P2002` shape is now transcribed from the
+  live server and re-asserted there on every `api:test-db` run, so that particular fiction cannot
+  return unnoticed — but the rest of its behaviour is still defined only by the specs that consume
+  it.
+- **The enum migration's effect**, server-side. It has been applied, but nothing asserts
+  `AuditLogAction`'s membership in the database afterwards.

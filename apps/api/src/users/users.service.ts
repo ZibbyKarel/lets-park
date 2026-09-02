@@ -122,6 +122,13 @@ export class UsersService {
    * a handful of admins, and the alternative (serialising every role change) buys
    * nothing against a scenario nobody has ever hit. Recorded in the task doc, not
    * hidden.
+   *
+   * **What it costs if it ever happens.** There is no way back through the API —
+   * every route that could restore an admin is itself admin-only, and users are
+   * provisioned from Okta as `USER`. Recovery requires **direct database
+   * access**: `UPDATE "User" SET role = 'ADMIN', active = true WHERE email =
+   * '…';`. Anyone weighing this trade-off later should weigh that, not just the
+   * probability.
    */
   private async requireAnotherActiveAdmin(excludedUserId: string): Promise<void> {
     const remaining = await this.prisma.client.user.count({

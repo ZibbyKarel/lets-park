@@ -141,6 +141,87 @@ describe('the RPC routing table', () => {
     }
   });
 
+  /**
+   * The routing table above says a path is mounted. It cannot say the path runs
+   * the procedure it names.
+   *
+   * `RPCHandler` dispatches on the URL, so what a request actually executes is
+   * whatever sits at that key in the controller's router object — the delegating
+   * method's name is decorative. Move `implementer.admin.spot.create.handler(…)`
+   * one line up, into the `list` slot, and every assertion above still passes
+   * while `admin.spot.list` creates spots.
+   *
+   * What distinguishes two sibling implementations is the contract procedure
+   * each was built from. `implement()` carries the contract's own schema objects
+   * through by reference, so identity comparison settles it with no machinery:
+   * the leaf at `admin.spot.list` must hold the *same* schema objects as
+   * `contract.admin.spot.list`.
+   *
+   * Limit worth stating: two procedures that share both schema objects — several
+   * share `noInputSchema` — are indistinguishable to this check on their input
+   * alone, which is why both schemas are compared and not just one.
+   */
+  describe('every route runs the procedure it names', () => {
+    /** The `~orpc` definition both a contract procedure and an implemented one carry. */
+    function definitionOf(node: unknown): { inputSchema?: unknown; outputSchema?: unknown } {
+      const def = (node as Record<string, unknown> | null)?.['~orpc'];
+      if (typeof def !== 'object' || def === null) {
+        throw new Error('Not an oRPC procedure: no `~orpc` definition.');
+      }
+      return def as { inputSchema?: unknown; outputSchema?: unknown };
+    }
+
+    /** Every leaf of an implemented router, as a dotted name. */
+    function routerLeaves(node: unknown, prefix: string[] = []): [string, unknown][] {
+      if (typeof node !== 'object' || node === null) {
+        return [];
+      }
+      if ('~orpc' in node) {
+        return [[prefix.join('.'), node]];
+      }
+      return Object.entries(node).flatMap(([key, child]) => routerLeaves(child, [...prefix, key]));
+    }
+
+    /**
+     * Builds each controller with stub collaborators and reads its router.
+     *
+     * Safe because nothing here calls a handler: the constructors only close
+     * over the service, and `RpcRouteHandler` only uses the logger inside an
+     * error interceptor. A real Nest context would prove nothing extra and would
+     * need a database.
+     */
+    function implementedProcedures(): [string, unknown][] {
+      const stub = undefined as never;
+      return CONTROLLERS.flatMap((Controller) => {
+        const instance = new Controller(stub, stub) as unknown as {
+          rpc: { router: unknown };
+        };
+        return routerLeaves(instance.rpc.router);
+      });
+    }
+
+    const implemented = implementedProcedures();
+
+    it('finds an implementation for every route, and no extras', () => {
+      expect(implemented.map(([name]) => name).sort()).toEqual(
+        routes.map((route) => route.procedure).sort()
+      );
+    });
+
+    it.each(implemented.map(([name]) => name).sort())(
+      '%s is built from its own contract procedure',
+      (name) => {
+        const [, implementation] = implemented.find(([candidate]) => candidate === name) ?? [];
+        const declared = name
+          .split('.')
+          .reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], contract);
+
+        expect(definitionOf(implementation).inputSchema).toBe(definitionOf(declared).inputSchema);
+        expect(definitionOf(implementation).outputSchema).toBe(definitionOf(declared).outputSchema);
+      }
+    );
+  });
+
   describe('authorization', () => {
     it('guards every admin procedure with @Roles(ADMIN)', () => {
       const adminRoutes = routes.filter((route) => route.procedure.startsWith('admin.'));

@@ -59,7 +59,23 @@ export type OrpcRouter = ConstructorParameters<typeof RPCHandler<OrpcContext>>[0
 export class RpcRouteHandler {
   private readonly handler: RPCHandler<OrpcContext>;
 
+  /**
+   * The router this handler dispatches into, kept for
+   * `orpc-route-parity.spec.ts`.
+   *
+   * `RPCHandler` dispatches on the **URL path**, so which procedure a request
+   * runs is decided by the key it sits under in this object — not by the name of
+   * the controller method that delegated here, which is decorative. Moving an
+   * implementation to a neighbouring key would therefore serve the wrong
+   * procedure at a path the parity spec still considers correctly mounted.
+   * Exposing the router lets that spec compare each leaf's schemas against the
+   * contract procedure for its own path, which is the only thing that
+   * distinguishes two sibling implementations from each other.
+   */
+  readonly router: OrpcRouter;
+
   constructor(router: OrpcRouter, logger: PinoLogger) {
+    this.router = router;
     const options: RPCHandlerOptions<OrpcContext> = {
       interceptors: [
         onError((error) => {
