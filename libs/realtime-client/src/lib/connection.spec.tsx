@@ -25,7 +25,13 @@ import {
   USER_SUMMARY,
   settle,
 } from '../__fixtures__/realtime-fixtures';
-import { RealtimeProvider, useDayRoom, useRealtime, useRealtimeEvent } from './connection';
+import {
+  REJECTED_RETRY_DELAYS_MS,
+  RealtimeProvider,
+  useDayRoom,
+  useRealtime,
+  useRealtimeEvent,
+} from './connection';
 import type { InvalidRealtimePayload } from './validation';
 
 jest.mock('./socket', () => {
@@ -49,14 +55,16 @@ afterEach(() => {
 function Providers({
   children,
   onInvalidPayload,
+  getAccessToken = () => 'jwt-value',
 }: {
   children: ReactNode;
   onInvalidPayload?: (report: InvalidRealtimePayload) => void;
+  getAccessToken?: () => string;
 }) {
   return (
     <RealtimeProvider
       url={API_URL}
-      getAccessToken={() => 'jwt-value'}
+      getAccessToken={getAccessToken}
       {...(onInvalidPayload === undefined ? {} : { onInvalidPayload })}
     >
       {children}
@@ -132,6 +140,168 @@ describe('useRealtimeConnection', () => {
     });
 
     expect(offline.socket.connected).toBe(false);
+  });
+});
+
+/**
+ * The gateway refusing the handshake, which is the failure this whole lib
+ * exists to survive: `socket.io-client` **destroys** the socket it was refused
+ * on (`Socket.onpacket`'s CONNECT_ERROR branch calls `destroy()`), so unlike a
+ * dropped transport there is nothing left that will ever try again.
+ *
+ * The fixture delivers a real CONNECT_ERROR packet — see `rejectHandshake` in
+ * `offline-transport.ts`, whose packet type code is discovered from the
+ * installed client rather than written down.
+ */
+describe('a refused handshake', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** Open the transport, then have the gateway refuse the CONNECT. */
+  async function refuse(): Promise<void> {
+    await act(async () => {
+      currentOfflineSocket().open();
+      await settle();
+    });
+    await act(async () => {
+      currentOfflineSocket().rejectHandshake();
+    });
+  }
+
+  it('is terminal, not "connecting" — socket.io will never retry it', async () => {
+    const statuses: string[] = [];
+    render(
+      <Providers>
+        <StatusProbe onStatus={(status) => statuses.push(status)} />
+      </Providers>
+    );
+
+    const refused = currentOfflineSocket();
+    await refuse();
+
+    // The library's own verdict, not this test's: `active` is `!!socket.subs`,
+    // and the CONNECT_ERROR branch cleared them.
+    expect(refused.socket.active).toBe(false);
+    expect(statuses.at(-1)).toBe('rejected');
+  });
+
+  it('is recovered from by a new socket carrying a freshly read token', async () => {
+    const tokens = ['jwt-stale', 'jwt-fresh'];
+    render(
+      <Providers getAccessToken={() => tokens.shift() ?? 'jwt-exhausted'}>
+        <StatusProbe onStatus={() => undefined} />
+      </Providers>
+    );
+
+    const refused = currentOfflineSocket();
+    await refuse();
+    expect(refused.handshakes()).toEqual([{ token: 'jwt-stale' }]);
+    expect(offlineSocketCount()).toBe(1);
+
+    await act(async () => {
+      jest.advanceTimersByTime(REJECTED_RETRY_DELAYS_MS[0] ?? 0);
+      await settle();
+    });
+
+    // A second socket, because the first one cannot be revived — and the
+    // rebuild re-ran the `auth` callback, which is what picks up the token
+    // `libs/auth` refreshed in the meantime.
+    expect(offlineSocketCount()).toBe(2);
+    await act(async () => {
+      currentOfflineSocket().open();
+      await settle();
+    });
+    expect(currentOfflineSocket().handshakes()).toEqual([{ token: 'jwt-fresh' }]);
+  });
+
+  it('stops rebuilding after a bounded number of attempts', async () => {
+    const statuses: string[] = [];
+    render(
+      <Providers>
+        <StatusProbe onStatus={(status) => statuses.push(status)} />
+      </Providers>
+    );
+
+    for (const delay of REJECTED_RETRY_DELAYS_MS) {
+      await refuse();
+      await act(async () => {
+        jest.advanceTimersByTime(delay);
+        await settle();
+      });
+    }
+    await refuse();
+
+    // One original socket plus one per entry in the delay table, and no more:
+    // a credential the gateway keeps refusing is not going to start working
+    // because the tab kept asking.
+    expect(offlineSocketCount()).toBe(1 + REJECTED_RETRY_DELAYS_MS.length);
+    await act(async () => {
+      jest.advanceTimersByTime(60 * 60_000);
+      await settle();
+    });
+    expect(offlineSocketCount()).toBe(1 + REJECTED_RETRY_DELAYS_MS.length);
+    expect(statuses.at(-1)).toBe('rejected');
+  });
+
+  it('is recovered from on demand by reconnect(), after the attempts are spent', async () => {
+    let reconnect: () => void = () => undefined;
+    function Control() {
+      reconnect = useRealtime().reconnect;
+      return null;
+    }
+    render(
+      <Providers>
+        <Control />
+      </Providers>
+    );
+
+    for (const delay of REJECTED_RETRY_DELAYS_MS) {
+      await refuse();
+      await act(async () => {
+        jest.advanceTimersByTime(delay);
+        await settle();
+      });
+    }
+    await refuse();
+    const spent = offlineSocketCount();
+
+    await act(async () => {
+      reconnect();
+      await settle();
+    });
+
+    expect(offlineSocketCount()).toBe(spent + 1);
+  });
+
+  it('leaves a dropped transport alone — socket.io retries that one itself', async () => {
+    const statuses: string[] = [];
+    render(
+      <Providers>
+        <StatusProbe onStatus={(status) => statuses.push(status)} />
+      </Providers>
+    );
+    const offline = currentOfflineSocket();
+
+    // `connect_error` with the socket still active: the transport failed, the
+    // handshake was never refused. Rebuilding here would fight socket.io's own
+    // reconnect loop.
+    await act(async () => {
+      offline.failTransport();
+      await settle();
+    });
+
+    expect(offline.socket.active).toBe(true);
+    expect(statuses.at(-1)).toBe('connecting');
+    await act(async () => {
+      jest.advanceTimersByTime(60 * 60_000);
+      await settle();
+    });
+    expect(offlineSocketCount()).toBe(1);
   });
 });
 

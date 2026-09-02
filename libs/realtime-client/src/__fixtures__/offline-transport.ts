@@ -224,6 +224,17 @@ export interface OfflineSocket {
    * `useRealtimeConnection` has to recover from, not a fixture invention.
    */
   rejectHandshake(message?: string): void;
+  /**
+   * The transport itself failed — the gateway was unreachable, not
+   * unwelcoming.
+   *
+   * Drives the manager's `error` event, which is what `Socket.subEvents()`
+   * binds to `onerror`; that emits `connect_error` too, but **without**
+   * destroying the socket, so it stays `active` and socket.io's own reconnect
+   * timer owns the retry. The pair with {@link rejectHandshake} is what makes
+   * the `socket.active` branch in `useRealtimeConnection` observable.
+   */
+  failTransport(message?: string): void;
   /** The server broadcast an event into a room this socket is in. */
   deliver(event: string, payload: unknown): void;
   /** The server answered the most recent emit of `event` with `payload`. */
@@ -282,6 +293,7 @@ export function attachOfflineTransport(socket: RealtimeSocket): OfflineSocket {
         nsp: nsp(),
         data: { message },
       }),
+    failTransport: (message = 'xhr poll error') => manager.emit('error', new Error(message)),
     deliver: (event, payload) =>
       manager.emit('packet', { type: types.event, nsp: nsp(), data: [event, payload] }),
     acknowledge: (event, payload) => {

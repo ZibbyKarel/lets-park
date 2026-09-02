@@ -19,7 +19,13 @@ import {
   settle,
 } from '../__fixtures__/realtime-fixtures';
 import { RealtimeProvider } from './connection';
-import { MIN_CELL_LOCK_RENEW_DELAY_MS, renewDelayMs, useCellLock } from './cell-lock';
+import {
+  CELL_LOCK_ACK_ATTEMPTS,
+  CELL_LOCK_ACK_TIMEOUT_MS,
+  MIN_CELL_LOCK_RENEW_DELAY_MS,
+  renewDelayMs,
+  useCellLock,
+} from './cell-lock';
 import type { CellLockState } from './cell-lock';
 
 jest.mock('./socket', () => {
@@ -324,6 +330,96 @@ describe('useCellLock', () => {
       ['cell:lock', cell],
       ['cell:lock', cell],
     ]);
+  });
+
+  it('re-sends a renewal whose acknowledgement never comes back', async () => {
+    renderEditor();
+    const offline = await connect();
+    await grant(offline);
+
+    // The renewal falls due and is sent…
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS / 2);
+    });
+    expect(offline.emitted()).toHaveLength(2);
+
+    // …and its ack is dropped in flight. `socket.emit` has no timeout of its
+    // own, so without `.timeout()` the callback would simply never be called
+    // and the heartbeat would end here, silently, with the form still `held`.
+    await act(async () => {
+      jest.advanceTimersByTime(CELL_LOCK_ACK_TIMEOUT_MS);
+    });
+
+    expect(offline.emitted()).toEqual([
+      ['cell:lock', cell],
+      ['cell:lock', cell],
+      ['cell:lock', cell],
+    ]);
+    // Still inside the TTL the half-TTL renewal left room for.
+    expect(Date.now()).toBeLessThan(Date.parse(EXPIRES_AT));
+    expect(states.at(-1)).toEqual({ status: 'held', expiresAt: EXPIRES_AT, lockedBy: null });
+  });
+
+  it('keeps the heartbeat going once a retried renewal is answered', async () => {
+    renderEditor();
+    const offline = await connect();
+    await grant(offline);
+
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS / 2 + CELL_LOCK_ACK_TIMEOUT_MS);
+    });
+    expect(offline.emitted()).toHaveLength(3);
+
+    // The retry is answered. The budget resets, so the next lost ack gets its
+    // own retry rather than inheriting a spent one.
+    const nextExpiry = new Date(Date.now() + TTL_MS).toISOString();
+    await grant(offline, nextExpiry);
+    expect(states.at(-1)).toEqual({ status: 'held', expiresAt: nextExpiry, lockedBy: null });
+
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS / 2);
+    });
+    expect(offline.emitted()).toHaveLength(4);
+    await act(async () => {
+      jest.advanceTimersByTime(CELL_LOCK_ACK_TIMEOUT_MS);
+    });
+    expect(offline.emitted()).toHaveLength(5);
+  });
+
+  it('drops to idle rather than claiming a hold the server stopped confirming', async () => {
+    renderEditor();
+    const offline = await connect();
+    await grant(offline);
+
+    // The renewal and its one retry both go unanswered.
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS / 2 + CELL_LOCK_ACK_TIMEOUT_MS * CELL_LOCK_ACK_ATTEMPTS);
+    });
+
+    expect(offline.emitted()).toHaveLength(1 + CELL_LOCK_ACK_ATTEMPTS);
+    // Not a frozen `held` with an `expiresAt` in the past: the server released
+    // this cell, and a form that still says otherwise is the stale "právě
+    // upravuje …" the lock exists to prevent.
+    expect(states.at(-1)).toEqual({ status: 'idle', expiresAt: null, lockedBy: null });
+
+    // And nothing keeps asking.
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS * 4);
+    });
+    expect(offline.emitted()).toHaveLength(1 + CELL_LOCK_ACK_ATTEMPTS);
+  });
+
+  it('does not leave a form stuck at "requesting" when the first ack is lost', async () => {
+    renderEditor();
+    const offline = await connect();
+    expect(states.at(-1)).toEqual({ status: 'requesting', expiresAt: null, lockedBy: null });
+
+    await act(async () => {
+      jest.advanceTimersByTime(CELL_LOCK_ACK_TIMEOUT_MS * CELL_LOCK_ACK_ATTEMPTS);
+    });
+
+    expect(offline.emitted()).toHaveLength(CELL_LOCK_ACK_ATTEMPTS);
+    expect(states.at(-1)).toEqual({ status: 'idle', expiresAt: null, lockedBy: null });
   });
 
   it('drops an acknowledgement that fails its schema instead of scheduling on it', async () => {
