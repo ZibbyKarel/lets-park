@@ -2,8 +2,8 @@
 
 Founded by Task 18 (`libs/form`), the first of a run of Tasks 18–22 that progressively
 establishes the rest of `WRAPPED_LIBRARIES`. Task 19 added `libs/api-client` and
-`libs/query`; `libs/realtime-client` and `libs/auth` are still to come. Each wrapper adds its
-own section here, not a new file.
+`libs/query`, Task 20 `libs/auth`, Task 21 `libs/realtime-client`; `libs/calendar-export` is
+still to come. Each wrapper adds its own section here, not a new file.
 
 ## What a wrapper lib is and why it's mandatory
 
@@ -502,3 +502,152 @@ refresher rather than module-global precisely so that no test-only reset hook wa
 `next-auth`, so this task added **nothing** to `eslint.config.mjs`. `@auth/core` was
 deliberately not allow-listed either: every type this lib needs is re-exported by `next-auth`
 itself (`Session`, `Account`, `NextAuthConfig`) or by `next-auth/jwt` (`JWT`).
+
+## `libs/realtime-client` — Socket.io (Task 21)
+
+`@lets-park/realtime-client` is the only place in the workspace allowed to import
+`socket.io-client`, and within it, exactly one file does: `src/lib/socket.ts`. It is a
+**type:util, scope:web** lib with one entry point.
+
+Everything a feature needs to watch a day, hold a cell or read a broadcast is re-exported,
+and every event name and payload type is derived from `@lets-park/contract/realtime` — so
+there is no way to emit or listen for something the contract does not declare, and no payload
+shape written down twice.
+
+| export | what it is |
+| --- | --- |
+| `RealtimeProvider` | the one connection, in context. Rendered once, in `apps/web`'s provider boundary |
+| `useRealtimeConnection` | **creates** the socket — the handshake token, the status, the teardown. `RealtimeProvider` is this plus a context |
+| `useRealtime` | **reads** the connection. Throws outside a provider rather than silently doing nothing |
+| `useRealtimeEvent` | one server → client event, payload already parsed against its contract schema |
+| `useDayRoom` | joins one day's room, and rejoins it after every reconnect |
+| `useCellLock` | the editing hold: take, renew, release |
+| `createRealtimeSocket` | the factory, for the app's own composition and for tests outside React |
+| `parseServerEvent` / `parseAck` | the parsing layer on its own |
+| `AccessTokenProvider` | re-exported from `@lets-park/api-client`, not redeclared — see below |
+
+One creator, one reader. A feature cannot open a second connection by rendering a component
+twice.
+
+### Usage
+
+```tsx
+'use client';
+
+export function Providers({ children }: { children: ReactNode }) {
+  const getAccessToken = useAccessTokenProvider();       // @lets-park/auth/client
+  const { status } = useSession();
+
+  return (
+    <RealtimeProvider
+      url={apiOrigin}
+      getAccessToken={getAccessToken}
+      enabled={status === 'authenticated'}
+      onInvalidPayload={(report) => logger.warn(report, 'realtime payload rejected')}
+    >
+      {children}
+    </RealtimeProvider>
+  );
+}
+
+// anywhere below it
+useDayRoom(date);
+useRealtimeEvent('reservation:created', ({ parkingSpotId, reservation }) => { … });
+const { status, lockedBy } = useCellLock({ date, parkingSpotId, enabled: isFormOpen });
+```
+
+`doc/realtime.md` is the full client-side reference — the handshake, rooms, parsing, and the
+cell lock's three guarantees. Only what is specific to *being a wrapper* is repeated here.
+
+### The token seam is imported, not redeclared
+
+`AccessTokenProvider` is defined once, in `libs/api-client`, and both `libs/auth` (which
+produces one) and `libs/realtime-client` (which consumes one) import it from there. That is
+deliberate: the HTTP client and the socket must not drift into two different ideas of what
+the seam is, because the drift that matters — "the socket takes a string, the client takes a
+function" — is exactly what would make a long-lived socket pin an expired token.
+
+It is an `import type`, so nothing from `@orpc` reaches the realtime bundle or the Jest
+runtime. It does create a workspace edge (`realtime-client → api-client`), which
+`type:util → type:util` permits and which forms no cycle: `libs/auth` also depends on
+`libs/api-client`, and `libs/realtime-client` does not depend on `libs/auth`.
+
+### No allow-list change, and no `eslint.config.mjs` change at all
+
+`WRAPPED_LIBRARIES` already named `libs/realtime-client` as `socket.io-client`'s owner, so
+both the global ban and this lib's exemption were generated before the lib existed. Nothing
+was added to `NPM_ALLOWLIST`, and `libs/realtime-client/eslint.config.mjs` is the generator's
+default — it sets **no** `no-restricted-imports` of its own, so the root's copy is not
+replaced. (That rule is a single rule: a lib-local config that sets it wins outright and
+silently switches the wrapper ban off for that lib. `libs/design-system/{primitives,tokens}`
+spread `restrictWrappedLibraries().patterns` back in for exactly that reason.)
+
+`socket.io-parser` was **not** allow-listed either, although the test fixture needs
+Socket.io's numeric packet type codes to feed an inbound packet. It discovers them from the
+installed client instead — see below.
+
+### Five probes, all exercised
+
+Read the config and you learn what it says; run it and you learn what it does. All five
+probe files were written, linted, and deleted.
+
+| probe | expected | result |
+| --- | --- | --- |
+| `libs/realtime-client/src/probe-owner.ts` imports `socket.io-client` | passes | `Successfully ran target lint for project realtime-client` |
+| `libs/query/src/lib/probe-outsider.ts` imports it | fails, naming the wrapper | `Do not import "socket.io-client" directly — use the wrapper lib @lets-park/realtime-client (libs/realtime-client)` |
+| `apps/web/src/probe-app.ts` imports it | fails, naming the wrapper | same message |
+| `libs/realtime-client/src/probe-allowlist.ts` imports `axios` | fails | `A project tagged with "type:util" is not allowed to import "axios"` |
+| `libs/realtime-client/src/probe-nextauth.ts` imports `next-auth/react` | fails, naming `libs/auth` | `Do not import "next-auth" directly — use the wrapper lib @lets-park/auth (libs/auth)` |
+
+The fourth is the one that would have caught an untagged lib — an untagged project is
+constrained by nothing. The fifth is the one that proves the per-wrapper override really is
+`restrictWrappedLibraries(['socket.io-client'])` and not a blanket exemption: every *other*
+wrapped package is still banned inside this directory.
+
+### Tests
+
+60 tests. The socket in all of them is a **real** `socket.io-client` socket: only the
+transport is replaced (`manager.open()` → no-op, `manager._packet()` → capture), while
+`Socket.onopen`, `Socket.onpacket`, `Socket.onclose`, `emit`'s buffering and the
+acknowledgement registry run the library's own code, driven through the manager's real
+`open` / `close` / `packet` events — which is what `Socket.subEvents()` subscribes to. A
+reconnect in these tests is the same event the reconnect timer fires in production.
+
+Even the numeric packet type codes are **discovered rather than written down**:
+`discoverPacketTypes()` makes the installed client emit a CONNECT (by opening), an EVENT (by
+emitting) and an ACK (by acknowledging an inbound event carrying an id), and reads the codes
+off its own output. Hard-coding `2` for EVENT would have been a number the fixture believes
+that nothing checks — and it is why no `socket.io-parser` allow-list entry was needed.
+
+| file | what it verifies |
+| --- | --- |
+| `socket.spec.ts` | the token in the CONNECT packet and nowhere else (no `query`, no `extraHeaders`, no `?` in the URI); **re-read on every reconnect**; an async provider awaited; `{}` — not `{ token: undefined }` — for no session and for a rejected provider |
+| `connection.spec.tsx` | one socket, its status transitions, disconnect on unmount; `useRealtimeEvent` **parsing** (a bad `waitlistCount` and a bad uuid dropped and reported, undeclared keys stripped, unsubscribe on unmount); `useDayRoom` joining, **rejoining after a reconnect**, and swapping rooms; `useRealtime` throwing outside a provider |
+| `cell-lock.spec.tsx` | `renewDelayMs` (half the TTL, the floor, and never `NaN`); the request on connect; **the heartbeat**, and that it does not fire early; **release on unmount**, on `enabled: false` and on a cell change; the heartbeat stopped with the component; no release for a hold never acquired; no polling of a contended cell; re-acquisition after a reconnect; a schema-failing ack dropped rather than scheduled on |
+| `validation.spec.ts` | every registered event accepted, rejected as a non-object, and rejected on a broken cell ref — driven by the contract registry, with an exhaustive `Record<ServerToClientEventName, unknown>` payload table that stops compiling if the contract grows an event; ack parsing; the report carrying paths and messages but nothing from the payload; and this file's own source containing no `socket.io-client` import |
+
+Each of the four behaviours the task brief names was **mutation-checked**: the behaviour was
+deleted, the suite run, and the failure recorded. Removing the `auth` callback's re-read
+makes the reconnect test report `"token": "jwt-first"` where `"jwt-second"` was expected;
+removing the renewal timer, the release emit, and `parseServerEvent` each fail their tests
+(1, 4 and 3 tests respectively).
+
+> **A finding from writing that third test.** Unmounting the *whole* tree emits no
+> `cell:unlock` — React runs a deletion's cleanups parent-first, so the provider has already
+> disconnected the socket. That is not a leak (a dropped socket is how the gateway frees a
+> hold, and it is the path a closed tab takes), but it does mean the emit is guaranteed for
+> the case that matters — a form closing on a live page — and redundant for the case it is
+> not. The test was restructured onto the real scenario; `connection.spec.tsx` covers the
+> other half by asserting the socket is closed. Recorded in `cell-lock.ts` and
+> `doc/realtime.md`.
+
+### No ESM-transform block, and that is a finding
+
+The block `doc/decision/0020-*` describes was **not** copied a sixth time, because nothing on
+this lib's runtime path is ESM-only: `socket.io-client` 4.8.3 is `"type": "commonjs"` with
+both conditions, `zod` is dual, and `@lets-park/contract/realtime` is deliberately free of
+`@orpc` — which `libs/contract/src/realtime/no-orpc.spec.ts` enforces, and which this Jest
+config is a second, independent consequence of. `tsconfig.spec.json` does drop the
+generator's `module: commonjs`, the same way `libs/auth`'s and `libs/query`'s do
+(`doc/decision/0038-*`): *type* resolution reaches `@orpc/client` through
+`@lets-park/api-client`, and that package has no `require` condition.
