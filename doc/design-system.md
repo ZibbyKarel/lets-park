@@ -1,6 +1,6 @@
 # Design system – tokens and primitives
 
-Tasks 6 and 7 from `doc/implementation-plan.md`. This document describes the
+Tasks 6, 7 and 8 from `doc/implementation-plan.md`. This document describes the
 two bottom layers of the design system:
 
 1. **tokens** (`libs/design-system/tokens`) – values,
@@ -27,11 +27,16 @@ The triple `#fcaf00`/`#00e25a`/`#3b88ff` (colors of cars on occupied spots) is
 from `plan.md` / `doc/design/README.md` – it's a separate group of tokens and
 is **not** part of the general palette (see below).
 
-Two token groups are **derived, not copied**, from `colors_and_type.css`, and
+Three token groups are **derived, not copied**, from `colors_and_type.css`, and
 their file headers say so: `BREAKPOINTS` in `layout.ts`
-(`doc/decision/0011-breakpoints-are-derived.md`) and `CONTROLS` in
+(`doc/decision/0011-breakpoints-are-derived.md`), `CONTROLS` in
 `controls.ts` – control heights and switch geometry, read from the exported
-design (`doc/decision/0011-derived-control-tokens-and-rounding.md`).
+design (`doc/decision/0011-derived-control-tokens-and-rounding.md`) – and
+`OVERLAYS` in `overlays.ts`: the layering scale, the scrim, and the dimensions
+of dialogs, menus, the tooltip and the toast
+(`doc/decision/0052-overlay-tokens-and-one-layering-scale.md`). `overlays.ts`
+additionally records, for **every** entry, whether it comes from the design or
+was invented – neither the tooltip nor the toast appears in the design at all.
 
 ## How the tokens are put together
 
@@ -48,6 +53,7 @@ libs/design-system/tokens/
       shadows.ts               – --shadow-*
       motion.ts                 – --ease-*, --dur-*
       layout.ts                  – --container*, BREAKPOINTS (derived, see 0011)
+      overlays.ts                 – --z-*, --scrim, --modal-w-*, ... (DERIVED, see 0052)
       tokens.ts                   – DESIGN_TOKENS = everything above, combined
       generate-css.ts               – generateTokensCss(tokens) -> CSS text (a pure function)
       generate-css.spec.ts           – test that the committed tokens.css == generateTokensCss(...)
@@ -183,8 +189,8 @@ needs the concept of a "user"), so it doesn't live in the design system.
 The 8 weights of Neue Haas Grotesk Display Pro (`.otf`) are copied into
 `assets/fonts/` and used in the generated `@font-face` blocks. **The
 production-deployment license is not verified** (see `doc/design/README.md`
-and `doc/decision/0012-*`) – which is why `FONT_FAMILIES.sans` always has a
-working fallback (`Neue Haas Grotesk` → `Helvetica Neue` → `Inter` → `Arial`
+and `doc/decision/0012-otf-fonts-committed-without-verified-license.md`) –
+which is why `FONT_FAMILIES.sans` always has a working fallback (`Neue Haas Grotesk` → `Helvetica Neue` → `Inter` → `Arial`
 → `system-ui` → `sans-serif`), so the app still looks reasonable even if the
 `.otf` files had to be dropped from a production build.
 
@@ -193,8 +199,10 @@ working fallback (`Neue Haas Grotesk` → `Helvetica Neue` → `Inter` → `Aria
 # Primitives (`libs/design-system/primitives`)
 
 The package `@lets-park/design-system/primitives`, tags `type:ui`,
-`scope:web`, `ds:primitives`. Nine components, each with a **story alongside
-the component** and a Jest + Testing Library test (84 tests total).
+`scope:web`, `ds:primitives`. **Fourteen components** in two batches – nine
+form controls (Task 7) and five overlay/navigation ones (Task 8) – each with a
+**story alongside the component** and a Jest + Testing Library test (187 tests
+across 17 suites).
 
 ```
 libs/design-system/primitives/
@@ -205,11 +213,14 @@ libs/design-system/primitives/
   src/
     lib/
       cx.ts               – a class-name joiner (no clsx, three lines)
-      control-size.ts     – the shared sm|md|lg|xl scale + FOCUS_RING, PRESS_FEEDBACK
+      control-size.ts     – the shared sm|md|lg|xl scale + FOCUS_RING, INSET_FOCUS_RING, PRESS_FEEDBACK
       field.tsx           – useFieldIds() + <Field> (label / hint / error around an element)
+      dismissable-layer.tsx – the page-wide layer tree + the single Escape listener (see 0056)
+      use-focus-trap.ts   – focus trap + focus restoration (Modal only; see 0053)
       button.tsx    badge.tsx    avatar.tsx
       input.tsx     select.tsx   checkbox.tsx   radio.tsx
       switch.tsx    stepper.tsx
+      modal.tsx     dropdown.tsx tabs.tsx       tooltip.tsx    toast.tsx
       *.stories.tsx        – a story for every component
       *.spec.tsx            – a test for every component
     index.ts                 – the public API
@@ -220,14 +231,16 @@ libs/design-system/primitives/
 - **No hand-written value.** Colors, spacing, radii, and font sizes come from
   tokens via Tailwind utilities (`bg-brand-blue`, `px-4`, `rounded-cta`,
   `text-sm`); control heights via `h-[var(--control-h-lg)]`. Rounding
-  dimensions from the design is covered in `doc/decision/0011-*`.
+  dimensions from the design is covered in
+  `doc/decision/0011-derived-control-tokens-and-rounding.md`.
 - **Native elements.** Input/Select/Checkbox/Radio are real `<input>` /
   `<select>` elements, only restyled. Keyboard behavior comes from the
-  platform, not our code (`doc/decision/0012-*`).
+  platform, not our code
+  (`doc/decision/0012-focus-ring-and-native-elements-in-primitives.md`).
 - **A uniform focus ring** (`FOCUS_RING`) on every focusable element – 2px
   `--brand-blue` via `:focus-visible`. The design doesn't specify one, see
-  `doc/decision/0012-*`.
-- **The disabled state doesn't override, it replaces.** Two utilities that
+  `doc/decision/0012-focus-ring-and-native-elements-in-primitives.md`.
+- **A state's look is swapped in, not layered on.** Two utilities that
   set the same property (`bg-bg` and `bg-bg-muted`, `text-fg` and
   `text-fg-3`) have the same specificity – whichever Tailwind emits later in
   the stylesheet wins, not whichever comes later in `className`. Adding
@@ -236,12 +249,22 @@ libs/design-system/primitives/
   in the enabled branch of a ternary, so an element never carries both halves
   of a pair at once. The same applies to `checked:` – that variant overrides
   both plain utilities, so a disabled, checked Checkbox has to recolor its
-  `checked:` fill too, or it lights up brand blue.
+  `checked:` fill too, or it lights up brand blue. And it is not only about
+  `disabled`: **variants** have the same problem – an active vs. an inactive
+  tab, an open vs. a closed trigger.
   jsdom applies no stylesheet at all, so no render test catches this – the
-  invariant is guarded by `disabled-styling.spec.tsx`.
+  invariant is guarded by `disabled-styling.spec.tsx`. That spec doesn't check
+  a list of known-bad pairs but the rule itself: **no element may carry two
+  unconditional color utilities that set the same property**
+  (`bg-*` / `text-*` / `border-*`). Classification goes by the *token name*,
+  not by the prefix, so that `text-sm` (a font size) or `border-2` (a width)
+  don't fall into a color group.
 - **The error state is a message.** The `error` prop doesn't exist as a
   boolean: the error text *is* the state. It sets `aria-invalid`, the red
-  border, and `role="alert"` together, so they can't drift apart.
+  border, and `role="alert"` together, so they can't drift apart. When an
+  element is `disabled` at the same time, **the disabled state wins**: a field
+  the user cannot edit shouldn't also be shouting at them through a red
+  border.
 - **UI copy in Czech** (e.g. the Stepper's default button labels),
   **identifiers and comments in English.**
 
@@ -294,8 +317,10 @@ via a ref, since it exists only on the DOM node, not as an HTML attribute.
 **It deliberately has no `aria-invalid`** – `role="radio"` doesn't support it;
 the group carries validity instead.
 
-`RadioGroup` (`<fieldset>`): `legend` (required, the group's accessible name),
-`hint`, `error`, `horizontal`.
+`RadioGroup` is a `<fieldset role="radiogroup">`: `legend` (required, the
+group's accessible name), `hint`, `error`, `horizontal`. The explicit
+`role="radiogroup"` is both a more precise mapping than the default `group` and
+the only one of the two that supports `aria-invalid` on the group at all.
 
 ### `Badge`
 
@@ -334,11 +359,191 @@ and Space work by virtue of the element itself, and it never submits a form.
 | `label` | `string` | – (required) |
 | `formatValue` | `(v: number) => string` | – |
 | `decrementLabel` / `incrementLabel` | `string` | `'Snížit'` ("Decrease") / `'Zvýšit'` ("Increase") |
+| `size` | `ControlSize` | `'lg'` (the only size the design draws) |
 
 The value has `role="spinbutton"`, so it's reachable via Tab and operable
 with the arrow keys, Home, and End – the buttons are a mouse convenience, not
 the only way in. `formatValue` also becomes `aria-valuetext`, so the unit
 gets read out too.
+
+## Overlay and navigation primitives
+
+The five components of the second batch. They are the riskiest pieces from an
+accessibility standpoint, so two further rules apply to them:
+
+- **The keyboard is first class.** The focus trap, Escape, the arrow keys and
+  Home/End are not "nice to have" – they are the only ways anyone without a
+  mouse operates these components. They are therefore tested as **behavior**
+  (`user-event`, a real Tab and real focus), not as the presence of an
+  attribute.
+- **Layering comes from one scale**, `--z-*`
+  (`doc/decision/0052-overlay-tokens-and-one-layering-scale.md`). No component
+  invents a `z-index` of its own.
+
+These components also have more conditional states than the form controls (an
+active vs. an inactive tab, an open vs. a closed trigger, five toast tones), so
+the swap-don't-layer rule above bites here hardest: every state supplies the
+**whole** set of colors for every property it sets.
+
+### Escape and the layer tree
+
+Every overlay here that Escape can dismiss – `Modal` (through `useFocusTrap`),
+`Dropdown` and `Tooltip` – registers with **one page-wide layer tree**
+(`dismissable-layer.tsx`) while it is open. That tree owns the single `keydown`
+listener on `document`; no overlay binds an Escape listener of its own. `Tabs`
+and `Toast` are not Escape-dismissable and are not in it.
+
+Nesting is established at registration time from React context, **not** from
+DOM containment: `Modal` portals to `document.body`, so two modals nested in
+JSX are DOM siblings and `element.contains()` cannot see the nesting at all.
+
+One press dismisses **exactly one** layer: the deepest one on the path the user
+is in; among unrelated sibling leaves, whichever holds `document.activeElement`;
+and failing both, the last registered. The layer beneath is reached by pressing
+Escape again. The focus trap is layer-aware for the same reason – an outer trap
+pauses while another trapping layer is registered above it. The full reasoning,
+including the three earlier attempts this replaced, is in
+`doc/decision/0056-escape-goes-to-the-innermost-open-layer.md`.
+
+### `Modal`
+
+| prop | type | default |
+| --- | --- | --- |
+| `open` | `boolean` | – (required) |
+| `onClose` | `() => void` | – (required) |
+| `title` | `ReactNode` | – (required; it is also the accessible name) |
+| `description` | `ReactNode` | – (wired to `aria-describedby`) |
+| `eyebrow` | `ReactNode` | – (a pill above the title) |
+| `footer` | `ReactNode` | – (right-aligned) |
+| `size` | `'sm' \| 'md'` | `'sm'` (460 / 620 px) |
+| `closeOnScrimClick` | `boolean` | `true` |
+| `closeLabel` | `string` | `'Zavřít'` ("Close") |
+| `hideCloseButton` | `boolean` | `false` |
+
+A `<div role="dialog" aria-modal="true">` in a portal on `document.body`.
+**It never closes itself** – the caller owns `open`, and `onClose` is called for
+all three ways out (Escape, the scrim, the ×).
+
+What it does for accessibility:
+
+- **A real focus trap.** Tab and Shift+Tab cycle inside; if focus ends up
+  outside, the next Tab pulls it back. A dialog with no controls at all focuses
+  itself (`tabIndex={-1}`), so a screen reader isn't left on the page behind it.
+- **Focus restoration** to the element that opened the dialog.
+- **Escape closes it** – as the layer tree's chosen target, so a dropdown or
+  tooltip open inside the dialog takes the press first.
+- **It locks the page's scroll** underneath – scrolling is the one way a pointer
+  can still reach content the scrim is covering.
+- "Content behind is inert" is handled by the trio of `aria-modal` + trap +
+  covering scrim, not by mutating sibling nodes; **why**, along with why this is
+  not a native `<dialog>`, is in
+  `doc/decision/0053-modal-focus-trap-is-manual-not-native-dialog.md`.
+
+### `Dropdown`
+
+| prop | type | default |
+| --- | --- | --- |
+| `trigger` | `ReactNode` | – (content of the button the component owns) |
+| `triggerLabel` | `string` | – (the trigger's name, when it isn't self-describing) |
+| `items` | `DropdownItem[]` | – (required) |
+| `onSelect` | `(id: string) => void` | – |
+| `header` | `ReactNode` | – (a non-focusable block above the items) |
+| `label` | `string` | the trigger's name |
+| `align` | `'start' \| 'end'` | `'end'` |
+
+`DropdownItem`: `id`, `separator?`, `label`, `trailing?`, `danger?`,
+`disabled?`. With `separator: true` the other fields are ignored and the item
+renders as a `DropdownSeparator` (a thin rule, `role="separator"`) instead of a
+`menuitem` — the arrow keys skip it just as they skip disabled items.
+
+The trigger carries `aria-haspopup="menu"` + `aria-expanded` +
+`aria-controls`, the panel is `role="menu"`, the items `role="menuitem"`.
+Keyboard: `ArrowDown` opens on the first item, `ArrowUp` on the last; inside,
+the arrows wrap, `Home`/`End` jump to the ends, `Enter`/Space selects, `Escape`
+closes and returns focus to the trigger, `Tab` closes and moves past the
+trigger. Disabled items are skipped. A click outside closes.
+
+**Roving tabindex** – only ever one item is in the tab order, so the menu is one
+stop rather than N. **Type-ahead is deliberately absent**
+(`doc/decision/0054-keyboard-navigation-for-dropdown-and-tabs.md`).
+
+It is not a portal (unlike `Modal`), so `z-[var(--z-dropdown)]` applies locally,
+within the trigger's stacking context.
+
+### `Tabs`
+
+| prop | type | default |
+| --- | --- | --- |
+| `items` | `TabItem[]` | – (required) |
+| `value` / `defaultValue` / `onValueChange` | `string` / `(id: string) => void` | uncontrolled, from the first enabled tab |
+| `label` | `string` | – (the strip's name) |
+
+`TabItem`: `id`, `label`, `content?`, `disabled?`.
+
+`role="tablist"` / `tab` / `tabpanel`, with `aria-selected` on **every** tab
+(including `false`), and `aria-controls` and `aria-labelledby` binding tab to
+panel in both directions. Keyboard: `←`/`→` move focus **and the selection**
+(automatic activation), `Home`/`End` jump to the ends, `↑`/`↓` are left to the
+page. Roving tabindex, so `Tab` out of the strip goes straight into the panel;
+the panel has `tabIndex={0}` so it is reachable even when it contains nothing
+focusable. The decisions are in
+`doc/decision/0054-keyboard-navigation-for-dropdown-and-tabs.md`.
+
+The selected tab's underline is a `border-bottom` of `--tab-indicator-h` (3px)
+on **every** tab – the unselected ones use `border-transparent` – so nothing
+shifts when the selection changes.
+
+### `Tooltip`
+
+| prop | type | default |
+| --- | --- | --- |
+| `content` | `ReactNode` | – (required) |
+| `children` | `ReactElement` | – (exactly one focusable element) |
+| `placement` | `'top' \| 'bottom'` | `'top'` |
+
+It opens on **focus as well as hover**, and closes on blur, pointer leave and
+`Escape` (without moving focus). Because Escape goes through the layer tree, a
+bubble merely hovered while the keyboard is in an unrelated menu does not take
+the press away from that menu – it closes on the press after.
+`aria-describedby` is written **onto the child itself** via `cloneElement`,
+merged with whatever the caller already set – on a wrapper it would describe
+nothing, because a screen reader reads the description off the focused element.
+
+It is a **description, not a name**: an element whose only name would come from
+its tooltip needs an `aria-label`. The bubble is mounted on demand, so while
+hidden it is not in the accessibility tree either, and it adds no stop of its
+own to the tab order.
+
+### `Toast` and `ToastRegion`
+
+| prop (`Toast`) | type | default |
+| --- | --- | --- |
+| `children` | `ReactNode` | – (required; the message itself) |
+| `title` | `ReactNode` | – (a bold first line) |
+| `tone` | `'neutral' \| 'info' \| 'success' \| 'warning' \| 'danger'` | `'info'` |
+| `icon` | `ReactNode` | – (decorative, `aria-hidden`) |
+| `onDismiss` | `() => void` | – (only this makes the × button appear) |
+| `dismissLabel` | `string` | `'Zavřít'` ("Close") |
+
+| prop (`ToastRegion`) | type | default |
+| --- | --- | --- |
+| `children` | `ReactNode` | – (`Toast` elements; none is fine) |
+| `placement` | `'top-right' \| 'bottom-right' \| 'bottom-center'` | `'top-right'` |
+| `label` | `string` | – (the region's name) |
+
+**It announces without stealing focus** – that is the whole point of a toast.
+The live region is the **`Toast` itself**: `role="status"` (polite) for every
+tone but `danger`, which gets `role="alert"` (assertive) – the same shape common
+toast libraries use. Render `ToastRegion` **unconditionally, empty if need
+be** – not for the sake of the live region (`role="region"` is deliberately not
+live itself, so a message isn't read twice), but so the application has a stable
+node to insert toasts into. Whether a real screen reader actually reads it is
+something this test suite cannot verify – jsdom has no accessibility tree to
+consume it.
+
+A queue, a timer and an imperative `toast.success(...)` are **not** here and
+will not be: that is application state, not design-system state
+(`doc/decision/0055-toast-and-tooltip-are-presentational.md`).
 
 ## Storybook
 
@@ -348,8 +553,11 @@ npx nx run design-system-primitives:build-storybook   # static build into dist/
 ```
 
 The configuration is written by hand, without `@nx/storybook` and without
-addons – why, is covered in `doc/decision/0013-*`. Note: `build-storybook` is
-**not** part of `npm run build`; it has to be added to CI separately.
+addons – why, is covered in
+`doc/decision/0013-storybook-10-without-nx-storybook-and-without-addons.md`.
+`build-storybook` **is** part of `npm run build`
+(`nx run-many -t build,build-storybook`) and of `npm run affected`, so a broken
+story fails in CI rather than only on a manual run.
 
 `preview.css` imports `theme.css` (not `tokens.css` – that alone gives
 variables but no Tailwind utilities) and adds `@source '../src'` so Tailwind
@@ -368,3 +576,10 @@ that contains `@import "tailwindcss"`, which lives in the tokens lib.
 4. Export it from `src/index.ts`.
 5. `npm run lint && npm run typecheck && npm run test` and
    `npx nx run design-system-primitives:build-storybook`.
+
+An overlay that has to be dismissable by Escape has one extra step: register it
+with the layer tree (`useDismissableLayer`, passing `active` and its outermost
+node) and render a `DismissableLayerProvider` with the returned node around its
+own content. Binding an Escape listener of its own instead is the defect
+`doc/decision/0056-escape-goes-to-the-innermost-open-layer.md` exists to
+prevent.

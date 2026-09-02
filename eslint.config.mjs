@@ -65,7 +65,16 @@ const WRAPPED_LIBRARIES = {
  * which is why both the global block and the overrides are generated from the
  * single `WRAPPED_LIBRARIES` map above.
  */
-function restrictWrappedLibraries(allowedPackages = []) {
+/**
+ * Exported so that a lib-local config can *compose* these patterns rather than
+ * replace them. `no-restricted-imports` is a single rule: a later flat-config
+ * block that sets it wins outright, so a lib adding its own bans without
+ * spreading these in would silently switch the wrapper ban off for itself —
+ * which is exactly the kind of enforcement-shaped hole this file has been
+ * caught in before. `libs/design-system/{primitives,tokens}/eslint.config.mjs`
+ * both spread `restrictWrappedLibraries().patterns` for that reason.
+ */
+export function restrictWrappedLibraries(allowedPackages = []) {
   return {
     patterns: Object.entries(WRAPPED_LIBRARIES)
       .filter(([pkg]) => !allowedPackages.includes(pkg))
@@ -333,6 +342,25 @@ const DEP_CONSTRAINTS = [
   // tokens -> primitives -> compounds, one direction only.
   // `type:ui` alone cannot express this because all three layers
   // carry that tag.
+  //
+  // These entries constrain **workspace** dependencies only, and deliberately
+  // carry no `allowedExternalImports`. Task 8's branch had tighter npm
+  // allow-lists here, on the theory that Nx ANDs constraints across dimensions
+  // so a second list would intersect and could only narrow. **That was probed
+  // at merge and it is false.** With `clsx` on `NPM_ALLOWLIST.ui` and absent
+  // from a `ds:primitives` list, an `import clsx from 'clsx'` inside
+  // `libs/design-system/primitives` produced **no error at all**: a matching
+  // constraint that permits the package is enough, so the second list never
+  // narrows anything. Carrying it would have been a rule that reads as
+  // enforcement and enforces nothing — the exact failure this file has already
+  // been caught in four times.
+  //
+  // The npm surface therefore stays on the `type:` dimension
+  // (`doc/decision/0017-*`), and the design system's tighter surface is
+  // enforced where it actually fires: `no-restricted-imports` in
+  // `libs/design-system/primitives/eslint.config.mjs` and
+  // `libs/design-system/tokens/eslint.config.mjs`, each with a probe recorded
+  // beside it.
   {
     sourceTag: 'ds:tokens',
     onlyDependOnLibsWithTags: ['type:util'],

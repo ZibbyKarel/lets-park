@@ -95,7 +95,7 @@ describe('RadioGroup', () => {
       </RadioGroup>
     );
 
-    expect(screen.getByRole('group', { name: 'Jak často' })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'Jak často' })).toBeInTheDocument();
   });
 
   it('carries the invalid state and the error message for the group', () => {
@@ -105,7 +105,7 @@ describe('RadioGroup', () => {
       </RadioGroup>
     );
 
-    const group = screen.getByRole('group', { name: 'Jak často' });
+    const group = screen.getByRole('radiogroup', { name: 'Jak často' });
     expect(group).toHaveAttribute('aria-invalid', 'true');
     expect(group).toHaveAccessibleDescription('Vyber prosím možnost.');
     expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -118,6 +118,6 @@ describe('RadioGroup', () => {
       </RadioGroup>
     );
 
-    expect(screen.getByRole('group')).toHaveAccessibleDescription('Změnit můžeš kdykoli.');
+    expect(screen.getByRole('radiogroup')).toHaveAccessibleDescription('Změnit můžeš kdykoli.');
   });
 });

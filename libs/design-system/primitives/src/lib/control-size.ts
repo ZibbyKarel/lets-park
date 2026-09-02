@@ -15,6 +15,17 @@ export const CONTROL_HEIGHT: Record<ControlSize, string> = {
   xl: 'h-[var(--control-h-xl)]',
 };
 
+/**
+ * Track width for square controls (an icon button whose box matches the row
+ * height). Same token as the height, so the two can never drift apart.
+ */
+export const CONTROL_SQUARE_WIDTH: Record<ControlSize, string> = {
+  sm: 'w-[var(--control-h-sm)]',
+  md: 'w-[var(--control-h-md)]',
+  lg: 'w-[var(--control-h-lg)]',
+  xl: 'w-[var(--control-h-xl)]',
+};
+
 /** Type size per step. */
 export const CONTROL_TEXT: Record<ControlSize, string> = {
   sm: 'text-sm',
@@ -48,6 +59,17 @@ export const FIELD_PADDING_X: Record<ControlSize, string> = {
  */
 export const FOCUS_RING =
   'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue';
+
+/**
+ * The same ring, drawn *inside* the element's box rather than around it.
+ *
+ * For items that sit flush against a panel edge — menu items, tabs — an outward
+ * ring is clipped by the panel or overlaps the neighbour above. The offset is
+ * the negative of `FOCUS_RING`'s, off the same numeric scale, so the two rings
+ * are the same weight and the same colour and only their side differs.
+ */
+export const INSET_FOCUS_RING =
+  'outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-blue';
 
 /**
  * Press feedback, taken verbatim from the design's `style-active` rules

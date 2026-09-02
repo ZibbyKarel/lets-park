@@ -3,6 +3,7 @@ import { COLORS } from './colors';
 import { CONTROLS } from './controls';
 import { LAYOUT } from './layout';
 import { MOTION } from './motion';
+import { OVERLAYS } from './overlays';
 import { RADIUS } from './radius';
 import { SHADOWS } from './shadows';
 import { SPACING } from './spacing';
@@ -24,6 +25,7 @@ export const DESIGN_TOKENS = {
   motion: MOTION,
   layout: LAYOUT,
   controls: CONTROLS,
+  overlays: OVERLAYS,
 } as const;
 
 export type DesignTokens = typeof DESIGN_TOKENS;

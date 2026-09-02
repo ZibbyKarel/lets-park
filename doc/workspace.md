@@ -89,9 +89,9 @@ npx nx run web-e2e:e2e      # Playwright; starts the dev server itself
 npx nx run api-e2e:e2e      # Jest; starts api:serve itself
 ```
 
-Likewise, **Storybook isn't part of `npm run build`** – it must be added to CI
-separately (`nx run-many -t build-storybook`), otherwise a broken story is
-only noticed by hand:
+**Storybook is part of `npm run build`** (`nx run-many -t build,build-storybook`)
+and of `npm run affected`, so a broken story is caught in CI rather than only by
+hand. The individual targets for working on the design system:
 
 ```bash
 npx nx run design-system-primitives:storybook         # dev server, port 4400
@@ -187,15 +187,38 @@ on `libs/shared-types` (`scope:shared`), but **not** on `libs/i18n`
 
 ### The `ds:` dimension – design-system layers
 
-| tag | may depend on |
+| tag | may depend on (workspace libs) |
 | --- | --- |
 | `ds:tokens` | `type:util` |
 | `ds:primitives` | `ds:tokens`, `type:util` |
 | `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` |
 
-Enforces the direction tokens → primitives → compounds. `type:ui` alone isn't
-enough for this, since all three layers carry it – details in
-`doc/decision/0007-*`.
+This dimension enforces the direction tokens → primitives → compounds.
+`type:ui` alone isn't enough for it, since all three layers carry that tag –
+details in `doc/decision/0007-*`.
+
+These entries carry **no** `allowedExternalImports`, and that is deliberate.
+Task 8's branch put a tighter npm list on `ds:tokens` and `ds:primitives`, on
+the theory that because Nx ANDs the dimensions a second list must be an
+intersection and could only narrow. **That theory was probed at merge and it is
+false.** With `clsx` on `type:ui`'s list and absent from a `ds:primitives` list,
+an `import clsx from 'clsx'` inside `libs/design-system/primitives` produced no
+error at all: one matching constraint that permits a package is enough, so the
+second list never narrows anything. Shipping it would have been a rule that
+reads as enforcement and enforces nothing – which is the failure mode
+`eslint.config.mjs` has already been caught in four times, and the reason this
+document tells you to probe a boundary rule rather than read it.
+
+The npm surface therefore stays on the `type:` dimension
+(`doc/decision/0017-*`). The design system's genuinely tighter surface – it is
+meant to be a closed layer with a near-zero runtime dependency footprint, and
+`cx.ts` exists precisely so that no class-name helper has to be installed – is
+enforced by `no-restricted-imports` in `libs/design-system/primitives/eslint.config.mjs`
+and `libs/design-system/tokens/eslint.config.mjs`, where it does fire. Each of
+those files carries the probe that proves it, and each spreads the wrapper-ban
+patterns back in: `no-restricted-imports` is a single rule, so a lib-local block
+that sets it replaces the root's copy outright, and a lib adding its own bans
+without spreading those in would silently switch the wrapper ban off for itself.
 
 ---
 
