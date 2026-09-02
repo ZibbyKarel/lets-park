@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { Button } from './button';
+import { Dropdown } from './dropdown';
 import { Input } from './input';
 import { Tooltip } from './tooltip';
 
@@ -65,6 +66,32 @@ export const OnAField: Story = {
     <div className="w-80">
       <Tooltip {...args}>
         <Input label="Kód" defaultValue="REF-4821" />
+      </Tooltip>
+    </div>
+  ),
+};
+
+/**
+ * Escape belongs to whatever holds the keyboard, not to whatever appeared last.
+ *
+ * To try it: open the menu with the button on the left (the arrow keys move
+ * between its items), then rest the mouse on the trigger on the right so its
+ * bubble appears without taking focus. The first Escape closes the **menu**,
+ * because that is where the keyboard is; the second closes the bubble. See
+ * `doc/decision/0024-escape-goes-to-the-innermost-open-layer.md`.
+ */
+export const EscapeAgainstAnOpenMenu: Story = {
+  render: (args) => (
+    <div className="flex items-center gap-8">
+      <Dropdown
+        trigger="Nabídka"
+        items={[
+          { id: 'edit', label: 'Upravit' },
+          { id: 'copy', label: 'Duplikovat' },
+        ]}
+      />
+      <Tooltip {...args} content="Zobrazí se při najetí myší.">
+        <Button variant="secondary">Detail</Button>
       </Tooltip>
     </div>
   ),
