@@ -58,53 +58,54 @@ export const Dismissible: Story = {
   args: { onDismiss: () => undefined, title: 'Uloženo' },
 };
 
+function InARegionDemo() {
+  const [items, setItems] = useState<{ id: number; tone: ToastTone }[]>([]);
+  const [nextId, setNextId] = useState(1);
+
+  const push = (tone: ToastTone) => {
+    setItems((current) => [...current, { id: nextId, tone }]);
+    setNextId((current) => current + 1);
+  };
+
+  return (
+    <div className="flex min-h-64 flex-col items-start gap-4">
+      <div className="flex gap-3">
+        <Button onClick={() => push('success')}>Přidat úspěch</Button>
+        <Button variant="danger" onClick={() => push('danger')}>
+          Přidat chybu
+        </Button>
+      </div>
+      <p className="max-w-96 text-sm text-fg-3">
+        Po kliknutí zůstane focus na tlačítku – oznámení se přečte, ale focus nekrade.
+      </p>
+
+      <ToastRegion label="Oznámení">
+        {items.map((item) => (
+          <Toast
+            key={item.id}
+            tone={item.tone}
+            title={item.tone === 'danger' ? 'Chyba' : 'Hotovo'}
+            onDismiss={() =>
+              setItems((current) => current.filter((candidate) => candidate.id !== item.id))
+            }
+          >
+            {item.tone === 'danger' ? 'Uložení selhalo.' : 'Změny uloženy.'}
+          </Toast>
+        ))}
+      </ToastRegion>
+    </div>
+  );
+}
+
 /**
  * The real shape: a `ToastRegion` that is rendered unconditionally and empty,
- * with toasts pushed into it. The region has to exist *before* the message
- * does, or a live region frequently never announces it — and the toast never
- * takes focus, so the button below stays where the user left it.
+ * with toasts pushed into it. Each `Toast` carries its own live region
+ * (`role="status"`/`"alert"`); the region itself deliberately does not, so the
+ * two cannot double-announce — and the toast never takes focus, so the button
+ * below stays where the user left it.
  */
 export const InARegion: Story = {
-  render: () => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const [items, setItems] = useState<{ id: number; tone: ToastTone }[]>([]);
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const [nextId, setNextId] = useState(1);
-
-    const push = (tone: ToastTone) => {
-      setItems((current) => [...current, { id: nextId, tone }]);
-      setNextId((current) => current + 1);
-    };
-
-    return (
-      <div className="flex min-h-64 flex-col items-start gap-4">
-        <div className="flex gap-3">
-          <Button onClick={() => push('success')}>Přidat úspěch</Button>
-          <Button variant="danger" onClick={() => push('danger')}>
-            Přidat chybu
-          </Button>
-        </div>
-        <p className="max-w-96 text-sm text-fg-3">
-          Po kliknutí zůstane focus na tlačítku – oznámení se přečte, ale focus nekrade.
-        </p>
-
-        <ToastRegion label="Oznámení">
-          {items.map((item) => (
-            <Toast
-              key={item.id}
-              tone={item.tone}
-              title={item.tone === 'danger' ? 'Chyba' : 'Hotovo'}
-              onDismiss={() =>
-                setItems((current) => current.filter((candidate) => candidate.id !== item.id))
-              }
-            >
-              {item.tone === 'danger' ? 'Uložení selhalo.' : 'Změny uloženy.'}
-            </Toast>
-          ))}
-        </ToastRegion>
-      </div>
-    );
-  },
+  render: () => <InARegionDemo />,
 };
 
 /** The three positions the region can sit in. */

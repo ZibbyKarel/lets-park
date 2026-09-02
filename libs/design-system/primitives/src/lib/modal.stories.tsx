@@ -56,7 +56,7 @@ export const Default: Story = {
         </>
       }
     >
-      <Input label="Kód" defaultValue="ABC 123" />
+      <Input label="Kód" defaultValue="REF-4821" />
     </Demo>
   ),
 };
@@ -77,7 +77,7 @@ export const WithForm: Story = {
     >
       <div className="flex flex-col gap-4">
         <Input label="Jméno" defaultValue="Karel Zíbar" />
-        <Input label="Kód" defaultValue="ABC 123" />
+        <Input label="Kód" defaultValue="REF-4821" />
         <Select label="Kategorie">
           <option value="1">První</option>
           <option value="2">Druhá</option>
@@ -92,9 +92,9 @@ export const WithEyebrow: Story = {
   render: (args) => (
     <Demo
       {...args}
-      eyebrow="Obsazeno"
-      title="Položka B12"
-      description="Nikdo nečeká — budeš první v řadě."
+      eyebrow="Otevřeno"
+      title="Žádost #482"
+      description="Průměrná doba odezvy je dnes 12 minut."
       footer={<Button>Potvrdit</Button>}
     />
   ),

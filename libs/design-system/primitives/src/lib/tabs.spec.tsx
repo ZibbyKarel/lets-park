@@ -5,7 +5,7 @@ import { Tabs, type TabItem } from './tabs';
 
 const ITEMS: TabItem[] = [
   { id: 'users', label: 'Uživatelé', content: <p>Obsah uživatelů</p> },
-  { id: 'spots', label: 'Místa', content: <p>Obsah míst</p> },
+  { id: 'reports', label: 'Sestavy', content: <p>Obsah sestav</p> },
   { id: 'rules', label: 'Pravidla', content: <p>Obsah pravidel</p> },
 ];
 
@@ -30,7 +30,7 @@ describe('Tabs', () => {
     render(<Tabs items={ITEMS} />);
 
     expect(screen.getByText('Obsah uživatelů')).toBeInTheDocument();
-    expect(screen.queryByText('Obsah míst')).not.toBeInTheDocument();
+    expect(screen.queryByText('Obsah sestav')).not.toBeInTheDocument();
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
   });
 
@@ -48,9 +48,9 @@ describe('Tabs', () => {
     screen.getByRole('tab', { name: 'Uživatelé' }).focus();
 
     await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: 'Místa' })).toHaveFocus();
-    expect(screen.getByRole('tab', { name: 'Místa' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('Obsah míst')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Sestavy' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Sestavy' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Obsah sestav')).toBeInTheDocument();
 
     await user.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'Pravidla' })).toHaveFocus();
@@ -108,7 +108,7 @@ describe('Tabs', () => {
     await user.keyboard('{ArrowRight}');
 
     expect(tabbable()).toHaveLength(1);
-    expect(tabbable()[0]).toHaveAccessibleName('Místa');
+    expect(tabbable()[0]).toHaveAccessibleName('Sestavy');
   });
 
   it('is one stop in the page tab order: Tab goes from the strip into the panel', async () => {
@@ -162,9 +162,9 @@ describe('Tabs', () => {
     const onValueChange = jest.fn();
     render(<Tabs items={ITEMS} value="users" onValueChange={onValueChange} />);
 
-    await user.click(screen.getByRole('tab', { name: 'Místa' }));
+    await user.click(screen.getByRole('tab', { name: 'Sestavy' }));
 
-    expect(onValueChange).toHaveBeenCalledWith('spots');
+    expect(onValueChange).toHaveBeenCalledWith('reports');
     expect(screen.getByRole('tab', { name: 'Uživatelé' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Obsah uživatelů')).toBeInTheDocument();
   });

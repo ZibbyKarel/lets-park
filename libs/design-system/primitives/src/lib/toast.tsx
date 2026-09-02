@@ -66,10 +66,19 @@ export interface ToastProps {
  * in isolation. `ToastRegion` below is the positioning shell; the app supplies
  * the list. See `doc/decision/0023-toast-je-prezentacni.md`.
  *
- * For a live region to announce at all it has to be **in the DOM before the
- * message is**: a region that appears already containing text is frequently not
- * read. Render `ToastRegion` unconditionally and let the list of toasts inside
- * it be empty.
+ * **This `Toast` is itself the live region, mounted already containing its
+ * text** — the same shape mainstream toast libraries ship. The stricter rule
+ * that a live region must exist *before* the message arrives, or it is
+ * frequently never announced, is real, but it describes mutating text inside
+ * a region that was already sitting in the DOM; it is not a claim this
+ * component makes about *inserting a whole new* `role="status"`/`"alert"`
+ * element, which is what happens here. `ToastRegion` is mounted unconditionally
+ * and empty for a simpler reason — it gives the app a stable node to render
+ * toasts into — not because doing so makes it a live region itself; see its
+ * own docstring for why it deliberately is not one. Whether a given screen
+ * reader actually announces this is not something this test suite can verify:
+ * jsdom has no accessibility tree consumer, and real assistive-technology
+ * behaviour here varies.
  */
 export function Toast({
   title,
@@ -154,6 +163,13 @@ export interface ToastRegionProps {
 
 /**
  * Fixed shell that positions a stack of toasts.
+ *
+ * Deliberately **not** a live region itself: each `Toast` already carries its
+ * own (`role="status"`/`"alert"`, see its docstring), and nesting a second live
+ * region around it risks a double announcement on the screen readers that
+ * treat container mutation and element insertion as separate events. Mounted
+ * unconditionally and rendered empty so it is a stable, pre-existing node for
+ * the app to push toasts into — not for any live-region reason.
  *
  * `pointer-events-none` on the shell with `pointer-events-auto` on each child
  * keeps the empty space around the stack clickable — otherwise an invisible

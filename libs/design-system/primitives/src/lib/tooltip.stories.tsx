@@ -60,11 +60,11 @@ export const LongText: Story = {
 
 /** It describes any focusable element, not just buttons. */
 export const OnAField: Story = {
-  args: { content: 'Formát ABC 123.' },
+  args: { content: 'Formát REF-4821.' },
   render: (args) => (
     <div className="w-80">
       <Tooltip {...args}>
-        <Input label="Kód" defaultValue="ABC 123" />
+        <Input label="Kód" defaultValue="REF-4821" />
       </Tooltip>
     </div>
   ),

@@ -114,8 +114,9 @@ describe('ToastRegion', () => {
   it('is a named region that exists even while empty', () => {
     render(<ToastRegion label="Oznámení" />);
 
-    // A live region has to be in the DOM *before* the message arrives, or the
-    // message is frequently never announced — so the empty region is the point.
+    // Not because the region is itself live — it deliberately isn't, see the
+    // next test — but so the app has a stable, pre-existing node to render
+    // toasts into rather than mounting/unmounting the region itself.
     expect(screen.getByRole('region', { name: 'Oznámení' })).toBeInTheDocument();
   });
 
@@ -126,6 +127,10 @@ describe('ToastRegion', () => {
       </ToastRegion>
     );
 
+    // The `Toast` is the live region (role="status"/"alert", see its
+    // docstring); this container is not, on purpose. Whether either is
+    // actually announced by a real screen reader is outside what jsdom can
+    // verify — this only checks the markup contract.
     const region = screen.getByRole('region', { name: 'Oznámení' });
     expect(region).not.toHaveAttribute('aria-live');
     expect(region).not.toHaveAttribute('role', 'status');

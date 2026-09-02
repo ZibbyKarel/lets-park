@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { Tabs, type TabItem } from './tabs';
+import { Tabs, type TabItem, type TabsProps } from './tabs';
 
 const ITEMS: TabItem[] = [
   { id: 'users', label: 'Uživatelé', content: <Panel>Tabulka uživatelů</Panel> },
-  { id: 'spots', label: 'Místa', content: <Panel>Seznam míst</Panel> },
+  { id: 'reports', label: 'Sestavy', content: <Panel>Seznam sestav</Panel> },
   { id: 'rules', label: 'Pravidla', content: <Panel>Nastavení pravidel</Panel> },
 ];
 
@@ -48,7 +48,7 @@ export const WithDisabledTab: Story = {
   args: {
     items: [
       { id: 'users', label: 'Uživatelé', content: <Panel>Tabulka uživatelů</Panel> },
-      { id: 'spots', label: 'Místa', content: <Panel>Seznam míst</Panel>, disabled: true },
+      { id: 'reports', label: 'Sestavy', content: <Panel>Seznam sestav</Panel>, disabled: true },
       { id: 'rules', label: 'Pravidla', content: <Panel>Nastavení pravidel</Panel> },
     ],
   },
@@ -72,19 +72,20 @@ export const Overflowing: Story = {
   ],
 };
 
+function ControlledDemo(args: TabsProps) {
+  const [value, setValue] = useState('reports');
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-fg-3">
+        Vybráno: <span className="font-bold text-fg">{value}</span>
+      </p>
+      <Tabs {...args} value={value} onValueChange={setValue} />
+    </div>
+  );
+}
+
 /** Selection owned by the parent, which is how a router-driven strip works. */
 export const Controlled: Story = {
-  render: (args) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const [value, setValue] = useState('spots');
-
-    return (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-fg-3">
-          Vybráno: <span className="font-bold text-fg">{value}</span>
-        </p>
-        <Tabs {...args} value={value} onValueChange={setValue} />
-      </div>
-    );
-  },
+  render: (args) => <ControlledDemo {...args} />,
 };

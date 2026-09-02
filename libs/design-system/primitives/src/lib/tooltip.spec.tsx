@@ -160,7 +160,7 @@ describe('Tooltip', () => {
   it('also describes a non-button trigger, such as a field', async () => {
     const user = userEvent.setup();
     render(
-      <Tooltip content="Formát ABC 123">
+      <Tooltip content="Formát REF-4821">
         <input aria-label="Kód" />
       </Tooltip>
     );
@@ -169,6 +169,6 @@ describe('Tooltip', () => {
     await user.click(input);
 
     expect(input).toHaveFocus();
-    expect(input).toHaveAccessibleDescription('Formát ABC 123');
+    expect(input).toHaveAccessibleDescription('Formát REF-4821');
   });
 });

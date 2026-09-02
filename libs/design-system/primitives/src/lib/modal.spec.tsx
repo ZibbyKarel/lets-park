@@ -266,7 +266,7 @@ describe('Modal', () => {
           open={open}
           onClose={() => setOpen(false)}
           title="Detail"
-          eyebrow="Obsazeno"
+          eyebrow="Otevřeno"
           footer={<Button>Potvrdit</Button>}
         />
       );
@@ -274,7 +274,7 @@ describe('Modal', () => {
 
     render(<WithEyebrow />);
 
-    expect(screen.getByText('Obsazeno')).toBeInTheDocument();
+    expect(screen.getByText('Otevřeno')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Potvrdit' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
   });
