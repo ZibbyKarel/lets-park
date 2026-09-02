@@ -555,8 +555,17 @@ export { auth as middleware } from './src/auth';
 
 // any Server Component / Route Handler / Server Action
 const session = await auth();
-const api = createApiClient({ url: env.NEXT_PUBLIC_API_URL, getAccessToken });
+const api = createApiClient({ url: apiRpcUrl(env.NEXT_PUBLIC_API_URL), getAccessToken });
 ```
+
+`apiRpcUrl` — `apps/web/src/api-url.ts` — is not decoration. `NEXT_PUBLIC_API_URL`
+stops at the global prefix (`http://localhost:3000/api`), while the oRPC
+transport is mounted a segment below it (`MeController` is `@Controller('rpc')`),
+and `RPCLink` appends only the procedure's key path to the base it is given.
+Passing the configured URL straight in calls `POST /api/me/get`, which **404s —
+every request**, measured against the running API. Use the helper; the same file
+derives the readiness-probe URL and the Socket.io origin, which are not the base
+URL either. See `doc/decision/0101-*`.
 
 Browser side:
 

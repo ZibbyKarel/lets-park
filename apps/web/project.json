@@ -14,6 +14,12 @@
         }
       }
     },
+    "dev": {
+      "// port": "The same `.env` injection the build target guards against also carries PORT=3000 — the API's port (`.env`, §API). `next dev` reads PORT when no `--port` is given, so the inferred `next dev` bound 3000 and collided with `api:serve` (EADDRINUSE). The flag wins over the environment variable, which is why the port is spelled here rather than removed from `.env`. 4200 is not a preference either: `CORS_ALLOWED_ORIGINS` and the Okta redirect URI registered with the mock OIDC server both name http://localhost:4200.",
+      "options": {
+        "command": "next dev --port 4200"
+      }
+    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {

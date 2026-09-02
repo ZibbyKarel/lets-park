@@ -10,6 +10,7 @@
   "include": [
     "index.d.ts",
     "next-env.d.ts",
+    "src/test-setup.ts",
     "jest.config.ts",
     "jest.config.cts",
     "src/**/*.test.ts",

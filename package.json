@@ -39,6 +39,7 @@
     "@swc/cli": "~0.8.1",
     "@swc/core": "~1.15.5",
     "@swc/helpers": "~0.5.18",
+    "@tailwindcss/postcss": "4.3.3",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.0",
     "@testing-library/jest-dom": "6.9.1",
