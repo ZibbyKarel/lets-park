@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 
 import { useDismissableLayer } from './dismissable-layer';
 import { Dropdown, type DropdownItem } from './dropdown';
+import { Modal } from './modal';
 import { Tooltip } from './tooltip';
 
 const ITEMS: DropdownItem[] = [
@@ -290,5 +291,221 @@ describe('Escape across sibling layers', () => {
     // tell a focus-opened bubble from a hover-opened one.
     expect(screen.queryByText('Popis alfa')).not.toBeInTheDocument();
     expect(screen.getByText('Popis beta')).toBeInTheDocument();
+  });
+});
+
+/**
+ * A modal opened from inside another modal — a confirmation over a settings
+ * dialog — is an ordinary composition, and it is the one shape that cannot be
+ * read off the DOM: both dialogs portal to `document.body`, so nesting them in
+ * JSX makes them DOM *siblings*. The tests below are about the layer tree
+ * (which follows React, through the portal) rather than about `contains`.
+ */
+function NestedModals() {
+  const [outer, setOuter] = useState(true);
+  const [inner, setInner] = useState(true);
+
+  return (
+    <Modal open={outer} onClose={() => setOuter(false)} title="Vnější" hideCloseButton>
+      <button type="button">Prvek ve vnějším</button>
+      <button type="button">Druhý prvek ve vnějším</button>
+
+      <Modal open={inner} onClose={() => setInner(false)} title="Vnitřní" hideCloseButton>
+        <button type="button">Prvek ve vnitřním</button>
+        {/* On the second control, not the first: the first is what the trap
+            focuses, and a tooltip there would open by itself and change how
+            many presses each test below is about. */}
+        <Tooltip content="Nápověda">
+          <button type="button">Druhý prvek ve vnitřním</button>
+        </Tooltip>
+      </Modal>
+    </Modal>
+  );
+}
+
+describe('Escape across overlays nested in JSX but portalled to the same parent', () => {
+  it('dismisses one layer per press, innermost first, across the portal boundary', async () => {
+    const user = userEvent.setup();
+
+    render(<NestedModals />);
+
+    expect(screen.getByRole('dialog', { name: 'Vnější' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Vnitřní' })).toBeInTheDocument();
+
+    // Hover rather than focus, so the bubble's presence does not depend on
+    // which trap won the focus race — that is the next test's subject.
+    await user.hover(screen.getByRole('button', { name: 'Druhý prvek ve vnitřním' }));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+    // Three layers open. One press must take exactly the innermost one.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Vnitřní' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Vnější' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Vnitřní' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Vnější' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Vnější' })).not.toBeInTheDocument();
+  });
+
+  it('leaves focus in the overlay on top instead of the one beneath reclaiming it', async () => {
+    const user = userEvent.setup();
+
+    render(<NestedModals />);
+
+    const inner = screen.getByRole('dialog', { name: 'Vnitřní' });
+
+    // The outer trap cannot see past the inner one's portal boundary, so
+    // letting it run its "focus the first thing inside me" step would move
+    // focus to its own container — out of the overlay actually on top.
+    expect(screen.getByRole('button', { name: 'Prvek ve vnitřním' })).toHaveFocus();
+    expect(inner).toContainElement(document.activeElement as HTMLElement);
+
+    // And Tab stays inside the top overlay rather than being pulled out by the
+    // trap underneath it.
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Druhý prvek ve vnitřním' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Prvek ve vnitřním' })).toHaveFocus();
+  });
+
+  it('hands the trap back to the overlay beneath once the one on top closes', async () => {
+    const user = userEvent.setup();
+
+    render(<NestedModals />);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Vnitřní' })).not.toBeInTheDocument();
+
+    // Resuming takes focus back into the overlay that is now on top...
+    expect(screen.getByRole('dialog', { name: 'Vnější' })).toContainElement(
+      document.activeElement as HTMLElement
+    );
+
+    // ...and the trap was paused, not dismantled, so Tab cycles inside it again.
+    screen.getByRole('button', { name: 'Prvek ve vnějším' }).focus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Druhý prvek ve vnějším' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Prvek ve vnějším' })).toHaveFocus();
+  });
+});
+
+describe('the layer set under the shapes the review exercised', () => {
+  it('gives Escape to a menu inside a modal before the modal itself', async () => {
+    const user = userEvent.setup();
+
+    function MenuInModal() {
+      const [open, setOpen] = useState(true);
+      return (
+        <Modal open={open} onClose={() => setOpen(false)} title="Nastavení" hideCloseButton>
+          <Dropdown trigger="Menu" items={ITEMS} />
+        </Modal>
+      );
+    }
+
+    render(<MenuInModal />);
+
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('treats two modals with no nesting between them as siblings, newest first', async () => {
+    const user = userEvent.setup();
+
+    function TwoModals() {
+      const [first, setFirst] = useState(true);
+      const [second, setSecond] = useState(true);
+
+      return (
+        <div>
+          <Modal open={first} onClose={() => setFirst(false)} title="První" hideCloseButton>
+            <button type="button">Prvek v první</button>
+          </Modal>
+          <Modal open={second} onClose={() => setSecond(false)} title="Druhá" hideCloseButton>
+            <button type="button">Prvek v druhé</button>
+          </Modal>
+        </div>
+      );
+    }
+
+    render(<TwoModals />);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Druhá' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'První' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'První' })).not.toBeInTheDocument();
+  });
+
+  it('still dismisses the only open overlay when nothing holds focus at all', async () => {
+    const user = userEvent.setup();
+
+    function OneModal() {
+      const [open, setOpen] = useState(true);
+      return (
+        <Modal open={open} onClose={() => setOpen(false)} title="Nastavení" hideCloseButton>
+          <button type="button">Prvek</button>
+        </Modal>
+      );
+    }
+
+    render(<OneModal />);
+
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('leaves nothing behind for a layer that opens and closes within one tick', async () => {
+    const user = userEvent.setup();
+
+    function AbortedOpen() {
+      const [a, setA] = useState(true);
+      const [b, setB] = useState(false);
+
+      return (
+        <div>
+          <ProbeLayer name="A" open={a} onDismiss={() => setA(false)} />
+          <button
+            type="button"
+            onClick={() => {
+              setB(true);
+              setB(false);
+            }}
+          >
+            Otevřít a hned zavřít B
+          </button>
+          <ProbeLayer name="B" open={b} onDismiss={() => setB(false)} />
+        </div>
+      );
+    }
+
+    render(<AbortedOpen />);
+
+    await user.click(screen.getByRole('button', { name: 'Otevřít a hned zavřít B' }));
+    expect(screen.queryByText('B otevřeno')).not.toBeInTheDocument();
+
+    // B never became a layer, so the press belongs to A and nothing throws.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText('A otevřeno')).not.toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
   });
 });
