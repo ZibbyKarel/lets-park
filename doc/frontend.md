@@ -275,9 +275,14 @@ globals (`jest-environment-web.cjs`), and `@testing-library/jest-dom`.
 
 Two details worth knowing before adding a suite:
 
-- **`next/jest` replaces `transformIgnorePatterns`.** ESM-only packages are
-  re-exempted *after* `createJestConfig` has run, at the bottom of
-  `jest.config.cts`. Adding a dependency that ships ESM-only means adding it to
+- **`transformIgnorePatterns` has to be overwritten on the *resolved* config.**
+  `next/jest` *appends* a custom `transformIgnorePatterns` after its own
+  entries, and discards one coming from a preset entirely. Appending is no use:
+  the array is a union — Jest skips a file that matches *any* entry — and
+  Next's own `/node_modules/(?!.pnpm)(?!(geist)/)` already matches everything in
+  `node_modules` but `geist`. So the ESM-only exemption is applied to the
+  resolved object at the bottom of `jest.config.cts`, after `createJestConfig`
+  has run. Adding a dependency that ships ESM-only means adding it to
   `esmOnlyPackages` there.
 - **`FormData`, `Blob` and `File` are deliberately jsdom's**, unlike in
   `libs/query`'s otherwise identical environment. React 19 implements a form

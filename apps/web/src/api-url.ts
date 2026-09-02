@@ -64,8 +64,7 @@ export function apiReadinessUrl(apiUrl: string): string {
  * `MeController` is `@Controller('rpc')` with `@Post('me/get')` under the
  * global prefix `api`, which puts the procedure at `POST /api/rpc/me/get`.
  *
- * Handing the configured URL straight to `createApiClient` — which is what
- * `doc/auth.md`'s illustrative snippet does — therefore calls
+ * Handing the configured URL straight to `createApiClient` therefore calls
  * `POST /api/me/get`, and **every** request 404s. That is not a deduction:
  * against the API running on `localhost:3000`, `POST /api/me/get` answered
  * `404` and `POST /api/rpc/me/get` answered `401 Unauthorized` (i.e. the route

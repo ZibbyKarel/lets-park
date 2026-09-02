@@ -9,12 +9,28 @@ const nextJest = require('next/jest.js');
  * `doc/decision/0025-next-intl-esm-jest-transform.md`.
  *
  * Decision 0020 asks that a third project needing this consolidate the block
- * into the root `jest.preset.js`. **That would not help here**, and this is a
- * measured statement rather than a guess: `next/jest` builds its own config
- * and *replaces* `transformIgnorePatterns` with `['/node_modules/',
- * '^.+\\.module\\.(css|sass|scss)$']`, so anything the preset set is gone by
- * the time the resolved config exists. The override therefore has to be
- * applied to the resolved object below, after `createJestConfig` has run.
+ * into the root `jest.preset.js`. **That would not help here**, and neither
+ * would handing the list to `createJestConfig`. Both were measured on Next
+ * 16.1.7 (`next/dist/build/jest/jest.js:197-210`):
+ *
+ * - a `transformIgnorePatterns` set in the **preset** never reaches the
+ *   resolved config. `next/jest` always writes the key, and Jest only falls
+ *   back to a preset's value for a key the project config leaves unset.
+ * - a `transformIgnorePatterns` in the object passed to `createJestConfig` is
+ *   **appended** after Next's own entries — Next's source says so in a comment
+ *   ("Custom config can append to transformIgnorePatterns but not modify it")
+ *   and a sentinel probe comes back last in the array. It is *not* replaced;
+ *   an earlier claim here said otherwise and was wrong.
+ *
+ * Appending is useless all the same, which is why the override below still has
+ * to overwrite the resolved array. `transformIgnorePatterns` is a **union**:
+ * Jest leaves a file untransformed if it matches *any* entry. `next.config.ts`
+ * sets `transpilePackages: ['geist']`, so Next's first entry is
+ * `/node_modules/(?!.pnpm)(?!(geist)/)`, which already matches every
+ * `node_modules` path but `geist`'s — a negative-lookahead exemption added
+ * after it cannot subtract from a match that already happened. Appending
+ * instead of overwriting was tried: 4 of the 8 suites fail with
+ * `SyntaxError: Unexpected token 'export'` out of `next-intl`.
  */
 const esmOnlyPackages = [
   // `@lets-park/api-client` and `@lets-park/contract`.
@@ -72,9 +88,10 @@ module.exports = async () => {
       value[1] = { ...value[1], resolvedBaseUrl: undefined };
     }
   }
-  // See `esmOnlyPackages` above: `next/jest` overwrote whatever was set, so
-  // the exemption is re-applied here. The CSS-module entry is Next's own and
-  // is kept — dropping it would send `*.module.css` through the JS transform.
+  // Overwrite rather than append: see `esmOnlyPackages` above. Next's own
+  // `/node_modules/(?!.pnpm)(?!(geist)/)` entry would otherwise keep matching,
+  // and one match is all it takes. The CSS-module entry is Next's own and is
+  // kept — dropping it would send `*.module.css` through the JS transform.
   resolved.transformIgnorePatterns = [
     `/node_modules/(?!(?:${esmOnlyPackages.join('|')})/)`,
     '^.+\\.module\\.(css|sass|scss)$',
