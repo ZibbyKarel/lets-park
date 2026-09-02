@@ -9,8 +9,10 @@
 transaction is built on three rules:
 
 1. **Days are written in ascending date order.** The order comes from `allocateBulk`, which sorts
-   its own input; the service never writes in request order. Putting the answer back into the order
-   the client asked for happens *after* the transaction, in memory.
+   its own input and whose output order *is* the row order of the `INSERT`; the service never
+   writes in request order. Putting the answer back into the order the client asked for happens
+   *after* the transaction, in memory. That sort is the **single authority** for the write order —
+   see §"One authority" below, which is the correction of an earlier version of this record.
 2. **No statement inside the transaction is allowed to fail.** Both writes are
    `createManyAndReturn({ …, skipDuplicates: true })` — `INSERT … ON CONFLICT DO NOTHING
    RETURNING …`. A day whose spot was taken between the read and the write simply does not come
@@ -36,20 +38,85 @@ week from opposite ends is not an exotic case, it is two people using a month gr
 
 The cycle is not hypothetical. `bulk-concurrency.db.spec.ts` builds the other side by hand — a
 competitor that takes the later day first, waits, then reaches back for the earlier one — and
-PostgreSQL reports `40P01 deadlock detected` every run. What that test proves is that the ordering
-constraint is real; the ordering itself is pinned by `bulk-allocator.spec.ts`.
+PostgreSQL reports `40P01 deadlock detected` every run.
 
-**Honest limit, recorded because it was measured.** Deleting the sort from `allocateBulk` leaves the
-entire database suite green (see the mutation table in the task report). The reason is rule 2: each
-transaction's reservations go in as a *single* multi-row `INSERT`, so the interleaving that would
-form a cycle cannot be forced from outside the process, and the two-caller race in the suite
-succeeds either way. The sort is killed deterministically by a unit test instead
-(`bulk-allocator.spec.ts`, "comes back in ascending date order, whatever order it was asked in"),
-and the cycle it prevents is proven reachable by the hand-built competitor above. Treat the
-single-statement insert as the *reason* the sort is currently hard to falsify end to end — not as a
-reason to drop the sort: the moment the batch is split into per-day statements (a retry loop, a
-savepoint, a per-day hook), the ordering becomes the only thing standing between two users and a
-deadlock.
+### One authority
+
+**This section replaces a claim in the first version of this record that was measured and found
+false.** That version said the ordering came from `allocateBulk`, and that deleting it could not be
+falsified end to end because "PostgreSQL takes the keys of one statement in one go, so the
+interleaving cannot be forced from outside the process". Both halves were wrong, in different ways.
+
+*There were two sorts, not one.* `BulkReservationService.assertRequestable` also returned
+`[...dates].sort(compareDateOnly)`, and that sorted list was what reached the allocator. Measured on
+the code as first written: **removing either sort alone → 3/3 confirmations fulfilled; removing both
+→ 3/3 `P2034`.** Either sufficed, so neither could be killed by a test, and every document pointed
+at only one of them.
+
+*A multi-row `INSERT` is not atomic with respect to lock acquisition.* It acquires its unique keys
+row by row and can be caught between them — this project's own deadlock log shows exactly that,
+`CONTEXT: while inserting index tuple`. What a multi-row `INSERT` lacks is a yield point *available
+to JavaScript*, which is a much weaker property than the one that was recorded, and one the database
+can supply on its own.
+
+Both are now fixed rather than merely restated:
+
+- **The write order has exactly one authority**, `allocateBulk`'s `[...request.dates]
+  .sort(compareDateOnly)`. It is the right home for it because the plan's order *is* the row order
+  of the reservation `INSERT` (`createReservations` maps straight off `plans`), so nothing between
+  the guarantee and the write can reorder it. `assertRequestable` still sorts, but only locally, to
+  name the earliest offending day in a rejection; the dates it hands downstream are in request
+  order. Two sorts would have been defensible as defence in depth, but only at the price of the
+  guarantee being unfalsifiable — and an unfalsifiable guarantee is the one that rots.
+- **Both remaining sorts are pinned by a test that fails when they are removed.** `allocateBulk`'s
+  by `bulk-allocator.spec.ts` ("comes back in ascending date order, whatever order it was asked
+  in") *and*, end to end, by `bulk-concurrency.db.spec.ts` › "a forced interleaving inside one
+  multi-row INSERT": a test-only `BEFORE INSERT … FOR EACH ROW` trigger stalls each row of the
+  `INSERT`, so each caller holds one day's key while reaching for the other's. With the sort, 3/3
+  fulfilled; without it, 3/3 `rejected CONFLICT`. The trigger lives in the spec's own setup and is
+  dropped in a `finally` — no production code, no runtime flag, no `NODE_ENV` branch.
+  `assertRequestable`'s local sort is pinned by `bulk-reservation.db.spec.ts`, "names the earliest
+  offending day, not the first one listed".
+
+The conclusion the first version reached — keep the sort, and do **not** split the batch into
+per-day statements merely to make a test possible — was right and still stands. Only its reasoning
+was wrong. If the batch is ever split into per-day statements (a retry loop, a savepoint, a per-day
+hook), the ordering becomes the only thing standing between two users and a deadlock.
+
+### `confirmBulk` against `cancel` + promote
+
+The first version of this record and the task report both said this pair cannot deadlock **because
+"the `doc/decision/0065-*` cycle is built from `FOR UPDATE` plus a delete, and bulk takes neither"**.
+That is the wrong shape of argument and it is retracted: a cycle needs two shared resources taken in
+opposite orders, not two particular kinds of lock. Reasoning from lock *types* is how a "cannot"
+survives long enough to ship.
+
+The conclusion still holds, for a reason that is about the resources:
+
+- `ReservationsService.cancel` + `WaitlistPromotionService.promote` is confined to **one date**. It
+  takes `FOR UPDATE` on that cell's reservation and on that cell's queue, inserts one `Reservation`
+  on that date, and `deleteMany`s the promoted user's `WaitlistEntry` rows *for that date*. Nothing
+  it touches lies on a second day.
+- `confirmBulk` contends for at most **one** resource per date in each of its two write phases, and
+  the phases are sequential over the whole batch: every reservation first, then every queue entry.
+  On any single date it therefore either holds a reservation key or later wants a queue key — never
+  both, because a day that was assigned is not queued and a day that lost its cell holds nothing.
+
+So every wait between the two is one-directional. The concrete wait that does exist — `confirmBulk`'s
+queue `INSERT` blocking on a `WaitlistEntry` key that `promote` has deleted but not yet committed —
+has no return edge, because for `promote` to block on `confirmBulk` in turn it would have to want a
+reservation key that `confirmBulk` holds *on the same date*, and on that date `confirmBulk` holds
+none.
+
+Note also that the reverse edge is narrower than it looks: under `READ COMMITTED` a `DELETE` locks
+only rows visible in its snapshot, so `promote`'s `deleteMany` does **not** wait on a queue entry
+`confirmBulk` has inserted uncommitted. It never sees it.
+
+**Two changes would make this a real cycle, and both are plausible:** a `promote` that ever spans
+more than one date, or a `confirmBulk` that interleaves its two write phases per day (a per-day
+loop) instead of running them as two batches. If either happens, re-derive this. And if a cycle does
+form, the blast radius is already bounded: `P2034 → CONFLICT`, a 409 on an all-or-nothing batch,
+never a 500 and never a half-written booking.
 
 ### Why `ON CONFLICT DO NOTHING` instead of a retry
 
@@ -72,9 +139,9 @@ it is not the right instrument for a batch.
 
 Locking every candidate spot for every day would close the gap between the read and the write —
 and would hold, for the length of a 31-day transaction, a row lock on every spot in the lot,
-serialising every other reservation in the building behind one bulk booking. Worse, it would put
-`confirmBulk` back inside the lock-ordering cycle that `doc/decision/0065-*` documents for
-cancellation, because that path takes `FOR UPDATE` on reservation rows.
+serialising every other reservation in the building behind one bulk booking. Worse, it would give
+`confirmBulk` a second contended resource per date and a *return edge* against the cancel path
+(previous section), turning a one-directional wait into a cycle.
 
 So the gap stays open, and it is benign because it is self-correcting: the state can only change
 *against* the plan (a free spot becomes taken; a taken one becoming free again cannot help, because
@@ -98,16 +165,21 @@ not a bigger attempt count.
 
 - `bulk-allocator.ts` — pure, sorts spots (group then label) and days (ascending), returns a plan.
   Both sorts are re-derived here rather than trusted from the caller, so a `findMany` that lost its
-  `orderBy` cannot silently change what a bulk booking books.
+  `orderBy` cannot silently change what a bulk booking books, and the day sort is the single
+  authority for the write order (§"One authority").
 - `bulk-reservation.service.ts` — `confirmOnce` reads the world, allocates, inserts reservations,
-  derives the days that were lost, inserts queue entries for them, re-reads the queues for their
-  positions, writes the audit rows, and returns the events. `preview` runs the same allocation with
-  no transaction and writes nothing.
+  re-reads which of the still-unsatisfied days the caller has since acquired a reservation on,
+  inserts queue entries for the rest, re-reads the queues for their positions, writes the audit
+  rows, and returns the events. That second read covers days the allocator planned to **queue** as
+  well as days it wanted to assign and lost: both would otherwise write an entry for a user who
+  already holds that day. `preview` runs the same allocation with no transaction and writes nothing.
 - Events are returned from the transaction callback and published by the caller after it commits —
   the Task 13 seam (`DomainEventPublisher`), unchanged.
 - Tests: `bulk-allocator.spec.ts` (preference order, both sorts, tiebreaks),
-  `bulk-reservation.db.spec.ts` (writes, audit, broadcasts, forced mid-transaction races),
-  `bulk-concurrency.db.spec.ts` (two callers in opposite order; the hand-built deadlock).
+  `bulk-reservation.db.spec.ts` (writes, audit, broadcasts, the earliest-offending-day rejection,
+  forced mid-transaction races on both an assigned and a queued day),
+  `bulk-concurrency.db.spec.ts` (two callers in opposite order; the same pair with a test-only
+  `BEFORE INSERT` trigger breaking the statement open; the hand-built deadlock).
 
 ## Risk
 

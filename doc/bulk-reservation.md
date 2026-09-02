@@ -88,6 +88,17 @@ absent from the candidate list, so a stale preference degrades to step 5.
   request order for the response, because the contract promises request order
   while the writes have to stay in date order.
 
+  **This sort is the single authority for the write order**, and deliberately so.
+  The plan's order *is* the row order of the reservation `INSERT`, so nothing
+  between here and the write can reorder it.
+  `BulkReservationService.assertRequestable` sorts too, but only *locally*, to
+  name the earliest offending day in a rejection; the dates it hands downstream
+  are in request order. It used to return them sorted, which meant either sort
+  could be deleted with all 68 tests still green — measured: removing either
+  alone, 3/3 confirmations fulfilled; removing both, 3/3 `P2034`. A redundant
+  guarantee nothing can falsify is the one that rots, so the redundancy went and
+  each remaining sort now has a test that fails when it is removed.
+
 **The shortest-queue tiebreak is the label alone**, deliberately not
 group-then-label. Choosing a queue is not choosing where to park: every candidate
 is already taken, so the `IT`-before-`SHARED` preference has nothing to say, and
@@ -106,7 +117,7 @@ One interactive transaction per confirmation, `{ maxWait: 5_000, timeout:
 read the world (spots, that month's reservations, that month's queues)
   → allocate (pure)
   → INSERT reservations         … ON CONFLICT DO NOTHING RETURNING *
-  → work out which days lost their spot
+  → re-read: which still-unsatisfied days does the caller now hold a spot on?
   → INSERT waitlist entries     … ON CONFLICT DO NOTHING RETURNING *
   → re-read the affected queues for real positions
   → INSERT audit rows (one per reservation, one per queue entry)
@@ -148,6 +159,18 @@ for *that spot* — exactly what would have happened had the read seen the truth
 What is *not* left to chance is what the caller is told: every field of the
 answer is derived from rows the database returned, never from the plan.
 
+One case is **not** left open, and the re-read in the sequence above is why: a
+caller who acquires a reservation on one of the target days while the transaction
+is running — from another tab, or by being promoted off a queue — must not then
+be given a queue entry for that day. Such an entry could never be promoted (one
+reservation per user per day) and is the exact state `waitlist.join` refuses at
+the door. The re-read covers **every** still-unsatisfied day, both the ones that
+lost an assignment and the ones the allocator had already planned to queue; the
+day is reported `UNAVAILABLE / ALREADY_HAS_RESERVATION` instead. Forced, not
+hoped for, by `bulk-reservation.db.spec.ts` ("does not queue a planned-QUEUED day
+the caller acquired a reservation on"), which blocks the transaction on a
+contested day and runs a real cancel-and-promote into the gap.
+
 Locking the candidate spots instead would hold a row lock on every spot in the
 lot for the length of the transaction, serialising every other reservation in
 the building behind one bulk booking — and it would put `confirmBulk` back
@@ -159,21 +182,44 @@ inside the lock-ordering cycle `doc/waitlist.md` documents for cancellation.
 | --- | --- | --- |
 | `confirmBulk` × `confirmBulk` | no | both take reservation keys in ascending date order, at most one per date; the sequences are prefixes of one total order |
 | `confirmBulk` × `reservation.create` | no | a single-day create takes exactly one key — one key cannot be half of a cycle |
-| `confirmBulk` × `cancel` + promote | no | the cancel path's cycle (`doc/decision/0065-*`) is built from `FOR UPDATE` on reservation rows and a delete; bulk takes neither, and only ever inserts |
+| `confirmBulk` × `cancel` + promote | no, but **not** for the reason first recorded | see below |
 | `confirmBulk` × anything unordered | **yes** | a writer that takes two of the same cells in the opposite order deadlocks. `bulk-concurrency.db.spec.ts` builds exactly that competitor and PostgreSQL reports `40P01`; the batch is all-or-nothing and the caller gets `CONFLICT` |
 
 The last row is what makes the first one meaningful: without a demonstrated
 cycle, "both callers succeeded" could just mean the two requests never met.
 
-**Recorded limit.** Deleting the ascending sort leaves the entire database suite
-green, because each transaction's reservations go in as a single multi-row
-`INSERT` — the interleaving that forms a cycle cannot be forced from outside the
-process. The sort is pinned by a unit test instead (`bulk-allocator.spec.ts`,
-"comes back in ascending date order, whatever order it was asked in"). The
-single-statement insert is the *reason* the sort is hard to falsify end to end,
-not a reason to drop it: split the batch into per-day statements — a retry loop,
-a savepoint, a per-day hook — and the ordering becomes the only thing between two
-users and a deadlock.
+#### The cancel + promote row, restated
+
+This row used to read "bulk takes no `FOR UPDATE` and deletes nothing, so it is
+outside the cancel path's cycle". That argument is retracted: a cycle needs two
+shared resources taken in opposite orders, not two particular kinds of lock, and
+`WaitlistPromotionService.promote` does in fact `deleteMany` the promoted user's
+`WaitlistEntry` rows as well as inserting a reservation.
+
+The answer is still "no", for a reason about the resources rather than the locks:
+**`cancel` + `promote` is confined to a single date**, and on any single date
+`confirmBulk` either holds a reservation key or later wants a queue key — never
+both, because a day it assigned is not queued and a day that lost its cell holds
+nothing. So the one wait that does exist (bulk's queue `INSERT` blocking on a
+`WaitlistEntry` key `promote` has deleted uncommitted) has no return edge. Two
+changes would create one, and both are plausible: a `promote` that spans more
+than one date, or a `confirmBulk` that interleaves its two write phases per day
+instead of running them as two batches. Full derivation in
+`doc/decision/0092-*` §"`confirmBulk` against `cancel` + promote", including why
+the outcome would be `CONFLICT` and not a 500 even then.
+
+**How the ordering is falsified.** `bulk-concurrency.db.spec.ts` › "a forced
+interleaving inside one multi-row INSERT" creates a test-only `BEFORE INSERT …
+FOR EACH ROW` trigger that stalls between the rows of the reservation `INSERT`,
+so each of two opposite-order callers is holding one day's key while reaching for
+the other's. With the sort: 3/3 fulfilled. Without it: 3/3 `rejected CONFLICT`.
+An earlier version of this document said such an interleaving "cannot be forced
+from outside the process" because the batch is one statement — that is false. A
+multi-row `INSERT` acquires its keys row by row and this project's own deadlock
+log catches one mid-statement (`CONTEXT: while inserting index tuple`); what it
+lacks is a yield point available to *JavaScript*, and the database supplies one
+itself. The trigger lives in the spec's setup, is scoped to two days nothing else
+touches, and is dropped in a `finally`.
 
 ---
 
@@ -216,8 +262,8 @@ describe.
 | --- | --- | --- |
 | preference order, both sortings, tiebreaks, positions | `bulk-allocator.spec.ts` | `nx run api:test` |
 | routes exist and run their own contract procedure | `orpc-route-parity.spec.ts` | `nx run api:test` |
-| preview writes nothing; confirm writes rows, audit and broadcasts; window and past-day rejections; forced mid-transaction races | `bulk-reservation.db.spec.ts` | `nx run api:test-db` |
-| two callers in opposite order; a hand-built deadlock | `bulk-concurrency.db.spec.ts` | `nx run api:test-db` |
+| preview writes nothing; confirm writes rows, audit and broadcasts; window and past-day rejections (naming the earliest offending day); forced mid-transaction races on an assigned **and** a queued day | `bulk-reservation.db.spec.ts` | `nx run api:test-db` |
+| two callers in opposite order; the same pair with the `INSERT` broken open by a test-only `BEFORE INSERT` trigger; a hand-built deadlock | `bulk-concurrency.db.spec.ts` | `nx run api:test-db` |
 
 The database suites follow the rules `doc/waitlist.md` §Testing sets out: real
 PostgreSQL, no `PrismaDouble`, a throwaway database per run
