@@ -592,21 +592,43 @@ describe('the realtime gateway', () => {
       ).toHaveLength(0);
     });
 
-    it('never throws, whatever the gateway does', () => {
+    it('never throws, and still publishes the rest of the batch, when the gateway raises', async () => {
       // `reservation-events.ts`: a failure to broadcast must never turn a
       // successful cancellation into an error the user sees.
-      const publisher = harness.app.get(DomainEventPublisher);
+      //
+      // The gateway is made to raise rather than fed a payload that *ought* to
+      // make it raise. The first version of this test passed a malformed date
+      // on the theory that `roomForDate`'s `assertDateOnly` would throw — it
+      // does, but `emitToDay` validates the payload *before* it builds the
+      // room, so the publisher's `catch` was never entered and the test would
+      // have passed with the `try` deleted. Mutating the publisher to rethrow
+      // failed **zero** tests; it now fails this one. A double stands in here
+      // for a dependency's behaviour, not for a protocol or an error shape.
+      const watcher = await connectAs(alice);
+      await watch(watcher, DAY);
+      const cell = freshCell();
+      const gateway = harness.app.get(RealtimeGateway);
+      const broadcast = jest.spyOn(gateway, 'broadcastDomainEvent').mockImplementationOnce(() => {
+        throw new Error('the gateway is broken');
+      });
 
-      expect(() =>
-        publisher.publish([
-          // `roomForDate` throws a `TypeError` on a date that is not a calendar
-          // date, which is the realistic way this path raises.
-          {
-            name: 'waitlist:updated',
-            payload: { date: 'nope', parkingSpotId: randomUUID(), waitlistCount: 0 },
-          } as never,
-        ])
-      ).not.toThrow();
+      try {
+        expect(() =>
+          harness.app.get(DomainEventPublisher).publish([
+            { name: 'reservation:cancelled', payload: { ...cell, reservationId: randomUUID() } },
+            { name: 'waitlist:updated', payload: { ...cell, waitlistCount: 0 } },
+          ])
+        ).not.toThrow();
+
+        // The loop is per event on purpose: one broadcast failing must not take
+        // the other fact about the same cell down with it.
+        await watcher.waitForEvent(
+          'waitlist:updated',
+          (p: { parkingSpotId: string }) => p.parkingSpotId === cell.parkingSpotId
+        );
+      } finally {
+        broadcast.mockRestore();
+      }
     });
   });
 

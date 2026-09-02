@@ -47,6 +47,18 @@ export interface RealtimeTestAppOptions {
   readonly logLevel?: string;
   /** Receives every line pino emits, if a spec asked for a level that emits any. */
   readonly onLogLine?: (line: string) => void;
+  /**
+   * A last chance to substitute a provider before the module compiles.
+   *
+   * Used by `realtime-ack-leak.spec.ts` to hand the gateway a `LockService`
+   * whose grant carries a *fat* holder — the shape a Prisma `select` that is
+   * not honoured produces. There is no other seam that can produce it, because
+   * the real `loadUserSummary` narrows to three fields on the way in, and a
+   * defence that only the code path it guards can reach is a defence no test
+   * can falsify. It stands in for a dependency's **behaviour**, never for the
+   * shape of an error or for the protocol.
+   */
+  readonly overrides?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
 }
 
 export interface RealtimeTestApp {
@@ -124,6 +136,10 @@ export async function startRealtimeTestApp(
       ],
     };
     builder = builder.overrideProvider(PARAMS_PROVIDER_TOKEN).useValue(params);
+  }
+
+  if (options.overrides !== undefined) {
+    builder = options.overrides(builder);
   }
 
   const moduleRef = await builder.compile();
