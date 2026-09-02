@@ -129,9 +129,10 @@ export function Dropdown({
   }, [open, activeIndex]);
 
   // Escape closes and hands focus back to the trigger — but only when this menu
-  // is the layer the press belongs to. `rootRef`, not the panel, is registered:
-  // it covers the trigger as well, so the menu still counts as holding the
-  // keyboard in the moment between closing and focus landing back.
+  // is the layer the press belongs to. `rootRef` is what gets registered rather
+  // than the panel, because it is mounted whether the menu is open or not, so
+  // the node handed to the set is never one that is about to disappear from
+  // under it mid-render.
   useDismissableLayer({ active: open, elementRef: rootRef, onDismiss: () => close(true) });
 
   // Click outside closes. Pointer-only affordance, kept out of the layer set

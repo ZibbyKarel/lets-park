@@ -259,4 +259,36 @@ describe('Escape across sibling layers', () => {
 
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
+
+  it('closes the focused tooltip rather than the one merely hovered', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <div>
+        <Tooltip content="Popis alfa">
+          <button type="button">Alfa</button>
+        </Tooltip>
+        <Tooltip content="Popis beta">
+          <button type="button">Beta</button>
+        </Tooltip>
+      </div>
+    );
+
+    // Tab rather than click: the pointer must never visit the first trigger,
+    // or leaving it would hide its bubble again. Focus opens the first bubble;
+    // hovering the second opens that one too and registers it later, without
+    // taking the keyboard off the first trigger.
+    await user.tab();
+    await user.hover(screen.getByRole('button', { name: 'Beta' }));
+    expect(screen.getByText('Popis alfa')).toBeInTheDocument();
+    expect(screen.getByText('Popis beta')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alfa' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+
+    // The tooltip wrapper contains its own trigger, which is how the set can
+    // tell a focus-opened bubble from a hover-opened one.
+    expect(screen.queryByText('Popis alfa')).not.toBeInTheDocument();
+    expect(screen.getByText('Popis beta')).toBeInTheDocument();
+  });
 });
