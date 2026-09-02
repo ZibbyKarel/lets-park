@@ -211,6 +211,16 @@ const NPM_ALLOWLIST = {
     '@testing-library/react',
     '@testing-library/jest-dom',
     '@testing-library/user-event',
+    // `ical.js` — Mozilla's RFC 5545 parser, a **devDependency** used only by
+    // `libs/calendar-export`'s specs (and `apps/api`'s calendar pipeline spec,
+    // which is `type:app` and needs no entry). It is the independent reader
+    // that makes those tests worth anything: a test that asserts our own
+    // generated string back at us proves the template matches itself, not that
+    // a calendar client can parse it. Deliberately **not** in
+    // `WRAPPED_LIBRARIES` — it stands in for nothing, ships in nothing, and
+    // there is no wrapper anybody should use instead. Same reasoning, and the
+    // same limitation, as the `@testing-library/*` entries directly above.
+    'ical.js',
   ],
 
   /**
