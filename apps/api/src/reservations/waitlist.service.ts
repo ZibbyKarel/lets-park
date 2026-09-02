@@ -43,6 +43,7 @@ import type {
 import type { Prisma } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
 import { todayInPrague } from '@lets-park/shared-types';
+import { AuditLogService } from '../audit/audit-log.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { DomainError } from '../common/errors/domain-error';
 import { toContractWaitlistEntry, toDateColumn, toDateOnly } from '../common/prisma-mapping';
@@ -67,7 +68,8 @@ export class WaitlistService {
     private readonly prisma: PrismaService,
     private readonly window: ReservationWindowService,
     private readonly policy: ReservationPolicy,
-    private readonly publisher: DomainEventPublisher
+    private readonly publisher: DomainEventPublisher,
+    private readonly audit: AuditLogService
   ) {}
 
   /**
@@ -155,6 +157,21 @@ export class WaitlistService {
     const entry = await tx.waitlistEntry.create({
       data: { parkingSpotId: input.parkingSpotId, userId: actor.id, date: dateColumn },
     });
+
+    // In the transaction, for the same reason the reservation's entry is: a
+    // queue entry nobody can account for is what the audit log exists to
+    // prevent, and `reservation.confirmBulk` writes the same action for the
+    // rows it creates (`doc/decision/0091-*`).
+    await this.audit.record(
+      {
+        actorUserId: actor.id,
+        action: 'WAITLIST_JOINED',
+        entityType: 'WaitlistEntry',
+        entityId: entry.id,
+        payload: { parkingSpotId: input.parkingSpotId, date: input.date },
+      },
+      tx
+    );
 
     // The position is read back rather than counted before the insert: what the
     // caller wants to know is where they *are*, and only the committed order can

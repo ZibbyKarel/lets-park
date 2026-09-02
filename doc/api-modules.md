@@ -350,8 +350,8 @@ in `viewerReservationId`. Including it would make `canReserve` mean two things a
 ## 9. Reservations and the waitlist
 
 `apps/api/src/reservations/`. Routes: `reservation.create`, `reservation.cancel`, `waitlist.join`,
-`waitlist.leave` — all open to any authenticated user, because "may I cancel this?" is a fact about
-a row, not about a route, and lives in the service with the row.
+`waitlist.leave`, plus the bulk pair below — all open to any authenticated user, because "may I
+cancel this?" is a fact about a row, not about a route, and lives in the service with the row.
 
 **`doc/waitlist.md` is the document for this module.** It has the cancel + promote sequence diagram,
 why the queue is read `FOR UPDATE`, what happens under concurrency, and what happens after the
@@ -367,8 +367,29 @@ commit. Only the shape is repeated here:
 - `DomainEventPublisher` — the after-commit seam Tasks 15 and 16 replace. Nothing that can block on
   the network runs inside the transaction.
 
-`reservation.previewBulk` / `reservation.confirmBulk` are Task 14 and remain unmounted; the parity
-spec (§1) keeps them answering 404 rather than something half-built.
+### Bulk booking
+
+`reservation.previewBulk` / `reservation.confirmBulk`, added by Task 30 on their own controller
+(`BulkReservationController`) for the same reason the waitlist has one: a controller here delegates
+to exactly one service. Both are open to any authenticated caller — the batch is always written for
+`context.user`, so there is no "somebody else's booking" to authorize.
+
+**`doc/bulk-reservation.md` is the document for this half of the module.** It has the allocator's
+preference order, why the preview writes nothing, the shape of the transaction and the deadlock
+analysis. Only the shape is repeated here:
+
+- `bulk-allocator.ts` — **pure**: a snapshot of the world in, a plan out. No database, no
+  transaction, no clock, which is why the preference order has an ordinary unit spec.
+- `BulkReservationService` — `preview` (reads, writes nothing) and `confirm` (one interactive
+  transaction for the whole batch, events published after it commits).
+
+Two things worth knowing before reading either: a weekend inside a bulk request is a **per-day**
+`UNAVAILABLE`, not a rejected request (`doc/decision/0090-*`), and the confirmation never lets a
+statement fail — it inserts with `ON CONFLICT DO NOTHING` and reads the difference
+(`doc/decision/0092-*`).
+
+`NOT_YET_IMPLEMENTED` in the parity spec (§1) is now empty: every procedure the contract declares
+has exactly one route.
 
 ---
 

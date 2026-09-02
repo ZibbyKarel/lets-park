@@ -1,0 +1,17 @@
+-- Task 30 adds one member to the audit action enum.
+--
+-- Bulk booking creates queue entries on the user's behalf, and every row a
+-- mutation creates has to be accounted for in the append-only trail. None of the
+-- existing members describes it: `WAITLIST_PROMOTED` is the opposite event (an
+-- entry being *consumed*), and every other member names a different table.
+-- See `doc/decision/0091-*`.
+--
+-- `ADD VALUE IF NOT EXISTS` rather than a recreate, for the same reason as
+-- `20260902090000_audit_reservation_window_updated`: rewriting the type would
+-- mean dropping and re-adding `AuditLog.action`, and that table is append-only
+-- by trigger (`doc/decision/0027-*`) — an UPDATE against it is rejected by the
+-- database.
+--
+-- Postgres 12+ allows ADD VALUE inside a transaction block as long as the new
+-- value is not used in the same transaction; nothing here uses it.
+ALTER TYPE "AuditLogAction" ADD VALUE IF NOT EXISTS 'WAITLIST_JOINED';

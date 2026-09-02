@@ -96,6 +96,29 @@ describe('the waitlist against a real PostgreSQL', () => {
         entry: { parkingSpotId: spot.id, userId: first.id, date: FUTURE_BUSINESS_DAY },
       });
       expect(two.position).toBe(2);
+      // Joining a queue is audited too, in the same transaction as the entry —
+      // the waitlist is a promise about a scarce resource, and Task 30 made
+      // bulk booking a second way to get into one (`doc/decision/0091-*`).
+      await expect(
+        client.auditLog.findMany({
+          where: { action: 'WAITLIST_JOINED', entityId: { in: [one.entry.id, two.entry.id] } },
+          orderBy: { createdAt: 'asc' },
+          select: { actorUserId: true, entityType: true, entityId: true, payload: true },
+        })
+      ).resolves.toEqual([
+        {
+          actorUserId: first.id,
+          entityType: 'WaitlistEntry',
+          entityId: one.entry.id,
+          payload: { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        },
+        {
+          actorUserId: second.id,
+          entityType: 'WaitlistEntry',
+          entityId: two.entry.id,
+          payload: { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        },
+      ]);
       expect(harness.publisher.ofKind('waitlist:updated')).toEqual([
         {
           name: 'waitlist:updated',

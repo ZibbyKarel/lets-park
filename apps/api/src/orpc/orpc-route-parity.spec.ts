@@ -26,6 +26,7 @@ import { ROLES_KEY } from '../auth/roles.decorator';
 import { MeController } from '../me/me.controller';
 import { OverviewController } from '../overview/overview.controller';
 import { ReservationWindowController } from '../reservation-window/reservation-window.controller';
+import { BulkReservationController } from '../reservations/bulk-reservation.controller';
 import { ReservationsController } from '../reservations/reservations.controller';
 import { WaitlistController } from '../reservations/waitlist.controller';
 import { SpotsController } from '../spots/spots.controller';
@@ -38,11 +39,11 @@ import { RPC_ROUTE_PREFIX } from './rpc-route';
  * same commit that adds its routes, and the assertions below force that to
  * happen together.
  *
- * Task 13 removed the four single-day procedures from it. What is left is the
- * bulk pair, which is Task 14 — and it has to stay listed, because a bulk route
- * answering 404 is much better than one answering half a booking.
+ * Task 13 removed the four single-day procedures; Task 30 removed the bulk pair.
+ * The list is empty, and that is a state the assertions have to keep working in
+ * — "every procedure has exactly one route" is now the whole claim.
  */
-const NOT_YET_IMPLEMENTED = ['reservation.previewBulk', 'reservation.confirmBulk'];
+const NOT_YET_IMPLEMENTED: string[] = [];
 
 const CONTROLLERS = [
   SpotsController,
@@ -52,6 +53,7 @@ const CONTROLLERS = [
   OverviewController,
   ReservationsController,
   WaitlistController,
+  BulkReservationController,
 ];
 
 interface RegisteredRoute {

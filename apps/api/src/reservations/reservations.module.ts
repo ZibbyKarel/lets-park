@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { ReservationWindowModule } from '../reservation-window/reservation-window.module';
+import { BulkReservationController } from './bulk-reservation.controller';
+import { BulkReservationService } from './bulk-reservation.service';
 import { DomainEventPublisher, NoopDomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
 import { ReservationsController } from './reservations.controller';
@@ -10,10 +12,12 @@ import { WaitlistPromotionService } from './waitlist-promotion.service';
 import { WaitlistService } from './waitlist.service';
 
 /**
- * Reservations and the waitlist, which are one module because they are one
- * transaction: cancelling a reservation promotes out of the waitlist, and
- * splitting them would mean either a circular import or a promotion that could
- * not share the cancellation's transaction.
+ * Reservations, the waitlist and bulk booking, which are one module because they
+ * are one transaction: cancelling a reservation promotes out of the waitlist,
+ * and splitting them would mean either a circular import or a promotion that
+ * could not share the cancellation's transaction. Bulk booking joins them
+ * because it writes into both tables at once and shares the same policy, the
+ * same audit shape and the same after-commit publisher.
  *
  * The window settings come from `ReservationWindowModule` rather than being
  * re-read here, for the same reason the day overview borrows them: one
@@ -30,10 +34,11 @@ import { WaitlistService } from './waitlist.service';
  */
 @Module({
   imports: [AuditModule, ReservationWindowModule],
-  controllers: [ReservationsController, WaitlistController],
+  controllers: [ReservationsController, WaitlistController, BulkReservationController],
   providers: [
     ReservationsService,
     WaitlistService,
+    BulkReservationService,
     WaitlistPromotionService,
     ReservationPolicy,
     { provide: DomainEventPublisher, useClass: NoopDomainEventPublisher },
