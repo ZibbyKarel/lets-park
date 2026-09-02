@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 
 import { FOCUS_RING } from './control-size';
 import { cx } from './cx';
+import { DismissableLayerProvider } from './dismissable-layer';
 import { useFocusTrap } from './use-focus-trap';
 
 export type ModalSize = 'sm' | 'md';
@@ -84,7 +85,7 @@ export function Modal({
   const descriptionId = `${baseId}-description`;
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useFocusTrap({ active: open, containerRef: dialogRef, onEscape: onClose });
+  const layer = useFocusTrap({ active: open, containerRef: dialogRef, onEscape: onClose });
 
   // The page behind must not scroll under an open modal — scrolling it is the
   // one way a pointer user can still reach content the scrim is covering.
@@ -106,100 +107,106 @@ export function Modal({
   }
 
   return createPortal(
-    <div
-      // Presentational: the scrim is a backdrop, and the dialog inside it is
-      // what carries the role. A keyboard user reaches every way out through
-      // Escape and the close button, so this click handler is a pointer
-      // shortcut that duplicates existing behaviour rather than adding any.
-      role="presentation"
-      onClick={
-        closeOnScrimClick
-          ? (event) => {
-              if (event.target === event.currentTarget) {
-                onClose();
-              }
-            }
-          : undefined
-      }
-      className={cx(
-        'fixed inset-0 flex items-center justify-center overflow-y-auto bg-scrim p-6',
-        'z-[var(--z-overlay)]'
-      )}
-    >
+    // The provider, not the portal, is what a modal opened inside this one will
+    // find as its parent: the portal moves the DOM node to `document.body`,
+    // where nesting is invisible, but React context follows the tree the JSX
+    // describes and crosses the portal unchanged.
+    <DismissableLayerProvider layer={layer}>
       <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descriptionId : undefined}
-        // Focusable as a last resort, so a dialog with no controls in it can
-        // still receive focus instead of leaving it in the page behind.
-        tabIndex={-1}
+        // Presentational: the scrim is a backdrop, and the dialog inside it is
+        // what carries the role. A keyboard user reaches every way out through
+        // Escape and the close button, so this click handler is a pointer
+        // shortcut that duplicates existing behaviour rather than adding any.
+        role="presentation"
+        onClick={
+          closeOnScrimClick
+            ? (event) => {
+                if (event.target === event.currentTarget) {
+                  onClose();
+                }
+              }
+            : undefined
+        }
         className={cx(
-          'relative w-full rounded-lg bg-bg p-6 shadow-lg outline-none',
-          MODAL_WIDTH[size],
-          className
+          'fixed inset-0 flex items-center justify-center overflow-y-auto bg-scrim p-6',
+          'z-[var(--z-overlay)]'
         )}
       >
-        {hideCloseButton ? null : (
-          <button
-            type="button"
-            aria-label={closeLabel}
-            onClick={onClose}
-            className={cx(
-              'absolute right-6 top-6 inline-flex size-8 items-center justify-center',
-              'cursor-pointer rounded-cta border-0 bg-transparent text-fg-3',
-              'transition duration-[var(--dur-base)] ease-out hover:bg-bg-muted hover:text-fg',
-              FOCUS_RING
-            )}
-          >
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 14 14" className="size-3">
-              <path
-                d="M1 1 13 13M13 1 1 13"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        )}
-
-        {eyebrow ? (
-          <div
-            className={cx(
-              'mb-3 inline-flex h-6 items-center rounded-cta bg-brand-light px-3',
-              'text-xs font-bold uppercase tracking-caps text-brand-blue'
-            )}
-          >
-            {eyebrow}
-          </div>
-        ) : null}
-
-        <h2
-          id={titleId}
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={description ? descriptionId : undefined}
+          // Focusable as a last resort, so a dialog with no controls in it can
+          // still receive focus instead of leaving it in the page behind.
+          tabIndex={-1}
           className={cx(
-            'mb-2 text-xl font-bold tracking-snug text-fg',
-            // Keeps the title clear of the × button in the corner.
-            !hideCloseButton && 'pr-8'
+            'relative w-full rounded-lg bg-bg p-6 shadow-lg outline-none',
+            MODAL_WIDTH[size],
+            className
           )}
         >
-          {title}
-        </h2>
+          {hideCloseButton ? null : (
+            <button
+              type="button"
+              aria-label={closeLabel}
+              onClick={onClose}
+              className={cx(
+                'absolute right-6 top-6 inline-flex size-8 items-center justify-center',
+                'cursor-pointer rounded-cta border-0 bg-transparent text-fg-3',
+                'transition duration-[var(--dur-base)] ease-out hover:bg-bg-muted hover:text-fg',
+                FOCUS_RING
+              )}
+            >
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 14 14" className="size-3">
+                <path
+                  d="M1 1 13 13M13 1 1 13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          )}
 
-        {description ? (
-          <p id={descriptionId} className="mb-5 text-base leading-loose text-fg-3">
-            {description}
-          </p>
-        ) : null}
+          {eyebrow ? (
+            <div
+              className={cx(
+                'mb-3 inline-flex h-6 items-center rounded-cta bg-brand-light px-3',
+                'text-xs font-bold uppercase tracking-caps text-brand-blue'
+              )}
+            >
+              {eyebrow}
+            </div>
+          ) : null}
 
-        {children}
+          <h2
+            id={titleId}
+            className={cx(
+              'mb-2 text-xl font-bold tracking-snug text-fg',
+              // Keeps the title clear of the × button in the corner.
+              !hideCloseButton && 'pr-8'
+            )}
+          >
+            {title}
+          </h2>
 
-        {footer ? (
-          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">{footer}</div>
-        ) : null}
+          {description ? (
+            <p id={descriptionId} className="mb-5 text-base leading-loose text-fg-3">
+              {description}
+            </p>
+          ) : null}
+
+          {children}
+
+          {footer ? (
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">{footer}</div>
+          ) : null}
+        </div>
       </div>
-    </div>,
+    </DismissableLayerProvider>,
     document.body
   );
 }

@@ -1,7 +1,7 @@
 import { cloneElement, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 
 import { cx } from './cx';
-import { useDismissableLayer } from './dismissable-layer';
+import { DismissableLayerProvider, useDismissableLayer } from './dismissable-layer';
 
 export type TooltipPlacement = 'top' | 'bottom';
 
@@ -77,7 +77,7 @@ export function Tooltip({ content, children, placement = 'top', className }: Too
   // the trigger too, so "is the keyboard in this layer?" is true for a tooltip
   // opened by focus and false for one merely hovered — which is exactly the
   // distinction the Escape rule turns on.
-  useDismissableLayer({ active: visible, elementRef: wrapperRef, onDismiss: hide });
+  const layer = useDismissableLayer({ active: visible, elementRef: wrapperRef, onDismiss: hide });
 
   const existingDescribedBy = children.props['aria-describedby'];
   const describedBy = visible
@@ -96,24 +96,26 @@ export function Tooltip({ content, children, placement = 'top', className }: Too
       onFocus={show}
       onBlur={hide}
     >
-      {cloneElement(children, { 'aria-describedby': describedBy })}
+      <DismissableLayerProvider layer={layer}>
+        {cloneElement(children, { 'aria-describedby': describedBy })}
 
-      {visible ? (
-        <span
-          id={bubbleId}
-          role="tooltip"
-          className={cx(
-            'absolute left-1/2 -translate-x-1/2 whitespace-normal rounded-xs',
-            'max-w-[var(--tooltip-max-w)] bg-bg-inverse px-3 py-2',
-            'text-xs leading-normal text-fg-on-dark shadow-md',
-            'z-[var(--z-tooltip)]',
-            placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
-            className
-          )}
-        >
-          {content}
-        </span>
-      ) : null}
+        {visible ? (
+          <span
+            id={bubbleId}
+            role="tooltip"
+            className={cx(
+              'absolute left-1/2 -translate-x-1/2 whitespace-normal rounded-xs',
+              'max-w-[var(--tooltip-max-w)] bg-bg-inverse px-3 py-2',
+              'text-xs leading-normal text-fg-on-dark shadow-md',
+              'z-[var(--z-tooltip)]',
+              placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
+              className
+            )}
+          >
+            {content}
+          </span>
+        ) : null}
+      </DismissableLayerProvider>
     </span>
   );
 }

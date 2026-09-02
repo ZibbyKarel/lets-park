@@ -11,7 +11,7 @@ import {
 
 import { FOCUS_RING, INSET_FOCUS_RING } from './control-size';
 import { cx } from './cx';
-import { useDismissableLayer } from './dismissable-layer';
+import { DismissableLayerProvider, useDismissableLayer } from './dismissable-layer';
 import { getTabbableElements } from './use-focus-trap';
 
 export type DropdownAlign = 'start' | 'end';
@@ -133,7 +133,11 @@ export function Dropdown({
   // than the panel, because it is mounted whether the menu is open or not, so
   // the node handed to the set is never one that is about to disappear from
   // under it mid-render.
-  useDismissableLayer({ active: open, elementRef: rootRef, onDismiss: () => close(true) });
+  const layer = useDismissableLayer({
+    active: open,
+    elementRef: rootRef,
+    onDismiss: () => close(true),
+  });
 
   // Click outside closes. Pointer-only affordance, kept out of the layer set
   // above on purpose: a pointer event names its own target, so every open
@@ -252,85 +256,87 @@ export function Dropdown({
 
   return (
     <div ref={rootRef} className={cx('relative inline-block', className)}>
-      <button
-        ref={triggerRef}
-        type="button"
-        id={triggerId}
-        aria-label={triggerLabel}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => (open ? close(false) : openAt(firstEnabled))}
-        onKeyDown={onTriggerKeyDown}
-        className={cx(
-          'inline-flex cursor-pointer items-center gap-3 rounded-cta border border-border bg-bg',
-          'py-1 pl-1 pr-3 text-sm text-fg',
-          'transition duration-[var(--dur-fast)] ease-out hover:shadow-sm',
-          FOCUS_RING,
-          triggerClassName
-        )}
-      >
-        {trigger}
-      </button>
-
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          aria-label={label}
-          aria-labelledby={label ? undefined : triggerId}
-          onKeyDown={onMenuKeyDown}
+      <DismissableLayerProvider layer={layer}>
+        <button
+          ref={triggerRef}
+          type="button"
+          id={triggerId}
+          aria-label={triggerLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={() => (open ? close(false) : openAt(firstEnabled))}
+          onKeyDown={onTriggerKeyDown}
           className={cx(
-            'absolute top-full mt-2 flex flex-col gap-1 rounded-md border border-border bg-bg p-2',
-            'min-w-[var(--menu-min-w)] shadow-lg',
-            'z-[var(--z-dropdown)]',
-            align === 'end' ? 'right-0' : 'left-0'
+            'inline-flex cursor-pointer items-center gap-3 rounded-cta border border-border bg-bg',
+            'py-1 pl-1 pr-3 text-sm text-fg',
+            'transition duration-[var(--dur-fast)] ease-out hover:shadow-sm',
+            FOCUS_RING,
+            triggerClassName
           )}
         >
-          {header ? <div className="px-3 pb-3 pt-2">{header}</div> : null}
+          {trigger}
+        </button>
 
-          {items.map((item, index) =>
-            item.separator ? (
-              <DropdownSeparator key={item.id} />
-            ) : (
-              <button
-                key={item.id}
-                ref={(node) => {
-                  itemRefs.current[index] = node;
-                }}
-                type="button"
-                role="menuitem"
-                // Roving tabindex: only the active item is reachable by Tab, so
-                // the menu is one stop rather than N.
-                tabIndex={index === activeIndex ? 0 : -1}
-                disabled={item.disabled}
-                onClick={() => selectItem(item)}
-                onMouseEnter={() => {
-                  if (!item.disabled) {
-                    setActiveIndex(index);
-                  }
-                }}
-                className={cx(
-                  'flex items-center justify-between gap-3 rounded-sm border-0 bg-transparent',
-                  'px-3 py-3 text-left text-sm',
-                  'transition duration-[var(--dur-fast)] ease-out',
-                  INSET_FOCUS_RING,
-                  // Swapped, never layered (see `button.tsx`): the three states
-                  // each supply their own text colour rather than stacking.
-                  item.disabled
-                    ? 'cursor-not-allowed text-fg-3'
-                    : item.danger
-                      ? 'cursor-pointer text-danger hover:bg-danger-100'
-                      : 'cursor-pointer text-fg hover:bg-bg-muted'
-                )}
-              >
-                <span>{item.label}</span>
-                {item.trailing ? <span className="text-fg-3">{item.trailing}</span> : null}
-              </button>
-            )
-          )}
-        </div>
-      ) : null}
+        {open ? (
+          <div
+            id={menuId}
+            role="menu"
+            aria-label={label}
+            aria-labelledby={label ? undefined : triggerId}
+            onKeyDown={onMenuKeyDown}
+            className={cx(
+              'absolute top-full mt-2 flex flex-col gap-1 rounded-md border border-border bg-bg p-2',
+              'min-w-[var(--menu-min-w)] shadow-lg',
+              'z-[var(--z-dropdown)]',
+              align === 'end' ? 'right-0' : 'left-0'
+            )}
+          >
+            {header ? <div className="px-3 pb-3 pt-2">{header}</div> : null}
+
+            {items.map((item, index) =>
+              item.separator ? (
+                <DropdownSeparator key={item.id} />
+              ) : (
+                <button
+                  key={item.id}
+                  ref={(node) => {
+                    itemRefs.current[index] = node;
+                  }}
+                  type="button"
+                  role="menuitem"
+                  // Roving tabindex: only the active item is reachable by Tab, so
+                  // the menu is one stop rather than N.
+                  tabIndex={index === activeIndex ? 0 : -1}
+                  disabled={item.disabled}
+                  onClick={() => selectItem(item)}
+                  onMouseEnter={() => {
+                    if (!item.disabled) {
+                      setActiveIndex(index);
+                    }
+                  }}
+                  className={cx(
+                    'flex items-center justify-between gap-3 rounded-sm border-0 bg-transparent',
+                    'px-3 py-3 text-left text-sm',
+                    'transition duration-[var(--dur-fast)] ease-out',
+                    INSET_FOCUS_RING,
+                    // Swapped, never layered (see `button.tsx`): the three states
+                    // each supply their own text colour rather than stacking.
+                    item.disabled
+                      ? 'cursor-not-allowed text-fg-3'
+                      : item.danger
+                        ? 'cursor-pointer text-danger hover:bg-danger-100'
+                        : 'cursor-pointer text-fg hover:bg-bg-muted'
+                  )}
+                >
+                  <span>{item.label}</span>
+                  {item.trailing ? <span className="text-fg-3">{item.trailing}</span> : null}
+                </button>
+              )
+            )}
+          </div>
+        ) : null}
+      </DismissableLayerProvider>
     </div>
   );
 }

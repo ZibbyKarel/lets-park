@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { useDismissableLayer } from './dismissable-layer';
+import { DismissableLayerProvider, useDismissableLayer } from './dismissable-layer';
 import { Dropdown, type DropdownItem } from './dropdown';
 import { Modal } from './modal';
 import { Tooltip } from './tooltip';
@@ -14,8 +14,10 @@ const ITEMS: DropdownItem[] = [
 
 /**
  * A layer with no styling, no roles and no behaviour of its own, so the tests
- * below are about the set and nothing else. Its wrapper stays mounted whether
- * the layer is open or not, which is how the real overlays behave too.
+ * below are about the tree and nothing else. Its wrapper stays mounted whether
+ * the layer is open or not, and it publishes its own node the way every real
+ * overlay does — that provider is the whole contract for being somebody's
+ * parent, so a probe without one would be testing a shape nothing ships.
  */
 function ProbeLayer({
   name,
@@ -29,13 +31,15 @@ function ProbeLayer({
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useDismissableLayer({ active: open, elementRef: ref, onDismiss });
+  const layer = useDismissableLayer({ active: open, elementRef: ref, onDismiss });
 
   return (
     <div ref={ref}>
-      {open ? <p>{name} otevřeno</p> : null}
-      <button type="button">Prvek v {name}</button>
-      {children}
+      <DismissableLayerProvider layer={layer}>
+        {open ? <p>{name} otevřeno</p> : null}
+        <button type="button">Prvek v {name}</button>
+        {children}
+      </DismissableLayerProvider>
     </div>
   );
 }

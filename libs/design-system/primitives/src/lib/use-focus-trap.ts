@@ -1,6 +1,11 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, type RefObject } from 'react';
 
-import { useDismissableLayer } from './dismissable-layer';
+import {
+  isActiveFocusTrap,
+  subscribeToLayers,
+  useDismissableLayer,
+  type DismissableLayer,
+} from './dismissable-layer';
 
 /**
  * Selector for the elements a browser will put in the tab order. Kept in one
@@ -34,10 +39,11 @@ export interface FocusTrapOptions {
   /** Element whose contents are trapped. */
   containerRef: RefObject<HTMLElement | null>;
   /**
-   * Called when Escape is pressed and this trap's container is the innermost
-   * open overlay (see `useDismissableLayer`). Omitting it keeps the container
-   * out of the layer set altogether, so Escape falls through to whatever is
-   * beneath rather than being swallowed.
+   * Called when Escape is pressed and this trap's container is the deepest open
+   * layer (see `useDismissableLayer`). Omitting it makes the container one
+   * Escape never selects, so a press falls through to whatever is beneath
+   * rather than being swallowed — the container still takes its place in the
+   * layer tree, because a nested overlay has to be able to find it.
    */
   onEscape?: (() => void) | undefined;
 }
@@ -52,6 +58,19 @@ export interface FocusTrapOptions {
  * question no single trap can answer from where it stands. The `keydown`
  * listener below therefore handles Tab and nothing else.
  *
+ * **Only the trap on top traps.** A trap whose container is a portal cannot see
+ * a nested overlay that portals somewhere else, so left to itself it would find
+ * nothing tabbable, focus its own container, and pull the keyboard out of the
+ * overlay the user is actually in — which then feeds the layer set's focus
+ * tie-break a false answer about who owns the next Escape. This hook therefore
+ * asks the layer tree whether it is the active trap, pauses when another
+ * trapping layer opens above it, and resumes when that layer closes. Pausing
+ * releases Tab only; the layer that is closing owns focus restoration, so a
+ * resume moves focus solely when this trap never took it in the first place.
+ *
+ * Returns its layer node, which the caller must publish with a
+ * `DismissableLayerProvider` around the overlay's content.
+ *
  * **Why a hand-rolled trap rather than `<dialog>.showModal()`.** The native top
  * layer really does trap focus in a browser, and it would be the better
  * primitive if it could be verified — but jsdom implements neither the top
@@ -64,21 +83,21 @@ export interface FocusTrapOptions {
  * the behaviour the specs assert is the behaviour that ships. See
  * `doc/decision/0021-fokus-trap-modalu-rucne-ne-dialog.md`.
  */
-export function useFocusTrap({ active, containerRef, onEscape }: FocusTrapOptions): void {
-  // Held in a ref, not in the dependency array. A consumer almost always passes
-  // an inline arrow for `onEscape`, so depending on it would tear down and
-  // rebuild the trap on every render — and rebuilding re-runs the initial
-  // focus, yanking the caret out of whatever field the user was typing in.
-  const onEscapeRef = useRef(onEscape);
-  onEscapeRef.current = onEscape;
-
+export function useFocusTrap({
+  active,
+  containerRef,
+  onEscape,
+}: FocusTrapOptions): DismissableLayer {
   // Escape is not handled by the trap's own listener below. It belongs to the
-  // page-wide layer set, which is what decides whether this container or
-  // something open inside it owns a given press.
-  useDismissableLayer({
-    active: active && onEscape !== undefined,
+  // page-wide layer tree, which is what decides whether this container or
+  // something open inside it owns a given press. The container joins the tree
+  // whether or not it answers to Escape, because it has to be findable as the
+  // parent of anything opened inside it either way.
+  const layer = useDismissableLayer({
+    active,
     elementRef: containerRef,
-    onDismiss: () => onEscapeRef.current?.(),
+    onDismiss: onEscape,
+    trapsFocus: true,
   });
 
   useEffect(() => {
@@ -94,12 +113,6 @@ export function useFocusTrap({ active, containerRef, onEscape }: FocusTrapOption
     // Captured before the first focus move, so it is the element that opened
     // the overlay rather than anything the overlay itself focused.
     const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    const [firstTabbable] = getTabbableElements(container);
-    // Falls back to the container itself, which is made focusable with
-    // `tabIndex={-1}` — an overlay with no controls at all must still take
-    // focus, or the screen reader stays in the page behind it.
-    (firstTabbable ?? container).focus();
 
     // Tab only — see the note about Escape above.
     const onKeyDown = (event: KeyboardEvent) => {
@@ -143,10 +156,54 @@ export function useFocusTrap({ active, containerRef, onEscape }: FocusTrapOption
       }
     };
 
-    document.addEventListener('keydown', onKeyDown);
+    let trapping = false;
+    let hasTakenFocus = false;
+
+    const startTrapping = () => {
+      if (trapping) {
+        return;
+      }
+      trapping = true;
+
+      // Once per activation, not on every resume: when a nested overlay closes,
+      // its own cleanup puts focus back on whatever opened it — which is inside
+      // this container already. Grabbing the first control again here would
+      // overwrite that with a worse answer.
+      if (!hasTakenFocus) {
+        hasTakenFocus = true;
+
+        const [firstTabbable] = getTabbableElements(container);
+        // Falls back to the container itself, which is made focusable with
+        // `tabIndex={-1}` — an overlay with no controls at all must still take
+        // focus, or the screen reader stays in the page behind it.
+        (firstTabbable ?? container).focus();
+      }
+
+      document.addEventListener('keydown', onKeyDown);
+    };
+
+    const stopTrapping = () => {
+      if (!trapping) {
+        return;
+      }
+      trapping = false;
+
+      // Focus is left exactly where it is: the layer that opened above this one
+      // is about to place it, and moving it here would be a race with that.
+      document.removeEventListener('keydown', onKeyDown);
+    };
+
+    const sync = () => (isActiveFocusTrap(layer) ? startTrapping() : stopTrapping());
+
+    // Run on every change to the tree rather than once: this trap has to pause
+    // when a modal opens above it and resume when that modal closes, and
+    // neither of those is a render of this component.
+    const unsubscribe = subscribeToLayers(sync);
+    sync();
 
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
+      unsubscribe();
+      stopTrapping();
 
       if (!previouslyFocused || !previouslyFocused.isConnected) {
         return;
@@ -165,5 +222,7 @@ export function useFocusTrap({ active, containerRef, onEscape }: FocusTrapOption
         previouslyFocused.focus();
       }
     };
-  }, [active, containerRef]);
+  }, [active, containerRef, layer]);
+
+  return layer;
 }
