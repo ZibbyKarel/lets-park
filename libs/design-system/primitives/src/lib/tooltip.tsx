@@ -1,4 +1,11 @@
-import { cloneElement, useId, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  cloneElement,
+  useEffect,
+  useId,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 
 import { cx } from './cx';
 
@@ -34,6 +41,15 @@ export interface TooltipProps {
  * that only appears on hover is invisible to keyboard and touch users, which is
  * the single most common way this component is got wrong.
  *
+ * **Escape works even when the bubble opened from a hover, not a focus.**
+ * WCAG 2.1 SC 1.4.13 requires content shown on hover to be dismissable without
+ * moving the pointer or focus. Because of that, the `Escape` listener is
+ * attached to `document` for as long as the bubble is visible, rather than to
+ * the wrapper: a wrapper-level `onKeyDown` only ever fires for keys delivered
+ * to something inside the wrapper, so it would never fire while the pointer is
+ * hovering and focus is elsewhere on the page — exactly the case this rule is
+ * about.
+ *
  * `aria-describedby` is written **onto the child element itself**, merged with
  * any the caller already set. It cannot go on a wrapper: assistive technology
  * resolves a description from the focused element's own attributes, so a
@@ -55,6 +71,29 @@ export function Tooltip({ content, children, placement = 'top', className }: Too
   const show = () => setVisible(true);
   const hide = () => setVisible(false);
 
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    // Document-level, not a wrapper `onKeyDown`: a hover-opened bubble can be
+    // visible while focus sits elsewhere on the page, and a keydown delivered
+    // there would never reach a listener on this wrapper. `stopPropagation`
+    // still keeps a surrounding Modal's own Escape handler from also firing.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        // `setVisible` directly, not `hide()`: it is the stable identity React
+        // guarantees, so the effect's dependency array can name only `visible`.
+        setVisible(false);
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [visible]);
+
   const existingDescribedBy = children.props['aria-describedby'];
   const describedBy = visible
     ? [existingDescribedBy, bubbleId].filter(Boolean).join(' ')
@@ -70,14 +109,6 @@ export function Tooltip({ content, children, placement = 'top', className }: Too
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
-      onKeyDown={(event) => {
-        // Escape dismisses the bubble without moving focus, so a user who finds
-        // it covering the content underneath can get rid of it.
-        if (event.key === 'Escape' && visible) {
-          event.stopPropagation();
-          hide();
-        }
-      }}
     >
       {cloneElement(children, { 'aria-describedby': describedBy })}
 

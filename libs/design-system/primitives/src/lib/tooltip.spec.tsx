@@ -135,6 +135,34 @@ describe('Tooltip', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('dismisses on Escape even when it was opened by hover with focus elsewhere (WCAG 1.4.13)', async () => {
+    const user = userEvent.setup();
+    render(
+      <div>
+        <button type="button">Jinde</button>
+        <Tooltip content="Zamčeno správcem">
+          <button type="button">Potvrdit</button>
+        </Tooltip>
+      </div>
+    );
+
+    const elsewhere = screen.getByRole('button', { name: 'Jinde' });
+    const trigger = screen.getByRole('button', { name: 'Potvrdit' });
+
+    elsewhere.focus();
+    await user.hover(trigger);
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+
+    // Escape reaches the tooltip via a document-level listener, not one on the
+    // trigger — a wrapper-level handler would never see this, because focus
+    // never moved to the trigger in the first place.
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+  });
+
   it('never takes focus itself', async () => {
     const user = userEvent.setup();
     render(
