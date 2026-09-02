@@ -150,3 +150,67 @@ export const NoControlsInside: Story = {
     />
   ),
 };
+
+/**
+ * A confirmation opened from inside another dialog.
+ *
+ * Both dialogs render into `document.body`, so in the DOM they are siblings —
+ * nothing there says one was opened inside the other. The layer tree reads that
+ * from React instead, which is why Escape closes the confirmation first and the
+ * dialog underneath only on the second press. Focus stays in the confirmation
+ * while it is open, and Tab does not wander into the dialog behind it.
+ */
+export const DialogAboveDialog: Story = {
+  render: (args) => {
+    function Nested() {
+      const [outer, setOuter] = useState(false);
+      const [confirm, setConfirm] = useState(false);
+
+      return (
+        <div className="flex flex-col items-start gap-4">
+          <Button onClick={() => setOuter(true)}>Otevřít dialog</Button>
+          <p className="max-w-96 text-sm text-fg-3">
+            Otevři dialog, pak potvrzení nad ním. První Escape zavře potvrzení, druhý dialog pod
+            ním. Tab zůstává v tom, který je navrchu.
+          </p>
+
+          <Modal
+            {...args}
+            open={outer}
+            onClose={() => setOuter(false)}
+            title="Nastavení"
+            description="Změny se projeví hned po uložení."
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setOuter(false)}>
+                  Zavřít
+                </Button>
+                <Button onClick={() => setConfirm(true)}>Zahodit změny</Button>
+              </>
+            }
+          >
+            <Input label="Kód" defaultValue="REF-4821" />
+
+            <Modal
+              open={confirm}
+              onClose={() => setConfirm(false)}
+              title="Opravdu zahodit?"
+              description="Rozepsané hodnoty se ztratí."
+              hideCloseButton
+              footer={
+                <>
+                  <Button variant="secondary" onClick={() => setConfirm(false)}>
+                    Zpět
+                  </Button>
+                  <Button onClick={() => setConfirm(false)}>Zahodit</Button>
+                </>
+              }
+            />
+          </Modal>
+        </div>
+      );
+    }
+
+    return <Nested />;
+  },
+};
