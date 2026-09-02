@@ -207,7 +207,7 @@
 
   /* --- Controls ---
      DERIVED from lets-park-design.dc.html, NOT from colors_and_type.css —
-     see controls.ts and doc/decision/0011-*. */
+     see controls.ts and doc/decision/0011-derived-control-tokens-and-rounding.md. */
   --control-h-sm: 36px;
   --control-h-md: 40px;
   --control-h-lg: 48px;

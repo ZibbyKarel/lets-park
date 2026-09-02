@@ -84,5 +84,5 @@ generous.
 
 **`monthSpan()` duplicates future calendar arithmetic.** Once there's a need
 to compute month ranges in more than one place, it belongs in
-`libs/shared-types` next to `doc/decision/0013-*`; moving it there now would be
+`libs/shared-types` next to `doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary.md`; moving it there now would be
 premature abstraction.

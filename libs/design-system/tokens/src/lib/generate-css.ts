@@ -217,7 +217,7 @@ export function generateTokensCss(tokens: DesignTokens): string {
 
   /* --- Controls ---
      DERIVED from lets-park-design.dc.html, NOT from colors_and_type.css —
-     see controls.ts and doc/decision/0011-*. */
+     see controls.ts and doc/decision/0011-derived-control-tokens-and-rounding.md. */
   --control-h-sm: ${controls.height.sm};
   --control-h-md: ${controls.height.md};
   --control-h-lg: ${controls.height.lg};

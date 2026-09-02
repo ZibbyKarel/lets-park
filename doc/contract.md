@@ -691,7 +691,7 @@ The contract builds on it, but the backend and `libs/i18n` use it too.
 | realtime | `RESERVATION_REASSIGN_CAUSES`, `CELL_LOCK_RESULTS` |
 
 Arithmetic is calendar-based, and the timezone is resolved at a single
-boundary — see `doc/decision/0013-*`. Movable holidays (Good Friday, Easter
+boundary — see `doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary.md`. Movable holidays (Good Friday, Easter
 Monday) are computed with the Meeus/Jones/Butcher algorithm, not from a
 table, so they never go stale.
 
