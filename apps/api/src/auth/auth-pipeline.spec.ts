@@ -330,11 +330,22 @@ describe('authentication through the assembled application', () => {
 
   describe('the default is deny', () => {
     it('protects a route that carries no auth decorator at all', async () => {
-      // `AppController` is from the operational baseline and knows nothing about
-      // auth; it is protected because `JwtAuthGuard` is an APP_GUARD.
-      const response = await get('/api');
+      // `ProtectedController` carries no auth decorator of any kind; it is
+      // protected because `JwtAuthGuard` is an APP_GUARD. This used to probe
+      // `GET /api`, the Nx scaffold's `AppController`, which was deleted as a
+      // route in no contract (`doc/decision/0239-*`) — a locally declared
+      // controller makes the same point without depending on a stub existing.
+      const response = await get('/api/protected');
 
       expect(response.status).toBe(401);
+    });
+
+    it('answers 404 at the bare /api prefix — nothing is mounted there', async () => {
+      // The scaffold route's replacement assertion. `AppModule` registers no
+      // controller of its own any more, so the prefix itself is not a route.
+      const response = await get('/api');
+
+      expect(response.status).toBe(404);
     });
 
     it('lets a @Public() route through with no token', async () => {

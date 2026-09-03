@@ -103,6 +103,7 @@ import type {
   ReservationWindowSettings,
 } from '@lets-park/contract';
 import type { Prisma } from '@lets-park/database';
+import { Prisma as PrismaNamespace } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
 import { compareDateOnly, todayInPrague } from '@lets-park/shared-types';
 import type { AuditEntry } from '../audit/audit-log.service';
@@ -248,6 +249,16 @@ export class BulkReservationService {
     const created = await this.createReservations(tx, plans, actor.id);
     const createdByDate = new Map(created.map((row) => [toDateOnly(row.date), row]));
 
+    // A day the caller was already queued on and has now been given a spot.
+    //
+    // `WaitlistService.join` refuses that state at the door and `promote` clears
+    // it on the other side; this was the one writer that could create it. The
+    // entry would not corrupt anything — `firstEligible` skips somebody who
+    // already holds the day — but the person's day screen would show them queued
+    // for a spot they can never be promoted into while they hold their own. See
+    // `doc/decision/0236-*`.
+    const releasedCells = await this.releaseOwnQueues(tx, [...createdByDate.keys()], actor.id);
+
     // Every day that could still end up on a queue, re-read before it does.
     //
     // Two sources, and they need the same second read for the same reason: a day
@@ -298,6 +309,10 @@ export class BulkReservationService {
             },
           })
         ),
+        // The cells the caller's own pre-existing entries were removed from.
+        // Same reasoning as an insert: the queue got shorter, and everyone
+        // behind them moved up.
+        ...releasedCells,
         // Only the cells an entry was actually inserted into: a queue whose
         // length did not change is not news, and `skipDuplicates` means a
         // planned entry that was already there changed nothing.
@@ -492,6 +507,57 @@ export class BulkReservationService {
       skipDuplicates: true,
       select: { id: true, parkingSpotId: true, userId: true, date: true },
     });
+  }
+
+  /**
+   * Drops the caller's own queue entries on days this batch just reserved for
+   * them, and reports the cells that got shorter.
+   *
+   * `DELETE … RETURNING` rather than `deleteMany`, which reports only a count:
+   * the cells have to be named in the broadcast, and only the delete itself
+   * knows which they were. Ordered by `(date, parkingSpotId)` so two
+   * confirmations that reach into the same rows take them in the same order —
+   * the same reason `createReservations` inserts in ascending date order.
+   *
+   * The recount afterwards is a second round trip per cell, sequentially: these
+   * run inside a transaction that is holding row locks, which is not a place to
+   * fan out. Cells are few — at most one per day in the batch.
+   */
+  private async releaseOwnQueues(
+    tx: Prisma.TransactionClient,
+    dates: readonly DateOnly[],
+    userId: string
+  ): Promise<DomainEvent[]> {
+    if (dates.length === 0) {
+      return [];
+    }
+
+    const days = PrismaNamespace.join(
+      [...dates].sort(compareDateOnly).map((date) => PrismaNamespace.sql`${date}::date`)
+    );
+    const cleared = await tx.$queryRaw<{ parkingSpotId: string; date: Date }[]>`
+      DELETE FROM "WaitlistEntry"
+      WHERE "userId" = ${userId}::uuid
+        AND "date" IN (${days})
+      RETURNING "parkingSpotId", "date"
+    `;
+
+    const events: DomainEvent[] = [];
+    for (const row of [...cleared].sort(
+      (left, right) =>
+        left.date.getTime() - right.date.getTime() ||
+        left.parkingSpotId.localeCompare(right.parkingSpotId)
+    )) {
+      const date = toDateOnly(row.date);
+      const waitlistCount = await tx.waitlistEntry.count({
+        where: { parkingSpotId: row.parkingSpotId, date: row.date },
+      });
+      events.push({
+        name: 'waitlist:updated',
+        payload: { date, parkingSpotId: row.parkingSpotId, waitlistCount },
+      });
+    }
+    return events;
   }
 
   // --- assembling the answer -------------------------------------------------

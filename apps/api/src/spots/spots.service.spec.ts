@@ -165,14 +165,32 @@ describe('SpotsService', () => {
 
       await expect(spots.deactivate({ id: spot.id }, 'admin-1')).rejects.toMatchObject({
         code: 'CONFLICT',
-        details: { reservations: 1 },
+        details: { reservations: 1, waitlistEntries: 0 },
       });
     });
 
-    it('ignores reservations that are already in the past', async () => {
+    it('refuses while somebody is only *queued* for the spot, with no reservation left', async () => {
+      // Reachable without any admin mistake: a cancellation whose whole queue is
+      // ineligible promotes nobody, so the spot goes free with its queue intact.
+      // Retiring it then orphans those entries behind `listActive` — invisible
+      // on the day overview, unreachable by the person queued, and never
+      // promotable. See `doc/decision/0235-*`.
+      const spot = double.seedSpot({ label: 'A1' });
+      const user = double.seedUser();
+      double.seedWaitlistEntry({ parkingSpotId: spot.id, userId: user.id, date: '2026-09-10' });
+
+      await expect(spots.deactivate({ id: spot.id }, 'admin-1')).rejects.toMatchObject({
+        code: 'CONFLICT',
+        details: { reservations: 0, waitlistEntries: 1 },
+      });
+      expect(double.spots[0]?.active).toBe(true);
+    });
+
+    it('ignores reservations and queue entries that are already in the past', async () => {
       const spot = double.seedSpot({ label: 'A1' });
       const user = double.seedUser();
       double.seedReservation({ parkingSpotId: spot.id, userId: user.id, date: '2026-09-01' });
+      double.seedWaitlistEntry({ parkingSpotId: spot.id, userId: user.id, date: '2026-09-01' });
 
       await expect(spots.deactivate({ id: spot.id }, 'admin-1')).resolves.toMatchObject({
         active: false,

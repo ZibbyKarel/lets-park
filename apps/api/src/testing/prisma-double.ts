@@ -2,8 +2,11 @@
  * An in-memory stand-in for `PrismaService`, for the domain services' unit
  * tests.
  *
- * Docker is unavailable in this environment, so nothing here has ever spoken to
- * a real Postgres. This double is therefore deliberately narrow: it implements
+ * Nothing **in this file** ever speaks to a real Postgres — that is what makes
+ * it a double, not a statement about the project. The `*.db.spec.ts` suites do,
+ * against PostgreSQL 17, under `nx run api:test-db` and in CI's own job
+ * (`doc/decision/0206-*`), and they are where anything resting on the database's
+ * actual behaviour belongs. This double is deliberately narrow: it implements
  * only the query shapes the Task 12 services actually issue, and it **fails
  * loudly** on anything else rather than quietly returning `[]`. A double that
  * silently answers a query it does not understand is how a test passes while the
@@ -13,8 +16,11 @@
  * either would make the test that depends on it worthless:
  *
  * - **Unique constraints.** `ParkingSpot.label` and `User.icsToken` raise a real
- *   `Prisma.PrismaClientKnownRequestError` P2002 with the `meta.target` Postgres
- *   produces. `MeService`'s ICS-token retry loop exists for exactly that error.
+ *   `Prisma.PrismaClientKnownRequestError` P2002 — in the shape this project's
+ *   **driver adapter** produces, which is *not* the documented `meta.target`.
+ *   See {@link uniqueViolation}: assuming `meta.target` is precisely the bug
+ *   that shipped `SPOT_ALREADY_RESERVED` unreachable. `MeService`'s ICS-token
+ *   retry loop exists for exactly that error.
  * - **`@db.Date` comparison.** A reservation's day is compared as the UTC
  *   midnight `Date` the pg adapter produces, so `date: { gte }` behaves the way
  *   `SpotsService.deactivate` assumes.
@@ -480,6 +486,19 @@ export class PrismaDouble {
           .filter((row) => row.date.getTime() === target)
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
           .map(copy);
+      },
+      // `SpotsService.requireNoFutureCommitments`, which counts queues for a
+      // spot as well as reservations on it. Same `date.gte` shape as the
+      // reservation count, and refused the same way if it is missing.
+      count: async (args: { where: { parkingSpotId: string; date: { gte: Date } } }) => {
+        const gte = args.where.date?.gte;
+        if (!(gte instanceof Date)) {
+          return unsupported('a waitlist count without a `date.gte` bound', args.where);
+        }
+        return this.waitlist.filter(
+          (row) =>
+            row.parkingSpotId === args.where.parkingSpotId && row.date.getTime() >= gte.getTime()
+        ).length;
       },
     };
   }

@@ -201,21 +201,23 @@ export class WaitlistService {
   /**
    * Leaves the queue.
    *
-   * Unlike cancelling a reservation, this **is** blocked by a closed window
-   * (`doc/decision/0004-*`): leaving reshuffles everybody behind you, which is
-   * a change to other people's positions, not a spot being given back.
-   * `OUT_OF_HORIZON` is reachable too — an admin lowering `openDaysBefore` puts
-   * a month back to `NOT_YET_OPEN` while entries already exist in it.
+   * **No window check**, exactly like `reservation.cancel` — see
+   * `doc/decision/0233-leaving-a-waitlist-is-exempt-from-the-reservation-window`,
+   * which amends `doc/decision/0004-*`. The rule that used to be here read
+   * "leaving reshuffles everybody behind you, so it is a write like any other".
+   * Under the shipped `AUTO` / `openDaysBefore = 7` defaults that made leaving
+   * impossible for the whole live life of every queue: `monthLockState` returns
+   * `LOCKED` from the 1st of the target month onwards, and the target month is
+   * the only period a queue for it can be promoted in. The person was then
+   * force-promoted into a reservation they had asked to leave, with no way out.
+   * The reshuffle argument also cuts the other way: everyone behind you moves
+   * *up*, which is nearer to cancellation (always allowed) than to creation.
+   *
+   * That is why `leaveWaitlistContract` declares no window errors at all.
    */
-  async leave(
-    input: LeaveWaitlistInput,
-    actor: AuthenticatedUser,
-    today: DateOnly = todayInPrague()
-  ): Promise<LeaveWaitlistOutput> {
-    const settings = await this.window.getSettings();
-
+  async leave(input: LeaveWaitlistInput, actor: AuthenticatedUser): Promise<LeaveWaitlistOutput> {
     const outcome = await this.prisma.client.$transaction(
-      (tx) => this.leaveOnce(tx, input, actor, settings, today),
+      (tx) => this.leaveOnce(tx, input, actor),
       WAITLIST_TRANSACTION_OPTIONS
     );
 
@@ -226,9 +228,7 @@ export class WaitlistService {
   private async leaveOnce(
     tx: Prisma.TransactionClient,
     input: LeaveWaitlistInput,
-    actor: AuthenticatedUser,
-    settings: Awaited<ReturnType<ReservationWindowService['getSettings']>>,
-    today: DateOnly
+    actor: AuthenticatedUser
   ): Promise<WaitlistOutcome<LeaveWaitlistOutput>> {
     // Locked: a promotion running right now wants this row too, and whichever
     // gets it first decides. If the promotion wins, the `delete` below finds
@@ -252,10 +252,6 @@ export class WaitlistService {
     }
 
     const date = toDateOnly(entry.date);
-    // The window is checked here, after the row is known: the target day comes
-    // from the entry, not from the request, so it cannot be checked earlier.
-    this.policy.assertWindowOpen(date, actor, settings, today);
-
     await tx.waitlistEntry.delete({ where: { id: entry.id } });
 
     const waitlistCount = await tx.waitlistEntry.count({

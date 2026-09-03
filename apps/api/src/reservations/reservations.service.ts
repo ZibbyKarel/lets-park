@@ -310,6 +310,30 @@ export class ReservationsService {
       where: { parkingSpotId: reservation.parkingSpotId, date: toDateColumn(date) },
     });
 
+    // The promotion deleted every queue entry the promoted person held for this
+    // day, which can shorten queues on spots nobody in this request named. Each
+    // of those cells needs its own `waitlist:updated`: the web cache patches
+    // `waitlistCount` only for the cell an event names
+    // (`apps/web/src/lot/day-overview-cache.ts`), so a cell that went 1 → 0 in
+    // silence keeps showing "1 waiting" — and everyone queued behind the
+    // promoted person there keeps a position one too high — until something
+    // unrelated forces a refetch. Sequential rather than `Promise.all`: these
+    // are extra round trips inside a transaction that is holding row locks, and
+    // an interactive transaction is not a place to fan out.
+    const otherCellEvents: DomainEvent[] = [];
+    for (const parkingSpotId of promotion.clearedParkingSpotIds) {
+      if (parkingSpotId === reservation.parkingSpotId) {
+        continue;
+      }
+      const count = await tx.waitlistEntry.count({
+        where: { parkingSpotId, date: toDateColumn(date) },
+      });
+      otherCellEvents.push({
+        name: 'waitlist:updated',
+        payload: { date, parkingSpotId, waitlistCount: count },
+      });
+    }
+
     return {
       result: {
         reservationId: reservation.id,
@@ -332,6 +356,8 @@ export class ReservationsService {
         },
         // A different fact about the same cell: the queue got shorter.
         { name: 'waitlist:updated', payload: { ...cell, waitlistCount } },
+        // …and the same fact about every other cell the promotion emptied.
+        ...otherCellEvents,
       ],
       notices: [
         {

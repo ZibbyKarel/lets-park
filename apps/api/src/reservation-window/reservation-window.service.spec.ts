@@ -149,6 +149,10 @@ describe('ReservationWindowService', () => {
 
           const { months } = await window.listMonths({ from: '2026-08', to: '2026-12' }, TODAY);
 
+          // The expectation below is built from `months` itself, so an
+          // implementation returning `[]` would satisfy it against an equally
+          // empty list. August through December inclusive is five.
+          expect(months).toHaveLength(5);
           expect(months.map((month) => month.state)).toEqual(
             months.map((month) =>
               monthLockState(startOfYearMonth(month.month), openDaysBefore, lockMode, TODAY)
