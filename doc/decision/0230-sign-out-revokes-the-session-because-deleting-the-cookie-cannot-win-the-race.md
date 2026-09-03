@@ -2,12 +2,12 @@
 
 ## What
 
-Signing out now records a **per-subject cutoff** on the server, and every later
-session read refuses a token issued at or before it. Cookie deletion still
+Signing out now adds the session's subject to a **revoked set** on the server,
+and every later session read refuses a token carrying it. Cookie deletion still
 happens — Auth.js does it — but it is no longer the thing that makes sign-out
 work.
 
-`libs/auth/src/lib/revocation.ts` holds the cutoffs;
+`libs/auth/src/lib/revocation.ts` holds the revoked set;
 `applySessionLifecycle` in `libs/auth/src/lib/config.ts` consults them from the
 `jwt` callback and returns `null` for a revoked session, which `@auth/core`
 answers by **clearing the session cookie instead of re-issuing it**
@@ -29,18 +29,25 @@ That capture was done (`apps/web-e2e/src/support/auth-network-log.ts`,
 `doc/decision/0232-*`). Three things came out of it, and the fix follows from
 them rather than from the hypothesis.
 
-**1. The hypothesis is wrong for this application.** `/api/auth/session` is
-never requested at all — 0 occurrences across 20 captured sign-out journeys.
-It cannot be, either: `AuthProvider` is always handed the session the root
-layout already read (`await auth()`), so `hasInitialSession` is true, and
+**1. The hypothesis is wrong for this application: `/api/auth/session` is not on
+the sign-out path.** 0 occurrences across 20 captured sign-out journeys. It
+cannot be there, either: `AuthProvider` is always handed the session the root
+layout already read (`await auth()`), so `hasInitialSession` is true and
 `SessionProvider`'s `_getSession()` early-returns instead of fetching
-(`next-auth/react.js`). The only `/api/auth/*` requests a sign-out makes are
-`GET /api/auth/csrf` and `POST /api/auth/signout`, and neither re-issues the
-session cookie.
+(`next-auth/react.js`); and `signOut()` with the default `redirect: true`
+returns before its own `_getSession()` call. The only `/api/auth/*` requests a
+sign-out makes are `GET /api/auth/csrf` and `POST /api/auth/signout`, and
+neither re-issues the session cookie.
+
+The endpoint is not unreachable in general — `AuthProvider` sets
+`refetchInterval` to `SESSION_REFETCH_SECONDS = 300` and Auth.js refetches on
+window focus, so a long-lived tab does poll it. It is simply never in flight
+during the seconds a sign-out occupies, which is all hypothesis one needed.
 
 **2. Every render that reads the session re-issues the cookie.** This is the
 real mechanism, and it is much broader than one endpoint. A single navigation to
-`/` produced three different session cookies in under two milliseconds:
+`/` produced three different session cookies, one per request — each carrying
+the one its predecessor had just set:
 
 ```
 >  GET /                  cookie=#9fec66a7   <  200  set=#dceef266
@@ -74,31 +81,53 @@ happened to race, which the trace never captured.
 
 Revocation does not depend on knowing which request raced. That is the argument.
 
-### Why the key is `sub` + `iat`, and not `jti`
+### Why the key is `sub`, and why that is enough
 
-The obvious design fails, silently, and the reason is worth stating because it
-would look correct in review: `@auth/core`'s `encode()` calls
-`setJti(crypto.randomUUID())` on **every** issue (`jwt.js`). The token a racing
-render re-installs therefore has a *different* `jti` from the one that signed
-out. Revoking the id that signed out would leave the one that survived working.
+Two designs were tried. The first was wrong in an instructive way.
 
-So the record is keyed on the subject — the stable Okta user id — and holds a
-cutoff in Unix seconds. `iat <= cutoff` refuses it; `iat > cutoff` honours it.
+**`jti` cannot be the key.** `@auth/core`'s `encode()` calls
+`setJti(crypto.randomUUID())` on *every* issue (`jwt.js`), so the token a racing
+render re-installs has a different `jti` from the one that signed out. Revoking
+the id that signed out leaves the one that survived working.
 
-**`<=`, not `<`.** The racing render encodes its token *before* the sign-out
-records the cutoff, so its `iat` — whole seconds, floored — is necessarily less
-than or equal to the cutoff second, never greater. A strict `<` would let
-exactly the token the race produces survive, and would pass every other test in
-the suite. `revocation.spec.ts` pins the boundary case on its own.
+**Nor `sub` plus an `iat` cutoff**, which is what this record originally
+described. The argument for it was that a racing render encodes *before* the
+sign-out records its cutoff, so its `iat` could never exceed the cutoff second.
+That is not sound: `iat` is stamped by `jose`'s `setIssuedAt()` at **encode**
+time, and `applySessionLifecycle` runs `rotateAccessToken` — possibly a refresh
+round trip to Okta — *between* the revocation check and that encode. A render
+whose check preceded the cutoff write and whose encode crossed the next second
+boundary would emit `iat > cutoff` and be honoured. A smaller race than the one
+it replaced, but still a race.
 
-The mirror ordering needs no separate handling: a render that reaches the `jwt`
-callback *after* the cutoff is recorded sees the incoming (older) token as
-revoked, returns `null`, and clears the cookie rather than re-issuing it. So the
-surviving cookie is not merely refused — it deletes itself on first use.
+**`sub` alone is enough, because `sub` is already per sign-in.** `@auth/core`
+sets the user id to a fresh `crypto.randomUUID()` on every completed sign-in,
+deliberately ignoring the provider's profile id:
+
+```js
+// @auth/core/lib/actions/callback/oauth/callback.js
+const user = { ...userFromProfile, id: crypto.randomUUID(), … };
+```
+
+and `token.sub = user.id`. Measured live in a production `next start` — the same
+persona signing in twice through the real OIDC flow produced `9efdd0ac…` then
+`15326704…`.
+
+So `sub` names **one sign-in session**, and re-encoding that session's cookie
+never changes it. A revoked *set* of subjects therefore decides on a value the
+race cannot move, has no clock in it, and closes the encode-time window
+completely. It also removes a branch: an earlier version dropped the cutoff on a
+new sign-in, which could never fire in production — a fresh sign-in always
+arrives as a subject the registry has never seen.
 
 Auth.js awaits `events.signOut` before pushing the clearing cookie
-(`lib/actions/signout.js`), so the cutoff is in place before the sign-out
+(`lib/actions/signout.js`), so the revocation is in place before the sign-out
 response leaves the server. That ordering is asserted, not assumed.
+
+The mirror ordering needs no separate handling: a render that reaches the `jwt`
+callback *after* the revocation is recorded sees its subject revoked, returns
+`null`, and clears the cookie rather than re-issuing it. So the surviving cookie
+is not merely refused — it deletes itself on first use.
 
 ## What this does and does not close
 
@@ -110,30 +139,47 @@ is gone.
 **Not closed: the Okta access token.** The session carries a bearer that
 `apps/api` validates against the issuer's JWKS, and nothing here revokes it at
 Okta. Somebody who has extracted that token from a session can keep calling the
-API directly until it expires — minutes, not the cookie's thirty days. Calling
-Okta's RFC 7009 revocation endpoint at sign-out would close that too; it is not
-done here because it is a second, independent change with its own failure modes
-(a revocation call that fails must not block a sign-out) and because the
-exposure is bounded by a short lifetime and is not reachable through the browser
-this fixes. Named here so it is a decision and not an oversight.
+API directly until it expires.
+
+**How long that is, since the number is the argument:** measured against the dev
+issuer, `expires_in` is **3599 seconds — one hour**, not the "minutes" an earlier
+draft of this record claimed. In production the lifetime is set on the Okta
+authorization server and is *not* configured by this repository, so it could be
+longer. The exposure is therefore an hour-scale window in dev, and an unknown
+set elsewhere — bounded, but less comfortably than first written.
+
+Calling Okta's RFC 7009 revocation endpoint at sign-out would close it. That is
+not done here because it is a second, independent change with its own failure
+modes (a revocation call that fails must not block a sign-out), and because the
+window is bounded and not reachable through the browser this fixes. It is the
+one part of the sign-out story still open, and it is a decision, not an
+oversight.
 
 **Not closed: a restart forgets.** See `doc/decision/0231-*`.
 
 ## Risk
 
-- **The cutoff store is in memory.** A restart of the Next.js server forgets
+- **The revoked set is in memory.** A restart of the Next.js server forgets
   every sign-out, and a token that had survived one would work again until it
   expires. This is the same posture, and the same single-instance premise, as
   `LockService` on the API side; `0231` records the boundary and the upgrade
   path. It is a narrower hole than the one it replaces — it needs a restart
   *and* a surviving token — but it is not zero.
-- **Revocation is by subject, so it is all-or-nothing per person.** Signing out
-  in one browser invalidates that person's sessions everywhere, including
-  another device. For an internal parking app that is defensible and arguably
-  what a user expects from "Odhlásit se"; it is not what a multi-device product
-  would want, and a future per-session key would have to survive re-encoding
-  (`jti` cannot — see above).
-- **Signing out and back in inside the same second** would be refused by the
-  cutoff alone. The sign-in branch drops the cutoff for that subject precisely
-  so it is not, and `config.spec.ts` pins it — but it is a coupling between two
-  branches of one callback, and removing either half breaks the other.
+- **Retention keeps a revoked subject for the session's whole maximum lifetime**
+  (30 days by default), so the set grows with sign-outs and is only swept on the
+  next write. For this application's population that is a few hundred short
+  strings at worst; for a large one it would want an expiry sweep of its own.
+- **A token with no `sub` is refused outright**, not merely un-revocable: the
+  registry fails closed because a subject it cannot key is a subject it can
+  never clear, and nothing downstream would catch it (`isAuthorized` reads
+  `auth.user`, never `sub`). `@auth/core` always sets a subject, so this is
+  unreachable in practice — but it is a refusal, and two pre-existing rotation
+  fixtures had to gain a `sub` to keep describing something production produces.
+
+**A limit this design was previously documented as having, and does not.** An
+earlier version of this record said "signing out in one browser invalidates that
+person's sessions everywhere, including another device", and adjudicated that
+cost as acceptable. It was wrong: `sub` is minted per sign-in, so revocation is
+per *session*, and other devices are untouched. The behaviour is finer-grained
+than the record claimed — the safe direction — but a cost was weighed that never
+existed, which is worth naming rather than quietly deleting.

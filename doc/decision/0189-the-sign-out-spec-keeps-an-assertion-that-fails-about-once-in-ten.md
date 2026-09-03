@@ -4,17 +4,23 @@
 >
 > The missing datum this record asked for — the request `Cookie` header, and the
 > ordering of `/api/auth/session` against `/api/auth/signout` — was captured.
-> The result overturns *Hypothesis one*: **`/api/auth/session` is never
-> requested by this application at all**, in any of 20 recorded sign-out
-> journeys, and it cannot be — `AuthProvider` always receives the session the
-> root layout already read, so `SessionProvider` never fetches one.
+> The result overturns *Hypothesis one*: **`/api/auth/session` is not on the
+> sign-out path** — 0 requests to it in any of 20 recorded sign-out journeys.
+> It cannot be there: `AuthProvider` always receives the session the root layout
+> already read, so `SessionProvider`'s mount fetch early-returns, and `signOut()`
+> with the default `redirect: true` returns before its own session fetch. (The
+> endpoint is not dead in general — a long-lived tab polls it every 300 s and on
+> window focus — it is simply never in flight during a sign-out, which is all
+> the hypothesis needed.)
 >
 > What the capture showed instead is broader than one endpoint: under
 > `strategy: 'jwt'` **every** server render that reads the session re-issues the
-> cookie. One navigation to `/` was measured setting three different session
-> cookies in under two milliseconds — the document render plus two `?_rsc`
-> prefetches. The sign-out clear is therefore racing every concurrent render,
-> and the browser keeps whichever `Set-Cookie` lands last.
+> cookie. One navigation to `/` was measured answering with three different
+> session cookies — the document render plus two `?_rsc` prefetches, each
+> request carrying the one the previous response set. The sign-out clear is
+> therefore racing every concurrent render, and the browser keeps whichever
+> `Set-Cookie` lands last. (Deleting a cookie is not a revocation mechanism at
+> all: the token stays valid, and a copy of it keeps working.)
 >
 > Because that ordering is not the application's to control, the fix is **not**
 > the client-side ordering change this record expected. Sign-out now revokes the

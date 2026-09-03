@@ -1,9 +1,11 @@
-# 0231 – The sign-out cutoffs hang off `globalThis`, because Next.js builds three auth configs
+# 0231 – The sign-out revocations hang off `globalThis`, because Next.js builds three auth configs
 
 ## What
 
-`createSignOutRegistry` reads its cutoff map from `sharedCutoffStore()`, which
-anchors a single `Map` to `globalThis` under `Symbol.for('@lets-park/auth:sign-out-cutoffs')`.
+`createSignOutRegistry` reads its revocation map from `sharedRevokedStore()`,
+which anchors a single `Map` to `globalThis` under
+`Symbol.for('@lets-park/auth:signed-out-sessions')`. That function **throws**
+when `process.env.NEXT_RUNTIME` is anything but the Node.js runtime.
 
 A module-level `Map` would be the obvious thing. It does not work, and it does
 not work *quietly* — which is the reason this has a record of its own rather
@@ -11,7 +13,7 @@ than a comment.
 
 ## Why
 
-The first implementation of `doc/decision/0230-*` held the cutoffs in the
+The first implementation of `doc/decision/0230-*` held the revocations in the
 closure of `createAuthConfig`. Every unit test passed. The end-to-end test —
 sign in, keep the cookie, sign out, put the cookie back, expect to be refused —
 failed, and the restored cookie worked exactly as before.
@@ -52,15 +54,23 @@ visible at the call site instead of hidden in a module.
 
 ## Risk
 
-- **Moving the proxy to the Edge runtime would silently stop this working.**
-  Edge is a separate isolate with its own `globalThis`, so the proxy would go
-  back to an empty registry and sign-out would stop being enforced on exactly
-  the path that enforces it — with no error. `0100-*` already fixes the runtime
-  for a different reason (secrets must not be inlined into an Edge bundle);
-  this is a second, independent reason it cannot move.
-  `config.spec.ts` › *revokes across configurations, not just the one that
-  signed out* is what fails if the sharing is ever broken, and it fails for the
-  per-configuration map specifically — verified by mutation.
+- **Moving the proxy to the Edge runtime would stop this working — so it now
+  refuses to boot instead.** Edge is a separate isolate with its own
+  `globalThis`, so the proxy would go back to an empty registry and sign-out
+  would stop being enforced on exactly the path that enforces it, with no error
+  and nothing logged. That is not a risk a comment can carry: it is the same
+  failure mode the first implementation of this fix had, and only an end-to-end
+  test caught it. `sharedRevokedStore()` therefore throws
+  `SignOutRevocationUnavailableError` when `process.env.NEXT_RUNTIME` is not the
+  Node.js runtime, turning a silent disable into an immediate boot failure.
+  `0100-*` already fixes the runtime for a different reason (secrets must not be
+  inlined into an Edge bundle); this makes that constraint executable rather
+  than merely argued.
+
+  Two tests hold the line: `revocation.spec.ts` › *refuses to boot on the Edge
+  runtime rather than silently not enforcing*, and `config.spec.ts` › *revokes
+  across configurations, not just the one that signed out*, which fails
+  specifically for a per-configuration map — verified by mutation.
 - **Process-wide state is process-wide.** A second web instance would not see
   the first's sign-outs, which makes horizontal scaling of `apps/web` a change
   that must go through this file. `SignOutRegistry` is deliberately four methods

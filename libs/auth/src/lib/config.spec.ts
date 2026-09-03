@@ -20,8 +20,11 @@ import {
   REFRESH_SKEW_SECONDS,
   REFRESH_TOKEN_ERROR,
   rotateAccessToken,
-  sharedCutoffStore,
 } from '../index';
+// Deep import on purpose: the shared store is not part of the lib's public API
+// (it is a process-global mutable map), and this file is the only thing that
+// needs to reset it between tests.
+import { sharedRevokedStore } from './revocation';
 import type { AuthOptions, TokenRefresher } from '../index';
 import { discoveryDocument, stubFetch } from '../__fixtures__/stub-fetch';
 
@@ -336,6 +339,10 @@ describe('createAuthConfig', () => {
 
     const token = await config.callbacks?.jwt?.({
       token: {
+        // `sub` is not decoration: `@auth/core` sets one on every session, and
+        // the `jwt` callback now refuses a token it cannot key for revocation.
+        // A fixture without it is a shape production never produces.
+        sub: 'e3f1a2b4-0c7d-4e2a-9f10-8b6c5d4e3f21',
         accessToken: 'about-to-expire',
         expiresAt: nowSeconds() + (REFRESH_SKEW_SECONDS - 30),
         refreshToken: 'refresh-me',
@@ -358,6 +365,7 @@ describe('createAuthConfig', () => {
 
     const token = await config.callbacks?.jwt?.({
       token: {
+        sub: 'e3f1a2b4-0c7d-4e2a-9f10-8b6c5d4e3f21',
         accessToken: 'dead',
         expiresAt: nowSeconds() - 10,
         refreshToken: 'revoked',
@@ -406,35 +414,18 @@ describe('createAuthConfig', () => {
  * survived the sign-out race delete itself on its next use.
  */
 describe('sign-out revocation', () => {
-  const SUBJECT = 'okta-user-1';
+  /**
+   * Two subjects, shaped like what `@auth/core` actually mints: a fresh UUID per
+   * **sign-in**, not a per-person id. `SESSION_B` is the same human being
+   * signing in a second time.
+   */
+  const SESSION_A = '9efdd0ac-6b1e-4d0e-9a7d-2b5c1f0a3e11';
+  const SESSION_B = '15326704-0c8a-4a1f-8d33-7e9b2c4d6a02';
 
-  // `createAuthConfig` deliberately reads a process-wide cutoff map — see
-  // `sharedCutoffStore` for why it has to. That is exactly the state a test
+  // `createAuthConfig` deliberately reads a process-wide revocation map — see
+  // `sharedRevokedStore` for why it has to. That is exactly the state a test
   // file must reset, or the second test inherits the first one's sign-out.
-  beforeEach(() => sharedCutoffStore().clear());
-
-  it('revokes across configurations, not just the one that signed out', async () => {
-    // This is the shape of the real deployment, and the reason the first
-    // attempt at this fix did nothing: Next.js builds the proxy, the
-    // `/api/auth/*` handlers and the server components separately, so
-    // `createAuthConfig` runs several times in one process. Sign-out lands on
-    // one of them; the authorization check that matters runs on another.
-    expect(sharedCutoffStore()).toBe(sharedCutoffStore());
-
-    const signOutSide = createAuthConfig(OPTIONS);
-    const authorizingSide = createAuthConfig(OPTIONS);
-    const issuedAt = nowSeconds() - 60;
-
-    await signOutSide.events?.signOut?.({ token: liveToken(issuedAt) });
-
-    expect(
-      await authorizingSide.callbacks?.jwt?.({
-        token: liveToken(issuedAt),
-        user: {},
-        account: null,
-      })
-    ).toBeNull();
-  });
+  beforeEach(() => sharedRevokedStore().clear());
 
   /** A configuration whose refresher can never be reached over the network. */
   function config() {
@@ -442,20 +433,40 @@ describe('sign-out revocation', () => {
     return createAuthConfig({ ...OPTIONS, fetch: server.fetch });
   }
 
-  /** A healthy, non-expiring session token for `SUBJECT`. */
-  const liveToken = (iat: number): JWT => ({
-    sub: SUBJECT,
+  /** A healthy, non-expiring session token for one sign-in session. */
+  const liveToken = (sub: string, iat = nowSeconds() - 60): JWT => ({
+    sub,
     iat,
     accessToken: 'still-good',
     expiresAt: nowSeconds() + 3600,
     refreshToken: 'unused',
   });
 
+  it('revokes across configurations, not just the one that signed out', async () => {
+    // The shape of the real deployment, and the reason the first attempt at
+    // this fix did nothing: Next.js builds the proxy, the `/api/auth/*`
+    // handlers and the server components separately, so `createAuthConfig` runs
+    // three times in one process — measured. Sign-out lands on one of them; the
+    // authorization check that matters runs on another.
+    const signOutSide = createAuthConfig(OPTIONS);
+    const authorizingSide = createAuthConfig(OPTIONS);
+
+    await signOutSide.events?.signOut?.({ token: liveToken(SESSION_A) });
+
+    expect(
+      await authorizingSide.callbacks?.jwt?.({
+        token: liveToken(SESSION_A),
+        user: {},
+        account: null,
+      })
+    ).toBeNull();
+  });
+
   it('leaves a session alone when nobody has signed out', async () => {
     const c = config();
 
     const token = await c.callbacks?.jwt?.({
-      token: liveToken(nowSeconds() - 60),
+      token: liveToken(SESSION_A),
       user: {},
       account: null,
     });
@@ -465,11 +476,10 @@ describe('sign-out revocation', () => {
 
   it('ends the session that signed out', async () => {
     const c = config();
-    const issuedAt = nowSeconds() - 60;
 
-    await c.events?.signOut?.({ token: liveToken(issuedAt) });
+    await c.events?.signOut?.({ token: liveToken(SESSION_A) });
     const token = await c.callbacks?.jwt?.({
-      token: liveToken(issuedAt),
+      token: liveToken(SESSION_A),
       user: {},
       account: null,
     });
@@ -477,16 +487,18 @@ describe('sign-out revocation', () => {
     expect(token).toBeNull();
   });
 
-  it('ends a session re-issued by a render that raced the sign-out', async () => {
-    // The defect itself. The racing render answers with a *newly encoded*
-    // token — a different `jti`, a fresh `iat` on the sign-out's own second —
-    // and the browser installs it over the clear. It must still be refused.
+  it('ends a token re-encoded after the sign-out, whatever its issued-at says', async () => {
+    // The defect itself, and the case the previous `iat`-cutoff design could
+    // lose. `iat` is stamped at *encode* time, and `rotateAccessToken` — with a
+    // possible refresh round trip — runs between the revocation check and that
+    // encode, so a racing render can emit an `iat` seconds *after* the
+    // sign-out. `sub` is unchanged by re-encoding, so membership still refuses
+    // it.
     const c = config();
-    const signOutSecond = nowSeconds();
 
-    await c.events?.signOut?.({ token: liveToken(signOutSecond - 1) });
+    await c.events?.signOut?.({ token: liveToken(SESSION_A, nowSeconds() - 60) });
     const token = await c.callbacks?.jwt?.({
-      token: liveToken(signOutSecond),
+      token: liveToken(SESSION_A, nowSeconds() + 5),
       user: {},
       account: null,
     });
@@ -494,12 +506,12 @@ describe('sign-out revocation', () => {
     expect(token).toBeNull();
   });
 
-  it('does not end anybody else’s session', async () => {
+  it('does not end a different session', async () => {
     const c = config();
 
-    await c.events?.signOut?.({ token: liveToken(nowSeconds() - 60) });
+    await c.events?.signOut?.({ token: liveToken(SESSION_A) });
     const token = await c.callbacks?.jwt?.({
-      token: { ...liveToken(nowSeconds() - 60), sub: 'okta-user-2' },
+      token: liveToken(SESSION_B),
       user: {},
       account: null,
     });
@@ -507,16 +519,17 @@ describe('sign-out revocation', () => {
     expect(token).toMatchObject({ accessToken: 'still-good' });
   });
 
-  it('honours a fresh sign-in by the same person', async () => {
-    // Signing out and straight back in must work — including inside the same
-    // second, which is why the sign-in branch drops the cutoff rather than
-    // relying on the new token being younger than it.
+  it('honours a fresh sign-in, which arrives as a brand-new subject', async () => {
+    // Signing out and back in must work, and it does so without any "forget"
+    // step: `@auth/core` mints `id: crypto.randomUUID()` for every completed
+    // sign-in and copies it to `token.sub`, so the new session is a subject
+    // this registry has never seen. Verified live — the same persona signing in
+    // twice produced `9efdd0ac…` then `15326704…`.
     const c = config();
-    const second = nowSeconds();
-    await c.events?.signOut?.({ token: liveToken(second) });
+    await c.events?.signOut?.({ token: liveToken(SESSION_A) });
 
     const signedIn = await c.callbacks?.jwt?.({
-      token: { sub: SUBJECT, iat: second },
+      token: { sub: SESSION_B },
       user: {},
       account: ACCOUNT,
     });
@@ -524,7 +537,7 @@ describe('sign-out revocation', () => {
 
     // …and the session that sign-in produced survives the next request.
     const next = await c.callbacks?.jwt?.({
-      token: { ...liveToken(second), accessToken: 'still-good' },
+      token: liveToken(SESSION_B),
       user: {},
       account: null,
     });
@@ -537,11 +550,11 @@ describe('sign-out revocation', () => {
     // before the response leaves. Asserting the promise settles is what stops
     // a future refactor from making this fire-and-forget.
     const c = config();
-    const result = c.events?.signOut?.({ token: liveToken(nowSeconds()) });
+    const result = c.events?.signOut?.({ token: liveToken(SESSION_A) });
 
     await expect(Promise.resolve(result)).resolves.not.toThrow();
     expect(
-      await c.callbacks?.jwt?.({ token: liveToken(nowSeconds()), user: {}, account: null })
+      await c.callbacks?.jwt?.({ token: liveToken(SESSION_A), user: {}, account: null })
     ).toBeNull();
   });
 });

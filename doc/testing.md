@@ -305,11 +305,12 @@ server-side, so a cookie that survives the clear is refused and deleted on its
 next use.
 
 If you see it again, it is a regression, not the known flake. What was measured,
-so you can tell them apart: `/api/auth/session` is never requested by this
-application — the hypothesis in the original record was wrong — and the cookie
-came back because **every render that reads the session re-issues it**, so the
-sign-out clear was racing concurrent `?_rsc` prefetches. The fix does not
-depend on winning that race.
+so you can tell them apart: `/api/auth/session` is never requested **on the
+sign-out path** — the hypothesis in the original record was wrong — and the
+cookie came back because **every render that reads the session re-issues it**,
+so the sign-out clear was racing concurrent `?_rsc` prefetches. The fix does not
+depend on winning that race: it revokes the session's subject, and re-encoding
+never changes that subject.
 
 The property is now also asserted deterministically, by *a session cookie kept
 from before sign-out is refused afterwards* in the same spec: it takes the

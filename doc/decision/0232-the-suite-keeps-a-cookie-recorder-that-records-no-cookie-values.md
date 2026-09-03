@@ -40,8 +40,8 @@ Everything this writes is derived, never copied:
 Because "a cookie was present" and "a *different* cookie was present" are
 different findings, and the whole of `0230-*` turns on telling them apart. The
 measurement that killed the standing hypothesis was three consecutive responses
-setting `#dceef266`, `#4605bfb2`, `#70533434` — visibly three distinct tokens in
-under two milliseconds. Recorded as "session cookie: yes, yes, yes", that says
+setting `#dceef266`, `#4605bfb2`, `#70533434` — visibly three distinct tokens
+within one navigation. Recorded as "session cookie: yes, yes, yes", that says
 nothing.
 
 ## Risk

@@ -15,7 +15,7 @@ import type { JWT } from 'next-auth/jwt';
 import { OKTA_PROVIDER_ID, REFRESH_TOKEN_ERROR } from './session';
 import { createTokenRefresher, shouldRefresh } from './refresh';
 import type { TokenRefresher } from './refresh';
-import { createSignOutRegistry, sharedCutoffStore } from './revocation';
+import { createSignOutRegistry, sharedRevokedStore } from './revocation';
 import type { SignOutRegistry } from './revocation';
 
 /**
@@ -181,8 +181,8 @@ export async function rotateAccessToken(
  * Auth.js's own default session lifetime, in seconds (30 days).
  *
  * Restated here because {@link AuthOptions.sessionMaxAgeSeconds} is optional
- * and the sign-out registry has to know how long a cutoff could still matter.
- * Keeping a cutoff for less time than a cookie can live would quietly reopen
+ * and the sign-out registry has to know how long a revocation could still
+ * matter. Keeping one for less time than a cookie can live would quietly reopen
  * the hole it exists to close.
  */
 export const DEFAULT_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -196,16 +196,16 @@ export const DEFAULT_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
  * cookie which survived the sign-out race self-healing: the next request that
  * carries it is both refused *and* has it deleted.
  *
- * The three branches, in the order they have to be checked:
+ * Revocation is checked **before** rotation on purpose: there is no reason to
+ * spend a refresh-token round trip on a session that is about to be thrown
+ * away.
  *
- * 1. **A completed sign-in** (`account` present) supersedes any earlier
- *    sign-out for this subject, so the cutoff is dropped before anything else
- *    looks at it. Without this, signing out and back in inside the same second
- *    would reject the brand-new session.
- * 2. **A revoked session** is over. Checked before rotation on purpose: there
- *    is no reason to spend a refresh-token round trip renewing a session that
- *    is about to be thrown away.
- * 3. Otherwise the existing rotation rules apply, unchanged.
+ * A completed sign-in needs no branch of its own, and that is worth stating
+ * because an earlier version of this function had one. `@auth/core` mints a
+ * fresh `sub` for every sign-in, so a new session is never the subject that
+ * signed out — `isRevoked` is simply false for it, without being told. The
+ * branch that existed to "forget" the previous sign-out could not fire in
+ * production at all; only a hand-built token reusing the old subject reached it.
  */
 export async function applySessionLifecycle(
   token: JWT,
@@ -213,14 +213,9 @@ export async function applySessionLifecycle(
   refresh: TokenRefresher,
   registry: SignOutRegistry
 ): Promise<JWT | null> {
-  if (account) {
-    registry.forget(token);
-    return rotateAccessToken(token, account, refresh);
-  }
-
   if (registry.isRevoked(token)) return null;
 
-  return rotateAccessToken(token, null, refresh);
+  return rotateAccessToken(token, account, refresh);
 }
 
 /**
@@ -268,16 +263,16 @@ export function createAuthConfig(options: AuthOptions): NextAuthConfig {
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 
-  // The registry object is per configuration; the cutoffs it reads are shared
-  // by the whole process, and have to be. Next.js builds the proxy, the
+  // The registry object is per configuration; the revocations it reads are
+  // shared by the whole process, and have to be. Next.js builds the proxy, the
   // `/api/auth/*` handlers and the server components as separate bundles, so
   // this function runs three times in one `next start` — measured. A private
   // map per call would mean the sign-out endpoint revoking into a registry that
   // the proxy, which does the actual authorizing, never reads. See
-  // `sharedCutoffStore` and `doc/decision/0231-*`.
+  // `sharedRevokedStore` and `doc/decision/0231-*`.
   const registry = createSignOutRegistry({
     retentionSeconds: options.sessionMaxAgeSeconds ?? DEFAULT_SESSION_MAX_AGE_SECONDS,
-    cutoffs: sharedCutoffStore(),
+    revoked: sharedRevokedStore(),
   });
 
   return {
@@ -320,9 +315,9 @@ export function createAuthConfig(options: AuthOptions): NextAuthConfig {
        *
        * `@auth/core`'s signout action awaits this event and only then pushes
        * `sessionStore.clean()` (`lib/actions/signout.js`), so by the time the
-       * clearing response leaves the server the cutoff is already in place —
+       * clearing response leaves the server the subject is already revoked —
        * and any render that was racing it is already answering with a token
-       * this registry will refuse.
+       * this registry will refuse, since re-encoding never changes `sub`.
        *
        * Under `strategy: 'jwt'` the message carries the decoded `token`; the
        * `session` shape is the database-strategy branch, which this app does
