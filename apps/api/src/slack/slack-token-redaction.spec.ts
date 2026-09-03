@@ -50,6 +50,10 @@ describe('createSlackTokenRedactor', () => {
       expect(createSlackTokenRedactor()('xapp-1-A0000-1111-deadbeef')).toBe(REDACTED_SLACK_TOKEN);
     });
 
+    it('covers the browser/session token prefix too', () => {
+      expect(createSlackTokenRedactor()('xoxd-aBcD1234-eFgH5678')).toBe(REDACTED_SLACK_TOKEN);
+    });
+
     it('is case-insensitive, because a mis-cased token is still a credential', () => {
       expect(createSlackTokenRedactor()('XOXB-1111-AAAA')).toBe(REDACTED_SLACK_TOKEN);
     });

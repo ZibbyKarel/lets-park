@@ -26,10 +26,12 @@
 import type { PrismaClient } from '@lets-park/database';
 import { AuditLogService } from '../audit/audit-log.service';
 import { WebClient } from '@slack/web-api';
+import { toDateColumn } from '../common/prisma-mapping';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
 import { ReservationPolicy } from '../reservations/reservation-policy';
 import { ReservationsService } from '../reservations/reservations.service';
 import { WaitlistPromotionService } from '../reservations/waitlist-promotion.service';
+import type { GracefulShutdownService } from '../shutdown/graceful-shutdown.service';
 import {
   FUTURE_BUSINESS_DAY,
   TODAY,
@@ -104,7 +106,9 @@ describe('Slack over a real database', () => {
     };
     const slack = new SlackClient(SlackConfig.fromEnv(SLACK_ENV), logs.logger, factory);
     notifications = new SlackNotificationService(prismaService, slack, logs.logger);
-    publisher = new SlackDomainEventPublisher(notifications, logs.logger);
+    publisher = new SlackDomainEventPublisher(notifications, logs.logger, {
+      registerCloser: () => undefined,
+    } as unknown as GracefulShutdownService);
 
     const audit = new AuditLogService(prismaService);
     reservations = new ReservationsService(
@@ -315,6 +319,59 @@ describe('Slack over a real database', () => {
       // cancellation above did not wait for it, which is the point.
       await new Promise((resolve) => setTimeout(resolve, 800));
       expect(logs.lines().some((line) => line['message'] === 'Slack call failed')).toBe(true);
+    });
+  });
+
+  describe('a cancellation that promotes someone off the waitlist', () => {
+    it('sends the freed-spot notice nowhere and DMs the promoted user instead, end to end', async () => {
+      // The gap this closes (review finding M6): every other cancellation spec
+      // in this file resolves `promoted: false`. This is the only one that
+      // drives `ReservationsService.cancel` through a *real* promotion and
+      // checks the wiring all the way to the wire —
+      // `SlackDomainEventPublisher.notifyPromotions` →
+      // `SlackNotificationService.notifyWaitlistPromotion` →
+      // `SlackClient.postDirectMessage` — rather than stopping at the unit
+      // spec's stubbed `notifications` object.
+      const holder = await seedUser(client);
+      const waiter = await seedUser(client);
+      const spot = await seedSpot(client, { labelPrefix: 'PROMOTED' });
+      const reservation = await client.reservation.create({
+        data: {
+          parkingSpotId: spot.id,
+          userId: holder.id,
+          date: new Date(`${FUTURE_BUSINESS_DAY}T00:00:00.000Z`),
+        },
+      });
+      await client.waitlistEntry.create({
+        data: {
+          parkingSpotId: spot.id,
+          userId: waiter.id,
+          date: toDateColumn(FUTURE_BUSINESS_DAY),
+        },
+      });
+      server.respondWith((attempt) =>
+        attempt === 1 ? { status: 200, body: { ok: true, user: { id: 'U0WAITER' } } } : SLACK_OK
+      );
+
+      await expect(
+        reservations.cancel({ reservationId: reservation.id }, actorFor(holder))
+      ).resolves.toMatchObject({ promoted: true });
+      await flush();
+
+      // No freed-spot notice to the channel — the queue took it immediately.
+      expect(server.requests.some((r) => r.url.includes('chat.postMessage'))).toBe(true);
+      expect(server.requests).toHaveLength(2);
+      expect(server.requests[0]?.url).toContain('users.lookupByEmail');
+      expect(new URLSearchParams(server.requests[0]?.body).get('email')).toBe(waiter.email);
+      expect(sentChannel(1)).toBe('U0WAITER');
+      expect(sentText(1)).toBe(
+        `Máte parkovací místo ${spot.label} na pondělí 5. ledna 2099. Uvolnilo se a byli jste první ve frontě.`
+      );
+
+      // The waiter now holds the reservation the holder gave up.
+      await expect(
+        observer.reservation.findFirst({ where: { parkingSpotId: spot.id, userId: waiter.id } })
+      ).resolves.not.toBeNull();
     });
   });
 

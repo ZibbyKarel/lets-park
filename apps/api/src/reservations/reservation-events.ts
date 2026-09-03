@@ -79,8 +79,12 @@ export interface WaitlistPromotionNotice {
  * Implementations must not throw and must not block: they are called after the
  * transaction has committed, on the request's way out, and a failure to
  * broadcast must never turn a successful cancellation into an error the user
- * sees. {@link NoopDomainEventPublisher} is what is registered until Task 15
- * replaces it.
+ * sees. {@link NoopDomainEventPublisher} was what got registered before any
+ * real subscriber existed; Task 16 bound the token to
+ * `SlackDomainEventPublisher` (`reservations.module.ts`), and Task 15's
+ * Socket.io gateway is due to replace that single binding with a composite of
+ * both (see `SlackDomainEventPublisher`'s class comment) — so nothing
+ * currently registers the no-op below.
  */
 export abstract class DomainEventPublisher {
   /** Broadcast committed facts into their day rooms. Never called inside a transaction. */
@@ -91,14 +95,17 @@ export abstract class DomainEventPublisher {
 }
 
 /**
- * The default: events are computed, typed and validated by the compiler, and
- * then dropped.
+ * The historical default: events are computed, typed and validated by the
+ * compiler, and then dropped. No longer registered anywhere as of Task 16 (see
+ * the class comment above) — kept rather than deleted because it costs nothing
+ * to keep and is the obvious fallback for a future module that needs
+ * `DomainEventPublisher` wired but has nothing to send events to yet (e.g. a
+ * narrow unit test, or a deployment with both Task 15 and Task 16 disabled).
  *
- * Deliberately silent rather than logging: until Task 15 exists there is no
- * subscriber, and an `info` line per reservation would be pure noise. What makes
- * this safe to forget is the parity between this class and the contract's event
- * map — Task 15 replaces the provider and every call site already passes it the
- * right shape.
+ * Deliberately silent rather than logging: an `info` line per reservation with
+ * no subscriber listening would be pure noise. What makes this safe to forget
+ * is the parity between this class and the contract's event map, which the
+ * compiler checks regardless of whether anything is bound to it.
  */
 export class NoopDomainEventPublisher extends DomainEventPublisher {
   publish(): void {

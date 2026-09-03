@@ -19,12 +19,19 @@
  * retry loop, past `await`; nothing in this file may be called from anywhere
  * else.
  *
- * ## Failures are outcomes, not exceptions
+ * ## Failures this class turns into outcomes, and one it does not
  *
- * No method throws. A missing spot row, an unreachable Slack, a user with no
- * Slack account — all of them return an outcome and log. `plan.md` is explicit
+ * A missing spot row, an unreachable Slack, a user with no Slack account — all
+ * of them return an outcome and log, never a rejection. `plan.md` is explicit
  * that a Slack failure never breaks a domain operation, and the cheapest way to
- * guarantee that at every call site is to leave nothing to catch.
+ * guarantee that at every *Slack* call site is to leave nothing to catch.
+ *
+ * That does not extend to the database reads above the Slack call in each
+ * method (`spotLabel`, the user lookup, `collectDailySummary`'s three reads):
+ * none of them is guarded, so a Prisma failure *does* reject the method — an
+ * ordinary, expected way for this to fail, not a bug. `SlackDomainEventPublisher.detach`
+ * is what actually keeps that off the request path (see its own comment); it is
+ * not something this class promises on its own.
  */
 
 import { Injectable } from '@nestjs/common';

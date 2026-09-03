@@ -7,6 +7,8 @@
  */
 
 import type { DomainEvent, WaitlistPromotionNotice } from '../reservations/reservation-events';
+import type { ShutdownCloser } from '../shutdown/graceful-shutdown.service';
+import { GracefulShutdownService } from '../shutdown/graceful-shutdown.service';
 import { SlackDomainEventPublisher } from './slack-domain-event.publisher';
 import type { SlackNotificationService } from './slack-notification.service';
 import type { CapturedLogs } from './testing/capture-logs';
@@ -27,12 +29,23 @@ function cancelled(): DomainEvent {
   };
 }
 
+/** A promise plus its resolver, for holding a detached notification open. */
+function deferred(): { promise: Promise<unknown>; resolve: (v: unknown) => void } {
+  let resolve!: (v: unknown) => void;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('SlackDomainEventPublisher', () => {
   let logs: CapturedLogs;
   let notifications: {
     notifySpotFreed: jest.Mock;
     notifyWaitlistPromotion: jest.Mock;
   };
+  /** The closer the publisher registered, so shutdown can be driven for real. */
+  let closers: Map<string, ShutdownCloser>;
   let publisher: SlackDomainEventPublisher;
 
   beforeEach(() => {
@@ -41,9 +54,16 @@ describe('SlackDomainEventPublisher', () => {
       notifySpotFreed: jest.fn().mockResolvedValue('delivered'),
       notifyWaitlistPromotion: jest.fn().mockResolvedValue('delivered'),
     };
+    closers = new Map();
+    const shutdown = {
+      registerCloser(name: string, close: ShutdownCloser): void {
+        closers.set(name, close);
+      },
+    } as unknown as GracefulShutdownService;
     publisher = new SlackDomainEventPublisher(
       notifications as unknown as SlackNotificationService,
-      logs.logger
+      logs.logger,
+      shutdown
     );
   });
 
@@ -115,6 +135,23 @@ describe('SlackDomainEventPublisher', () => {
           name: 'waitlist:updated',
           payload: { date: DATE, parkingSpotId: SPOT, waitlistCount: 0 },
         },
+      ]);
+      await flush();
+
+      expect(notifications.notifySpotFreed).toHaveBeenCalledTimes(1);
+    });
+
+    it('still announces a cancellation that comes after another event in the batch', async () => {
+      // The case above puts the cancellation first, so a loop that `break`s
+      // instead of `continue`s on the first non-matching event would still
+      // pass it — the early exit is never reached. Reversing the order is
+      // what actually distinguishes "skip this one" from "stop looking".
+      publisher.publish([
+        {
+          name: 'waitlist:updated',
+          payload: { date: DATE, parkingSpotId: SPOT, waitlistCount: 0 },
+        },
+        cancelled(),
       ]);
       await flush();
 
@@ -205,6 +242,83 @@ describe('SlackDomainEventPublisher', () => {
       await flush();
 
       expect(notifications.notifySpotFreed).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('shutdown', () => {
+    it('registers itself with the shutdown registry, under a greppable name', () => {
+      expect([...closers.keys()]).toEqual(['slack-notifications']);
+    });
+
+    it('does not hang when nothing is in flight', async () => {
+      await expect(
+        Promise.resolve(closers.get('slack-notifications')?.())
+      ).resolves.toBeUndefined();
+    });
+
+    it('waits for a detached spot-freed notification before letting the process exit', async () => {
+      const held = deferred();
+      notifications.notifySpotFreed.mockReturnValue(held.promise);
+
+      publisher.publish([cancelled()]);
+
+      let drained = false;
+      const draining = Promise.resolve(closers.get('slack-notifications')?.()).then(() => {
+        drained = true;
+      });
+
+      // A full macrotask turn, not a microtask flush: if the closer resolved
+      // without waiting, `drained` would be true by now.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(drained).toBe(false);
+
+      held.resolve('delivered');
+      await draining;
+      expect(drained).toBe(true);
+    });
+
+    it('waits for a detached promotion DM the same way', async () => {
+      const held = deferred();
+      notifications.notifyWaitlistPromotion.mockReturnValue(held.promise);
+
+      publisher.notifyPromotions([
+        { userId: 'u-9', parkingSpotId: SPOT, date: DATE, reservationId: 'r-9' },
+      ]);
+
+      let drained = false;
+      const draining = Promise.resolve(closers.get('slack-notifications')?.()).then(() => {
+        drained = true;
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(drained).toBe(false);
+
+      held.resolve('delivered');
+      await draining;
+      expect(drained).toBe(true);
+    });
+
+    it('is not held open by a notification that fails while draining', async () => {
+      const held = deferred();
+      notifications.notifySpotFreed.mockReturnValue(
+        held.promise.then(() => {
+          throw new Error('boom');
+        })
+      );
+
+      publisher.publish([cancelled()]);
+      const draining = Promise.resolve(closers.get('slack-notifications')?.());
+      held.resolve(undefined);
+
+      await expect(draining).resolves.toBeUndefined();
+    });
+
+    it('stops tracking a notification once it settles, so a later drain does not wait for it again', async () => {
+      publisher.publish([cancelled()]);
+      await flush();
+
+      await expect(
+        Promise.resolve(closers.get('slack-notifications')?.())
+      ).resolves.toBeUndefined();
     });
   });
 });

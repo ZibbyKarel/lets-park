@@ -76,4 +76,10 @@ production makes.
   all (`server.requests` is empty), and is neither a `warn` nor an `error`.
 - `apps/api/src/slack/slack.db.spec.ts` — disabled still runs the database read.
 - `apps/api/src/slack/slack-env.spec.ts` — the rejected spellings, and that the
-  boot error names the variable and never the token.
+  boot error names the variable and never the token. The original version of
+  this last check supplied an *empty* `SLACK_BOT_TOKEN` and looked for the
+  wrong constant, so it could not have failed even if the formatter started
+  echoing offending values — task-16-task-review.md's M1 caught it. The fix
+  puts the real token-shaped string where the schema actually rejects it
+  (`SLACK_ENABLED`, a two-literal enum) and checks it does not come back out;
+  verified against `formatEnvValidationError` echoing the raw config value.

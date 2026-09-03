@@ -9,7 +9,7 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../database/prisma.service';
@@ -95,18 +95,30 @@ describe('SlackModule inside AppModule', () => {
       expect(controllers ?? []).toEqual([]);
     });
 
+    it('has no Slack-named controller anywhere in the app, not only inside this module', () => {
+      // The check above only reads `SlackModule`'s own metadata — a slash
+      // command or Block Kit handler added to *any other* module would pass
+      // it. `doc/slack.md`'s "adding a handler fails a test rather than
+      // passing review" is only as strong as this: a source-wide scan for a
+      // `@Controller` route naming Slack, wherever it might be registered.
+      const controllerFiles = filesUnder(join(__dirname, '..')).filter((file) =>
+        /@Controller\(\s*['"`][^'"`]*slack/i.test(readFileSync(file, 'utf8'))
+      );
+
+      expect(controllerFiles).toEqual([]);
+    });
+
     it('keeps every `@slack/web-api` import inside this module', () => {
       // Not a lint rule (the package is not in `WRAPPED_LIBRARIES` — nothing
       // wraps it, `SlackClient` *is* the wrapper), so the containment is
-      // asserted here. Anything outside `slack/` in this list is a second place
-      // Slack could be called from.
-      expect(importersOf(/from '@slack\/web-api'/)).toEqual([
-        join('slack', 'slack-client.service.spec.ts'),
-        join('slack', 'slack-client.service.ts'),
-        join('slack', 'slack-failure.spec.ts'),
-        join('slack', 'slack-failure.ts'),
-        join('slack', 'slack.db.spec.ts'),
-      ]);
+      // asserted here: every importer must live under `slack/`, whatever its
+      // filename. Not a fixed file list — renaming or adding a spec inside
+      // `slack/` (as this task's own I2 fix did) must not fail a test about
+      // module *boundaries*; a file appearing anywhere else must.
+      const importers = importersOf(/from '@slack\/web-api'/);
+
+      expect(importers.length).toBeGreaterThan(0);
+      expect(importers.every((file) => file.startsWith(`slack${sep}`))).toBe(true);
     });
 
     it('constructs a WebClient in exactly one shipped file', () => {

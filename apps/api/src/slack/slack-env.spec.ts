@@ -74,6 +74,22 @@ describe('the Slack environment keys', () => {
       expect(error).toContain('SLACK_BOT_TOKEN');
       expect(error).not.toContain(TOKEN);
     });
+
+    it('never echoes a raw offending value, even a token-shaped one typed into the wrong variable', () => {
+      // `SLACK_BOT_TOKEN` has no format check — any non-empty string is valid —
+      // so there is no way to make the *real* token itself the invalid value at
+      // that field; the case above supplies `''`, which cannot contain a token
+      // by construction and so cannot catch a formatter that starts echoing
+      // offending values. This one instead puts the token-shaped string in a
+      // field the schema *does* reject (`SLACK_ENABLED`, an enum of two
+      // literals), so `TOKEN` is genuinely part of the input a real crash
+      // message could echo — the copy-paste-into-the-wrong-variable case the
+      // reviewer's probe named.
+      const error = captureError(() => validateApiEnv({ ...BASE, SLACK_ENABLED: TOKEN }));
+
+      expect(error).toContain('SLACK_ENABLED');
+      expect(error).not.toContain(TOKEN);
+    });
   });
 
   describe('the tunables', () => {

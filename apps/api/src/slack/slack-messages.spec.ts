@@ -43,12 +43,27 @@ describe('spotFreedMessage', () => {
       'Uvolnilo se parkovací místo E2.92 na pondělí 28. září 2026. Je volné pro kohokoli.'
     );
   });
+
+  it('escapes Slack markup characters in the label', () => {
+    // Not a live defect — spot labels are alphanumeric today — but Slack's
+    // `text` field treats `&`, `<` and `>` as markup, and a label is operator
+    // data rather than a compile-time constant.
+    expect(spotFreedMessage('<A&B>', MONDAY)).toBe(
+      'Uvolnilo se parkovací místo &lt;A&amp;B&gt; na pondělí 28. září 2026. Je volné pro kohokoli.'
+    );
+  });
 });
 
 describe('waitlistPromotedMessage', () => {
   it('tells the promoted person they now hold the spot', () => {
     expect(waitlistPromotedMessage('E2.92', MONDAY)).toBe(
       'Máte parkovací místo E2.92 na pondělí 28. září 2026. Uvolnilo se a byli jste první ve frontě.'
+    );
+  });
+
+  it('escapes Slack markup characters in the label', () => {
+    expect(waitlistPromotedMessage('<A&B>', MONDAY)).toBe(
+      'Máte parkovací místo &lt;A&amp;B&gt; na pondělí 28. září 2026. Uvolnilo se a byli jste první ve frontě.'
     );
   });
 });
@@ -117,6 +132,13 @@ describe('dailySummaryMessage', () => {
     const message = dailySummaryMessage({ ...base, freeSpotLabels: ['B1', 'A1'] });
 
     expect(message).toContain('B1, A1');
+  });
+
+  it('escapes Slack markup characters in a free spot label', () => {
+    const message = dailySummaryMessage({ ...base, freeSpotLabels: ['<A&B>'] });
+
+    expect(message).toContain('&lt;A&amp;B&gt;');
+    expect(message).not.toContain('<A&B>');
   });
 
   it('is plain text — no Block Kit, no markup a button could hang off', () => {

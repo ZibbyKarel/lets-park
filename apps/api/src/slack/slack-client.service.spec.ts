@@ -18,7 +18,7 @@
  * because a redaction test that cannot see the log proves nothing.
  */
 
-import { WebClient } from '@slack/web-api';
+import { ErrorCode, WebClient } from '@slack/web-api';
 import type { CapturedLogs } from './testing/capture-logs';
 import { captureLogs } from './testing/capture-logs';
 import type { RecordedSlackRequest, SlackTestServer } from './testing/slack-test-server';
@@ -212,6 +212,28 @@ describe('SlackClient', () => {
     });
   });
 
+  describe('a 4xx other than 429', () => {
+    // The one row of `httpStatusIsRetryable`'s table that the rest of this file
+    // exercised only through a hand-built error object in `slack-failure.spec.ts`
+    // — added here so the claim in `doc/slack.md` ("every row … from a real HTTP
+    // server") is actually true rather than merely true of five rows out of six.
+    it('is ours, not a Slack decision, and is not retried', async () => {
+      server.respondWith(() => ({ status: 404, body: { ok: false, error: 'not_found' } }));
+
+      await expect(buildClient({ SLACK_RETRY_ATTEMPTS: 3 }).postToChannel('ahoj')).resolves.toBe(
+        'failed'
+      );
+
+      expect(server.requests).toHaveLength(1);
+      expect(lineAt('error')).toMatchObject({
+        slackErrorCode: 'slack_webapi_http_error',
+        statusCode: 404,
+        retryable: false,
+        attempt: 1,
+      });
+    });
+  });
+
   describe('a 429', () => {
     it('waits the Retry-After Slack asked for rather than our own backoff', async () => {
       server.respondWith((attempt) =>
@@ -309,6 +331,39 @@ describe('SlackClient', () => {
       expect(logs.raw()).not.toContain(BOT_TOKEN);
       expect(logs.raw()).not.toContain('xoxb-');
       // A log line was written, so this is not passing by writing nothing.
+      expect(linesAt('error')).toHaveLength(1);
+    });
+
+    it('is caught by the redactor SlackClient wires in, not only by what the SDK happens to omit', async () => {
+      // Every case above exercises `describeSlackFailure`'s scalar projection,
+      // which never carries the token *regardless of redaction* — the real
+      // Slack SDK simply never puts the token into `error.message` for these
+      // failure shapes, so those tests cannot see the redactor's wiring being
+      // removed. This one instead makes redaction itself the only thing
+      // standing between the token and the log: a fake `WebClient` whose
+      // failure message *contains* the configured token, the exact shape a
+      // future SDK version (or a regression in
+      // `attachOriginalToWebAPIRequestError`) could produce. If
+      // `SlackClient`'s constructor ever stops calling
+      // `createSlackTokenRedactor`, this is the test that notices.
+      const leakyChatPostMessage = (): Promise<never> =>
+        Promise.reject(
+          Object.assign(
+            new Error(`connect ECONNREFUSED to slack.com (Authorization: Bearer ${BOT_TOKEN})`),
+            { code: ErrorCode.RequestError }
+          )
+        );
+      const leaky = { chat: { postMessage: leakyChatPostMessage } } as unknown as WebClient;
+      const factory: SlackWebClientFactory = { create: () => leaky };
+      const client = new SlackClient(
+        SlackConfig.fromEnv({ ...BASE_ENV, SLACK_RETRY_ATTEMPTS: 1 }),
+        logs.logger,
+        factory
+      );
+
+      await client.postToChannel('ahoj');
+
+      expect(logs.raw()).not.toContain(BOT_TOKEN);
       expect(linesAt('error')).toHaveLength(1);
     });
   });

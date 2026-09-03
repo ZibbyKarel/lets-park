@@ -92,9 +92,15 @@ Three properties of that placement matter, and each is exercised:
   proves `COMMIT` had happened first.
 - **Exactly once.** `cancel` publishes outside the retry loop, so a transaction
   that lost a race and was retried does not produce two messages.
-- **Nothing is awaited.** The publisher fires and forgets, so a user's
-  cancellation does not wait on a Slack round trip and its backoff. Every
-  detached promise is caught.
+- **Nothing is awaited, but nothing is untracked either.** The publisher fires
+  and forgets, so a user's cancellation does not wait on a Slack round trip and
+  its backoff. Every detached promise is caught **and** held in
+  `SlackDomainEventPublisher`'s `inFlight` set, which is drained from a
+  `GracefulShutdownService` closer — the same mechanism §7 describes for the
+  daily-summary job. Without this, a SIGTERM landing right after a commit could
+  race a detached notification against `PrismaService.onModuleDestroy` closing
+  the pool in the same shutdown window, silently dropping the freed-spot notice
+  on a deploy that coincides with a cancellation.
 
 ### The provider Task 15 also wants
 
@@ -134,7 +140,9 @@ The SDK's own ten-retries-over-thirty-minutes policy is switched off
 (`retryConfig: { retries: 0 }`) so this one is ours and is testable.
 `slack-client.service.spec.ts` produces **every row of that table from a real
 HTTP server the real `WebClient` talks to** — a double that rejected on command
-would have proved only what the double was told to do.
+would have proved only what the double was told to do. (`slack-failure.spec.ts`
+additionally exercises the same `400`/`404` classification against a hand-built
+error object, for the branch in isolation from any transport.)
 
 ### Where a failure shows up
 
@@ -234,6 +242,9 @@ which supplies the three things `@nestjs/schedule` does not:
 - shutdown stops accepting new runs and **waits for the in-flight one**,
   registered as a closer on `GracefulShutdownService` so it happens after HTTP
   has drained and before the database pool closes.
+
+The request-path notifications (§3) are drained the same way, through their
+own closer on `SlackDomainEventPublisher` — this is not only a job concern.
 
 ### Two instances
 

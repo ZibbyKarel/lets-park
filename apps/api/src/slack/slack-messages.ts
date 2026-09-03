@@ -70,6 +70,21 @@ export function formatCzechFullDate(date: DateOnly): string {
 }
 
 /**
+ * Escapes the three characters Slack's `text` field treats as markup, per
+ * Slack's own escaping rule for plain text
+ * (`&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`, in that order so the ampersand a
+ * later replacement introduces is never re-escaped).
+ *
+ * Spot labels are alphanumeric today (`E2.92`), so this has no visible effect
+ * on anything this application currently sends — but a label is operator
+ * data, not a compile-time constant, and one containing `<` would otherwise
+ * render wrong or be silently swallowed by a Slack client.
+ */
+function escapeSlackText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
  * A spot came free and **stayed** free — nobody was waiting for it.
  *
  * Posted to the shared channel, because the whole point is that anybody may
@@ -79,7 +94,7 @@ export function formatCzechFullDate(date: DateOnly): string {
  * case, so the distinction is the realtime contract's, not a rule invented here.
  */
 export function spotFreedMessage(spotLabel: string, date: DateOnly): string {
-  return `Uvolnilo se parkovací místo ${spotLabel} na ${formatCzechFullDate(date)}. Je volné pro kohokoli.`;
+  return `Uvolnilo se parkovací místo ${escapeSlackText(spotLabel)} na ${formatCzechFullDate(date)}. Je volné pro kohokoli.`;
 }
 
 /**
@@ -88,7 +103,7 @@ export function spotFreedMessage(spotLabel: string, date: DateOnly): string {
  * not ask for it and would otherwise find out by refreshing a page.
  */
 export function waitlistPromotedMessage(spotLabel: string, date: DateOnly): string {
-  return `Máte parkovací místo ${spotLabel} na ${formatCzechFullDate(date)}. Uvolnilo se a byli jste první ve frontě.`;
+  return `Máte parkovací místo ${escapeSlackText(spotLabel)} na ${formatCzechFullDate(date)}. Uvolnilo se a byli jste první ve frontě.`;
 }
 
 /** What the daily summary reports. Counts, plus the labels of what is free. */
@@ -120,7 +135,8 @@ export function dailySummaryMessage(summary: DailySummary): string {
   if (freeSpotLabels.length === 0) {
     return `${heading}\n${allOccupiedPhrase(totalSpots)}. ${queue}`;
   }
-  return `${heading}\n${freePhrase(freeSpotLabels.length)} z ${totalSpots}: ${freeSpotLabels.join(', ')}. ${queue}`;
+  const labels = freeSpotLabels.map(escapeSlackText).join(', ');
+  return `${heading}\n${freePhrase(freeSpotLabels.length)} z ${totalSpots}: ${labels}. ${queue}`;
 }
 
 /** `Volné je 1 místo` / `Volná jsou 3 místa` / `Volných je 7 míst`. */

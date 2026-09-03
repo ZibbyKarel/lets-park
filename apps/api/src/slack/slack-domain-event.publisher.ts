@@ -38,6 +38,17 @@
  * detached promise is caught here, so a Slack failure can never surface as an
  * unhandled rejection, and `SlackClient` does not throw in the first place.
  *
+ * Not awaited does not mean untracked: every detached call is held in
+ * {@link inFlight} and registered as a `GracefulShutdownService` closer, the
+ * same mechanism `ScheduledJobRunner` uses for job bodies. Without this, a
+ * SIGTERM landing right after a commit would race the detached notification
+ * against `PrismaService.onModuleDestroy` closing the pool in the same
+ * shutdown window — the read inside `SlackNotificationService` would fail
+ * against a closing connection, or the Slack POST itself (up to
+ * `SLACK_RETRY_ATTEMPTS × SLACK_REQUEST_TIMEOUT_MS` plus backoff) would be
+ * abandoned mid-flight, silently dropping the freed-spot notice on every
+ * deploy that coincides with a cancellation.
+ *
  * ## What a reviewer merging Task 15 must do
  *
  * Task 15 (the Socket.io gateway) needs the *same* `DomainEventPublisher`
@@ -60,15 +71,23 @@ import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import type { DomainEvent, WaitlistPromotionNotice } from '../reservations/reservation-events';
 import { DomainEventPublisher } from '../reservations/reservation-events';
+import { GracefulShutdownService } from '../shutdown/graceful-shutdown.service';
 import { SlackNotificationService } from './slack-notification.service';
 
 @Injectable()
 export class SlackDomainEventPublisher extends DomainEventPublisher {
+  /** Detached notifications currently in flight, so shutdown can wait for them. */
+  private readonly inFlight = new Set<Promise<void>>();
+
   constructor(
     private readonly notifications: SlackNotificationService,
-    @InjectPinoLogger(SlackDomainEventPublisher.name) private readonly logger: PinoLogger
+    @InjectPinoLogger(SlackDomainEventPublisher.name) private readonly logger: PinoLogger,
+    gracefulShutdown: GracefulShutdownService
   ) {
     super();
+    // Same shape as `ScheduledJobRunner.drain` — registered in the
+    // constructor, not `onModuleInit`, so a closer can never be forgotten.
+    gracefulShutdown.registerCloser('slack-notifications', () => this.drain());
   }
 
   publish(events: readonly DomainEvent[]): void {
@@ -90,16 +109,40 @@ export class SlackDomainEventPublisher extends DomainEventPublisher {
   }
 
   /**
-   * Runs a notification without awaiting it, and without letting it escape.
+   * Runs a notification without awaiting it, and without letting it escape —
+   * but still tracked in {@link inFlight}, so shutdown can wait for it.
    *
-   * `SlackNotificationService` already returns outcomes rather than throwing,
-   * so the catch is for the one thing it cannot promise: a bug in this
-   * application. An unhandled rejection in Node terminates the process by
-   * default, and a Slack notice must never be able to take the API down.
+   * The catch below is not only for "a bug in this application": every method
+   * of `SlackNotificationService` does an unguarded Prisma read before it ever
+   * reaches `SlackClient` (which itself never throws), so an ordinary database
+   * hiccup is a real and expected way for `send()` to reject, not only a
+   * theoretical one.
    */
   private detach(notification: string, send: () => Promise<unknown>): void {
-    void send().catch((error: unknown) => {
-      this.logger.error({ err: error, notification }, 'Slack notification threw unexpectedly');
-    });
+    const running: Promise<void> = send()
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        this.logger.error({ err: error, notification }, 'Slack notification threw unexpectedly');
+      })
+      .finally(() => {
+        this.inFlight.delete(running);
+      });
+    this.inFlight.add(running);
+  }
+
+  /**
+   * Waits for every detached notification currently in flight. Called from
+   * the shutdown closer registered in the constructor; never throws, because
+   * every promise in {@link inFlight} already ends in `.catch`.
+   */
+  private async drain(): Promise<void> {
+    if (this.inFlight.size === 0) {
+      return;
+    }
+    this.logger.info(
+      { count: this.inFlight.size },
+      'Waiting for detached Slack notifications to finish'
+    );
+    await Promise.all([...this.inFlight]);
   }
 }

@@ -47,11 +47,12 @@ export const REDACTED_SLACK_TOKEN = '[redacted]';
 
 /**
  * Anything shaped like a Slack credential: `xoxb-`, `xoxp-`, `xoxa-`, `xoxe-`,
- * `xoxr-`, `xapp-`. Case-insensitive, because a token pasted into a `.env` in
- * the wrong case still reaches the header verbatim and would still be a
- * credential worth hiding if it appeared in an error string.
+ * `xoxr-`, `xoxd-` (the browser/session cookie token), `xapp-`.
+ * Case-insensitive, because a token pasted into a `.env` in the wrong case
+ * still reaches the header verbatim and would still be a credential worth
+ * hiding if it appeared in an error string.
  */
-const SLACK_TOKEN_SHAPE = /\b(?:xox[abceoprs]|xapp)-[A-Za-z0-9-]+/gi;
+const SLACK_TOKEN_SHAPE = /\b(?:xox[abcdeoprs]|xapp)-[A-Za-z0-9-]+/gi;
 
 /** Escapes a literal for embedding in a `RegExp`. */
 function escapeForRegExp(literal: string): string {

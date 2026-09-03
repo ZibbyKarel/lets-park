@@ -152,7 +152,9 @@ const apiEnvObjectSchema = z.object({
    * **Defaults to `false`**, which is what keeps a developer's machine from
    * posting into a real workspace — see `doc/decision/0130-*`. It is an env
    * *value*, not a `NODE_ENV` branch: the disabled path runs the same code, it
-   * just stops at the one gate inside `SlackClient.postMessage`.
+   * just stops at the one gate repeated in each of `SlackClient`'s three
+   * public methods (`postToChannel`, `postDirectMessage`,
+   * `lookupUserIdByEmail`).
    */
   SLACK_ENABLED: booleanFromEnvSchema,
 
