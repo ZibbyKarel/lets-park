@@ -305,9 +305,18 @@ the spec alone — it needs the load of the rest of the suite. In the retained
 trace, `POST /api/auth/signout` clears the cookie, `GET /prihlaseni` renders the
 login screen with no session, and then `GET /` comes back **200 with a freshly
 issued `authjs.session-token`** and the lot renders signed in. No `/authorize`
-request follows the sign-out, so the old session is being resurrected rather
-than re-established. `doc/decision/0189-*` has the full trace and says why the
-assertion is being kept rather than retried or relaxed.
+request follows the sign-out, so nothing re-authenticated — the session that
+comes back is the same one.
+
+**How it comes back is not yet known**, and the record is careful about that:
+the trace captured response headers only, so the request `Cookie` header on that
+`GET /` — the datum that would settle it — is missing. Re-issuing the cookie is
+the ordinary behaviour of a request that *arrived* with a valid one under
+`strategy: 'jwt'`. The leading hypothesis is a concurrent `GET
+/api/auth/session` (which next-auth's own `signOut` triggers, and which re-issues
+the cookie) racing the sign-out and re-installing it — which also explains the
+load dependence. `doc/decision/0189-*` has the full trace, the severity
+assessment, and why the assertion is kept rather than retried or relaxed.
 
 If you need to reproduce it: run the whole suite in a loop with
 `--trace retain-on-failure` and read `0-trace.network` out of the retained

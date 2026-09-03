@@ -22,12 +22,16 @@
  *
  * **An honest note about what this did and did not fix.** It was written to
  * explain a 25%-failure flake in `cell-lock.spec.ts`, and it did not: with the
- * wait in place the suite still failed 2 runs in 20. The tracing below is what
- * found the real cause — two socket.io connections per page under `next dev`'s
- * `StrictMode`, the second one's teardown releasing the first one's hold
- * (`doc/decision/0187-*`). This module is kept because the race it closes is
- * real even so, and because a socket that never connects now fails with a
- * sentence instead of a tile that stayed grey.
+ * wait in place the suite still failed 2 runs in 20. It was then blamed on
+ * `StrictMode` giving each page a second socket.io connection — **also wrong**,
+ * and wrong twice over: the suite runs the *built* app, where `StrictMode` does
+ * not double-invoke effects at all.
+ *
+ * The actual cause was the spec colliding with itself — two tests, one bay, one
+ * persona, `fullyParallel: true`, and a `LockService.release` keyed by user
+ * (`cell-lock.spec.ts`'s `SPOTS` map, `doc/decision/0187-*`). This module is
+ * kept because the race it closes is real regardless, and because a socket that
+ * never connects now fails with a sentence instead of a tile that stayed grey.
  *
  * ## Why it reads the wire
  *

@@ -47,17 +47,59 @@ Read that middle pair twice, because it is the whole finding:
    `authjs.session-token`**.
 
 There is **no `/authorize` request anywhere after the sign-out**, so this is not
-a fresh login: nothing re-authenticated against the issuer. The old session was
-brought back. The captured page snapshot confirms how completely: the lot
-renders with `Uživatelské menu: Dev User`, `9 volných`, and the group regions —
-data that only arrives with a working bearer token.
+a fresh login: nothing re-authenticated against the issuer. The captured page
+snapshot shows how complete the result is: the lot renders with
+`Uživatelské menu: Dev User`, `9 volných`, and the group regions — data that
+only arrives with a working bearer token.
 
 So: **a completed sign-out can be undone by the next navigation.** The user
 clicked "Odhlásit se", saw the sign-in screen, and one navigation later was
-signed in again.
+signed in again. That much is observed.
 
-Where inside Auth.js the cleared cookie comes back has not been pinned down, and
-this record does not guess. What is measured is the pair of responses above.
+### What is inference, and not observation
+
+An earlier version of this record said the server "resurrected" the session.
+**That is a step further than the evidence goes, and it is corrected here.**
+
+The `Set-Cookie` on `GET /` is *not* evidence that a cookieless request was
+handed a session. Under `strategy: 'jwt'`, plus this application's access-token
+refresh in the `jwt` callback, re-issuing the session cookie is the **ordinary
+signature of a request that arrived carrying a valid one** — and there is no
+Auth.js path that mints a session for a request with no cookie at all.
+
+The datum that would settle it was not captured: **the request `Cookie` header
+on that `GET /`.** The trace records response headers only. So the honest
+statement is that the cookie was present again by the time of that request, and
+*how* it got there is not yet known.
+
+**Hypothesis one: a concurrent `GET /api/auth/session` re-installs it.**
+next-auth's own client `signOut` triggers a session fetch, and under `jwt` that
+endpoint re-issues the cookie. If that request is in flight while the sign-out
+response is clearing it, the clear is immediately undone. This fits everything
+measured: it is a race, which explains the load dependence; it needs the rest of
+the suite competing for the machine, which explains 0 failures in 12 isolated
+runs; and it requires no server-side misbehaviour at all.
+
+Whoever fixes this should start by capturing that request header — and the
+ordering of `/api/auth/session` against `/api/auth/signout` — rather than by
+reading Auth.js's source for a resurrection path that probably is not there.
+
+### Severity: Medium
+
+Real and security-relevant, and bounded:
+
+- Sign-out here is **cookie deletion with no server-side revocation**. There is
+  no session table and no token blacklist — the JWT is self-contained, so a copy
+  that survives deletion **stays valid until it expires**, and the access token
+  inside it keeps working against the API.
+- The realistic harm is a **shared or unattended machine**: someone signs out,
+  sees the sign-in screen, walks away, and the next navigation in that browser
+  is signed in as them.
+- It is **not a privilege boundary failure** — no cross-user exposure, no
+  escalation; the surviving session is the user's own.
+- It is **not attacker-inducible** as far as anything here shows: the trigger is
+  a timing race in the user's own browser, not something a third party can
+  provoke.
 
 ## Why the test is not being adjusted
 
@@ -77,6 +119,12 @@ The cost is a suite that goes red roughly one run in ten for a known reason.
 `doc/testing.md` names the symptom and points here, so the next person to see it
 does not spend the afternoon this took.
 
+**This was escalated rather than decided alone, and the ruling was to keep the
+assertion** — unretried, unquarantined, not `fixme` — until the sign-out fix
+lands as its own task, on the grounds that marking it would make a
+security-relevant defect invisible. Anyone wanting to revisit that trade should
+revisit it deliberately, not by quietly adding a retry.
+
 ## Why the fix is not in this task
 
 It is an application change to session handling — the part of the system where
@@ -90,14 +138,19 @@ For whoever picks it up, the useful starting points:
   `--trace retain-on-failure` and read `0-trace.network` from the retained
   `trace.zip`. Three failures in thirty-five runs is enough to catch one in
   under half an hour.
-- The question to answer first is how `auth()` in `proxy.ts` obtained a session
-  on a request that followed a `Max-Age=0` clear which the immediately preceding
-  request had already honoured. A same-session re-issue rather than a new login
-  points at the JWT being read from somewhere other than the request's current
-  cookie.
+- **Start by capturing the request `Cookie` header** on that `GET /` — the one
+  datum this record is missing. It decides everything: a cookie present means
+  something re-installed it after the clear (hypothesis one above), and a cookie
+  absent would mean something far stranger, in Auth.js itself.
+- Then log the ordering of `/api/auth/session` against `/api/auth/signout`.
+  next-auth's client `signOut` triggers a session fetch, and under `jwt` that
+  endpoint re-issues the cookie; a fetch still in flight when the sign-out
+  response lands would undo the clear.
 - Whether the API should care is a separate question: the access token in that
-  resurrected session is still valid and unexpired, so the API is behaving
-  correctly in accepting it. Sign-out here is a web-session concern.
+  surviving session is still valid and unexpired, so the API is behaving
+  correctly in accepting it. Sign-out here is a web-session concern — though see
+  the severity note: with no server-side revocation, a surviving JWT cannot be
+  invalidated even once the race is fixed.
 
 ## Risk
 

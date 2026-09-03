@@ -34,11 +34,15 @@ Three fixes were considered:
    wait is still on a condition — the URL, then the modal being visible — so it
    costs nothing when the route is already warm.
 3. **Build the web app and serve it with `next start`.** Rejected here, and
-   then **adopted** a few hours later for an unrelated and much better reason:
-   `next dev` runs React `StrictMode`, which gave every page two socket.io
-   connections and made `cell-lock.spec.ts` fail one run in four. See
-   `doc/decision/0187-*`. The suite's own `webServer` now runs `web:start`, so
-   the compilation this record is about does not happen on a normal run.
+   then **adopted** a few hours later — though the reason recorded at the time
+   was wrong. It was adopted because `next dev`'s `StrictMode` was believed to
+   be what made `cell-lock.spec.ts` fail one run in four; the actual cause was
+   the spec sharing one bay between two concurrent tests against a user-keyed
+   `LockService.release` (`doc/decision/0187-*`). Running the built app is still
+   right — it is the code production runs, and it removes `StrictMode`'s extra
+   connection as a variable — but it did not fix that flake, and the suite's own
+   `webServer` now runs `web:start`, so the compilation this record is about
+   does not happen on a normal run.
 
 **Which is why the allowance is kept rather than removed.** `reuseExistingServer`
 is on outside CI, so a developer with `nx run web:dev` already up still runs the

@@ -82,6 +82,10 @@ test('a completed sign-in yields a session the API accepts', async ({ page }) =>
  * `authjs.session-token`, no `/authorize` anywhere in between. Measured at 3
  * failures in 35 runs; 0 in 12 runs of this spec alone.
  *
+ * *How* the cookie comes back is not established — the trace caught response
+ * headers only, so the request `Cookie` on that `GET /` is missing. The leading
+ * hypothesis is a concurrent `/api/auth/session` re-installing it.
+ *
  * The second assertion below is the one that catches it. Do not retry it, relax
  * it, or mark it `fixme` — see `doc/decision/0189-*` for the trace and for why
  * each of those is a way of not knowing.

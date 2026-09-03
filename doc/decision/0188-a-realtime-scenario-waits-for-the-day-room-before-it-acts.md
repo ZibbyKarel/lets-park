@@ -34,10 +34,15 @@ failure would read as "the lock does not work".
 
 **What this did not fix, stated plainly.** It was written to explain a
 25%-failure flake in this spec and it did not: with the wait in place the suite
-still failed 2 runs in 20. The real cause was two socket.io connections per page
-under `next dev`'s `StrictMode`, one of them releasing the other's hold
-(`doc/decision/0187-*`). This wait is kept anyway, for two reasons that stand on
-their own: the race it closes is real regardless of which server is running, and
+still failed 2 runs in 20. The blame then moved to `StrictMode` giving each page
+a second socket.io connection, and **that was wrong too** — the suite serves the
+built app, where `StrictMode` does not double-invoke effects.
+
+The cause was the spec colliding with itself: two tests sharing one bay as one
+persona under `fullyParallel: true`, against a `LockService.release` keyed by
+user, so one test's `closeDialog` dropped the other's hold. Fixed by giving each
+test its own bay (`cell-lock.spec.ts`, `doc/decision/0187-*`). This wait is kept
+anyway, for two reasons that stand on their own: the race it closes is real regardless of which server is running, and
 a socket that never connects now fails with a sentence naming the date it never
 subscribed to, instead of a tile that quietly stayed grey for five seconds.
 
