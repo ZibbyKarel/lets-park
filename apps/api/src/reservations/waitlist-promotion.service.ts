@@ -79,6 +79,18 @@ export interface Promotion {
   /** The queue entry that was consumed. Clients drop it by id. */
   waitlistEntryId: string;
   user: PromotedUser;
+  /**
+   * Every spot whose queue for this day lost a row, **including** the spot that
+   * was freed.
+   *
+   * A promotion deletes all of the promoted person's entries for the day, not
+   * just the one it consumed, so it can shorten queues on cells the caller never
+   * named. Those cells are returned rather than kept private because a queue
+   * that got shorter and told nobody is a badge that stays wrong on every open
+   * day view until an unrelated event forces a refetch — the caller emits one
+   * `waitlist:updated` per cell in here.
+   */
+  clearedParkingSpotIds: string[];
 }
 
 @Injectable()
@@ -119,7 +131,16 @@ export class WaitlistPromotionService {
     // Every queue entry this person holds for this day, not just the one that
     // was consumed: they have their spot, and a promotion out of a second queue
     // on the same day could not be honoured anyway (one reservation per day).
-    await tx.waitlistEntry.deleteMany({ where: { userId: candidate.userId, date: dateColumn } });
+    //
+    // `DELETE … RETURNING` rather than `deleteMany`, which reports only a count:
+    // the caller has to name the cells whose queues just got shorter, and only
+    // the delete itself knows which they were.
+    const cleared = await tx.$queryRaw<{ parkingSpotId: string }[]>`
+      DELETE FROM "WaitlistEntry"
+      WHERE "userId" = ${candidate.userId}::uuid
+        AND "date" = ${date}::date
+      RETURNING "parkingSpotId"
+    `;
 
     const user = await this.holder(tx, candidate.userId);
 
@@ -140,7 +161,12 @@ export class WaitlistPromotionService {
       tx
     );
 
-    return { reservation, waitlistEntryId: candidate.id, user };
+    return {
+      reservation,
+      waitlistEntryId: candidate.id,
+      user,
+      clearedParkingSpotIds: [...new Set(cleared.map((row) => row.parkingSpotId))],
+    };
   }
 
   /** The queue for one cell, in promotion order, with every row locked. */

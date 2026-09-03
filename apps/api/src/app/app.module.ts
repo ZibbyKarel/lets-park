@@ -23,8 +23,6 @@ import { ShutdownModule } from '../shutdown/shutdown.module';
 import { SlackModule } from '../slack/slack.module';
 import { SpotsModule } from '../spots/spots.module';
 import { UsersModule } from '../users/users.module';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 
 /**
  * The operational baseline is assembled here rather than in `main.ts` wherever
@@ -87,9 +85,11 @@ import { AppService } from './app.service';
     // same singleton either way.
     SlackModule,
   ],
-  controllers: [AppController],
+  // No controllers of its own. The Nx scaffold's `AppController`
+  // (`GET /api` → `{"message":"Hello API"}`) lived here and was deleted: it
+  // existed in no contract, which global constraint 1 forbids, and nothing
+  // called it. See `doc/decision/0239-*`.
   providers: [
-    AppService,
     // Registered as a provider rather than via `app.useGlobalFilters(...)` so
     // that Nest can inject the pino logger into it.
     { provide: APP_FILTER, useClass: ContractExceptionFilter },

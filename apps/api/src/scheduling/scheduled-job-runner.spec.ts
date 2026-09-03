@@ -72,6 +72,25 @@ describe('ScheduledJobRunner', () => {
 
       await expect(runner.run('nightly', () => Promise.resolve())).resolves.toBe('ran');
     });
+
+    it('catches a body that throws *before* returning a promise', async () => {
+      // The three cases above all reject a promise the guard is already
+      // holding. A plain (non-`async`) function that throws on its first line
+      // never returns one — and with `body()` called outside the `try`, that
+      // threw straight out of `run`, past the guard, into a timer callback with
+      // nobody to catch it. "Never rejects" has to mean this too.
+      const throwsSynchronously = (): Promise<void> => {
+        throw new Error('boom before the promise');
+      };
+
+      await expect(runner.run('nightly', throwsSynchronously)).resolves.toBe('failed');
+
+      const line = logs.lines().find((entry) => entry['level'] === 'error');
+      expect(JSON.stringify(line?.['err'])).toContain('boom before the promise');
+      // …and it did not leave a claim behind that would block every later tick.
+      expect(runner.runningJobNames()).toEqual([]);
+      await expect(runner.run('nightly', () => Promise.resolve())).resolves.toBe('ran');
+    });
   });
 
   describe('overlapping runs', () => {

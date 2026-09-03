@@ -82,6 +82,8 @@ const BUSY_ELSEWHERE_DAYS = ['2100-01-27', '2100-01-28'] as DateOnly[];
  * "one month per file", so `[…-03-01, …-03-02]` satisfies it on its own.
  */
 const QUEUE_BUSY_DAYS = ['2100-03-01', '2100-03-02'] as DateOnly[];
+/** March 2100 too, and for the same reason: January has no day left. */
+const ALREADY_QUEUED_DAY = '2100-03-03' as DateOnly;
 
 /** Every day this file names, for the fixture guard. */
 const BUSINESS_DAYS = [
@@ -97,6 +99,9 @@ const BUSINESS_DAYS = [
   ...CONTESTED_DAYS,
   ...BUSY_ELSEWHERE_DAYS,
 ];
+
+/** The March days, kept apart from {@link BUSINESS_DAYS}'s one-month guard. */
+const MARCH_DAYS = [...QUEUE_BUSY_DAYS, ALREADY_QUEUED_DAY];
 
 /** The `details` a rejected call carried. Only a `DomainError` has any. */
 async function detailsOf(work: Promise<unknown>): Promise<unknown> {
@@ -203,13 +208,13 @@ describe('bulk booking against a real PostgreSQL', () => {
     expect(new Set([...BUSINESS_DAYS, HOLIDAY, WEEKEND].map((date) => date.slice(0, 7)))).toEqual(
       new Set(['2100-01'])
     );
-    expect(new Set(QUEUE_BUSY_DAYS.map((date) => date.slice(0, 7)))).toEqual(new Set(['2100-03']));
-    for (const date of QUEUE_BUSY_DAYS) {
+    expect(new Set(MARCH_DAYS.map((date) => date.slice(0, 7)))).toEqual(new Set(['2100-03']));
+    for (const date of MARCH_DAYS) {
       expect(isBusinessDay(date)).toBe(true);
     }
     // And no case borrows another's day, which is what keeps them independent
     // of the order Jest runs them in.
-    const everyDay = [...BUSINESS_DAYS, ...QUEUE_BUSY_DAYS];
+    const everyDay = [...BUSINESS_DAYS, ...MARCH_DAYS];
     expect(new Set(everyDay).size).toBe(everyDay.length);
   });
 
@@ -440,6 +445,60 @@ describe('bulk booking against a real PostgreSQL', () => {
           where: { userId: booker.id, date: toDateColumn(taken) },
         })
       ).toBe(0);
+    });
+
+    it('releases a queue the caller was already in on a day it just reserved for them', async () => {
+      // The state the rest of the module treats as invalid from both sides:
+      // `WaitlistService.join` refuses it at the door and `promote` cleans it up
+      // afterwards, because a queue entry held by somebody who already has that
+      // day can never be promoted. `confirmBulk` was the one writer that could
+      // create it — `allocateBulk` refuses a day the caller already has a
+      // *reservation* on, and nothing did the reverse. See `doc/decision/0236-*`.
+      const [booker, holder, behind, contested] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      await harness.reservations.create(
+        { parkingSpotId: contested.id, date: ALREADY_QUEUED_DAY },
+        actorFor(holder),
+        TODAY
+      );
+      const own = await harness.waitlist.join(
+        { parkingSpotId: contested.id, date: ALREADY_QUEUED_DAY },
+        actorFor(booker),
+        TODAY
+      );
+      const theirs = await harness.waitlist.join(
+        { parkingSpotId: contested.id, date: ALREADY_QUEUED_DAY },
+        actorFor(behind),
+        TODAY
+      );
+      expect([own.position, theirs.position]).toEqual([1, 2]);
+      harness.publisher.reset();
+
+      const result = await harness.bulk.confirm(
+        { dates: [ALREADY_QUEUED_DAY] },
+        actorFor(booker),
+        TODAY
+      );
+
+      // They got a spot — a different one, since `contested` is held.
+      expect(result.summary).toMatchObject({ assigned: 1, queued: 0 });
+      expect(result.days[0]).toMatchObject({ outcome: 'SPOT_ASSIGNED' });
+
+      // …and their own queue entry is gone, while the person behind them stays.
+      expect(await client.waitlistEntry.findUnique({ where: { id: own.entry.id } })).toBeNull();
+      expect(
+        await client.waitlistEntry.findUnique({ where: { id: theirs.entry.id } })
+      ).not.toBeNull();
+
+      // The shorter queue is announced, or the badge on that cell stays wrong
+      // and the person behind keeps a position one too high.
+      expect(harness.publisher.ofKind('waitlist:updated').map((event) => event.payload)).toEqual([
+        { date: ALREADY_QUEUED_DAY, parkingSpotId: contested.id, waitlistCount: 1 },
+      ]);
     });
 
     it('queues, audits and broadcasts when the whole lot is taken', async () => {

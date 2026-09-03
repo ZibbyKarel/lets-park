@@ -10,6 +10,14 @@
 
 import type { PrismaClient, User as UserRow, ParkingSpot as SpotRow } from '@lets-park/database';
 import { Prisma } from '@lets-park/database';
+import type { DateOnly } from '@lets-park/shared-types';
+import {
+  addDays,
+  isBusinessDay,
+  monthLockState,
+  startOfMonth,
+  todayInPrague,
+} from '@lets-park/shared-types';
 import { mapPrismaErrorCode } from '../common/filters/contract-exception.filter';
 import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
@@ -41,6 +49,26 @@ async function codeOf(work: Promise<unknown>): Promise<string> {
     throw error;
   }
   throw new Error('Expected this call to be rejected, but it succeeded.');
+}
+
+/**
+ * The first bookable day of the month `day` falls in.
+ *
+ * Used to build a target date that `AUTO` has already locked, from the real
+ * clock rather than from a fixture — which is the state the window rule made
+ * unleavable. Every month has a business day within its first fortnight, so the
+ * scan is bounded rather than open-ended; a month without one would be a bug in
+ * `isBusinessDay`, and throwing says so instead of hanging.
+ */
+function firstBusinessDayOfMonthContaining(day: DateOnly): DateOnly {
+  const first = startOfMonth(day);
+  for (let offset = 0; offset < 14; offset += 1) {
+    const candidate = addDays(first, offset);
+    if (isBusinessDay(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error(`No business day in the first fortnight of ${first}.`);
 }
 
 describe('the waitlist against a real PostgreSQL', () => {
@@ -309,8 +337,7 @@ describe('the waitlist against a real PostgreSQL', () => {
 
       const result = await harness.waitlist.leave(
         { waitlistEntryId: entry.entry.id },
-        actorFor(going),
-        TODAY
+        actorFor(going)
       );
 
       expect(result).toEqual({
@@ -336,44 +363,74 @@ describe('the waitlist against a real PostgreSQL', () => {
       );
 
       await expect(
-        codeOf(
-          harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(stranger), TODAY)
-        )
+        codeOf(harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(stranger)))
       ).resolves.toBe('FORBIDDEN');
 
-      await harness.waitlist.leave(
-        { waitlistEntryId: entry.entry.id },
-        actorFor(admin, 'ADMIN'),
-        TODAY
-      );
+      await harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(admin, 'ADMIN'));
       expect(await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })).toBeNull();
     });
 
-    it('is blocked in a locked month — unlike cancelling a reservation', async () => {
-      const { spot } = await occupiedSpot();
-      const user = await seedUser(client);
+    it('is allowed in a month AUTO has locked — the only timeline a live queue is ever in', async () => {
+      // The window rule this replaces made leaving impossible for the whole
+      // live life of every queue. `monthLockState` returns `LOCKED` from the 1st
+      // of the target month onwards (`reservation-window.ts:100-102`), and the
+      // target month is the only period a queue for it can be promoted in — so
+      // under the shipped `AUTO` defaults a normal user could never get out.
+      //
+      // Deliberately built from the **real** `todayInPrague()` and `AUTO`, not
+      // from `FORCE_LOCKED`: the previous test reached `LOCKED` through the
+      // admin override, and every fixture in this file uses a `TODAY` in the
+      // month *before* its target day, so this timeline was exercised nowhere.
+      // See `doc/decision/0233-*`.
+      const today = todayInPrague();
+      const target = firstBusinessDayOfMonthContaining(today);
+      // The last day the window was open under `AUTO`: they joined then.
+      const whileOpen = addDays(startOfMonth(today), -1);
+
+      const settings = await harness.window.getSettings();
+      expect(monthLockState(target, settings.openDaysBefore, settings.lockMode, today)).toBe(
+        'LOCKED'
+      );
+      expect(monthLockState(target, settings.openDaysBefore, settings.lockMode, whileOpen)).toBe(
+        'OPEN'
+      );
+
+      const [holder, user, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      await harness.reservations.create(
+        { parkingSpotId: spot.id, date: target },
+        actorFor(holder),
+        whileOpen
+      );
       const entry = await harness.waitlist.join(
-        { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY },
+        { parkingSpotId: spot.id, date: target },
         actorFor(user),
-        TODAY
+        whileOpen
       );
-      await setLockMode(client, 'FORCE_LOCKED');
+      harness.publisher.reset();
 
-      await expect(
-        codeOf(harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(user), TODAY))
-      ).resolves.toBe('RESERVATIONS_LOCKED');
-      expect(
-        await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })
-      ).not.toBeNull();
-
-      // An admin is not restricted by the window, here as everywhere.
-      const admin = await seedUser(client);
-      await harness.waitlist.leave(
+      // No `today` argument: `leave` does not take one any more, so this runs
+      // against the locked month the real clock is in.
+      const result = await harness.waitlist.leave(
         { waitlistEntryId: entry.entry.id },
-        actorFor(admin, 'ADMIN'),
-        TODAY
+        actorFor(user)
       );
+
+      expect(result).toEqual({
+        waitlistEntryId: entry.entry.id,
+        parkingSpotId: spot.id,
+        date: target,
+      });
       expect(await client.waitlistEntry.findUnique({ where: { id: entry.entry.id } })).toBeNull();
+      expect(harness.publisher.ofKind('waitlist:updated')).toEqual([
+        {
+          name: 'waitlist:updated',
+          payload: { date: target, parkingSpotId: spot.id, waitlistCount: 0 },
+        },
+      ]);
     });
 
     it('answers NOT_FOUND for an entry a promotion already consumed', async () => {
@@ -394,7 +451,7 @@ describe('the waitlist against a real PostgreSQL', () => {
       // The truth, and the right thing to tell them: they were promoted rather
       // than left waiting.
       await expect(
-        codeOf(harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(waiter), TODAY))
+        codeOf(harness.waitlist.leave({ waitlistEntryId: entry.entry.id }, actorFor(waiter)))
       ).resolves.toBe('NOT_FOUND');
     });
   });

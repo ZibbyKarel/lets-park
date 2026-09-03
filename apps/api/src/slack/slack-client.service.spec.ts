@@ -72,8 +72,18 @@ describe('SlackClient', () => {
     await server.close();
   });
 
-  /** A client wired to the fake Slack, with `env` overriding the defaults. */
-  function buildClient(env: Partial<SlackEnv> = {}): SlackClient {
+  /**
+   * A client wired to the fake Slack, with `env` overriding the defaults.
+   *
+   * `onSignal` is handed the signal each outgoing request was actually given —
+   * the one observation that distinguishes "every request has its own
+   * controller" from "they all share the singleton's latest one", which no
+   * amount of request counting can see.
+   */
+  function buildClient(
+    env: Partial<SlackEnv> = {},
+    onSignal?: (signal: AbortSignal | undefined) => void
+  ): SlackClient {
     const config = SlackConfig.fromEnv({ ...BASE_ENV, ...env });
     const factory: SlackWebClientFactory = {
       create: ({ token, signal }) =>
@@ -91,6 +101,7 @@ describe('SlackClient', () => {
           // production, rather than through a different, unwired path.
           requestInterceptor: (requestConfig) => {
             const current = signal();
+            onSignal?.(current);
             if (current !== undefined) {
               requestConfig.signal = current;
             }
@@ -452,6 +463,66 @@ describe('SlackClient', () => {
 
       expect(server.requests).toHaveLength(requestsBeforeRelease);
     }, 60_000);
+  });
+
+  /**
+   * The final review's api-platform I-1, and the reason it survived every test
+   * above: each of them drives **one** `SlackClient` **sequentially**, and the
+   * defect only exists when two calls overlap.
+   *
+   * `SlackClient` is a singleton, and the attempt's `AbortController` used to be
+   * a mutable field on it. The `WebClient`'s `requestInterceptor` reads that
+   * field when axios builds the request — a *microtask* after `attempt()` writes
+   * it — so two calls started in the same tick both read whichever controller
+   * was written last. Reproduced against the real `@slack/web-api` from this
+   * repo's `node_modules`, the signals attached to the two in-flight requests
+   * came back as `[ 'B', 'B' ]`: the first call's timeout then aborted a
+   * controller attached to nothing (its own request kept running — the
+   * "slow-but-successful response delivered twice" the class comment says the
+   * abort exists to stop) while tearing down the *second* call's request, which
+   * had not timed out, sending it round the retry loop as a genuine duplicate.
+   *
+   * Reachable without contrivance: `SlackDomainEventPublisher.publish` detaches
+   * one un-awaited chain per event, so any two overlapping cancellations produce
+   * exactly this, and the daily summary job can overlap with either.
+   */
+  describe('two calls in flight on the same client', () => {
+    it('gives each request its own signal, so one timeout tears down only its own request', async () => {
+      // Neither call is ever answered, so both are genuinely in flight when the
+      // first one's timer fires — which is the moment the shared-controller bug
+      // reaches across.
+      server.respondWith(() => 'hang');
+      const attached: (AbortSignal | undefined)[] = [];
+      const client = buildClient(
+        { SLACK_RETRY_ATTEMPTS: 1, SLACK_REQUEST_TIMEOUT_MS: 300 },
+        (signal) => attached.push(signal)
+      );
+
+      // Started in the same tick, un-awaited — the shape
+      // `SlackDomainEventPublisher.detach` produces.
+      const first = client.postToChannel('první');
+      const second = client.postToChannel('druhá');
+
+      await expect(first).resolves.toBe('failed');
+
+      // Two requests, two distinct controllers. Under the singleton field this
+      // was one object twice over, and every assertion below followed from it.
+      expect(attached).toHaveLength(2);
+      expect(attached[0]).toBeDefined();
+      expect(attached[1]).toBeDefined();
+      expect(attached[0]).not.toBe(attached[1]);
+
+      // The first call has timed out and torn its own request down. The second
+      // has not timed out, so its request must still be alive: exactly one of
+      // the two signals is aborted, and it is the first one's.
+      expect(attached[0]?.aborted).toBe(true);
+      expect(attached[1]?.aborted).toBe(false);
+
+      // …and the second call then fails on its own timer, not on the first's.
+      await expect(second).resolves.toBe('failed');
+      expect(attached[1]?.aborted).toBe(true);
+      expect(server.requests).toHaveLength(2);
+    });
   });
 
   describe('users.lookupByEmail', () => {

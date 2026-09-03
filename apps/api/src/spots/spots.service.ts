@@ -6,7 +6,7 @@
  * `AuditLog` entries name it by id, so retiring one is `active: false`
  * (`doc/decision/0027-*`). Everything else follows from that: `spot.list`
  * filters on `active`, and `deactivate` has to refuse while the spot still holds
- * reservations somebody is counting on.
+ * reservations — or queues — somebody is counting on.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -103,7 +103,7 @@ export class SpotsService {
     const existing = await this.requireSpot(id);
 
     if (changes.active === false && existing.active) {
-      await this.requireNoFutureReservations(id);
+      await this.requireNoFutureCommitments(id);
     }
 
     // Spread the present fields only. `exactOptionalPropertyTypes` is on, so
@@ -144,7 +144,7 @@ export class SpotsService {
       return toContractSpot(existing);
     }
 
-    await this.requireNoFutureReservations(input.id);
+    await this.requireNoFutureCommitments(input.id);
 
     const row = await this.prisma.client.parkingSpot.update({
       where: { id: input.id },
@@ -171,24 +171,38 @@ export class SpotsService {
   }
 
   /**
-   * Refuses while somebody still holds this spot for today or a later day.
+   * Refuses while anybody is still counting on this spot for today or a later
+   * day — whether they hold it or are queued for it.
    *
    * "Today" is a Europe/Prague calendar day, and the comparison is `>=` rather
    * than `>`: a reservation for *today* is one somebody has already parked on.
    * Silently retiring the spot under them would leave them believing they have a
    * place — which is why this is a `CONFLICT` the admin has to resolve first,
    * not a warning.
+   *
+   * **Waitlist entries count too**, and that is not symmetry for its own sake.
+   * A queue can outlive the reservation it was waiting on: a cancellation whose
+   * whole queue is ineligible promotes nobody
+   * (`WaitlistPromotionService.promote` returns `null`), so the spot goes free
+   * with its queue intact. Retiring it then would leave those entries pointing
+   * at a spot `listActive` filters out — invisible on the day overview,
+   * unreachable by the person who queued, and never promotable, because nothing
+   * will ever free a spot nobody can reserve. `ON DELETE RESTRICT` explains why
+   * the *row* survives a retirement; it says nothing about why the *queue*
+   * should. See `doc/decision/0235-*`.
    */
-  private async requireNoFutureReservations(spotId: string, today?: DateOnly): Promise<void> {
+  private async requireNoFutureCommitments(spotId: string, today?: DateOnly): Promise<void> {
     const from = toDateColumn(today ?? todayInPrague());
-    const blocking = await this.prisma.client.reservation.count({
-      where: { parkingSpotId: spotId, date: { gte: from } },
-    });
+    const where = { parkingSpotId: spotId, date: { gte: from } };
+    const [reservations, waitlistEntries] = [
+      await this.prisma.client.reservation.count({ where }),
+      await this.prisma.client.waitlistEntry.count({ where }),
+    ];
 
-    if (blocking > 0) {
+    if (reservations + waitlistEntries > 0) {
       throw new DomainError('CONFLICT', {
-        message: 'The spot still has reservations from today onwards.',
-        details: { reservations: blocking },
+        message: 'The spot still has reservations or waitlist entries from today onwards.',
+        details: { reservations, waitlistEntries },
       });
     }
   }

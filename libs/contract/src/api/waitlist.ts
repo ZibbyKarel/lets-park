@@ -66,16 +66,17 @@ export type LeaveWaitlistOutput = z.infer<typeof leaveWaitlistOutputSchema>;
 /**
  * Leave the queue.
  *
- * Unlike cancelling a reservation, this **is** blocked by a closed window:
- * `doc/decision/0004-*` lists "odejít z fronty" among the things a normal user
- * may not do in a locked month, because leaving reshuffles everyone behind you.
- *
- * `OUT_OF_HORIZON` looks impossible at first glance — you cannot have joined a
- * month that never opened — but it is reachable: an admin lowering
- * `openDaysBefore` moves a month back to `NOT_YET_OPEN` while entries already
- * exist in it.
+ * **No window errors.** Like cancelling a reservation, leaving a queue is never
+ * blocked by a closed or not-yet-open month — see
+ * `doc/decision/0233-leaving-a-waitlist-is-exempt-from-the-reservation-window`,
+ * which amends `doc/decision/0004-*`. Under the shipped `AUTO` /
+ * `openDaysBefore = 7` defaults the target month is `LOCKED` from its own 1st,
+ * which is the entire period a queue for it can be promoted in — so the window
+ * rule made leaving impossible for a queue's whole live life. Leaving moves
+ * everyone behind you *up*, which is nearer to cancellation (always allowed)
+ * than to creation.
  */
 export const leaveWaitlistContract = authed
   .input(leaveWaitlistInputSchema)
   .output(leaveWaitlistOutputSchema)
-  .errors(contractErrors('NOT_FOUND', 'OUT_OF_HORIZON', 'RESERVATIONS_LOCKED', 'CONFLICT'));
+  .errors(contractErrors('NOT_FOUND', 'CONFLICT'));

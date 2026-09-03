@@ -103,9 +103,15 @@ export class ScheduledJobRunner implements OnApplicationShutdown {
     }
 
     const startedAt = Date.now();
-    const running = body();
-    this.runningJobs.set(name, running.then(noop, noop));
     try {
+      // Inside the `try`, not before it. `body` is typed as returning a promise,
+      // but a plain (non-`async`) function that throws *before* returning one
+      // throws synchronously — and from out here that escaped the guard and made
+      // this method's "never rejects" false, which is the one thing a scheduled
+      // job cannot afford: an unhandled rejection out of a timer takes the
+      // process down.
+      const running = body();
+      this.runningJobs.set(name, running.then(noop, noop));
       await running;
       this.logger.info({ job: name, durationMs: Date.now() - startedAt }, 'Scheduled job finished');
       return 'ran';

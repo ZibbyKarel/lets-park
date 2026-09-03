@@ -456,8 +456,13 @@ describe('reservations against a real PostgreSQL', () => {
       // Attributed to whoever's request caused it — there is no system user row.
       expect(audit[0]?.actorUserId).toBe(holder.id);
 
+      // Three events, not two: the promotion emptied `first`'s queue on
+      // `otherSpot` as well, and a queue that got shorter and told nobody leaves
+      // that cell's badge reading "1 waiting" on every open day view until an
+      // unrelated event forces a refetch (`doc/decision/0234-*`).
       expect(harness.publisher.events.map((event) => event.name)).toEqual([
         'reservation:reassigned',
+        'waitlist:updated',
         'waitlist:updated',
       ]);
       expect(harness.publisher.ofKind('reservation:reassigned')[0]?.payload).toMatchObject({
@@ -466,7 +471,10 @@ describe('reservations against a real PostgreSQL', () => {
         fromWaitlistEntryId: firstEntry.entry.id,
         reservation: { id: promoted.id, user: { id: first.id } },
       });
-      expect(harness.publisher.ofKind('waitlist:updated')[0]?.payload.waitlistCount).toBe(1);
+      expect(harness.publisher.ofKind('waitlist:updated').map((event) => event.payload)).toEqual([
+        { date: FUTURE_BUSINESS_DAY, parkingSpotId: spot.id, waitlistCount: 1 },
+        { date: FUTURE_BUSINESS_DAY, parkingSpotId: otherSpot.id, waitlistCount: 0 },
+      ]);
       expect(harness.publisher.notices).toEqual([
         {
           userId: first.id,

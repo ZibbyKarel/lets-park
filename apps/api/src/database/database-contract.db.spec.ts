@@ -282,45 +282,52 @@ describe('what PostgreSQL actually does', () => {
         prisma.parkingSpot.create({ data: { label: unique('SPOT'), group: 'IT' } }),
       ]);
 
-      const reached = { one: resolvable(), two: resolvable() };
-      const lockThen = async (own: string, other: string, mine: keyof typeof reached) => {
-        await prisma.$transaction(
-          async (tx) => {
-            await tx.parkingSpot.update({ where: { id: own }, data: { group: 'SHARED' } });
-            reached[mine].resolve();
-            // Both transactions hold one row and reach for the other's.
-            await Promise.all([reached.one.promise, reached.two.promise]);
-            await tx.parkingSpot.update({ where: { id: other }, data: { group: 'SHARED' } });
+      // `try/finally` around everything after the two rows exist. The cleanup
+      // used to be the last statement, so any assertion between here and it
+      // leaked two `ParkingSpot` rows into the shared database — contradicting
+      // this file's own "Why nothing is left behind" header, and leaving a
+      // failing run to poison the next one's `SPOT_ORDER` assertions.
+      try {
+        const reached = { one: resolvable(), two: resolvable() };
+        const lockThen = async (own: string, other: string, mine: keyof typeof reached) => {
+          await prisma.$transaction(
+            async (tx) => {
+              await tx.parkingSpot.update({ where: { id: own }, data: { group: 'SHARED' } });
+              reached[mine].resolve();
+              // Both transactions hold one row and reach for the other's.
+              await Promise.all([reached.one.promise, reached.two.promise]);
+              await tx.parkingSpot.update({ where: { id: other }, data: { group: 'SHARED' } });
+            },
+            { maxWait: 10_000, timeout: 30_000 }
+          );
+        };
+
+        const outcomes = await Promise.allSettled([
+          lockThen(first.id, second.id, 'one'),
+          lockThen(second.id, first.id, 'two'),
+        ]);
+        const failure = outcomes.find((outcome) => outcome.status === 'rejected');
+        // A deadlock kills exactly one side. If neither failed, the two
+        // transactions did not overlap and this test proved nothing.
+        expect(failure).toBeDefined();
+
+        const error = (failure as PromiseRejectedResult).reason as unknown;
+        expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+        const known = error as Prisma.PrismaClientKnownRequestError;
+        expect(known.code).toBe('P2034');
+        expect(known.meta).toMatchObject({
+          driverAdapterError: {
+            cause: { originalCode: '40P01', kind: 'TransactionWriteConflict' },
           },
-          { maxWait: 10_000, timeout: 30_000 }
-        );
-      };
+        });
 
-      const outcomes = await Promise.allSettled([
-        lockThen(first.id, second.id, 'one'),
-        lockThen(second.id, first.id, 'two'),
-      ]);
-      const failure = outcomes.find((outcome) => outcome.status === 'rejected');
-      // A deadlock kills exactly one side. If neither failed, the two
-      // transactions did not overlap and this test proved nothing.
-      expect(failure).toBeDefined();
-
-      const error = (failure as PromiseRejectedResult).reason as unknown;
-      expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
-      const known = error as Prisma.PrismaClientKnownRequestError;
-      expect(known.code).toBe('P2034');
-      expect(known.meta).toMatchObject({
-        driverAdapterError: {
-          cause: { originalCode: '40P01', kind: 'TransactionWriteConflict' },
-        },
-      });
-
-      // And it must not reach the client as a 500.
-      expect(mapPrismaErrorCode(known)).toBe('CONFLICT');
-
-      // Undo whichever side committed — this case cannot use `rejectedBy`,
-      // because it needs both transactions to really run.
-      await prisma.parkingSpot.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+        // And it must not reach the client as a 500.
+        expect(mapPrismaErrorCode(known)).toBe('CONFLICT');
+      } finally {
+        // Undo whichever side committed — this case cannot use `rejectedBy`,
+        // because it needs both transactions to really run.
+        await prisma.parkingSpot.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+      }
     });
   });
 

@@ -66,6 +66,7 @@
  * operation still succeeds" testable without reading logs.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Injectable } from '@nestjs/common';
 import { ErrorCode, WebClient } from '@slack/web-api';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -152,10 +153,25 @@ export class DefaultSlackWebClientFactory extends SlackWebClientFactory {
 export class SlackClient {
   private readonly web: WebClient;
   private readonly redact: (value: string) => string;
-  // The in-flight attempt's controller, read by the factory's
-  // `requestInterceptor` and written by `withRetries`. `undefined` between
-  // attempts (and always, once Slack is disabled and no attempt ever runs).
-  private currentAttempt: AbortController | undefined;
+  /**
+   * The in-flight attempt's controller, read by the factory's
+   * `requestInterceptor`. Empty outside an attempt (and always, once Slack is
+   * disabled and no attempt ever runs).
+   *
+   * **Async context, not a field.** This used to be `private currentAttempt`,
+   * and `SlackClient` is a singleton: the interceptor reads it a *microtask*
+   * after {@link attempt} writes it, so two overlapping calls both saw whichever
+   * controller was written last. Measured against the real `@slack/web-api`,
+   * both in-flight requests were handed the same signal — so a timeout aborted a
+   * controller attached to nothing (its own request kept running, the duplicate
+   * delivery this class exists to prevent) while tearing down a *different*
+   * call that had not timed out (a genuine duplicate message, via that call's
+   * retry). `SlackDomainEventPublisher.publish` detaches one un-awaited chain
+   * per event, so two overlapping cancellations reach this. An
+   * `AsyncLocalStorage` store survives the interceptor's microtask hop and is
+   * per call by construction. See `doc/decision/0237-*`.
+   */
+  private readonly inFlight = new AsyncLocalStorage<AbortController>();
 
   constructor(
     private readonly config: SlackConfig,
@@ -167,7 +183,7 @@ export class SlackClient {
     // and building it unconditionally keeps one code path instead of two.
     this.web = webClientFactory.create({
       token: config.target?.botToken,
-      signal: () => this.currentAttempt?.signal,
+      signal: () => this.inFlight.getStore()?.signal,
     });
   }
 
@@ -286,13 +302,19 @@ export class SlackClient {
    * Runs one attempt of `call`, racing it against `SLACK_REQUEST_TIMEOUT_MS`.
    *
    * This is the abort described in the class comment. `call()`'s own HTTP
-   * request is given a fresh `AbortController` for {@link currentAttempt} to
-   * publish, and the *instant* our timer — never axios's; that one is
-   * disabled, see `DefaultSlackWebClientFactory` — decides the attempt is
-   * late, `controller.abort()` runs before the rejection this method throws
-   * even reaches `withRetries`'s `catch`. There is no window in this method
-   * in which an attempt is known to have timed out but has not yet been
-   * aborted.
+   * request is given a fresh `AbortController`, published on {@link inFlight}
+   * for the duration of *this* attempt only, and the *instant* our timer —
+   * never axios's; that one is disabled, see `DefaultSlackWebClientFactory` —
+   * decides the attempt is late, `controller.abort()` runs before the rejection
+   * this method throws even reaches `withRetries`'s `catch`. There is no window
+   * in this method in which an attempt is known to have timed out but has not
+   * yet been aborted.
+   *
+   * That guarantee is per *call*, not per process, and that is the point of the
+   * `AsyncLocalStorage`: `call()` is started inside `inFlight.run`, so every
+   * request it makes — the interceptor included, a microtask later — reads this
+   * attempt's controller and no other's. Two concurrent callers therefore abort
+   * strictly their own connections. See {@link inFlight}.
    *
    * The synthetic error on timeout carries `code: ErrorCode.RequestError` so
    * `describeSlackFailure` classifies it exactly as it would classify axios's
@@ -300,36 +322,35 @@ export class SlackClient {
    */
   private attempt(call: () => Promise<void>): Promise<void> {
     const controller = new AbortController();
-    this.currentAttempt = controller;
 
-    return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        controller.abort();
-        reject(
-          Object.assign(
-            new Error(`Slack request timed out after ${this.config.requestTimeoutMs}ms`),
-            {
-              code: ErrorCode.RequestError,
+    return this.inFlight.run(
+      controller,
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            controller.abort();
+            reject(
+              Object.assign(
+                new Error(`Slack request timed out after ${this.config.requestTimeoutMs}ms`),
+                {
+                  code: ErrorCode.RequestError,
+                }
+              )
+            );
+          }, this.config.requestTimeoutMs);
+
+          call().then(
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            (error: unknown) => {
+              clearTimeout(timer);
+              reject(error);
             }
-          )
-        );
-      }, this.config.requestTimeoutMs);
-
-      call().then(
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        (error: unknown) => {
-          clearTimeout(timer);
-          reject(error);
-        }
-      );
-    }).finally(() => {
-      if (this.currentAttempt === controller) {
-        this.currentAttempt = undefined;
-      }
-    });
+          );
+        })
+    );
   }
 
   /** Exponential: base, 2×base, 4×base … for attempts 1, 2, 3 … */
