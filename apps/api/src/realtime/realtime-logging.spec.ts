@@ -26,9 +26,24 @@ import { RealtimeTestClient } from './testing/realtime-test-client';
 import type { RealtimeTestApp } from './testing/realtime-test-app';
 import { seedEmployee, startRealtimeTestApp } from './testing/realtime-test-app';
 
+/**
+ * The file's deadline, and the only one — see the matching comment in
+ * `calendar/calendar-logging.spec.ts`. The wait below is event-driven (the
+ * harness's `onLogLine` resolves it), so this budget is a backstop that keeps
+ * the diagnostic readable, not the mechanism. It replaced a 2 s poll loop that
+ * was tighter than jest's own default and got tighter in effect every time the
+ * api suite grew.
+ */
+const TEST_TIMEOUT_MS = 30_000;
+const DIAGNOSTIC_BUDGET_MS = TEST_TIMEOUT_MS - 5_000;
+
+jest.setTimeout(TEST_TIMEOUT_MS);
+
 describe('what a refused handshake writes to the log', () => {
   let harness: RealtimeTestApp;
   let emitted: string[] = [];
+  /** Waiters registered by {@link waitForEmitted}, resolved from `onLogLine`. */
+  let waiters: { matches: (all: string) => boolean; resolve: () => void }[] = [];
   const originalEnv = { ...process.env };
 
   beforeAll(async () => {
@@ -36,7 +51,18 @@ describe('what a refused handshake writes to the log', () => {
       // Not `fatal`. A spec that would pass only because nothing was emitted is
       // not a passing spec.
       logLevel: 'debug',
-      onLogLine: (line) => emitted.push(line),
+      onLogLine: (line) => {
+        emitted.push(line);
+        // Push, rather than let a poller pull: what makes the wait below
+        // independent of how busy the machine is.
+        const all = emitted.join('');
+        for (const waiter of [...waiters]) {
+          if (waiter.matches(all)) {
+            waiters = waiters.filter((pending) => pending !== waiter);
+            waiter.resolve();
+          }
+        }
+      },
     });
     seedEmployee(harness.double, { oktaId: 'okta-alice', name: 'Alice' });
   });
@@ -48,7 +74,30 @@ describe('what a refused handshake writes to the log', () => {
 
   beforeEach(() => {
     emitted = [];
+    waiters = [];
   });
+
+  /** Resolves as soon as the captured output satisfies `matches`. */
+  async function waitForEmitted(matches: (all: string) => boolean, what: string): Promise<void> {
+    if (matches(emitted.join(''))) {
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const waiter = { matches, resolve };
+        waiters.push(waiter);
+        timer = setTimeout(() => {
+          waiters = waiters.filter((pending) => pending !== waiter);
+          reject(new Error(`${what}; got: ${emitted.join('')}`));
+        }, DIAGNOSTIC_BUDGET_MS);
+      });
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
 
   /** Waits for the gateway's own line, so the assertion never races the logger. */
   async function refuseAndCollectLogs(token: string | undefined): Promise<string[]> {
@@ -56,13 +105,10 @@ describe('what a refused handshake writes to the log', () => {
     expect(client.isConnected).toBe(false);
     await client.disconnect();
 
-    const deadline = Date.now() + 2000;
-    while (!emitted.join('').includes('Refused a Socket.io handshake')) {
-      if (Date.now() > deadline) {
-        throw new Error(`no refusal line was emitted; got: ${emitted.join('')}`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
+    await waitForEmitted(
+      (all) => all.includes('Refused a Socket.io handshake'),
+      'no refusal line was emitted'
+    );
     return emitted
       .join('')
       .split('\n')

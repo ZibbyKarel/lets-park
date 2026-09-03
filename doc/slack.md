@@ -130,6 +130,15 @@ delegate throw rather than argued in prose
   promoting cancellation's `reservation:reassigned` and `waitlist:updated` fail
   independently.
 
+- **Neither can a delegate take the process down.** The seam is `void`, but
+  `void` does not stop an `async` delegate from compiling, and an escaping
+  rejection would terminate the API process (there is no `unhandledRejection`
+  handler). The composite contains a returned promise's rejection into the same
+  log line, without awaiting it. A delegate with real async work should do what
+  `SlackDomainEventPublisher` does — detach, catch, and track in `inFlight` for
+  the shutdown drain — because a promise handed to the composite is *not*
+  drained at shutdown.
+
 Nothing rethrows: the seam is called on the request's way out, and a user told
 their cancellation failed will cancel again, against a row that is gone.
 

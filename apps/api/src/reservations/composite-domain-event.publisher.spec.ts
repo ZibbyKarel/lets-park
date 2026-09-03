@@ -52,6 +52,29 @@ class RecordingPublisher extends DomainEventPublisher {
   }
 }
 
+/**
+ * A delegate that breaks the seam's `void` contract by being `async`.
+ *
+ * This **compiles** as a `DomainEventPublisher`: TypeScript's void-return
+ * assignability rule lets a method returning `Promise<void>` satisfy an
+ * abstract `publish(...): void`, so the abstract-class token — chosen precisely
+ * so a replacement "cannot silently have the wrong shape" — does not stop it.
+ * The class exists to pin what the composite does about that at runtime.
+ */
+class AsyncRejectingPublisher extends DomainEventPublisher {
+  calls = 0;
+
+  async publish(): Promise<void> {
+    this.calls += 1;
+    throw new Error('async transport rejected');
+  }
+
+  async notifyPromotions(): Promise<void> {
+    this.calls += 1;
+    throw new Error('async transport rejected');
+  }
+}
+
 function cancelled(reservationId = RESERVATION): DomainEvent {
   return {
     name: 'reservation:cancelled',
@@ -75,17 +98,36 @@ describe('CompositeDomainEventPublisher', () => {
   let slack: RecordingPublisher;
   let errors: { bindings: Record<string, unknown>; message: string }[];
   let publisher: CompositeDomainEventPublisher;
+  /** Rejections Node saw escape into the process — must stay empty. */
+  let unhandled: unknown[];
+  const onUnhandled = (reason: unknown): void => {
+    unhandled.push(reason);
+  };
+
+  /** A `PinoLogger` double that records `error` calls into {@link errors}. */
+  function logger(): PinoLogger {
+    return {
+      error: (bindings: Record<string, unknown>, message: string) => {
+        errors.push({ bindings, message });
+      },
+    } as unknown as PinoLogger;
+  }
 
   beforeEach(() => {
     realtime = new RecordingPublisher();
     slack = new RecordingPublisher();
     errors = [];
-    const logger = {
-      error: (bindings: Record<string, unknown>, message: string) => {
-        errors.push({ bindings, message });
-      },
-    } as unknown as PinoLogger;
-    publisher = new CompositeDomainEventPublisher([realtime, slack], logger);
+    unhandled = [];
+    // A rejection escaping the composite is the failure mode under test, and it
+    // is invisible to `expect` — Node reports it on the process, not to the
+    // caller. Listening for it is what makes the async tests falsifiable
+    // rather than merely green.
+    process.on('unhandledRejection', onUnhandled);
+    publisher = new CompositeDomainEventPublisher([realtime, slack], logger());
+  });
+
+  afterEach(() => {
+    process.off('unhandledRejection', onUnhandled);
   });
 
   describe('the healthy path', () => {
@@ -220,6 +262,95 @@ describe('CompositeDomainEventPublisher', () => {
     });
   });
 
+  describe('a delegate that breaks the void contract by being async', () => {
+    // The seam is `void` on purpose: it is called on the request's way out and
+    // must not become anyone's async boundary. But `void` does not *stop* an
+    // async delegate — `AsyncRejectingPublisher` compiles — and an escaping
+    // rejection is worse than an escaping throw: `apps/api` installs no
+    // `unhandledRejection` handler, so under Node's default it would terminate
+    // the API process, after `COMMIT`, on a user's cancellation path. These
+    // tests pin that the composite contains it.
+
+    it('does not let an async delegate rejection escape publish', async () => {
+      const rejecting = new AsyncRejectingPublisher();
+      publisher = new CompositeDomainEventPublisher([rejecting, slack], logger());
+
+      expect(() => publisher.publish([cancelled()])).not.toThrow();
+      await flushMicrotasks();
+
+      expect(rejecting.calls).toBe(1);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('does not let an async delegate rejection escape notifyPromotions', async () => {
+      const rejecting = new AsyncRejectingPublisher();
+      publisher = new CompositeDomainEventPublisher([rejecting, slack], logger());
+
+      expect(() => publisher.notifyPromotions([promotion()])).not.toThrow();
+      await flushMicrotasks();
+
+      expect(rejecting.calls).toBe(1);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('still reaches the other delegate when an async delegate rejects', async () => {
+      // The isolation property, for the async case: the healthy delegate must
+      // run even though the one before it returned a promise that rejects.
+      const rejecting = new AsyncRejectingPublisher();
+      publisher = new CompositeDomainEventPublisher([rejecting, slack], logger());
+
+      publisher.publish([cancelled()]);
+      await flushMicrotasks();
+
+      expect(slack.published.map((event) => event.name)).toEqual(['reservation:cancelled']);
+    });
+
+    it('logs an async rejection the same way it logs a synchronous throw', async () => {
+      const rejecting = new AsyncRejectingPublisher();
+      publisher = new CompositeDomainEventPublisher([rejecting, slack], logger());
+
+      publisher.publish([cancelled()]);
+      await flushMicrotasks();
+
+      expect(errors).toHaveLength(1);
+      expect(onlyError().bindings['publisher']).toBe('AsyncRejectingPublisher');
+      expect(onlyError().bindings['method']).toBe('publish');
+      expect(onlyError().bindings['subject']).toBe('reservation:cancelled');
+      expect(Object.keys(onlyError().bindings).sort()).toEqual([
+        'err',
+        'method',
+        'publisher',
+        'subject',
+      ]);
+    });
+
+    it('does not wait for an async delegate before returning', async () => {
+      // Containing the rejection must not turn the seam into a blocking call:
+      // `publish` returns before the delegate's promise settles, so a slow
+      // transport cannot be added to a user's cancellation path by accident.
+      let settle = (): void => undefined;
+      const slow = new (class extends DomainEventPublisher {
+        publish(): void {
+          // Returns a pending promise, despite the `void` signature.
+          return new Promise<void>((resolve) => {
+            settle = resolve;
+          }) as unknown as void;
+        }
+        notifyPromotions(): void {
+          // Not exercised by this test.
+        }
+      })();
+      publisher = new CompositeDomainEventPublisher([slow, slack], logger());
+
+      publisher.publish([cancelled()]);
+
+      // Reached synchronously, with the delegate's promise still pending.
+      expect(slack.published).toHaveLength(1);
+      settle();
+      await flushMicrotasks();
+    });
+  });
+
   describe('nothing reaches the caller', () => {
     // `reservation-events.ts`: a failure to broadcast "must never turn a
     // successful cancellation into an error the user sees". A user told their
@@ -266,7 +397,7 @@ describe('CompositeDomainEventPublisher', () => {
         method: 'publish',
         subject: 'reservation:cancelled',
       });
-      expect(onlyError().message).toContain('threw');
+      expect(onlyError().message).toContain('failed');
     });
 
     it('logs once per failing delegate, not once per call', () => {
@@ -284,7 +415,11 @@ describe('CompositeDomainEventPublisher', () => {
       publisher.notifyPromotions([promotion()]);
 
       expect(onlyError().bindings['method']).toBe('notifyPromotions');
-      expect(onlyError().bindings['subject']).toBe('waitlist:promoted');
+      // Not a `namespace:verb` literal: a promotion notice has no contract
+      // event, and `subject` must not send a log reader grepping the contract
+      // for a name that was never there.
+      expect(onlyError().bindings['subject']).toBe('waitlist promotion notice');
+      expect(onlyError().bindings['subject']).not.toContain(':');
     });
 
     it('logs no payload, so a redacted field cannot re-enter the log here', () => {
@@ -312,6 +447,18 @@ describe('CompositeDomainEventPublisher', () => {
       expect(errors).toEqual([]);
     });
   });
+
+  /**
+   * Lets pending microtasks *and* one macrotask turn run.
+   *
+   * Node emits `unhandledRejection` only after the microtask queue has drained,
+   * so awaiting a bare promise is not enough to observe an escape: a test that
+   * did that would pass whether or not the rejection was contained.
+   */
+  async function flushMicrotasks(): Promise<void> {
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+  }
 
   /** The single logged failure, asserted to be single rather than assumed. */
   function onlyError(): { bindings: Record<string, unknown>; message: string } {

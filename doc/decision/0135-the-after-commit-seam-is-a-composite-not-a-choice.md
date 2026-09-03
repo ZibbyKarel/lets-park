@@ -50,6 +50,41 @@ Four properties, each of them load-bearing:
 4. **Failures are logged, never returned.** `error` with the stack, naming the
    delegate class, the method and the event *name*. Never the payload, and
    therefore never a token or a JWT.
+5. **A delegate cannot take the process down, whichever way it fails.** See
+   below.
+
+## A delegate must not be `async`, and what happens when one is
+
+The seam's return type is `void` on purpose: a delegate must not make the
+composite its async boundary. `SlackDomainEventPublisher` shows the expected
+shape for a delegate with real asynchronous work — it detaches its own
+promises, catches them itself, and holds them in an `inFlight` set registered as
+a `GracefulShutdownService` closer, so `SIGTERM` waits for them. A delegate that
+handed its promise to the composite instead would have work **nothing drains at
+shutdown**.
+
+`void` does not enforce this, and that turned out to matter. TypeScript's
+void-return assignability rule lets a method returning `Promise<void>` satisfy
+an abstract `publish(...): void`, so an `async` delegate *compiles* — the
+abstract-class token, chosen so a replacement "cannot silently have the wrong
+shape", does not catch this one. Measured on the first version of this class: a
+rejecting async delegate's rejection was **not** caught by `forward`'s `try`,
+and `apps/api` installs no `unhandledRejection` handler, so under Node's default
+it would terminate the API process — after `COMMIT`, on a user's cancellation
+path. That is a strictly worse version of the outcome the whole seam exists to
+prevent, and it would have arrived the first time someone added the obvious
+third delegate (email, Teams) and wrote it `async` because its client is async.
+
+`forward` therefore inspects what a delegate returns and routes a rejection to
+the same log line as a synchronous throw. It does **not** await it: containing
+the failure must not turn the seam into a blocking call. So the guarantee is "a
+delegate cannot take the process down, whichever way it fails" — not "`async`
+delegates are supported". Their work is still untracked at shutdown, and the log
+line is how the author finds out.
+
+Four tests pin this, and three mutants kill them: removing the thenable
+handling, swallowing the rejection silently instead of logging it, and making
+the composite await its delegates.
 
 ## Why a list of delegates rather than the two classes by name
 
@@ -61,6 +96,19 @@ detaches every promise). A composite tested only against the real two would be
 unable to distinguish "the composite isolates its delegates" from "the delegates
 happen not to fail", which is precisely the class of test this project keeps
 finding: one that passes on a defence other than the one it names.
+
+That isolation follows from taking a **list** through a **separate token**. It
+does not follow from that token being a `Symbol`, and an earlier draft of this
+record ran the two together. An abstract-class registry token would isolate the
+composite identically. `DOMAIN_EVENT_PUBLISHERS` is a `Symbol` for one narrower
+reason: the injected value is `readonly DomainEventPublisher[]`, and an array
+cannot be a class. The convention it departs from is about the *seam*, and the
+seam is untouched — `DomainEventPublisher` is still an abstract class, still
+what the services inject, still bound with `useClass`. What the `Symbol` costs
+is that the constructor parameter's type is an unchecked claim about what the
+container holds; the factory's annotated return type checks the producing end
+and two specs assert instance identity at the consuming end, which covers it
+from both sides.
 
 ## Why the delegate list injects the classes rather than constructing them
 
@@ -85,7 +133,9 @@ argument applies to `RealtimeDomainEventPublisher`, which needs the gateway
   among its delegates — the same fact ("the reservation services really reach
   me"), asserted through the shape that now delivers it.
 - Adding a third implementation is one entry in the factory in
-  `reservations.module.ts`; the composite does not change.
+  `reservations.module.ts`; the composite does not change. It must not be
+  `async` — see the section above for why the compiler will not stop you and
+  what the composite does when you do it anyway.
 - Ordering in the delegate list is delivery order, not precedence. Every
   delegate is called for every event regardless of what the ones before it did.
 

@@ -74,6 +74,18 @@ describe('SlackModule inside AppModule', () => {
     expect(delegates()).toContainEqual(expect.any(SlackDomainEventPublisher));
   });
 
+  it('fans out to exactly the two implementations, in delivery order', () => {
+    // `toContain` alone would not notice an **empty** delegate list, which is
+    // the worst failure this wiring has: the whole seam becomes a silent no-op
+    // while every composite unit test stays green (they build their own
+    // delegates). Nor would it notice an accidental third. Pinning the exact
+    // list is what makes both visible.
+    expect(delegates().map((delegate) => delegate.constructor.name)).toEqual([
+      'RealtimeDomainEventPublisher',
+      'SlackDomainEventPublisher',
+    ]);
+  });
+
   it('shares one publisher between the seam and SlackModule, not two', () => {
     // The instance behind the seam must be the one `SlackModule` built — the
     // reason Task 16 needed `useExisting`, and equally the reason the composite

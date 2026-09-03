@@ -24,10 +24,22 @@ import { SlackConfig } from './slack.config';
  *
  * ## What is exported and why
  *
- * `SlackDomainEventPublisher` is exported because `ReservationsModule` binds it
- * to the `DomainEventPublisher` token — the after-commit seam Task 13 left for
- * exactly this. Nothing else leaves this module: `SlackClient` is the single
- * importer of `@slack/web-api` and stays that way.
+ * `SlackDomainEventPublisher` is exported because `ReservationsModule` injects
+ * it into the delegate list behind the after-commit seam Task 13 left
+ * (`reservations/composite-domain-event.publisher.ts`). It is **not** bound to
+ * the `DomainEventPublisher` token directly — Task 15's Socket.io publisher
+ * implements the same seam, and one token resolves to one provider, so the
+ * token is bound to the composite and both implementations sit behind it.
+ *
+ * What the export still has to guarantee is what Task 16's original
+ * `useExisting` guaranteed: the instance reached through the seam is the one
+ * **this** module built. That matters because of
+ * `SlackDomainEventPublisher.inFlight` — a second instance would drain an empty
+ * set on `SIGTERM` while a real notification was still in the air.
+ * `slack.module.spec.ts` asserts the identity through the composite.
+ *
+ * Nothing else leaves this module: `SlackClient` is the single importer of
+ * `@slack/web-api` and stays that way.
  *
  * `SlackConfig` is built from `ConfigService` rather than read key-by-key at
  * every use site, so "enabled" is a single fact with a single type
