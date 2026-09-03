@@ -1,4 +1,13 @@
-# Let's Park — the whole stack, in two profiles.
+# Let's Park — the whole stack, in three profiles.
+#
+# Every service carries a profile, so a bare `docker compose up` starts nothing
+# and you have to say what you want. That is on purpose, and it is the one
+# place this file departs from the task brief's literal "`docker compose up`
+# starts the entire stack": the entire stack includes a mock OIDC issuer that
+# will sign a token for any subject asked of it, and a default that starts it
+# is a default that eventually starts it in production. Naming the profile
+# costs a reader one flag; the alternative costs an authentication bypass.
+# doc/decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice.
 #
 #   docker compose --profile dev up -d
 #       Infrastructure only: PostgreSQL, the mock OIDC issuer, adminer. The
@@ -9,6 +18,15 @@
 #   docker compose --env-file .env.docker --profile dev --profile app up -d --build
 #       The same infrastructure plus the two production images and the
 #       migration job. Everything runs in containers; nothing runs on the host.
+#
+#   docker compose --env-file .env.docker --profile db --profile app up -d --build
+#       The containers and a local PostgreSQL, but a real Okta tenant instead
+#       of the mock issuer.
+#
+#   docker compose --env-file .env.docker --profile app up -d --build
+#       Production: the containers only. `DATABASE_URL` points at a managed
+#       database and `AUTH_OKTA_ISSUER` at a real authorization server; neither
+#       postgres nor the mock issuer is started.
 #
 # Interpolation comes from `.env` by default and from `--env-file` when given
 # (`docker compose config` prints what it resolved). The two are different
@@ -26,8 +44,22 @@
 # are what enforce it at boot.
 
 services:
+  # The database, under its own profile so that it is a choice rather than a
+  # default. `dev` and `db` both start it; `--profile app` on its own does not,
+  # which is the deployment where PostgreSQL is somebody else's problem — RDS,
+  # Cloud SQL, a DBA — and an extra container next to the API would at best be
+  # idle and at worst be the one that quietly gets written to. Point
+  # `DATABASE_URL` at the managed instance and run `--profile app` alone.
+  #
+  # `migrate` and `api` therefore declare this dependency `required: false`:
+  # when the profile is off the service is simply absent and they start anyway,
+  # and when it is on the `service_healthy` condition still holds and they wait.
+  # Without `required: false` Compose rejects the whole file the moment the
+  # profile is off — `service "migrate" depends on undefined service
+  # "postgres"` — see doc/decision/0208-*.
   postgres:
     image: postgres:17
+    profiles: ['dev', 'db']
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -107,6 +139,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        # Absent when the `db` profile is off (managed database) — see the
+        # comment on `postgres` above. Present, and waited for, when it is on.
+        required: false
 
   api:
     profiles: ['app']
@@ -188,6 +223,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
       migrate:
         condition: service_completed_successfully
 

@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 19 topic documents, 132 decision records, and `doc/design/`.
+`doc/`: 19 topic documents, 133 decision records, and `doc/design/`.
 
 ---
 
@@ -196,3 +196,4 @@ for why, and take the next number from the end of this list.
 - [`0205-the-app-profile-names-every-variable-it-passes`](decision/0205-the-app-profile-names-every-variable-it-passes.md) — The app profile names every variable it passes, and has its own env file
 - [`0206-ci-runs-the-database-suites-against-a-real-postgres`](decision/0206-ci-runs-the-database-suites-against-a-real-postgres.md) — CI runs the database suites against a real PostgreSQL
 - [`0207-duplicate-decision-numbers-are-kept-and-citations-carry-slugs`](decision/0207-duplicate-decision-numbers-are-kept-and-citations-carry-slugs.md) — Duplicate decision numbers are kept; citations carry slugs
+- [`0208-every-service-carries-a-profile-and-the-database-is-a-choice`](decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice.md) — Every service carries a profile, and the database is a choice

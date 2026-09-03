@@ -1,6 +1,14 @@
 # 0009 – One `.env.example`, three targets; `web`/`api` in `docker-compose.yml` sit behind a profile
 
-**Date:** 2026-08-28 · **Status:** accepted
+**Date:** 2026-08-28 · **Status:** accepted; point 2 superseded by
+`doc/decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice`
+
+> Superseded in part. Point 2 below records that `postgres` and
+> `mock-oauth2-server` carry no profile. Both do now: the issuer took `dev` in
+> Task 29 so that no production invocation can start it, and `postgres` took
+> `dev` and `db` so that a deployment against a managed database does not get an
+> unwanted container. Everything in point 1 — the two `.env` copies, and why —
+> still holds.
 
 ## What
 

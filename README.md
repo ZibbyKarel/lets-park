@@ -92,8 +92,24 @@ docker compose --env-file .env.docker --profile app logs -f api
 docker compose --env-file .env.docker --profile dev --profile app down     # add -v to drop the volume
 ```
 
-Drop `--profile dev` to run against a real Okta tenant: nothing in the `app`
-profile depends on the mock issuer.
+### Which profile
+
+Every service carries one, so a bare `docker compose up` starts nothing and you
+have to say what you want. Pick by what is _not_ yours to run:
+
+| You are running                      | Command                       |
+| ------------------------------------ | ----------------------------- |
+| the apps on the host (everyday dev)  | `--profile dev`               |
+| everything, mock issuer (the above)  | `--profile dev --profile app` |
+| containers + local DB, **real** Okta | `--profile db --profile app`  |
+| containers only, managed DB and Okta | `--profile app`               |
+
+Nothing in the `app` profile depends on the mock issuer, and `postgres` is a
+`required: false` dependency, so the last row starts cleanly with `DATABASE_URL`
+pointed at RDS or Cloud SQL. The database is a choice rather than a default on
+purpose, and so is the issuer: this is why the brief's literal `docker compose
+up` is not what shipped
+(`doc/decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice`).
 
 ## Migrations
 
@@ -133,8 +149,17 @@ Single-instance deployment, no managed backups: the backup is `pg_dump`.
 
 ```bash
 docker compose --env-file .env.docker exec -T postgres \
-  pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom > lets-park-$(date +%F).dump
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > lets-park-$(date +%F).dump
 ```
+
+The `sh -c '…'` is load-bearing, and the single quotes with it. `--env-file`
+puts `POSTGRES_USER` and `POSTGRES_DB` inside the **container**; it does not put
+them in your shell. Written without the wrapper, your shell expands them first,
+they are almost certainly empty, and `pg_dump` falls back to the container's
+own user: `FATAL: role "root" does not exist`, exit 1, a zero-byte file, and a
+backup you do not discover is empty until you need it. `$(date +%F)` is outside
+the quotes on purpose — that one _is_ yours to expand.
 
 Restore, `--data-only` restores, and the `ReservationWindowSettings` row that
 has to be deleted first are all in `doc/database.md` §Backups.

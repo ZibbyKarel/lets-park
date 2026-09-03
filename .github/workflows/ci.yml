@@ -27,6 +27,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege, set once at the top so no job can quietly inherit more.
+# Nothing here writes: `verify` and `database` only read the checkout, and
+# `images` builds with `push: false`, so it needs no registry or package
+# scope either. A job that later needs to comment on a pull request or push a
+# tag should be given that scope in its own `permissions:` block rather than
+# widening this one.
+permissions:
+  contents: read
+
 # A new push to a branch cancels the run already in flight for it. Never on
 # `main`, where every commit's result is a record.
 concurrency:

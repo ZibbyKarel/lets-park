@@ -145,10 +145,14 @@ The actual `.env` files are in `.gitignore` – they are never committed.
    docker compose --profile dev up -d
    ```
 
-   Without `--profile dev`, only `postgres` comes up. The mock OIDC issuer
-   and `adminer` both carry the `dev` profile — the issuer deliberately, so
-   that no production invocation can start it and nothing in the `app`
-   profile depends on it (`doc/decision/0201-the-issuer-url-must-be-one-name-on-both-sides-of-the-network`).
+   Every service now carries a profile, so `docker compose up` with no
+   `--profile` starts **nothing**. That is deliberate: which database you run
+   against is a decision, not a default
+   (`doc/decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice`).
+   `postgres` answers to `dev` and to `db`; the mock OIDC issuer and `adminer`
+   answer only to `dev` — the issuer deliberately, so that no production
+   invocation can start it and nothing in the `app` profile depends on it
+   (`doc/decision/0201-the-issuer-url-must-be-one-name-on-both-sides-of-the-network`).
 
    `web` and `api` sit behind the **`app`** profile and now build real
    production images (`apps/api/Dockerfile`, `apps/web/Dockerfile`), together

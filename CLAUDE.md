@@ -20,7 +20,7 @@ a fresh worktree and spent the next hour on spurious `Module not found` errors
 in `api:build`.
 
 **The documentation map is `doc/README.md`**; it indexes every topic document
-and all 132 decision records. `README.md` is the operational runbook.
+and all 133 decision records. `README.md` is the operational runbook.
 
 ### Commands
 
@@ -63,13 +63,19 @@ npx nx run api-e2e:e2e
 npx nx run web-e2e:e2e                   # documented in doc/testing.md, not re-measured here
 ```
 
-`web-e2e:e2e` is the one command on this page whose exit code was not measured
-when it was written: port 4200 was held by another session, and
-`reuseExistingServer` would have run the suite against that `next dev` — which
-`doc/decision/0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev`
-records as the cause of a one-in-four `cell-lock.spec.ts` failure. The target
-and its caveats come from `doc/testing.md`, which the task that wrote the suite
-verified.
+`web-e2e:e2e` is the one command on this page not measured green by the person
+who wrote the line. It has since been run — **18 passed** — and two things about
+it are worth knowing before you run it yourself:
+
+- **Free port 4200 first.** `reuseExistingServer` will happily run the whole
+  suite against whatever is already listening, including a `next dev`, which
+  `doc/decision/0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev`
+  records as the cause of a one-in-four `cell-lock.spec.ts` failure. A green run
+  against the wrong server is the failure mode, not a red one.
+- **Exit 1 after `18 passed` is not a test failure.** Nx writes its task history
+  to a SQLite database under `.nx/`, and concurrent runs from several worktrees
+  corrupt the write; the same thing has been seen here as exit 1 after 509
+  passing tests. Read the suite's own summary line, not just `$?`.
 
 **`npm test` does not run the database suites.** `apps/api/jest.config.cts`
 excludes `*.db.spec.ts` because they need a live PostgreSQL; they run under
