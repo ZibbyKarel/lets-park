@@ -378,10 +378,16 @@ export class RealtimeGateway
    * Gives a hold back.
    *
    * No acknowledgement — the contract declares one only for `cell:lock` — so a
-   * release that names a cell this user does not hold is simply nothing
+   * release that names a cell this connection does not hold is simply nothing
    * happening. `LockService.release` is what enforces that a client cannot drop
    * somebody else's hold; the client is documented not to try, and the server
    * does not take its word for it.
+   *
+   * The requester is the same `{ user, socketId }` pair `cell:lock` acquires
+   * with, and passing `client.id` here is not bookkeeping: a release keyed by
+   * user alone lets one of a user's connections drop the hold another of them
+   * is renewing — a second tab, or a page that reloaded before this server
+   * noticed the old socket. `doc/decision/0220-*`.
    */
   @SubscribeMessage('cell:unlock')
   cellUnlock(@ConnectedSocket() client: RealtimeServerSocket, @MessageBody() raw: unknown): void {
@@ -389,7 +395,7 @@ export class RealtimeGateway
     if (cell === null) {
       return;
     }
-    if (this.locks.release(cell, client.data.user.id)) {
+    if (this.locks.release(cell, { user: client.data.user, socketId: client.id })) {
       this.emitCellUnlocked(cell);
     }
   }

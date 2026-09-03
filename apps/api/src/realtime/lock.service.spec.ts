@@ -178,21 +178,51 @@ describe('InMemoryLockService', () => {
     it('releases the holder’s own cell', () => {
       service.acquire(CELL, { user: ALICE, socketId: 'socket-a' });
 
-      expect(service.release(CELL, ALICE.id)).toBe(true);
+      expect(service.release(CELL, { user: ALICE, socketId: 'socket-a' })).toBe(true);
       expect(service.acquire(CELL, { user: BOB, socketId: 'socket-b' }).outcome).toBe('ACQUIRED');
     });
 
     it('refuses to let one user drop another’s hold', () => {
       service.acquire(CELL, { user: ALICE, socketId: 'socket-a' });
 
-      expect(service.release(CELL, BOB.id)).toBe(false);
+      expect(service.release(CELL, { user: BOB, socketId: 'socket-b' })).toBe(false);
       expect(service.acquire(CELL, { user: BOB, socketId: 'socket-b' }).outcome).toBe(
         'HELD_BY_OTHER'
       );
     });
 
+    it('refuses a superseded connection of the holder’s own user', () => {
+      // Two live connections of one user on one cell — a second tab, or a page
+      // that reloaded before the server noticed the old socket. The second
+      // `acquire` is a renewal, and it re-keys the hold onto `socket-b`.
+      service.acquire(CELL, { user: ALICE, socketId: 'socket-a' });
+      service.acquire(CELL, { user: ALICE, socketId: 'socket-b' });
+
+      // `socket-a` closing its dialog must not drop the hold `socket-b` holds.
+      // Keyed by user alone this is `true`, and the bay reads `Volné` to
+      // everybody while the other tab's form is still open.
+      expect(service.release(CELL, { user: ALICE, socketId: 'socket-a' })).toBe(false);
+      // …and the hold really is still there, rather than merely unreported:
+      // a second user asking for the cell is still refused.
+      expect(service.acquire(CELL, { user: BOB, socketId: 'socket-x' }).outcome).toBe(
+        'HELD_BY_OTHER'
+      );
+    });
+
+    it('lets the connection that re-took the hold give it back', () => {
+      // The other half of the pair above: keying release by socket must not
+      // strand a hold that survived a reconnect. `useCellLock` re-requests on
+      // the new connection, which re-keys the hold, so the connection that
+      // closes the form is always the one that owns it.
+      service.acquire(CELL, { user: ALICE, socketId: 'socket-a' });
+      service.acquire(CELL, { user: ALICE, socketId: 'socket-b' });
+
+      expect(service.release(CELL, { user: ALICE, socketId: 'socket-b' })).toBe(true);
+      expect(service.acquire(CELL, { user: BOB, socketId: 'socket-x' }).outcome).toBe('ACQUIRED');
+    });
+
     it('is a no-op for a cell nobody holds', () => {
-      expect(service.release(CELL, ALICE.id)).toBe(false);
+      expect(service.release(CELL, { user: ALICE, socketId: 'socket-a' })).toBe(false);
     });
 
     it('stops the expiry, so a released cell is not announced twice', () => {
@@ -200,7 +230,7 @@ describe('InMemoryLockService', () => {
       service.onExpired((cell) => expired.push(cell));
       service.acquire(CELL, { user: ALICE, socketId: 'socket-a' });
 
-      service.release(CELL, ALICE.id);
+      service.release(CELL, { user: ALICE, socketId: 'socket-a' });
       jest.advanceTimersByTime(TTL_MS * 2);
 
       // The gateway broadcasts `cell:unlocked` on the release itself; a later

@@ -168,21 +168,29 @@ scenario that only passes on the second attempt is a bug report, not a nuisance.
 `fullyParallel` is on (from `nxE2EPreset`), so **the tests inside one file run
 concurrently in separate workers**. That is easy to forget and it has bitten
 this suite once already: two tests in `cell-lock.spec.ts` shared a bay, and
-because a cell lock is keyed by user, each was releasing the other's hold. A
-test that mutates shared state needs its own bay — see `SPOTS` in that file, and
-`SPEC_DAY_SLOTS` in `support/dates.ts` for the same discipline between files.
+because a cell lock is *acquired* per user, each test's dialog was renewing the
+other's hold and each `closeDialog` was dropping it. A test that mutates shared
+state needs its own bay — see `SPOTS` in that file, and `SPEC_DAY_SLOTS` in
+`support/dates.ts` for the same discipline between files. (Since
+`doc/decision/0220-*` a release also has to come from the *connection* that
+holds the cell, which narrows that particular collision but does not remove the
+rule: two tests on one bay still contend for it.)
 
 To see what the sockets are actually doing, set `E2E_TRACE_REALTIME=1`. Every
 `day:*` and `cell:*` packet each page sends or receives is printed with a short
 clock and a label identifying the **page** — `w3/user#1`, worker and ordinal —
-along with every WebSocket that page opens. Labelling by persona alone is what
-made two concurrent pages read as one page with two sockets, so the ordinal is
-load-bearing. Nothing else is printed, deliberately: the socket.io handshake
-carries the access token and matches neither name.
+along with every WebSocket that page opens (`OPEN`), every document it loads
+(`LOAD`) and, per document, one `DOC <id> #<n>` line per socket that document
+constructed. Labelling by persona alone is what made two concurrent pages read
+as one page with two sockets, so the ordinal is load-bearing — and counting
+`OPEN` per *page* rather than per *document* is what made an ordinary reload
+read as a duplicate connection, which is what the `DOC` lines exist to stop
+(`doc/decision/0221-*`). Nothing else is printed, deliberately: the socket.io
+handshake carries the access token and matches neither name.
 
 ---
 
-## The six journeys
+## The seven journeys
 
 | Spec | What it proves |
 | --- | --- |
@@ -193,6 +201,7 @@ carries the access token and matches neither name.
 | `cell-lock.spec.ts` | Two users on one day: one opens a bay's dialog and the other's tile hatches over as *"právě upravuje Dev User"* and stops being clickable, live over the socket; closing releases it; the holder never sees their own hold. |
 | `admin-reservation.spec.ts` | An admin opens someone else's bay from the `⋯` affordance, gets the admin dialog, and cancels it — and the bay is free for its former holder too. An ordinary user gets no `⋯`. |
 | `ics-feed.spec.ts` | The calendar URL is read out of the Nastavení modal, fetched by a request context that has never signed in, and contains the reservation; a wrong token is a 404 that looks like any other 404; cancelling removes the event. |
+| `realtime-connection.spec.ts` | One document, one socket.io connection — asserted in the **built** app, after a day walk and an open editing form, and again on the document a reload produces. The claim `doc/decision/0221-*` had to measure because `doc/decision/0187-*` had counted it per page. |
 
 Each spec books its **own** business day of the target month
 (`SPEC_DAY_SLOTS` in `src/support/dates.ts`), so specs can run in parallel
@@ -264,9 +273,9 @@ THROTTLE_LIMIT=10000 THROTTLE_STRICT_LIMIT=1000 npx nx run api:serve
 Or simply wait a minute between runs; a single run fits inside 300.
 
 **`cell-lock.spec.ts` fails, saying a tile still reads `Volné`.** Something
-released the hold while the dialog was still open. `LockService.release` keys a
-hold by **user**, not by socket, so *anything* holding the same cell as the same
-user can drop it.
+released the hold while the dialog was still open. A hold is *acquired* per
+user, so anything asking for the same cell as the same user takes it over — and
+until `doc/decision/0220-*` any of that user's connections could also drop it.
 
 In order of likelihood:
 
@@ -283,16 +292,25 @@ In order of likelihood:
   second socket.io connection, which sits in the same day room. Measured at 5
   failures in 20 runs against `web:dev`. Kill 4200 and let the suite start
   `web:start` itself.
-- **The known application defect.** About one page in three opens a second
-  socket.io connection even against the built app — 23 of 68 pages across four
-  runs — for reasons that are not yet understood and are *not* `StrictMode`.
-  All four of those runs passed, so this is not usually what reddens the spec,
-  but it is real. `doc/decision/0187-*` has the traces.
+- **Another tab, or a page that reloaded.** One user with two live connections
+  on one cell is ordinary use, and it was the whole of the exposure the
+  "duplicate connection" scare was standing in for. Since `doc/decision/0220-*`
+  the connection that opened **first** can no longer release the hold — but the
+  one that opened **second** still can, because its `cell:lock` re-keyed the
+  hold onto itself and acquisition is per user by design. If a tile drops to
+  `Volné` under an open dialog, look for a second connection of the same
+  persona before looking anywhere else. `doc/realtime.md` §"Known residual".
 
-Reproduce any of them with `E2E_TRACE_REALTIME=1` and count `OPEN` lines per
-page label — the labels are `w<worker>/<persona>#<n>`, so two lines with the
-*same* label are one page with two sockets, and two lines differing only in the
-ordinal are two different pages.
+*Not* a cause, despite an earlier version of this section: "about one page in
+three opens a second socket.io connection against the built app". That number
+counted sockets per Playwright `Page`, and six of this suite's pages load a
+second document. Per document it is one socket, 89 times out of 89
+(`doc/decision/0221-*`).
+
+Reproduce any of them with `E2E_TRACE_REALTIME=1`. Count `DOC` lines, not `OPEN`
+lines: a `DOC <id> #2` is a document that opened two sockets and is a real
+finding, whereas two `OPEN` lines under one page label are usually just two page
+loads — compare them against that page's `LOAD` lines.
 
 There is no retry configured, and there should not be: this failure is a bug
 report.

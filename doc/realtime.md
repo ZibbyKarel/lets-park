@@ -448,6 +448,42 @@ what makes a reconnect a renewal rather than a `HELD_BY_OTHER` against yourself,
 and it is what makes the *late* disconnect of a dead socket free nothing when
 its user has already re-taken the hold on a new one.
 
+**Giving a hold back is keyed by both**, though: `release` frees the cell only
+for the `(user, socketId)` pair currently recorded, exactly as `releaseSocket`
+matches. A user really can have two live connections on one cell — a second tab,
+or a page that reloaded before this server noticed the old socket — and a
+release keyed by user alone let either of them drop the other's hold, which
+shows up as a bay reading `Volné` to everybody while a form is still open.
+`doc/decision/0220-*`.
+
+#### Known residual: one user, two tabs, one bay
+
+**This is a product decision waiting to be made, not an oversight.** Ownership
+is by user, so if the same person opens the same bay in two tabs, *both* forms
+show `held` and their renewal heartbeats hand the recorded socket back and forth.
+Keying the release by connection fixed half of what that costs and could not fix
+the other half:
+
+| what happens | before | now |
+| --- | --- | --- |
+| the **first** tab closes its dialog | drops the hold the second tab is showing | nothing happens — refused |
+| the **second** tab closes its dialog | drops the hold the first tab is showing | **unchanged: still drops it** |
+
+In the remaining case the first tab's form stays open over a bay that reads
+`Volné` to everyone else, and somebody else can take the editing hold, until
+that tab's next heartbeat re-takes it — at most half a TTL, so **~15 s** at the
+shipped `REALTIME_LOCK_TTL_MS` of 30 s. Nothing can be double-booked by it: a
+cell lock books nothing, and `reservation.create` re-checks everything against
+the unique indexes.
+
+Closing it means changing how a hold is **acquired** — for example, letting one
+user hold a cell on only one connection at a time. That would also change what a
+*reconnect* means, since a reconnect is a renewal by exactly the same rule, so it
+is a decision about the product ("what should a second tab of mine see?") rather
+than a bug fix. It is deliberately left open. Exercised over real sockets by
+`realtime.gateway.spec.ts`, "still lets the newest connection of a user drop a
+hold their older tab is showing".
+
 - **TTL** — `REALTIME_LOCK_TTL_MS`, 30 s. The client's renewal budget fits
   inside it with 5 s to spare; the arithmetic is `doc/decision/0110-*`.
 - **Renewal** — there is no heartbeat command. A second `cell:lock` from the
@@ -543,7 +579,7 @@ already has its Redis equivalent — the table is in its own doc comment:
 | --- | --- |
 | `acquire` (new) | `SET cell <holder> NX PX <ttl>` |
 | `acquire` (renewal) | the same `SET` with `XX`, guarded by a Lua compare on the holder |
-| `release` | Lua: `GET` the cell, `DEL` only if the holder matches |
+| `release` | Lua: `GET` the cell, `DEL` only if the holder **and its socket** match |
 | `releaseSocket` | a `SET` of cell keys per socket id, walked on disconnect |
 | `onExpired` | keyspace notifications (`Ex`) on the lock key prefix, **paired with a sweep** |
 
