@@ -80,17 +80,27 @@ hand-constructed `ORPCError` — including `does not narrow on oRPC's 'defined' 
 exists to fail if someone "simplifies" this to `isDefinedError`, and a sweep over all twelve
 `ERROR_CODES`.
 
-## An unguarded defect in `apps/api` that this decision does not fix
+## An unguarded defect in `apps/api` that this decision did not fix — **resolved**
 
-`apps/api`'s filter writes its body at the top level (`response.status(s).json(body)`), but
+> **Resolved by `doc/decision/0058-error-bodies-on-rpc-routes-carry-the-rpc-envelope.md`.**
+> `ContractExceptionFilter` now wraps every contract-error body on an `/api/rpc` path in
+> `{ json: … }` (`contract-exception.filter.ts:399`), and the guard this section asked for —
+> "a test that fails today", asserting the serialised body **is** enveloped — exists and runs
+> against a live server in `apps/api/src/orpc/orpc-pipeline.spec.ts`. The section below is
+> kept as the record of why the guard had to live in `apps/api` rather than in
+> `libs/api-client`; read it in the past tense. The "Risk if this is wrong" section that
+> follows is **still binding**: `toContractError` must not be loosened to read a top-level
+> body.
+
+`apps/api`'s filter wrote its body at the top level (`response.status(s).json(body)`), but
 the RPC protocol reads the payload out of a `{ json, meta }` envelope. A top-level body
 deserialises to `undefined`, fails oRPC's `isORPCErrorJson`, and the client synthesises a code
 from the HTTP status instead — so a 409 `SPOT_ALREADY_RESERVED` arrives as `CONFLICT`, which
-is *also* a member of `ERROR_CODES` and therefore does **not** fail closed: the UI would show
-the wrong domain error, confidently. Reproduced against a real `RPCLink` with
+is *also* a member of `ERROR_CODES` and therefore did **not** fail closed: the UI would have
+shown the wrong domain error, confidently. Reproduced against a real `RPCLink` with
 `@orpc/client@1.15.0`, and independently by the Task 19 reviewer.
 
-**No test is watching for this.** An earlier version of this record claimed the test
+**No test was watching for this.** An earlier version of this record claimed the test
 `libs/api-client/src/lib/errors.spec.ts` → `loses the domain code when a body is not wrapped
 in the RPC envelope` acted as a tripwire that would fail once the server was fixed. That was
 wrong, and it is worth stating why rather than quietly deleting it: that test hand-writes its
@@ -102,12 +112,14 @@ about the server.
 The coupling cannot be added from `libs/api-client`: it is `type:util`/`scope:web`, `apps/api`
 is `type:app`/`scope:api`, and the Nx boundaries forbid a lib depending on an app *and* web
 reaching api. **The guard that would work belongs in `apps/api`'s filter spec, asserting the
-serialised body is enveloped — a test that fails today.** Writing it was outside Task 19's
-file set; it is routed to whoever owns `apps/api` next.
+serialised body is enveloped — a test that failed at the time this was written.** Writing it
+was outside Task 19's file set; it was routed to whoever owned `apps/api` next, and they did
+it: `orpc-pipeline.spec.ts` now asserts `{ json: { code, status } }` for `FORBIDDEN`,
+`CONFLICT` and `INTERNAL_SERVER_ERROR` against a live server.
 
-Fixing the defect itself belongs there too, and it may resolve itself: an oRPC `RPCHandler`
-serialises its own responses, so the filter's hand-built body would never be what is on the
-wire. Until either happens, treat this as **known, reproduced, and unguarded**.
+Fixing the defect itself belonged there too. It is fixed — see `doc/decision/0058-*` for the
+path-scoped wrap and for why the ICS feed and the health probes are deliberately left bare.
+This is no longer **known, reproduced, and unguarded**; it is fixed and guarded.
 
 ## Risk if this is wrong
 

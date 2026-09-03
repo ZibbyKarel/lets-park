@@ -133,6 +133,12 @@ describe('a form built only from @lets-park/form + design-system primitives', ()
   });
 
   it('never imports react-hook-form directly in this file', () => {
+    // A demonstration that the wrapper's API is *sufficient* for the whole form
+    // above — **not** the defence against the ban being broken. This file is
+    // inside the lib that owns `react-hook-form`, where the import is legal and
+    // ESLint would not object to it. The ban is `no-restricted-imports` in
+    // `eslint.config.mjs` (`WRAPPED_LIBRARIES`), verified separately by linting
+    // `apps/**`; delete that rule and this test still passes.
     const source = readFileSync(__filename, 'utf-8');
     expect(source).not.toMatch(/from ['"]react-hook-form['"]/);
     expect(source).not.toMatch(/require\(['"]react-hook-form['"]\)/);

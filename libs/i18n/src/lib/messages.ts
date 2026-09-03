@@ -3,10 +3,15 @@
  *
  * Shaped the way next-intl expects a `Messages` object: a plain, JSON-like
  * object of strings grouped into namespaces. It is consumed two ways —
- * through `NextIntlClientProvider`/`getRequestConfig` inside React (see
- * `./provider.tsx` and `./request-config.ts`), and through `createTranslator`
- * outside React (see `translateErrorCode` in `./errors.ts`) — but there is
- * only ever this one object behind both, so the two paths can never disagree.
+ * through `NextIntlClientProvider` inside React (see `./provider.tsx`), and
+ * through `createTranslator` outside React (see `translateErrorCode` in
+ * `./errors.ts`) — but there is only ever this one object behind both, so the
+ * two paths can never disagree.
+ *
+ * There is no `getRequestConfig` and no `request-config.ts` anywhere in this
+ * workspace, and that is deliberate: next-intl's request-config entry point is
+ * for server-side locale negotiation, and this app has exactly one locale
+ * (`doc/i18n.md`). The provider is handed this object directly.
  *
  * The `errors` namespace came first, because translating the contract's closed
  * error-code enum was Task 17's whole remit (`doc/decision/0003-*`). Task 23

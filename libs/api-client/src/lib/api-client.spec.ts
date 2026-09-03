@@ -137,6 +137,13 @@ describe('createApiClient', () => {
     // this one pins that none of it needed the banned import — a claim that
     // would otherwise quietly stop being true the first time someone reaches
     // for an oRPC type here.
+    //
+    // **It demonstrates that the wrapper's API is *sufficient*; it is not the
+    // defence against the ban being broken.** This file sits in the lib that
+    // owns `@orpc/client`, where the import is legal — ESLint would not object
+    // to it here. The ban is `no-restricted-imports` in `eslint.config.mjs`
+    // (`WRAPPED_LIBRARIES`), verified separately by linting `apps/**`. Deleting
+    // that rule would leave this test green.
     const source = readFileSync(__filename, 'utf8');
 
     expect(source).not.toMatch(/from\s+['"]@orpc\//);

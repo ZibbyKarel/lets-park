@@ -66,12 +66,18 @@ export type AppForm<TIn extends FieldValues, TOut extends FieldValues = TIn> = U
  *   `A` is still generic. `zodResolver` then reports exactly `Resolver<TIn,
  *   unknown, TOut>`, which is what `useForm` needs — no cast required.
  *
- * Verified directly: with a concrete schema (e.g. `z.object({ name:
- * z.string(), age: z.coerce.number() })`), `tsc` both accepts
- * `form.getValues('name'): string` and `values.age: number` in
- * `handleSubmit`, and rejects the same with the types swapped, and rejects a
- * typo'd field name — see `use-app-form.spec.tsx` / `app-form.spec.tsx` for
- * the runtime side of the same guarantee.
+ * **Exercised, not just reasoned:** `use-app-form.spec.tsx`, "the TIn/TOut
+ * split", is the only place in the workspace where a schema's input and output
+ * types actually differ — every other form here (and both `apps/web` call
+ * sites, which write `useAppForm<TValues>` and let `TOut` default to `TIn`)
+ * uses a schema where they coincide, so nothing else can tell the two-parameter
+ * form from the one-parameter one. That suite pins both halves:
+ *
+ * - at runtime, `handleSubmit` receives `age: 42` from a field holding `'42'`;
+ * - at compile time, `form.getValues('age')` is a `string` and `values.age` in
+ *   `handleSubmit` is a `number`, with a `@ts-expect-error` on the assignment
+ *   that only type-errors while the two are different. Collapse `TOut` back to
+ *   `TIn` and `typecheck` fails twice — measured, not assumed.
  */
 export function useAppForm<TIn extends FieldValues, TOut extends FieldValues = TIn>(
   options: UseAppFormOptions<TIn, TOut>

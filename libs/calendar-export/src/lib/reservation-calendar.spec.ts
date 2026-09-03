@@ -329,15 +329,19 @@ describe('buildReservationCalendar', () => {
   it('escapes text a naive template would corrupt', () => {
     // RFC 5545 §3.3.11: commas, semicolons, backslashes and newlines are
     // structural inside a TEXT value and have to be escaped. A spot label is
-    // administrator-supplied, so this is not hypothetical.
-    const ics = buildReservationCalendar({
-      entries: [entry({ spotLabel: 'A,1;B\\C' })],
-    });
+    // administrator-supplied, so this is not hypothetical — and the newline is
+    // reachable: `parkingSpotSchema.shape.label` is `z.string().min(1)` with no
+    // restriction on it. It is in the fixture because it is the one of the four
+    // that a naive template corrupts *structurally* rather than cosmetically —
+    // an unescaped newline ends the content line, and everything after it is
+    // read as a new iCalendar property.
+    const label = 'A,1;B\\C\nSECOND LINE';
+    const ics = buildReservationCalendar({ entries: [entry({ spotLabel: label })] });
 
     const event = onlyEvent(ics);
-    expect(event.location).toBe('A,1;B\\C');
-    expect(event.summary).toBe(icsEventSummary('A,1;B\\C'));
-    expect(event.description).toBe(icsEventDescription('A,1;B\\C'));
+    expect(event.location).toBe(label);
+    expect(event.summary).toBe(icsEventSummary(label));
+    expect(event.description).toBe(icsEventDescription(label));
   });
 
   it('folds long lines so the document stays parseable', () => {

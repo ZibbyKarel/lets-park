@@ -239,10 +239,10 @@ const { status, expiresAt, lockedBy } = useCellLock({
 | `idle` | not asked for — disabled, or no connection |
 | `requesting` | asked, no answer yet |
 | `held` | this client holds it and is renewing it |
-| `held-by-other` | somebody else has it; `lockedBy` says who, `expiresAt` says until when |
+| `held-by-other` | somebody else has it; `lockedBy` says who, `expiresAt` says until when. **Not terminal** — see 4 below |
 
-Three things have to be true for the "právě upravuje" state not to get stuck,
-and the hook makes all three automatic by putting the whole lifecycle in **one
+Four things have to be true for the "právě upravuje" state not to get stuck,
+and the hook makes all four automatic by putting the whole lifecycle in **one
 effect** — so every way of leaving a cell is the same cleanup and every way of
 arriving at one is the same setup.
 
@@ -320,19 +320,48 @@ A dropped socket drops the server's lock with it, so the hook re-requests on the
 new connection rather than believing the state it had. No `cell:unlock` is sent
 across the gap — the socket was already gone.
 
+### 4. A cell somebody else holds becomes askable again
+
+`held-by-other` is the one status a form can sit in indefinitely, and it is the
+one the hook cannot resolve on its own: the cell becomes free because of
+something that happens on *another* client. Two independent things end it, and
+the hook is wired to both:
+
+- **the gateway's `cell:unlocked` broadcast** for this cell, which arrives on all
+  four ways a hold can end (`doc/decision/0111-*`) — the ordinary case, and the
+  fast one;
+- **the ack's own `expiresAt` passing** with no broadcast having arrived.
+
+Either alone would do. Both are here because `doc/decision/0111-*` says in as
+many words that neither side should assume the other did it: the server's
+expiry broadcast is not redundancy for a client that only believes broadcasts,
+and a client timer is not redundancy for a server that never fires one.
+
+Asking again clears `lockedBy` and `expiresAt` back to `requesting` rather than
+keeping the previous holder on screen: whoever answers next may be somebody
+else, or nobody.
+
 ### What the hook deliberately does not do
 
-**It does not poll a contended cell.** `held-by-other` sits still; the
-`cell:unlocked` broadcast (and `expiresAt` running out) is how a client learns
-the cell is free again. Polling from every open tab is exactly the traffic the
+**It does not poll a contended cell.** Nothing is sent while the other client's
+hold is still valid — the retry timer waits the **whole** remaining TTL, not
+half of it (`contendedRetryDelayMs`, against `renewDelayMs`'s half), and the
+broadcast handler fires once per broadcast, only for this cell, and only out of
+`held-by-other`. Polling from every open tab is exactly the traffic the
 broadcast exists to avoid.
+
+**It does not react to a broadcast about a cell it holds itself.** A gateway may
+echo a room broadcast to its own sender, and a supersession elsewhere can
+produce one; tearing down a live hold on that would turn somebody else's event
+into this form's problem.
 
 ---
 
 ## What is tested, and what is not
 
 Tests live beside the code: `socket.spec.ts`, `connection.spec.tsx`,
-`cell-lock.spec.tsx`, `validation.spec.ts` (69 tests).
+`cell-lock.spec.tsx`, `validation.spec.ts` (78 tests, measured
+`npx nx run realtime-client:test`).
 
 The socket in those tests is a **real** `socket.io-client` socket. Only the
 transport is replaced — `manager.open()` becomes a no-op and `manager._packet()`
@@ -358,7 +387,7 @@ of its protocol.
 | a real refused handshake arrives as CONNECT_ERROR and not as a plain disconnect | ✅ `realtime-handshake.spec.ts` |
 | the server's lock TTL and this client's renewal actually interleave | ✅ `doc/decision/0110-*` (arithmetic) + `lock.service.spec.ts`; a real round trip is still Fáze 7 |
 | broadcasts arrive only in the day room a client joined | ✅ `realtime.gateway.spec.ts` |
-| a lapsed hold is broadcast, so `held-by-other` cannot stick | ✅ `doc/decision/0111-*` |
+| a lapsed hold is broadcast, so `held-by-other` cannot stick | ✅ `doc/decision/0111-*` — and, independently of the broadcast, `cell-lock.spec.tsx` "asks again when the other hold lapses and no broadcast arrives" |
 | three attempts over ~36 s is long enough for `libs/auth` to rotate a token | Fáze 7 e2e |
 | a real reconnect against a real server re-authenticates | Fáze 7 e2e |
 
@@ -496,10 +525,12 @@ hold their older tab is showing".
 - **Renewal** — there is no heartbeat command. A second `cell:lock` from the
   current holder extends the hold, which is the contract's design.
 - **Expiry** — one timer per hold, rescheduled on renewal, cleared on release.
-  When it fires, `cell:unlocked` is broadcast. This is load-bearing rather than
-  tidy: `useCellLock` sits still on `held-by-other`, so a hold that lapses with
-  nothing said leaves "právě upravuje …" on every other tile until a reload.
-  `doc/decision/0111-*`.
+  When it fires, `cell:unlocked` is broadcast. This is the mechanism, not
+  bookkeeping: it is what clears "právě upravuje …" from every other tile
+  (`apps/web`'s `useCellLocks` prunes on it, and `useCellLock` asks again on
+  it). `useCellLock` also carries its own `expiresAt` timer as a backstop, so
+  the two are independent — `doc/decision/0111-*` asked for exactly that, and
+  `doc/decision/0295-*` is where it was built.
 - **A dropped socket** frees its holds and broadcasts each one, which is why
   `useCellLock` sends no `cell:unlock` across a connection gap.
 - **`cell:locked` excludes the asker.** It already knows — that is what the

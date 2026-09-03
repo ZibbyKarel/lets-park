@@ -5,6 +5,32 @@
  * `WRAPPED_LIBRARIES`), so this is the only place these defaults can be set —
  * which is the point: caching and retry behaviour is a product decision, not
  * something each feature re-derives at its own call site.
+ *
+ * ## The cache is per-user only because the *client* is, not because the keys are
+ *
+ * Query keys here are `[path, { type, input }]` (`@orpc/tanstack-query`,
+ * `./utils.ts`) and carry **no user identity**. Two people's `overview.day` for
+ * the same date are the same key. Nothing in this lib can notice an identity
+ * change, and there is no `queryClient.clear()` on one — so the isolation rests
+ * entirely on two facts outside it, both currently true:
+ *
+ * - **sign-out is a full navigation.** `apps/web/src/shell/app-top-bar.tsx`
+ *   calls `signOut({ redirectTo: LOGIN_ROUTE })`, which unloads the document
+ *   and destroys the client with it.
+ * - **the client is built per mount, not at module scope.**
+ *   `apps/web/src/app/providers.tsx` uses `useState(() => createQueryClient())`,
+ *   so it is one client per browser session and — because Next.js renders this
+ *   on the server too — one per request there, rather than a singleton shared
+ *   across users. {@link createQueryClient} is a factory and
+ *   `QueryClient` is exported as a **type only** (`../index.ts`) so a
+ *   module-level `new QueryClient()` is not available to write.
+ *
+ * **If an in-place account switch is ever added** — a "switch user" control, a
+ * silent re-auth to a different subject, anything that changes the session
+ * without unloading the document — this becomes a quiet cross-user read: the
+ * new user is served the old user's cached day, with no error and nothing in a
+ * log. The fix at that point is to clear or re-key the cache on the identity
+ * change, and it has to be made here rather than at a call site.
  */
 
 import { QueryClient } from '@tanstack/react-query';

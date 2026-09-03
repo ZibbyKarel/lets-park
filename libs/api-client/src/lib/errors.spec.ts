@@ -166,18 +166,23 @@ describe('toContractError', () => {
    * 409 it is replaced by `CONFLICT`, which is *also* a member of `ERROR_CODES`.
    * It does not fail closed: the wrong domain error arrives looking valid.
    *
-   * That matters because `apps/api`'s filter writes its body at the top level
-   * (`response.status(...).json(body)`, `doc/decision/0033-*`). **This test does
-   * not detect that.** Its input is hand-written here, so it will keep passing
-   * unchanged after the server is fixed — a real guard would have to assert
-   * against the filter's actual output, which the Nx boundaries make
-   * unreachable from this lib (`type:util`/`scope:web` may not depend on
-   * `type:app`/`scope:api`). The guard that would work belongs in
-   * `apps/api`'s filter spec, asserting the body **is** enveloped; it does not
-   * exist yet. See `doc/decision/0039-*`, which says so plainly.
+   * `apps/api` **used to** write its error body at the top level
+   * (`response.status(...).json(body)`, `doc/decision/0033-*`), which produced
+   * exactly this failure against a real server. It no longer does:
+   * `contract-exception.filter.ts:399` wraps every contract-error body on an
+   * `/api/rpc` path in `{ json: … }` (`doc/decision/0058-*`), and the guard
+   * that watches it lives in `apps/api/src/orpc/orpc-pipeline.spec.ts`, which
+   * asserts the enveloped shape against a live server. That is where the guard
+   * has to be: the coupling cannot be written from here, because the Nx
+   * boundaries forbid a `type:util`/`scope:web` lib from depending on
+   * `type:app`/`scope:api`.
    *
-   * Kept because the oRPC behaviour it pins is load-bearing for
-   * `toContractError` and is not obvious from the package's documentation.
+   * **This test therefore guards nothing about the server, and never did** —
+   * its input is hand-written here, so it passes unchanged whichever body the
+   * filter produces. It is kept because the oRPC behaviour it pins is
+   * load-bearing for `toContractError` and is not obvious from the package's
+   * documentation: it is the reason `toContractError` must **not** be loosened
+   * to read a top-level body (`doc/decision/0039-*`, "Risk if this is wrong").
    */
   it('loses the domain code when a body is not wrapped in the RPC envelope', async () => {
     const error = await failedCall({
