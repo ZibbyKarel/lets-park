@@ -224,15 +224,6 @@ describe('deciding when a patch is not enough', () => {
     expect(reservationCreatedTouchesViewer(theirs, VIEWER)).toBe(false);
   });
 
-  it('does not claim a created reservation is the caller’s while the caller is unknown', () => {
-    const event: ReservationCreatedEvent = {
-      date: DATE,
-      parkingSpotId: 'spot-a',
-      reservation: publicReservation('res-1', VIEWER),
-    };
-    expect(reservationCreatedTouchesViewer(event, null)).toBe(false);
-  });
-
   it('invalidates a cancellation only when it was the caller’s own reservation', () => {
     const event: ReservationCancelledEvent = {
       date: DATE,

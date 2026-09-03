@@ -159,10 +159,11 @@ export interface CzechLotMessages {
   readonly tileEditing: string;
   /** The yellow waitlist pill on a tile. */
   readonly waiting: string;
-  /** Accessible name of the `⋯` admin button on a tile. */
+  /**
+   * Accessible name of the `⋯` admin button on a tile. Not a menu — it opens
+   * the same dialog `onOpen` does; see `doc/decision/0125-*`.
+   */
   readonly spotMenu: string;
-  /** The single entry in that menu. */
-  readonly spotMenuManage: string;
   /** Spoken form of a plate for assistive technology, and the modal's fallback. */
   readonly noPlate: string;
 
@@ -297,7 +298,6 @@ export const csMessages: CzechMessages = {
     tileEditing: 'právě upravuje',
     waiting: '{count} ve frontě',
     spotMenu: 'Možnosti místa {label}',
-    spotMenuManage: 'Upravit rezervaci',
     noPlate: 'SPZ neuvedena',
 
     legendTaken: 'obsazeno',

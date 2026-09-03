@@ -146,17 +146,6 @@ describe('toSpotView', () => {
     expect(view.action).toBe('mine');
   });
 
-  it('does not claim a reservation is the caller’s while the caller is unknown', () => {
-    // `me.get` is still in flight. Guessing "mine" would offer a stranger the
-    // cancel button; guessing "not mine" is the safe direction.
-    const view = toSpotView(
-      spotRow({ reservation: reservation(VIEWER) }),
-      context({ viewerUserId: null })
-    );
-    expect(view.isMine).toBe(false);
-    expect(view.action).toBe('queue');
-  });
-
   it('lets a cell lock win over an occupied spot, and makes the tile inert', () => {
     const view = toSpotView(
       spotRow({ reservation: reservation(OTHER) }),

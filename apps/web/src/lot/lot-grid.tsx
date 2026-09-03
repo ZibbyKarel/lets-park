@@ -70,7 +70,16 @@ export interface SpotTileProps {
   readonly spot: SpotView;
   /** Opening the spot's modal. Not called for an `editing` tile. */
   readonly onOpen: (spotId: string) => void;
-  /** The `⋯` menu, admins only. Separate so it does not open the same modal. */
+  /**
+   * The `⋯` button, admins only, on a taken spot. It opens the **same**
+   * dialog `onOpen` does, deliberately: the contract exposes no procedure to
+   * edit somebody else's reservation (only create-for-self and cancel), so
+   * there is no second surface to route to. `SpotDialog` already renders the
+   * admin-flavoured copy (`titleEdit`/`subAdmin`) and the cancel button off
+   * `isAdmin` alone, regardless of which button opened it. What `⋯` adds is
+   * discoverability that matches the design's own affordance
+   * (`01-lot-admin.png`) — not a different modal. See `doc/decision/0125-*`.
+   */
   readonly onAdminOpen: (spotId: string) => void;
 }
 
@@ -83,8 +92,9 @@ export interface SpotTileProps {
  * which is also what keeps it out of the tab order — the design's `if
  * (locked) return;` is a pointer-only version of the same rule.
  *
- * The `⋯` menu is a sibling button rather than a nested one: a button inside
- * a button is invalid HTML and browsers recover from it unpredictably.
+ * The `⋯` button is a sibling button rather than a nested one: a button
+ * inside a button is invalid HTML and browsers recover from it
+ * unpredictably. It is not a menu — see {@link SpotTileProps.onAdminOpen}.
  */
 export function SpotTile({ spot, onOpen, onAdminOpen }: SpotTileProps) {
   const t = useTranslations('lot');

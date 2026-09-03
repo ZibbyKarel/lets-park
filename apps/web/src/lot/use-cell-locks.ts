@@ -19,7 +19,7 @@
  * listens for everybody else's, across the whole day.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRealtime, useRealtimeEvent } from '@lets-park/realtime-client';
 import type { DateOnly } from '@lets-park/i18n';
 import type { CellLockView } from './lot-view';
@@ -151,18 +151,46 @@ export function useCellLocks(date: DateOnly | null): CellLockMap {
   useEffect(() => {
     if (soonest === null) return;
 
-    // Clamped at zero: an expiry already in the past must fire on the next
-    // tick, not be scheduled with a negative delay (which `setTimeout` treats
-    // as zero anyway, but relying on that is a coincidence rather than a
-    // decision).
-    const delay = Math.max(soonest - Date.now(), 0);
-    const timer = setTimeout(() => {
-      setLocks((current) => pruneExpiredLocks(current, Date.now()));
-    }, delay);
+    let timer: ReturnType<typeof setTimeout>;
+
+    // Reschedules itself from *inside* the callback, rather than depending on
+    // `locks` changing identity to make this effect (keyed on `soonest`)
+    // re-run. That distinction matters for a case `jest.advanceTimersByTime`
+    // cannot produce but a real clock can: a coarse timer, or a clock nudged
+    // backwards, firing this callback a moment before `Date.now()` actually
+    // reaches `target`. `pruneExpiredLocks` then legitimately returns the
+    // same reference (deliberately — see its own docs), `setLocks` bails out,
+    // `locks` never changes, and an effect keyed only on `soonest` would never
+    // fire again — leaving that hold hatched past its `expiresAt` until an
+    // unrelated event happens to touch the map. Recomputing the next expiry
+    // and rescheduling unconditionally, every time the timer fires, closes
+    // that hole: an early wakeup just books a very short follow-up timer
+    // instead of losing the sweep entirely.
+    function fire(target: number) {
+      const delay = Math.max(target - Date.now(), 0);
+      timer = setTimeout(() => {
+        setLocks((current) => {
+          const pruned = pruneExpiredLocks(current, Date.now());
+          const next = nextLockExpiryAt(pruned);
+          if (next !== null) fire(next);
+          return pruned;
+        });
+      }, delay);
+    }
+
+    // Clamped at zero inside `fire`: an expiry already in the past must fire
+    // on the next tick, not be scheduled with a negative delay (which
+    // `setTimeout` treats as zero anyway, but relying on that is a
+    // coincidence rather than a decision).
+    fire(soonest);
     return () => {
       clearTimeout(timer);
     };
   }, [soonest]);
 
-  return useMemo(() => locks, [locks]);
+  // `locks` is already the stable reference `useState` hands back across
+  // renders where nothing changed (every setter above and `pruneExpiredLocks`
+  // preserve identity on a no-op update) — a `useMemo` keyed on the same value
+  // neither stabilises anything further nor computes anything.
+  return locks;
 }

@@ -221,6 +221,35 @@ describe('useCellLocks', () => {
     expect(seen.size).toBe(0);
   });
 
+  it('reschedules the sweep when it fires before the clock reaches the expiry', () => {
+    // What `jest.advanceTimersByTime` alone cannot exercise: a real clock can
+    // fire a `setTimeout` a moment early (a coarse timer, a clock nudged
+    // backwards). `Date.now` is stubbed for exactly the instant the scheduled
+    // sweep runs, so `pruneExpiredLocks` sees "not yet" and legitimately
+    // returns the same map — the fix under test is whether a sweep is still
+    // pending afterwards, not whether this one tick drops the hold.
+    render(<Harness date={DATE} />);
+    emit('cell:locked', locked('spot-a', '2026-09-28T09:00:10.000Z'));
+    expect(seen.size).toBe(1);
+
+    const early = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-28T09:00:09.999Z'));
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+    early.mockRestore();
+
+    // The early tick changed nothing — same map, same size.
+    expect(seen.size).toBe(1);
+
+    // The real clock has now reached the expiry. Without a reschedule from
+    // inside the fired callback, nothing is pending here and the hold would
+    // survive forever.
+    act(() => {
+      jest.advanceTimersByTime(2);
+    });
+    expect(seen.size).toBe(0);
+  });
+
   it('extends a hold when the holder renews it', () => {
     render(<Harness date={DATE} />);
     emit('cell:locked', locked('spot-a', '2026-09-28T09:00:10.000Z'));

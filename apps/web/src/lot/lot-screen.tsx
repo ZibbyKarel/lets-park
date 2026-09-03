@@ -15,7 +15,7 @@
  * `no-restricted-imports` (`doc/wrappers.md`).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addDays,
   addMonths,
@@ -75,6 +75,14 @@ export function LotScreen() {
   // again later" sentence, which is not what "not built yet" means.
   const [bulkNoticeOpen, setBulkNoticeOpen] = useState(false);
 
+  // Otherwise this is a one-way door: once shown, it would sit above the
+  // window banner — the screen's most-read element — for the rest of the
+  // session, with no dismiss control of its own. Moving to another day is a
+  // deliberate enough action to treat as "not asking about that any more".
+  useEffect(() => {
+    setBulkNoticeOpen(false);
+  }, [date]);
+
   const profile = useCurrentUser();
   const viewerUserId = profile.data?.id ?? null;
   // Unknown means not an admin, which is the only safe direction for this to
@@ -95,57 +103,6 @@ export function LotScreen() {
   useLotRealtime({ date, viewerUserId });
   const locks = useCellLocks(date);
 
-  // This client's own hold, taken while the dialog is open and released by the
-  // same effect when it closes (`doc/realtime.md`, §"The cell lock"). It is a
-  // courtesy, not an authorisation step: skipping it would get a `CONFLICT`
-  // from `reservation.create` rather than a double booking.
-  useCellLock({
-    date,
-    parkingSpotId: openSpotId ?? '',
-    enabled: openSpotId !== null,
-  });
-
-  const invalidateDay = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: api.overview.day.queryOptions({ input: { date } }).queryKey,
-    });
-  }, [api, queryClient, date]);
-
-  /**
-   * Every write ends the same way: close the dialog and refetch the day.
-   *
-   * The refetch is not belt-and-braces on top of the broadcast — a client
-   * cannot patch its own viewer-relative fields from an event it may not even
-   * receive (the gateway need not echo to the sender), and `canReserve` and
-   * `viewerReservationId` both move on a successful write.
-   */
-  const onSettled = useCallback(() => {
-    setOpenSpotId(null);
-    setActionError(null);
-    invalidateDay();
-  }, [invalidateDay]);
-
-  const createReservation = useMutation({
-    ...api.reservation.create.mutationOptions(),
-    onSuccess: onSettled,
-    onError: setActionError,
-  });
-  const cancelReservation = useMutation({
-    ...api.reservation.cancel.mutationOptions(),
-    onSuccess: onSettled,
-    onError: setActionError,
-  });
-  const joinWaitlist = useMutation({
-    ...api.waitlist.join.mutationOptions(),
-    onSuccess: onSettled,
-    onError: setActionError,
-  });
-  const leaveWaitlist = useMutation({
-    ...api.waitlist.leave.mutationOptions(),
-    onSuccess: onSettled,
-    onError: setActionError,
-  });
-
   const context = useMemo(
     () => ({
       canReserve: day?.canReserve ?? false,
@@ -160,11 +117,72 @@ export function LotScreen() {
     () => (day === null ? [] : toGroupViews(day.spots, context)),
     [day, context]
   );
-  const counts = useMemo(() => toLotCounts(day?.spots ?? []), [day?.spots]);
   const openSpot = useMemo(
     () => groups.flatMap((group) => group.spots).find((spot) => spot.spotId === openSpotId) ?? null,
     [groups, openSpotId]
   );
+
+  // This client's own hold, taken while the dialog is open and released by the
+  // same effect when it closes (`doc/realtime.md`, §"The cell lock"). It is a
+  // courtesy, not an authorisation step: skipping it would get a `CONFLICT`
+  // from `reservation.create` rather than a double booking — which is also
+  // why `info` is excluded: it is the **only** action `SpotDialog` can never
+  // write from (`showCancel`/`showPrimary` are both false for it, since the
+  // spot is free and unbookable). `reserve` and `mine` write directly, and
+  // `queue` can too — joining or leaving the waitlist, or an admin's cancel —
+  // so all three still take the hold; only the pure explanation does not.
+  useCellLock({
+    date,
+    parkingSpotId: openSpotId ?? '',
+    enabled: openSpot !== null && openSpot.action !== 'info',
+  });
+
+  const invalidateDay = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: api.overview.day.queryOptions({ input: { date } }).queryKey,
+    });
+  }, [api, queryClient, date]);
+
+  /**
+   * Every **successful** write ends the same way: close the dialog and
+   * refetch the day. Named for `onSuccess`, not TanStack's `onSettled` (which
+   * also fires on error) — wired only there, below; a failure goes to
+   * `setActionError` and deliberately leaves the dialog open so the caller
+   * can see why.
+   *
+   * The refetch is not belt-and-braces on top of the broadcast — a client
+   * cannot patch its own viewer-relative fields from an event it may not even
+   * receive (the gateway need not echo to the sender), and `canReserve` and
+   * `viewerReservationId` both move on a successful write.
+   */
+  const onMutationSuccess = useCallback(() => {
+    setOpenSpotId(null);
+    setActionError(null);
+    invalidateDay();
+  }, [invalidateDay]);
+
+  const createReservation = useMutation({
+    ...api.reservation.create.mutationOptions(),
+    onSuccess: onMutationSuccess,
+    onError: setActionError,
+  });
+  const cancelReservation = useMutation({
+    ...api.reservation.cancel.mutationOptions(),
+    onSuccess: onMutationSuccess,
+    onError: setActionError,
+  });
+  const joinWaitlist = useMutation({
+    ...api.waitlist.join.mutationOptions(),
+    onSuccess: onMutationSuccess,
+    onError: setActionError,
+  });
+  const leaveWaitlist = useMutation({
+    ...api.waitlist.leave.mutationOptions(),
+    onSuccess: onMutationSuccess,
+    onError: setActionError,
+  });
+
+  const counts = useMemo(() => toLotCounts(day?.spots ?? []), [day?.spots]);
 
   const parts = parseDateOnly(date);
   const years = Array.from(

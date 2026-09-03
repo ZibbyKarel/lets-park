@@ -367,16 +367,4 @@ describe('useLotRealtime — when a patch is not enough', () => {
 
     expect(invalidationsOfDay(invalidate)).toHaveLength(1);
   });
-
-  it('does not claim an event is the caller’s while the caller is unknown', () => {
-    const { invalidate } = setup({ viewerUserId: null });
-
-    emit('reservation:created', {
-      date: DATE,
-      parkingSpotId: 'spot-a',
-      reservation: publicReservation('res-1', VIEWER),
-    });
-
-    expect(invalidationsOfDay(invalidate)).toHaveLength(0);
-  });
 });

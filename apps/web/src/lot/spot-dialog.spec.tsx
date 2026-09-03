@@ -94,6 +94,31 @@ describe('SpotDialog', () => {
     renderDialog();
     expect(screen.getByText('Místo E2.92')).toBeInTheDocument();
   });
+
+  /**
+   * `showCancel`/`showPrimary` are read off three genuinely independent
+   * props (`spot`, `canReserve`, `isAdmin` — see the module docs) rather than
+   * off a value this component derives once and reuses. Every other test
+   * here passes them a *consistent* combination, the one `toSpotView` would
+   * actually produce, which cannot tell `showCancel`'s `isTaken` conjunct or
+   * `showPrimary`'s `!isInfo` conjunct apart from the rest of the expression:
+   * both are measured to fail 0 tests when deleted from a suite that only
+   * ever sees consistent props. These two exercise the inconsistent
+   * combinations a future reuse (Task 31's bulk flow is the obvious
+   * candidate) could pass by accident.
+   */
+  it('does not offer cancelling on a free bay, even to an admin', () => {
+    renderDialog({ spot: spot({ appearance: 'free', action: 'reserve' }), isAdmin: true });
+    expect(screen.queryByRole('button', { name: 'Zrušit rezervaci' })).not.toBeInTheDocument();
+  });
+
+  it('never offers reserving from the explanatory dialog, whatever canReserve says', () => {
+    renderDialog({
+      spot: spot({ appearance: 'window-locked', action: 'info' }),
+      canReserve: true,
+    });
+    expect(screen.queryByRole('button', { name: 'Rezervovat' })).not.toBeInTheDocument();
+  });
 });
 
 describe('SpotDialog — a free bay', () => {

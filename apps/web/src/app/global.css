@@ -83,11 +83,17 @@ body {
  * design's `background-image` on the map surface. Written as a class rather
  * than a Tailwind arbitrary value because it is four comma-separated
  * multi-value properties, which arbitrary-value syntax cannot carry legibly.
+ *
+ * Colours are token references, the same treatment `.lot-hatch` gives its own
+ * `rgba()` below: `color-mix(…, var(--neutral-0|--neutral-900) …, transparent)`
+ * in place of the design's literal white/black, so a token change (a theme
+ * pass, a brand refresh) moves the speckle along with everything else that
+ * reads `--neutral-0`/`--neutral-900` rather than leaving it behind.
  */
 .lot-asphalt {
   background-image:
-    radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+    radial-gradient(color-mix(in srgb, var(--neutral-0) 4.5%, transparent) 1px, transparent 1px),
+    radial-gradient(color-mix(in srgb, var(--neutral-900) 6%, transparent) 1px, transparent 1px);
   background-size:
     7px 7px,
     11px 11px;

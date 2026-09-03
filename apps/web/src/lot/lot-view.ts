@@ -157,6 +157,13 @@ export function toSpotView(row: DaySpotOverview, context: LotViewContext): SpotV
 
   const reservation = row.reservation;
   const isTaken = reservation !== null && lock === null;
+  // `context.viewerUserId !== null` is **redundant, and knowingly so** — the
+  // same shape as `reservationCreatedTouchesViewer` in `day-overview-cache.ts`,
+  // for the same reason: `reservation.user.id` is `idSchema` (a UUID string),
+  // so `id === null` is unrepresentable and the comparison alone already
+  // answers `false` for an unknown viewer. Kept because it states the intent
+  // ("an unknown viewer is never the holder") at the one place a reader looks
+  // for it. It is not load-bearing; do not add a test for it.
   const isMine =
     reservation !== null && context.viewerUserId !== null
       ? reservation.user.id === context.viewerUserId

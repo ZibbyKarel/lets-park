@@ -68,8 +68,12 @@ function replaceRow(
   index: number,
   next: DaySpotOverview
 ): DayOverviewOutput {
+  // `day.spots[index]` is `DaySpotOverview | undefined` only because
+  // `noUncheckedIndexedAccess` cannot see that `locate` already bounds
+  // `index` — every real caller here builds `next` with a fresh object
+  // spread, so `current === next` can never be true and is not checked.
   const current = day.spots[index];
-  if (current === undefined || current === next) return day;
+  if (current === undefined) return day;
 
   const spots = day.spots.slice();
   spots[index] = next;
