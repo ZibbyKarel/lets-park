@@ -33,9 +33,16 @@ import { seedEmployee, startRealtimeTestApp } from './testing/realtime-test-app'
  * the diagnostic readable, not the mechanism. It replaced a 2 s poll loop that
  * was tighter than jest's own default and got tighter in effect every time the
  * api suite grew.
+ *
+ * The budget is generous per test but does not compound across the file: once
+ * one wait has timed out, `destinationBroken` short-circuits the rest, because
+ * a wait that times out means the destination emitted nothing at all — a
+ * property of the fixture, not of one test. Without that, a broken file costs
+ * the budget times the test count; `calendar-logging.spec.ts`'s file comment
+ * has the measurement that prompted it.
  */
-const TEST_TIMEOUT_MS = 30_000;
-const DIAGNOSTIC_BUDGET_MS = TEST_TIMEOUT_MS - 5_000;
+const TEST_TIMEOUT_MS = 15_000;
+const WAIT_BUDGET_MS = 10_000;
 
 jest.setTimeout(TEST_TIMEOUT_MS);
 
@@ -44,6 +51,8 @@ describe('what a refused handshake writes to the log', () => {
   let emitted: string[] = [];
   /** Waiters registered by {@link waitForEmitted}, resolved from `onLogLine`. */
   let waiters: { matches: (all: string) => boolean; resolve: () => void }[] = [];
+  /** Set once any wait times out; never reset per test. See the file comment. */
+  let destinationBroken: string | undefined;
   const originalEnv = { ...process.env };
 
   beforeAll(async () => {
@@ -82,6 +91,9 @@ describe('what a refused handshake writes to the log', () => {
     if (matches(emitted.join(''))) {
       return;
     }
+    if (destinationBroken !== undefined) {
+      throw new Error(`${what}; skipped the wait — ${destinationBroken}`);
+    }
     let timer: NodeJS.Timeout | undefined;
     try {
       await new Promise<void>((resolve, reject) => {
@@ -89,8 +101,9 @@ describe('what a refused handshake writes to the log', () => {
         waiters.push(waiter);
         timer = setTimeout(() => {
           waiters = waiters.filter((pending) => pending !== waiter);
+          destinationBroken = `an earlier test in this file waited ${WAIT_BUDGET_MS}ms for log output and got none`;
           reject(new Error(`${what}; got: ${emitted.join('')}`));
-        }, DIAGNOSTIC_BUDGET_MS);
+        }, WAIT_BUDGET_MS);
       });
     } finally {
       if (timer !== undefined) {

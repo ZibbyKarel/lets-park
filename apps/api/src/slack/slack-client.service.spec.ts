@@ -43,6 +43,22 @@ const BASE_ENV: SlackEnv = {
   SLACK_DAILY_SUMMARY_AT: '08:00',
 };
 
+/**
+ * A per-attempt timeout that cannot fire during a test, so an assertion of
+ * "exactly one request" tests the **retry policy** rather than the machine.
+ *
+ * Ten minutes, against a jest `testTimeout` of five seconds for this project:
+ * for this timer to fire, the worker would have to be starved two orders of
+ * magnitude longer than jest is willing to wait, so jest fails the test first
+ * and says so. A failure of `toHaveLength(1)` under this value therefore has
+ * exactly one meaning — something started retrying a response Slack had
+ * already accepted.
+ *
+ * It costs nothing at runtime: `SlackClient.attempt` clears the timer on both
+ * the resolve and the reject path, so it never holds the worker open.
+ */
+const TIMEOUT_THAT_CANNOT_FIRE_MS = 600_000;
+
 describe('SlackClient', () => {
   let server: SlackTestServer;
   let logs: CapturedLogs;
@@ -132,33 +148,91 @@ describe('SlackClient', () => {
 
   describe('a message Slack accepts', () => {
     /**
-     * Known residual flake under severe CPU contention (`task-16-report.md`'s
-     * round-2 section) — documented rather than "fixed" because it cannot be:
-     * under a starved shared event loop, the request can fully round-trip
-     * (server records it, responds) *before* this process's own overdue
-     * timeout timer gets a turn — Node's timers phase always runs before the
-     * poll phase that would have delivered the already-arrived response, so
-     * the client cannot tell "no answer yet" from "answer already here, just
-     * not read yet" once both are stale by the time it wakes up. The abort in
-     * `withRetries` (see "a timed-out attempt…" below and `doc/slack.md` §4)
-     * closes the *other* race — a request still genuinely in flight when the
-     * timeout fires — deterministically. This one is not that: by the time
-     * any abort could run, the server has already recorded and answered the
-     * original request. No client-side timeout policy can prevent it without
-     * a server-side idempotency key, which Slack's API does not offer.
+     * ## Why this does not assert "exactly one request"
+     *
+     * It used to, under the name "posts once", and that assertion was wrong —
+     * not flaky, *wrong*: it asserted a property the code does not promise.
+     * `doc/slack.md` §4 and `doc/decision/0135-*` both state the guarantee as
+     * **at-least-once**, with the loser of a lost race torn down as soon as it
+     * is known to have lost. This file was the one place still claiming
+     * exactly-once, and it reddened the whole workspace's verification run at
+     * random: two identical `chat.postMessage` calls, recorded under a
+     * concurrent full-suite run, clean on rerun.
+     *
+     * The mechanism is irreducible from the client side. Under a starved
+     * shared event loop the request can fully round-trip — server records it,
+     * responds — *before* this process's own overdue timeout timer gets a
+     * turn: Node's timers phase runs before the poll phase that would have
+     * delivered the already-arrived response, so the client cannot tell "no
+     * answer yet" from "answer already here, just not read yet". By the time
+     * any abort could run, Slack has already accepted the message. Only a
+     * server-side idempotency key would close it, and Slack's API offers none.
+     *
+     * So the assertions below say what the code actually promises, and nothing
+     * is given up to get there — the three tests together are *stronger* than
+     * the one they replace:
+     *
+     * - **Content** holds for every request that was sent, not just the first.
+     *   A duplicate with the wrong channel, token or text fails here.
+     * - **Benign shape**: every recorded request is byte-identical. That is
+     *   what makes at-least-once tolerable for Slack in the first place, and
+     *   it is the part a bare `toHaveLength(1)` never checked.
+     * - **"A success is not retried"** — the real behavioural content of the
+     *   old assertion — is pinned in its own test below, under a timeout that
+     *   provably cannot fire, so it tests the retry policy instead of the
+     *   machine's load.
      */
-    it('posts once, with the channel, the text and the bearer token', async () => {
+    it('posts the channel, the text and the bearer token, in every request it sends', async () => {
       server.respondWith(() => SLACK_OK);
 
       await expect(buildClient().postToChannel('Uvolnilo se místo')).resolves.toBe('delivered');
 
+      // At-least-once: one request normally, more only if a timed-out attempt
+      // had in fact already been accepted. Never zero.
+      expect(server.requests.length).toBeGreaterThanOrEqual(1);
+      for (const request of server.requests) {
+        expect(request.method).toBe('POST');
+        expect(request.url).toContain('chat.postMessage');
+        expect(request.authorization).toBe(`Bearer ${BOT_TOKEN}`);
+        expect(request.body).toContain(encodeURIComponent(CHANNEL));
+        expect(request.body).toContain(encodeURIComponent('Uvolnilo se místo'));
+        // Duplication is only tolerable because a duplicate is the *same*
+        // message. A retry that differed would be a second, wrong post.
+        expect(request).toEqual(requestAt(0));
+      }
+    });
+
+    it('does not retry an attempt Slack accepted', async () => {
+      // The claim the old `toHaveLength(1)` was really making, made
+      // deterministic. Retries stay enabled (`SLACK_RETRY_ATTEMPTS` is 3 in
+      // `BASE_ENV`), so a policy that retried a success would send a second
+      // request; what is removed is the only thing that could *legitimately*
+      // produce one — see `TIMEOUT_THAT_CANNOT_FIRE_MS`.
+      server.respondWith(() => SLACK_OK);
+
+      await expect(
+        buildClient({ SLACK_REQUEST_TIMEOUT_MS: TIMEOUT_THAT_CANNOT_FIRE_MS }).postToChannel('ahoj')
+      ).resolves.toBe('delivered');
+
       expect(server.requests).toHaveLength(1);
-      const request = requestAt(0);
-      expect(request.method).toBe('POST');
-      expect(request.url).toContain('chat.postMessage');
-      expect(request.authorization).toBe(`Bearer ${BOT_TOKEN}`);
-      expect(request.body).toContain(encodeURIComponent(CHANNEL));
-      expect(request.body).toContain(encodeURIComponent('Uvolnilo se místo'));
+    });
+
+    it('sends a byte-identical request when an attempt is retried', async () => {
+      // The tolerated-duplication shape, pinned deterministically. A 503 is
+      // used rather than a timeout on purpose: it makes the retry happen
+      // without a wall clock anywhere in the test, and the property under test
+      // — that a retry re-sends the *same* request — does not depend on which
+      // failure triggered it.
+      server.respondWith((attempt) =>
+        attempt === 1
+          ? { status: 503, body: { ok: false, error: 'service_unavailable' } }
+          : SLACK_OK
+      );
+
+      await expect(buildClient().postToChannel('Uvolnilo se místo')).resolves.toBe('delivered');
+
+      expect(server.requests).toHaveLength(2);
+      expect(requestAt(1)).toEqual(requestAt(0));
     });
 
     it('sends a direct message to the user id it is given, not to the channel', async () => {
