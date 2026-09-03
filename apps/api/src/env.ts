@@ -55,6 +55,31 @@ const positiveMillisecondsSchema = z.coerce.number().int().positive();
 const positiveCountSchema = z.coerce.number().int().positive();
 
 /**
+ * A boolean written the only two ways this project accepts.
+ *
+ * Deliberately **not** `z.coerce.boolean()`, which treats every non-empty
+ * string as `true` — so `SLACK_ENABLED=false` would switch Slack *on*. Only the
+ * two literals parse; anything else names the variable and fails the boot.
+ */
+const booleanFromEnvSchema = z
+  .enum(['true', 'false'], { message: 'must be exactly "true" or "false"' })
+  .default('false')
+  .transform((value) => value === 'true');
+
+/**
+ * A wall-clock time of day, `HH:MM`, 24-hour, in Europe/Prague.
+ *
+ * No `_MS` suffix because this is not a duration: it is the *instant of the
+ * day* a cron fires, and 08:00 Prague is a different number of milliseconds
+ * from midnight on the two days a year the offset changes. That is exactly why
+ * the job is registered with `timeZone: 'Europe/Prague'` rather than an
+ * interval — see `apps/api/src/slack/daily-summary.job.ts`.
+ */
+const timeOfDaySchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a 24-hour time of day, e.g. "08:00"');
+
+/**
  * Defaults for the operational-baseline keys, exported so that the one place
  * that cannot inject `ConfigService` — the `StrictThrottle()` decorator in
  * `common/throttling/throttle-tiers.ts` — falls back to the same numbers this
@@ -68,9 +93,15 @@ export const ENV_DEFAULTS = {
   BODY_LIMIT: '100kb',
   HEALTH_DB_TIMEOUT_MS: 3_000,
   REALTIME_LOCK_TTL_MS: 30_000,
+
+  // --- Slack and scheduled jobs (Task 16) --------------------------------
+  SLACK_REQUEST_TIMEOUT_MS: 5_000,
+  SLACK_RETRY_ATTEMPTS: 3,
+  SLACK_RETRY_BASE_DELAY_MS: 500,
+  SLACK_DAILY_SUMMARY_AT: '08:00',
 } as const;
 
-export const apiEnvSchema = z.object({
+const apiEnvObjectSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   PORT: z.coerce.number().int().min(1).max(65535),
   DATABASE_URL: z.url(),
@@ -129,6 +160,72 @@ export const apiEnvSchema = z.object({
    * `AUTH_OKTA_ISSUER`.
    */
   REALTIME_LOCK_TTL_MS: positiveMillisecondsSchema.default(ENV_DEFAULTS.REALTIME_LOCK_TTL_MS),
+
+  // --- Slack and scheduled jobs (Task 16) --------------------------------
+  // Additive, like the block above: every key has a default, so an existing
+  // `.env` keeps working and an installation that wants no Slack has to do
+  // nothing at all. See `doc/slack.md` and `doc/decision/0130-*`.
+
+  /**
+   * Whether outbound Slack notifications are actually sent.
+   *
+   * **Defaults to `false`**, which is what keeps a developer's machine from
+   * posting into a real workspace — see `doc/decision/0130-*`. It is an env
+   * *value*, not a `NODE_ENV` branch: the disabled path runs the same code, it
+   * just stops at the one gate repeated in each of `SlackClient`'s three
+   * public methods (`postToChannel`, `postDirectMessage`,
+   * `lookupUserIdByEmail`).
+   */
+  SLACK_ENABLED: booleanFromEnvSchema,
+
+  /**
+   * The bot token (`xoxb-…`) for `chat.postMessage` and `users.lookupByEmail`.
+   *
+   * Optional here and **required by the refinement below when
+   * `SLACK_ENABLED=true`**, so the failure mode of "enabled but unconfigured"
+   * is a boot crash naming the variable rather than a stream of runtime errors.
+   * Its value is never logged, never audited and never echoed — see
+   * `apps/api/src/slack/slack-token-redaction.ts`.
+   */
+  SLACK_BOT_TOKEN: z.string().min(1, 'must not be empty').optional(),
+
+  /** The channel the freed-spot notice and the daily summary are posted to. */
+  SLACK_CHANNEL_ID: z.string().min(1, 'must not be empty').optional(),
+
+  /** Per-attempt HTTP timeout for a Slack call. */
+  SLACK_REQUEST_TIMEOUT_MS: positiveMillisecondsSchema.default(
+    ENV_DEFAULTS.SLACK_REQUEST_TIMEOUT_MS
+  ),
+  /** Total attempts per Slack call, the first one included. `1` disables retrying. */
+  SLACK_RETRY_ATTEMPTS: positiveCountSchema.default(ENV_DEFAULTS.SLACK_RETRY_ATTEMPTS),
+  /** First backoff delay; each further attempt doubles it (500 → 1000 → 2000 …). */
+  SLACK_RETRY_BASE_DELAY_MS: positiveMillisecondsSchema.default(
+    ENV_DEFAULTS.SLACK_RETRY_BASE_DELAY_MS
+  ),
+
+  /** When the daily summary is posted, as `HH:MM` **in Europe/Prague**. */
+  SLACK_DAILY_SUMMARY_AT: timeOfDaySchema.default(ENV_DEFAULTS.SLACK_DAILY_SUMMARY_AT),
+});
+
+/**
+ * `SLACK_ENABLED=true` without a token or a channel is a misconfiguration that
+ * would otherwise only show up as a failed API call per notification, hours
+ * later, in a log nobody is reading. Checked here so it crashes the boot
+ * instead — naming both variables, and neither of their values.
+ */
+export const apiEnvSchema = apiEnvObjectSchema.superRefine((env, ctx) => {
+  if (!env.SLACK_ENABLED) {
+    return;
+  }
+  for (const key of ['SLACK_BOT_TOKEN', 'SLACK_CHANNEL_ID'] as const) {
+    if (env[key] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: 'is required when SLACK_ENABLED=true',
+      });
+    }
+  }
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

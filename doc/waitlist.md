@@ -226,9 +226,12 @@ connection already sees the promotion.
 ### The seam Tasks 15 and 16 fill in
 
 `reservation-events.ts` declares `DomainEventPublisher`, an abstract class used
-as the DI token, bound in `ReservationsModule` to `NoopDomainEventPublisher`.
+as the DI token. It was bound in `ReservationsModule` to
+`NoopDomainEventPublisher`; both tasks below now implement it, so the binding is
+`CompositeDomainEventPublisher`, which forwards to each of them in its own `try`
+(`doc/decision/0135-*`).
 
-- **Task 15 (Socket.io)** replaces the binding. `DomainEvent` is a mapped type
+- **Task 15 (Socket.io)** is one of the two implementations. `DomainEvent` is a mapped type
   over the contract's own `ServerToClientEvents`, so a gateway can forward one
   with `io.to(roomForDate(payload.date)).emit(name, payload)` and nothing else.
   No payload is declared here; an event not in `@lets-park/contract/realtime`

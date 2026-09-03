@@ -20,6 +20,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { ReservationWindowModule } from '../reservation-window/reservation-window.module';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { ShutdownModule } from '../shutdown/shutdown.module';
+import { SlackModule } from '../slack/slack.module';
 import { SpotsModule } from '../spots/spots.module';
 import { UsersModule } from '../users/users.module';
 import { AppController } from './app.controller';
@@ -80,6 +81,11 @@ import { AppService } from './app.service';
     // The ICS feed (Task 14). The one controller outside the oRPC contract —
     // see its class comment and `doc/decision/0080-*`.
     CalendarModule,
+    // Outbound Slack notifications and the daily-summary job (Task 16).
+    // Imported here as well as by `ReservationsModule` so the composition root
+    // shows it: the job is not a reservations concern, and Nest resolves the
+    // same singleton either way.
+    SlackModule,
   ],
   controllers: [AppController],
   providers: [

@@ -364,8 +364,10 @@ commit. Only the shape is repeated here:
 - `WaitlistPromotionService` — takes a `Prisma.TransactionClient`, never `PrismaService`: the
   promotion and the cancellation that freed the spot share a fate or neither is correct.
 - `WaitlistService` — `join` / `leave`.
-- `DomainEventPublisher` — the after-commit seam Tasks 15 and 16 replace. Nothing that can block on
-  the network runs inside the transaction.
+- `DomainEventPublisher` — the after-commit seam. Bound to `CompositeDomainEventPublisher`, which
+  fans out to Tasks 15's Socket.io broadcast and Task 16's outbound Slack notification, each call in
+  its own `try` (`doc/decision/0135-*`). Nothing that can block on the network runs inside the
+  transaction.
 
 ### Bulk booking
 

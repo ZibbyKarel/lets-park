@@ -467,8 +467,10 @@ its user has already re-taken the hold on a new one.
 ### Broadcasting after commit
 
 `RealtimeDomainEventPublisher` implements the seam Task 13 left
-(`reservations/reservation-events.ts`). **When** an event is published is not up
-to it: `ReservationsService.cancel` computes events inside the transaction,
+(`reservations/reservation-events.ts`) — one of two implementations, reached
+through `CompositeDomainEventPublisher`, which also forwards to Task 16's Slack
+publisher and keeps the two out of a shared `try` (`doc/decision/0135-*`).
+**When** an event is published is not up to it: `ReservationsService.cancel` computes events inside the transaction,
 returns them, and publishes past the `await` — outside the retry loop, so a
 cancellation that lost two races publishes once, not three times.
 `reservations.db.spec.ts` §"the after-commit seam" proves the ordering by having
