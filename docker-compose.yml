@@ -1,14 +1,65 @@
-# Local dev/e2e infrastructure for Let's Park. See doc/environment.md for how
-# to run this and how it relates to running apps/api and apps/web directly
-# via `nx serve`/`nx dev` (not through Docker, for this phase).
+# Let's Park — the whole stack, in three profiles.
 #
-# Reads its variables from `.env` at the repo root — copy `.env.example` to
-# `.env` before running any of this (`docker compose config` will otherwise
-# substitute empty strings, which is still valid YAML but not what you want).
+# Every service carries a profile, so a bare `docker compose up` starts nothing
+# and you have to say what you want. That is on purpose, and it is the one
+# place this file departs from the task brief's literal "`docker compose up`
+# starts the entire stack": the entire stack includes a mock OIDC issuer that
+# will sign a token for any subject asked of it, and a default that starts it
+# is a default that eventually starts it in production. Naming the profile
+# costs a reader one flag; the alternative costs an authentication bypass.
+# doc/decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice.
+#
+#   docker compose --profile dev up -d
+#       Infrastructure only: PostgreSQL, the mock OIDC issuer, adminer. The
+#       apps run on the host (`nx serve api`, `nx run web:dev`). This is the
+#       development and e2e path and it is unchanged — see doc/environment.md
+#       and doc/testing.md.
+#
+#   docker compose --env-file .env.docker --profile dev --profile app up -d --build
+#       The same infrastructure plus the two production images and the
+#       migration job. Everything runs in containers; nothing runs on the host.
+#
+#   docker compose --env-file .env.docker --profile db --profile app up -d --build
+#       The containers and a local PostgreSQL, but a real Okta tenant instead
+#       of the mock issuer.
+#
+#   docker compose --env-file .env.docker --profile app up -d --build
+#       Production: the containers only. `DATABASE_URL` points at a managed
+#       database and `AUTH_OKTA_ISSUER` at a real authorization server; neither
+#       postgres nor the mock issuer is started.
+#
+# Interpolation comes from `.env` by default and from `--env-file` when given
+# (`docker compose config` prints what it resolved). The two are different
+# files because they describe two different topologies: on the host the API is
+# at `localhost:3000` and Postgres at `localhost:5432`; inside the network they
+# are at `lets-park-api:3000` and `postgres:5432`. Copy `.env.docker.example`
+# to `.env.docker` — both are git-ignored where they hold real values, and no
+# secret is ever written into this file or into an image.
+#
+# Every variable below is passed to the application containers **by name**.
+# There is deliberately no `env_file:` on `api` or `web`: a blanket env file
+# puts whatever happens to be in it — other projects' tokens, a personal
+# `DATABASE_URL` — inside a container that has no business seeing it. The list
+# here is the contract, and `apps/api/src/env.ts` and `apps/web/src/env.ts`
+# are what enforce it at boot.
 
 services:
+  # The database, under its own profile so that it is a choice rather than a
+  # default. `dev` and `db` both start it; `--profile app` on its own does not,
+  # which is the deployment where PostgreSQL is somebody else's problem — RDS,
+  # Cloud SQL, a DBA — and an extra container next to the API would at best be
+  # idle and at worst be the one that quietly gets written to. Point
+  # `DATABASE_URL` at the managed instance and run `--profile app` alone.
+  #
+  # `migrate` and `api` therefore declare this dependency `required: false`:
+  # when the profile is off the service is simply absent and they start anyway,
+  # and when it is on the `service_healthy` condition still holds and they wait.
+  # Without `required: false` Compose rejects the whole file the moment the
+  # profile is off — `service "migrate" depends on undefined service
+  # "postgres"` — see doc/decision/0208-*.
   postgres:
     image: postgres:17
+    profiles: ['dev', 'db']
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -24,15 +75,33 @@ services:
       timeout: 5s
       retries: 10
 
-  # OIDC issuer for dev/e2e. AUTH_OKTA_ISSUER=http://localhost:8080/default
-  # points here — dev, e2e and production all run the exact same auth code,
-  # only this issuer URL differs (see doc/decision/0008-*). No JSON_CONFIG
-  # is mounted: the server's built-in "default" issuer, reachable at
-  # http://localhost:8080/default/.well-known/openid-configuration, is
-  # enough for this phase.
+  # OIDC issuer for dev/e2e — and **only** for dev/e2e. It carries the `dev`
+  # profile so that no production invocation can start it, and nothing in the
+  # `app` profile below depends on it: the API discovers JWKS from whatever
+  # `AUTH_OKTA_ISSUER` names, lazily, on the first token it is shown. Point
+  # that variable at a real Okta authorization server and this container is
+  # simply never started (see README.md, "Okta").
+  #
+  # The `lets-park-oidc` alias is not decoration. mock-oauth2-server builds
+  # every URL it publishes — the authorization endpoint the browser is sent to,
+  # the JWKS URI the API reads, and the `iss` claim it mints — from the **Host
+  # header of the request it is answering**. So the issuer URL has to be one
+  # name that resolves to this container from inside the network *and* to the
+  # published port from the operator's browser. Docker's DNS gives the first;
+  # one line in the host's /etc/hosts gives the second:
+  #
+  #     127.0.0.1 lets-park-api lets-park-oidc
+  #
+  # Reach it by a different name from either side and sign-in succeeds while
+  # every API call 401s on a mismatched `iss` — see doc/decision/0201-*.
   mock-oauth2-server:
     image: ghcr.io/navikt/mock-oauth2-server:latest
     restart: unless-stopped
+    profiles: ['dev']
+    networks:
+      default:
+        aliases:
+          - lets-park-oidc
     ports:
       - '8080:8080'
 
@@ -47,41 +116,157 @@ services:
       postgres:
         condition: service_healthy
 
-  # --- Placeholders -----------------------------------------------------
-  # apps/web and apps/api do not have production Dockerfiles yet — those are
-  # built in Task 29. These two entries only sketch the eventual compose
-  # topology ahead of time (build context, port mapping, dependency order);
-  # the `dockerfile:` paths below do not exist yet. Both are gated behind the
-  # "app" profile precisely so a plain `docker compose up` (or
-  # `docker compose --profile dev up`) never tries to build them before
-  # Task 29 lands. Until then, run the apps on the host via
-  # `nx serve api` / `nx run web:dev`.
-  web:
+  # --- app profile ----------------------------------------------------------
+
+  # Applies pending migrations, then exits. `api` waits for it to exit 0
+  # (`service_completed_successfully`), so a container is never serving against
+  # a schema it does not match.
+  #
+  # It is a separate image (`--target migrator`) rather than an entrypoint step
+  # in the API: a serving process that can rewrite its own schema eventually
+  # will, on some restart nobody planned, and on more than one replica at once.
+  # `prisma migrate deploy` only applies what already exists in
+  # `libs/database/prisma/migrations` — it never generates and never resets.
+  migrate:
     profiles: ['app']
     build:
       context: .
-      dockerfile: apps/web/Dockerfile # created in Task 29
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - '3001:3000'
+      dockerfile: apps/api/Dockerfile
+      target: migrator
+    restart: 'no'
+    environment:
+      - DATABASE_URL
     depends_on:
-      - api
+      postgres:
+        condition: service_healthy
+        # Absent when the `db` profile is off (managed database) — see the
+        # comment on `postgres` above. Present, and waited for, when it is on.
+        required: false
 
   api:
     profiles: ['app']
     build:
       context: .
-      dockerfile: apps/api/Dockerfile # created in Task 29
+      dockerfile: apps/api/Dockerfile
     restart: unless-stopped
-    env_file: .env
+    # PID 1 is `node`, which does handle SIGTERM here (Nest's
+    # `enableShutdownHooks`), but it will not reap anything else. `init: true`
+    # puts a real init in front of it so a stray child cannot become a zombie.
+    init: true
+    # Long enough for in-flight requests and the Socket.io close that
+    # `GracefulShutdownService` performs; short enough that a stuck process is
+    # still killed.
+    stop_grace_period: 30s
+    networks:
+      default:
+        aliases:
+          - lets-park-api
+    # The list form, not the map, and every entry bare. Two findings, both
+    # measured:
+    #
+    # 1. An entry with no `=` is forwarded **only when the variable is set**
+    #    and is absent otherwise, whereas `KEY: ${KEY:-}` sets it to the empty
+    #    string. `apps/api/src/env.ts` gives every optional key a default that
+    #    an empty string does not satisfy — `SLACK_BOT_TOKEN` is
+    #    `z.string().min(1).optional()` — so `:-` would crash the boot on a
+    #    variable nobody set.
+    # 2. **`${VAR:?message}` cannot be used here at all.** Compose interpolates
+    #    *every* service in the file regardless of which profiles are active,
+    #    so one `:?` on `web` makes `docker compose --profile dev up -d` — the
+    #    everyday development command, and what the e2e suite depends on —
+    #    fail with `required variable AUTH_URL is missing a value`. Verified
+    #    with `--dry-run`.
+    #
+    # A missing *required* value is therefore caught where it always was: by
+    # the app's own fail-fast schema at boot (`apps/api/src/env.ts`,
+    # `apps/web/src/instrumentation-node.ts`), which names the variable and
+    # exits. `AUTH_URL` is the one exception — it is Auth.js's, not in
+    # `webEnvSchema` — and shows up instead as a bad post-login redirect on the
+    # first sign-in. See doc/decision/0205-*.
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL
+      - AUTH_OKTA_ISSUER
+      - AUTH_OKTA_AUDIENCE
+      - CORS_ALLOWED_ORIGINS
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Tunables. Each has a default in `apps/api/src/env.ts`; forwarded only
+      # when someone has actually chosen a value.
+      - BODY_LIMIT
+      - HEALTH_DB_TIMEOUT_MS
+      - REALTIME_LOCK_TTL_MS
+      - THROTTLE_TTL_MS
+      - THROTTLE_LIMIT
+      - THROTTLE_STRICT_TTL_MS
+      - THROTTLE_STRICT_LIMIT
+      # Slack. These belong to `apps/api/src/slack`, which lives on
+      # `feat/lets-park-mvp` and which this branch's base (`task-28-e2e`)
+      # predates — so they are listed, not defaulted: unset here today, and
+      # forwarded the moment the module and its `.env` arrive.
+      # `SLACK_ENABLED` already defaults to `false`, so an unset Slack is a
+      # working Slack-less API rather than a broken one
+      # (`doc/decision/0130-slack-is-off-by-default-and-there-is-no-dev-only-branch`,
+      # on that branch).
+      #
+      # **`SLACK_BOT_TOKEN` is a secret.** It is here and nowhere else: not in
+      # `.env.docker.example`, not in an image layer, not in a log line.
+      - SLACK_ENABLED
+      - SLACK_BOT_TOKEN
+      - SLACK_CHANNEL_ID
+      - SLACK_DAILY_SUMMARY_AT
+      - SLACK_REQUEST_TIMEOUT_MS
+      - SLACK_RETRY_ATTEMPTS
+      - SLACK_RETRY_BASE_DELAY_MS
     ports:
       - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
-      mock-oauth2-server:
-        condition: service_started
+        required: false
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Read by server code at request time and handed to the browser as a
+      # prop, so it must be one URL that works from both — hence the
+      # `lets-park-api` alias and the /etc/hosts line above.
+      - NEXT_PUBLIC_API_URL
+      # The app's **public** origin, and required in a container for a reason
+      # that only shows up in one: Next's request interceptor (`proxy.ts`) sees
+      # a request URL built from the address the server bound, not from the
+      # Host header. Auth.js then writes that origin into the `callbackUrl` it
+      # sends to the sign-in page, and after a successful sign-in redirects the
+      # browser to it. Measured: without this variable the browser finished a
+      # complete, valid OIDC round trip and then landed on
+      # `http://0.0.0.0:3000` — `chrome-error://chromewebdata/`, with a good
+      # session cookie already set. With it, the same run reaches `/`. The
+      # redirect_uri is *not* affected (it was correct either way), which is
+      # what makes this fail so late and look like an issuer problem.
+      # See doc/decision/0202-*.
+      - AUTH_URL
+      - AUTH_SECRET
+      - AUTH_OKTA_ISSUER
+      - AUTH_OKTA_CLIENT_ID
+      - AUTH_OKTA_CLIENT_SECRET
+    # 4200 on the host, 3000 in the container. The host port is the one that
+    # matters: `CORS_ALLOWED_ORIGINS` and the redirect URI the browser is sent
+    # back to both name `http://localhost:4200`, exactly as in host-run dev.
+    ports:
+      - '4200:3000'
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres-data:

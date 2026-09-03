@@ -390,9 +390,19 @@ pg_restore --dbname="$DATABASE_URL" --data-only lets-park-data-2026-08-28.dump
 From a running container with no local `pg_dump`:
 
 ```bash
-docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  --format=custom > lets-park-$(date +%F).dump
+docker compose exec -T postgres \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > lets-park-$(date +%F).dump
 ```
+
+`sh -c '…'`, in single quotes, so that `$POSTGRES_USER` and `$POSTGRES_DB` are
+expanded by the **container's** shell, which is where those variables live.
+Expanded by yours they are empty, and `pg_dump` then connects as the container's
+own user — `FATAL: role "root" does not exist`, exit 1, a zero-byte dump. The
+`$(date +%F)` stays outside the quotes: the filename is yours, not the
+container's. Same trap as `docker compose exec … psql`, and the reason the
+`DATABASE_URL` forms above are the ones to prefer when you have a local
+`pg_dump`.
 
 Notes:
 

@@ -27,7 +27,7 @@
  * `reservation-calendar.spec.ts` pins that by flipping `process.env.TZ`.
  *
  * This does not weaken the Europe/Prague rule: a reservation day is a *calendar
- * day* (`doc/decision/0013-*`), an all-day `VALUE=DATE` event carries no time
+ * day* (`doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary`), an all-day `VALUE=DATE` event carries no time
  * and therefore no offset, and the conversion from a stored `@db.Date` to
  * `YYYY-MM-DD` already happened in `apps/api`.
  */

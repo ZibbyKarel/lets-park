@@ -45,6 +45,9 @@ test-results/
 # env
 .env
 .env.local
+# The containerised stack's own environment (docker-compose.yml, §app profile).
+# `.env.docker.example` beside it is committed; this one holds real values.
+.env.docker
 *.local
 
 # misc

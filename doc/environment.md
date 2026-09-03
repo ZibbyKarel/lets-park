@@ -177,17 +177,32 @@ The actual `.env` files are in `.gitignore` – they are never committed.
    docker compose --profile dev up -d
    ```
 
-   Without `--profile dev`, only `postgres` and `mock-oauth2-server` come up
-   – that's enough if you don't need `adminer`.
+   Every service now carries a profile, so `docker compose up` with no
+   `--profile` starts **nothing**. That is deliberate: which database you run
+   against is a decision, not a default
+   (`doc/decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice`).
+   `postgres` answers to `dev` and to `db`; the mock OIDC issuer and `adminer`
+   answer only to `dev` — the issuer deliberately, so that no production
+   invocation can start it and nothing in the `app` profile depends on it
+   (`doc/decision/0201-the-issuer-url-must-be-one-name-on-both-sides-of-the-network`).
 
-   `web` and `api` in `docker-compose.yml` are only **placeholders** behind
-   the `app` profile – they have no production Dockerfile yet (that arrives
-   in Task 29), and `docker compose up` won't start them without an explicit
-   `--profile app`. Until then, both applications run on the host:
+   `web` and `api` sit behind the **`app`** profile and now build real
+   production images (`apps/api/Dockerfile`, `apps/web/Dockerfile`), together
+   with a one-shot `migrate` job that applies pending migrations before the
+   API starts. They need their own env file, because the addresses inside the
+   compose network are not the host's — see `README.md`, §"The containerised
+   stack", and `doc/decision/0205-the-app-profile-names-every-variable-it-passes`:
+
+   ```bash
+   cp .env.docker.example .env.docker
+   docker compose --env-file .env.docker --profile dev --profile app up -d --build
+   ```
+
+   For everyday development the applications run on the host instead:
 
    ```bash
    npx nx run api:serve   # NestJS, port per PORT in .env (default 3000)
-   npx nx run web:dev -- -p 4200   # Next.js; -p 4200 so it doesn't collide with the API on 3000
+   npx nx run web:dev     # Next.js on 4200 — the port is pinned in apps/web/project.json
    ```
 
 3. Verify Postgres is healthy:
@@ -212,15 +227,16 @@ The actual `.env` files are in `.gitignore` – they are never committed.
    using `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` from `.env`, host
    `postgres`, port `5432`.
 
-**The Docker daemon on the development machine this document was written on
-was not running** – verified only with `docker compose config` (see below);
-`docker compose up` could not actually be tried. Before your first attempt, at
-least verify the syntax without a daemon:
+The whole file has since been run, both profiles, from an empty volume: Postgres
+became healthy, `migrate` applied all three migrations and exited 0, `api`
+reported healthy, `web` reported healthy, and a browser completed a real OIDC
+sign-in and made authenticated oRPC calls against the API container. To check
+the syntax without starting anything (`--env-file` is what supplies the app
+profile's values):
 
 ```bash
-docker compose config
 docker compose --profile dev config
-docker compose --profile app config
+docker compose --env-file .env.docker --profile dev --profile app config
 ```
 
 ---

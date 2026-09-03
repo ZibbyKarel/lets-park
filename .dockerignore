@@ -1,0 +1,67 @@
+# What never enters a build context.
+#
+# Two reasons, in order of importance:
+#
+# 1. **Secrets.** `.env` holds the real `AUTH_SECRET`, the OAuth client secret
+#    and `DATABASE_URL`. A file that reaches the build context can be COPYed
+#    into a layer by accident and layers are readable by anyone who can pull
+#    the image. Every one of those values is supplied at *run* time instead
+#    (`docker-compose.yml`, §app profile).
+# 2. **Speed.** `node_modules/`, `.next/` and `dist/` are rebuilt inside the
+#    image from the lockfile and the sources; shipping the host's copies would
+#    upload hundreds of megabytes and — worse — let a stale host artifact win
+#    over a freshly built one.
+
+# --- secrets and local state ------------------------------------------------
+#
+# `**/`, not a bare `.env`. A .dockerignore pattern with no wildcard is
+# anchored at the context root, so `.env` excludes `/.env` and nothing else —
+# and this repository has a *second* one, `apps/web/.env`, because Next.js
+# resolves env files relative to its own directory (doc/decision/0009-*). It
+# was measured, not predicted: with a bare `.env` here, `docker build` shipped
+# the developer's `apps/web/.env` — AUTH_SECRET, AUTH_OKTA_CLIENT_SECRET and
+# DATABASE_URL — into `.next/standalone/apps/web/.env` inside the image, which
+# `next build --output standalone` copies for you. Note that a later `RUN rm`
+# would not have fixed it: the file would still sit in the layer that added it.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.docker.example
+apps/web-e2e/.auth/
+storage-state*.json
+
+# --- build output and caches ------------------------------------------------
+node_modules
+**/node_modules
+dist
+tmp
+out-tsc
+.nx
+**/.next
+**/.turbo
+coverage
+test-output
+playwright-report
+test-results
+*.tsbuildinfo
+
+# --- version control and tooling --------------------------------------------
+.git
+.gitignore
+.github
+.claude
+.superpowers
+.vscode
+.idea
+.playwright-mcp
+
+# --- things an image has no use for -----------------------------------------
+doc
+README.md
+CLAUDE.md
+TODO.md
+plan.md
+handoff.md
+docker-compose.yml
+**/Dockerfile
+.dockerignore
