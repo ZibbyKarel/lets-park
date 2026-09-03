@@ -102,16 +102,33 @@ export function WindowBanner({ banner }: { readonly banner: BannerView }) {
 }
 
 /**
- * The socket was refused and has stopped retrying.
+ * The board has stopped updating itself.
  *
- * `doc/decision/0061-*` makes a refused handshake terminal for that socket and
- * bounds the automatic retries, precisely so a page cannot sit forever
- * presenting a credential the gateway has already rejected. That leaves the
- * user with a grid that has silently stopped updating unless something says
- * so — which is this. The button is the intended caller of the connection's
- * unconditional `reconnect()`.
+ * Two states reach here and the sentence is the same for both, because it is
+ * the true one for both: live updates are off, so the overview may not refresh
+ * on its own. What differs is whether there is anything for the user to do.
+ *
+ * - **Refused** (`doc/decision/0061-*` makes a refused handshake terminal for
+ *   that socket and bounds the automatic retries, precisely so a page cannot
+ *   sit forever presenting a credential the gateway has already rejected).
+ *   Nothing will happen without the user, so `onReconnect` is passed and the
+ *   button — the intended caller of the connection's unconditional
+ *   `reconnect()` — is drawn.
+ * - **Dropped**, and reconnecting on its own. `onReconnect` is omitted and the
+ *   notice is the quieter, buttonless variant: a control that duplicates what
+ *   is already in progress invites a click that changes nothing.
+ *
+ * One `realtimeRejected` string covers both. The key is named for the state it
+ * was written for, but the sentence names neither — it says the connection is
+ * down and what that means for the screen — and inventing a second, identical
+ * string so the two keys could differ would be catalogue noise.
  */
-export function RealtimeNotice({ onReconnect }: { readonly onReconnect: () => void }) {
+export function RealtimeNotice({
+  onReconnect,
+}: {
+  /** Omitted for a drop the connection is already recovering from. */
+  readonly onReconnect?: (() => void) | undefined;
+}) {
   const t = useTranslations('lot');
 
   return (
@@ -120,9 +137,11 @@ export function RealtimeNotice({ onReconnect }: { readonly onReconnect: () => vo
       className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-brand-yellow bg-brand-yellow-100 px-4 py-3"
     >
       <p className="flex-1 text-base leading-snug text-fg">{t('realtimeRejected')}</p>
-      <Button variant="secondary" size="sm" onClick={onReconnect}>
-        {t('realtimeReconnect')}
-      </Button>
+      {onReconnect === undefined ? null : (
+        <Button variant="secondary" size="sm" onClick={onReconnect}>
+          {t('realtimeReconnect')}
+        </Button>
+      )}
     </div>
   );
 }

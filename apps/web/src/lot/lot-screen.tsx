@@ -15,7 +15,7 @@
  * `no-restricted-imports` (`doc/wrappers.md`).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDays,
   addMonths,
@@ -39,7 +39,13 @@ import { BulkReservationModal } from './bulk-modal';
 import { SpotDialog } from './spot-dialog';
 import { useCellLocks } from './use-cell-locks';
 import { useLotRealtime } from './use-lot-realtime';
-import { toBannerView, toDayNoteView, toGroupViews, toLotCounts } from './lot-view';
+import {
+  toBannerView,
+  toDayNoteView,
+  toGroupViews,
+  toLotCounts,
+  toRealtimeNoticeView,
+} from './lot-view';
 
 /** How far the year picker reaches either side of the day on screen. */
 const YEAR_PICKER_RADIUS = 1;
@@ -68,6 +74,16 @@ export function LotScreen() {
   const api = useApi();
   const queryClient = useQueryClient();
   const { status: realtimeStatus, reconnect } = useRealtime();
+
+  // A ref, not state: it only ever goes false → true, and it is read while
+  // deciding what to draw in the same render that sets it. Writing it during
+  // render is safe for exactly that reason — no subscriber to wake, no second
+  // commit, and `useRealtime()` is what re-renders this component when the
+  // status moves. See `toRealtimeNoticeView` for why "has it ever connected"
+  // is the question at all.
+  const hasEverConnected = useRef(false);
+  if (realtimeStatus === 'connected') hasEverConnected.current = true;
+  const realtimeNotice = toRealtimeNoticeView(realtimeStatus, hasEverConnected.current);
 
   const [date, setDate] = useState<DateOnly>(() => todayInPrague());
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
@@ -256,7 +272,16 @@ export function LotScreen() {
       />
 
       <WindowBanner banner={banner} />
-      {realtimeStatus === 'rejected' ? <RealtimeNotice onReconnect={reconnect} /> : null}
+      {/*
+        Both non-live states are drawn, not just the terminal one. `dropped`
+        gets no button because the connection is already retrying; `rejected`
+        gets one because it is not. `none` covers a live board *and* a board
+        that has not connected for the first time yet — see
+        `toRealtimeNoticeView`.
+      */}
+      {realtimeNotice === 'none' ? null : (
+        <RealtimeNotice onReconnect={realtimeNotice === 'rejected' ? reconnect : undefined} />
+      )}
 
       {day.spots.length === 0 ? (
         <EmptyState title={t('emptyTitle')} description={t('emptyDescription')} />

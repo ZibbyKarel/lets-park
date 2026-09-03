@@ -21,7 +21,7 @@
  * names a wrapped package (`doc/wrappers.md`).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   formatDayAndMonth,
   formatFullDate,
@@ -95,7 +95,34 @@ const WEEKDAY_KEYS = [
   'weekdaySun',
 ] as const;
 
-export function BulkReservationModal({
+/**
+ * The modal, with its state tied to one opening.
+ *
+ * The reset used to be a `useEffect` on `[open, month]` inside the component
+ * below. Passive effects run **after paint**, so the render in which `open`
+ * flips back to `true` still saw the previous run's `result` and took the
+ * result branch — the user reopening the modal got a frame of the last batch's
+ * outcome before the day grid appeared. See `doc/decision/0258-*`.
+ *
+ * A `key` fixes it by construction rather than by ordering: React discards the
+ * whole subtree and mounts a fresh one, so there is no state left to flash and
+ * no effect whose timing has to be right. The month is in the key as well as
+ * `open` because the contract refuses a batch spanning two months — a stale
+ * day from the previous month would turn the next confirmation into
+ * `VALIDATION_FAILED`. (`LotScreen` also closes the modal when the day moves,
+ * so that half is belt and braces; it is cheap and it is the rule this file
+ * actually depends on.)
+ */
+export function BulkReservationModal(props: BulkReservationModalProps) {
+  return (
+    <BulkReservationModalContent
+      key={`${String(props.open)}-${props.anchorDate.slice(0, 7)}`}
+      {...props}
+    />
+  );
+}
+
+function BulkReservationModalContent({
   open,
   onClose,
   anchorDate,
@@ -113,20 +140,10 @@ export function BulkReservationModal({
   const [result, setResult] = useState<ConfirmBulkOutput | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
 
-  const month = anchorDate.slice(0, 7);
-
-  // A modal reopened on another month must not still be holding the previous
-  // month's selection: the contract refuses a batch spanning two months, so a
-  // stale day would turn the next confirmation into `VALIDATION_FAILED`.
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setSelected([]);
-    setProposal(null);
-    setResult(null);
-    setFailure(null);
-  }, [open, month]);
+  // No reset effect here on purpose — the wrapper above keys this component on
+  // `open` and the month, so every opening is a fresh mount and the four
+  // `useState`s start at their initial values. An effect could only ever undo
+  // the previous run's state *after* the reopening render had already used it.
 
   const profile = useCurrentUser();
   const spotList = useQuery({ ...api.spot.list.queryOptions(), enabled: open });

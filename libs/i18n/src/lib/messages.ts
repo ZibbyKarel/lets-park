@@ -370,6 +370,18 @@ export interface CzechAdminMessages {
   readonly usersSelfActiveToggleLabel: string;
   /** Why an admin's own "aktivní" switch is disabled. Shown on hover. */
   readonly usersSelfActiveHint: string;
+  /**
+   * The confirmation an admin gets before taking their own `ADMIN` role away.
+   *
+   * Unlike the "aktivní" switch this one is **not** disabled: stepping down is
+   * a legitimate thing to do, and the API still refuses it for the last active
+   * admin. But it is one unlabelled click away from losing `/správa` — the tab
+   * simply disappears — and only another admin can undo it, which is exactly
+   * the shape of action a confirmation exists for.
+   */
+  readonly usersSelfRoleConfirmTitle: string;
+  readonly usersSelfRoleConfirmDescription: string;
+  readonly usersSelfRoleConfirmAction: string;
   readonly usersEmpty: string;
   readonly usersEmptySearch: string;
   readonly usersEmptySearchDescription: string;
@@ -734,6 +746,10 @@ export const csMessages: CzechMessages = {
     usersActiveToggleLabel: 'Aktivní účet — {name}',
     usersSelfActiveToggleLabel: 'Aktivní účet — {name} · vlastní účet nelze deaktivovat',
     usersSelfActiveHint: 'Vlastní účet nelze deaktivovat.',
+    usersSelfRoleConfirmTitle: 'Odebrat si roli administrátora?',
+    usersSelfRoleConfirmDescription:
+      'Přijdete o přístup do Správy. Vrátit vám roli může potom už jen jiný administrátor.',
+    usersSelfRoleConfirmAction: 'Odebrat roli',
     usersEmpty: 'Žádní uživatelé',
     usersEmptySearch: 'Hledání nic nenašlo',
     usersEmptySearchDescription: 'Zkuste jiné jméno nebo e-mail.',

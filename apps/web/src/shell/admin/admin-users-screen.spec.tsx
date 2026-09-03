@@ -181,7 +181,11 @@ describe('AdminUsersScreen', () => {
   });
 
   it('reports a promotion and a demotion as the role the switch moved to', async () => {
-    const { onRoleChange, user } = renderScreen();
+    // Viewed as Petr, so neither switch below is the viewer's own — changing
+    // somebody else's role is ordinary administration and goes straight
+    // through. The viewer's own demotion is the one that asks first, and it
+    // has its own tests.
+    const { onRoleChange, user } = renderScreen({ viewerId: PETR.id });
 
     await user.click(
       within(rowOf(ADELA)).getByRole('switch', { name: 'Admin role — Adéla Horáková' })
@@ -261,12 +265,91 @@ describe('AdminUsersScreen', () => {
 
     it('still lets an admin step down from their own role', () => {
       // Demoting yourself is allowed while another admin remains — the API
-      // decides that, and the UI must not pre-empt it.
+      // decides that, and the UI must not pre-empt it. So the switch is
+      // enabled, unlike the "aktivní" one above; what it is not is immediate.
       renderScreen({ viewerId: KAREL.id });
 
       expect(
         within(rowOf(KAREL)).getByRole('switch', { name: 'Admin role — Karel Zíbar' })
       ).toBeEnabled();
+    });
+
+    /**
+     * The asymmetry the review named: self-*deactivation* was guarded because
+     * it is how an admin loses their own session mid-task, while
+     * self-*demotion* — which takes `/správa` away and can only be undone by
+     * somebody else — was one unlabelled click, and this suite pinned that as
+     * intended.
+     */
+    describe('stepping down from your own admin role', () => {
+      const CONFIRM_TITLE = 'Odebrat si roli administrátora?';
+      const OWN_ADMIN_SWITCH = 'Admin role — Karel Zíbar';
+
+      it('asks before doing it, and reports nothing until the answer is yes', async () => {
+        const { onRoleChange, user } = renderScreen({ viewerId: KAREL.id });
+
+        await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
+
+        expect(screen.getByRole('dialog', { name: CONFIRM_TITLE })).toBeInTheDocument();
+        expect(onRoleChange).not.toHaveBeenCalled();
+      });
+
+      it('says what will be lost, not just that something will', async () => {
+        const { user } = renderScreen({ viewerId: KAREL.id });
+
+        await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
+
+        expect(
+          screen.getByText(
+            'Přijdete o přístup do Správy. Vrátit vám roli může potom už jen jiný administrátor.'
+          )
+        ).toBeInTheDocument();
+      });
+
+      it('goes through once confirmed', async () => {
+        const { onRoleChange, user } = renderScreen({ viewerId: KAREL.id });
+
+        await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
+        await user.click(screen.getByRole('button', { name: 'Odebrat roli' }));
+
+        expect(onRoleChange).toHaveBeenCalledWith(KAREL.id, false);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+
+      it('changes nothing when cancelled', async () => {
+        const { onRoleChange, user } = renderScreen({ viewerId: KAREL.id });
+
+        await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
+        await user.click(screen.getByRole('button', { name: 'Zrušit' }));
+
+        expect(onRoleChange).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH })).toBeChecked();
+      });
+
+      it('does not ask when the viewer is giving themselves the role back', async () => {
+        // Only the irreversible direction. Granting is undone by the same
+        // switch, by the same person.
+        const { onRoleChange, user } = renderScreen({
+          viewerId: ADELA.id,
+        });
+
+        await user.click(
+          within(rowOf(ADELA)).getByRole('switch', { name: 'Admin role — Adéla Horáková' })
+        );
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(onRoleChange).toHaveBeenCalledWith(ADELA.id, true);
+      });
+
+      it('does not ask when demoting somebody else', async () => {
+        const { onRoleChange, user } = renderScreen({ viewerId: ADELA.id });
+
+        await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(onRoleChange).toHaveBeenCalledWith(KAREL.id, false);
+      });
     });
 
     it('disables nothing when the viewer is not known yet', () => {

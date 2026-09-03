@@ -23,6 +23,19 @@
  * removing the last active admin, whatever any browser sends. Nothing here is
  * authorization — `@Roles('ADMIN')` on the two procedures is.
  *
+ * ## Stepping down is allowed, but not by accident
+ *
+ * The viewer's own **Admin** switch stays enabled: giving up the role is a
+ * legitimate thing to do, and unlike deactivation it does not end the session.
+ * What it does do is take `/správa` away — the tab disappears from the top bar
+ * and this screen stops rendering — and only another admin can give it back.
+ * One unlabelled click was the whole distance to that, so it goes through a
+ * `ConfirmDialog` first. See `doc/decision/0260-*`.
+ *
+ * Only *self*-demotion asks. Demoting somebody else is ordinary
+ * administration, is visible in the row afterwards, and is undone by the same
+ * switch.
+ *
  * Presentational: everything arrives as a prop. `./admin-users-panel.tsx` is
  * the connected half.
  */
@@ -30,7 +43,7 @@
 import { useMemo, useState } from 'react';
 import type { AdminUser } from '@lets-park/contract';
 import { Avatar, Input, Switch, Toast } from '@lets-park/design-system/primitives';
-import { DataTable } from '@lets-park/design-system/compounds';
+import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
 import { initialsOf } from '../initials';
@@ -95,6 +108,10 @@ export function AdminUsersScreen({
   const t = useTranslations('admin');
   const describeWriteError = useAdminWriteError();
   const [search, setSearch] = useState('');
+  // `true` while the viewer's own step-down is waiting to be confirmed. A
+  // boolean rather than the row, because there is exactly one row this can
+  // ever be about.
+  const [confirmingSelfDemotion, setConfirmingSelfDemotion] = useState(false);
 
   const all = users ?? [];
   const visible = useMemo(
@@ -132,7 +149,15 @@ export function AdminUsersScreen({
           checked={user.role === 'ADMIN'}
           aria-label={t('usersAdminToggleLabel', { name: user.name })}
           disabled={isRowBusy(pendingChange, user.id)}
-          onCheckedChange={(next) => onRoleChange(user.id, next)}
+          onCheckedChange={(next) => {
+            // Only the viewer taking their *own* role away asks first — and
+            // only in that direction. Granting is not the irreversible one.
+            if (user.id === viewerId && !next) {
+              setConfirmingSelfDemotion(true);
+              return;
+            }
+            onRoleChange(user.id, next);
+          }}
         />
       ),
     },
@@ -204,6 +229,27 @@ export function AdminUsersScreen({
         minWidth="720px"
         emptyTitle={search.trim() === '' ? t('usersEmpty') : t('usersEmptySearch')}
         emptyDescription={search.trim() === '' ? undefined : t('usersEmptySearchDescription')}
+      />
+
+      {/*
+        Rendered unconditionally and closed by its own `open` prop, the way
+        `ConfirmDialog` is built to be used: it renders nothing at all when
+        closed, and mounting it conditionally would take the dialog out of the
+        tree in the same commit the confirm button is pressed.
+      */}
+      <ConfirmDialog
+        open={confirmingSelfDemotion}
+        tone="danger"
+        title={t('usersSelfRoleConfirmTitle')}
+        description={t('usersSelfRoleConfirmDescription')}
+        confirmLabel={t('usersSelfRoleConfirmAction')}
+        onCancel={() => {
+          setConfirmingSelfDemotion(false);
+        }}
+        onConfirm={() => {
+          setConfirmingSelfDemotion(false);
+          if (viewerId !== undefined) onRoleChange(viewerId, false);
+        }}
       />
     </div>
   );

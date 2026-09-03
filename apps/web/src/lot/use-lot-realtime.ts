@@ -14,8 +14,8 @@
  * without joining.
  */
 
-import { useCallback, useMemo } from 'react';
-import { useDayRoom, useRealtimeEvent } from '@lets-park/realtime-client';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useDayRoom, useRealtime, useRealtimeEvent } from '@lets-park/realtime-client';
 import { useQueryClient } from '@lets-park/query';
 import type { DayOverviewOutput } from '@lets-park/contract';
 import type { DateOnly } from '@lets-park/i18n';
@@ -127,4 +127,60 @@ export function useLotRealtime({ date, viewerUserId }: LotRealtimeOptions): void
       [handle]
     )
   );
+
+  useReconnectReconciliation(queryKey);
+}
+
+/**
+ * Refetches the day the moment the socket comes back.
+ *
+ * **Why anything is needed at all.** The four handlers above patch the cache
+ * from broadcasts. A broadcast published while the socket is down is not
+ * queued anywhere — it is gone — and nothing else brings the entry back in
+ * line: `libs/query` sets `refetchOnWindowFocus: false` and a 30 s
+ * `staleTime`, and TanStack's `refetchOnReconnect` keys off `navigator.onLine`,
+ * which says nothing about a socket that dropped for a reason other than the
+ * network (an API restart, a proxy idle timeout, a laptop resume). Without
+ * this the grid keeps drawing spots as free that somebody took during the gap,
+ * until the user changes the date or writes something themselves.
+ *
+ * `use-cell-locks.ts` already handles the same event for locks — it empties the
+ * map on a drop, because "unknown" must not be drawn as "nobody is editing".
+ * This is the counterpart for the overview, where the honest recovery is to
+ * ask the server again rather than to blank the screen.
+ *
+ * **An edge, not a level.** `useRealtime()` reports the current status only, so
+ * the transition is derived here with a ref: any status other than `connected`
+ * arms it, and the next `connected` fires and disarms it. A level check would
+ * invalidate on every render while connected.
+ *
+ * The ref starts **disarmed**, and that is the whole difference between one
+ * refetch and two on a page load. A hook mounting under an already-connected
+ * socket (navigating between `/` and `/nastaveni`, say) has missed nothing and
+ * refetches nothing. A hook mounting on a cold page starts at `disconnected` —
+ * `RealtimeProvider`'s initial status — which arms it, so the first `connected`
+ * does fire: the window between the overview being fetched and the socket
+ * finishing its handshake is a real gap, the same gap as any later one, and
+ * this is the only thing that closes it.
+ */
+function useReconnectReconciliation(queryKey: readonly unknown[] | null): void {
+  const queryClient = useQueryClient();
+  const { status } = useRealtime();
+  const missedBroadcasts = useRef(false);
+
+  useEffect(() => {
+    if (status !== 'connected') {
+      // `connecting`, `disconnected` and `rejected` are all windows in which a
+      // broadcast can be published and never delivered here. They differ in
+      // what the *user* should be told (`RealtimeNotice`), not in what the
+      // cache has to do about it.
+      missedBroadcasts.current = true;
+      return;
+    }
+    if (!missedBroadcasts.current) return;
+    missedBroadcasts.current = false;
+    if (queryKey === null) return;
+
+    void queryClient.invalidateQueries({ queryKey });
+  }, [status, queryKey, queryClient]);
 }

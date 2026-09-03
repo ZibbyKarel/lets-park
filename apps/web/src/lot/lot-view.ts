@@ -31,6 +31,7 @@ import {
   type DateOnly,
 } from '@lets-park/i18n';
 import type { DaySpotOverview, MonthWindowOverview, ParkingGroup } from '@lets-park/contract';
+import type { RealtimeStatus } from '@lets-park/realtime-client';
 import { CAR_COLOR_PALETTE } from '@lets-park/design-system/tokens';
 
 /**
@@ -324,6 +325,52 @@ export function toBannerView(window: MonthWindowOverview, isAdmin: boolean): Ban
         values,
       };
   }
+}
+
+/**
+ * Which realtime notice, if any, sits above the map.
+ *
+ * - `rejected` — the gateway refused the handshake and the automatic retries
+ *   are spent. There is something for the user to *do*, so this one carries
+ *   the "Připojit znovu" button.
+ * - `dropped` — the socket went away and is coming back on its own. Same
+ *   sentence, no button: offering a control that duplicates what is already
+ *   happening invites a click that changes nothing.
+ * - `none` — live, or not live yet.
+ */
+export type RealtimeNoticeView = 'none' | 'dropped' | 'rejected';
+
+/**
+ * Whether to say that the board has stopped updating.
+ *
+ * `lot-header.tsx` already argues that a silently-frozen grid is the failure
+ * worth naming, and the screen used to draw that argument for exactly one of
+ * the four statuses — `rejected`. `disconnected` and `connecting` are the far
+ * more common way to end up looking at a board that stopped four minutes ago
+ * (an API restart, a proxy idle timeout, a laptop resume), and neither was
+ * drawn anywhere.
+ *
+ * **`hasEverConnected` is the whole subtlety.** `RealtimeProvider` starts at
+ * `disconnected` and stays there until the handshake finishes — and longer
+ * still for a visitor whose session has not resolved, because `RealtimeBoundary`
+ * holds the socket closed until then. A rule that read the status alone would
+ * therefore flash "Živé aktualizace jsou odpojené" on every single page load,
+ * which is worse than saying nothing: a warning that is usually wrong is a
+ * warning nobody reads. Before the first `connected` there is no stale data to
+ * warn about — the grid has not gone stale, it has not arrived.
+ *
+ * `rejected` is exempt from that rule and reported whenever it happens. It is
+ * terminal by construction (`doc/decision/0061-*`), so there is no later state
+ * that would correct it, and it is refused *credentials* rather than a slow
+ * start.
+ */
+export function toRealtimeNoticeView(
+  status: RealtimeStatus,
+  hasEverConnected: boolean
+): RealtimeNoticeView {
+  if (status === 'rejected') return 'rejected';
+  if (status === 'connected') return 'none';
+  return hasEverConnected ? 'dropped' : 'none';
 }
 
 /** Which `lot` message the day bar's second line renders. */

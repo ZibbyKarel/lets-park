@@ -385,6 +385,43 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     );
   });
 
+  it('does not carry an in-flight proposal request into the next opening', async () => {
+    // The reset used to be a `useEffect` on `[open, month]`, which reset the
+    // four `useState`s and nothing else — the *mutation* stayed pending, so a
+    // modal closed mid-request reopened with its primary button already
+    // spinning and every day locked, and nothing would ever land to clear it.
+    // Keying the subtree on `open` drops the mutation with everything else.
+    //
+    // This is also the closest a jsdom test can get to the flash the review
+    // named: a passive effect resetting after paint is invisible here, because
+    // `act` flushes render and effects together, but the state it *failed* to
+    // reset is not.
+    const { user, rerender, onClose } = setup();
+    apiMocks.previewBulk.mockReturnValue(new Promise(() => undefined));
+
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' })).toHaveAttribute(
+        'aria-busy',
+        'true'
+      );
+    });
+
+    rerender(
+      <BulkReservationModal open={false} onClose={onClose} anchorDate={ANCHOR} canReserveMonth />
+    );
+    rerender(<BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth />);
+
+    const primary = screen.getByRole('button', { name: 'Vyberte dny' });
+    expect(primary).not.toHaveAttribute('aria-busy');
+    // Disabled because nothing is selected yet, which is step 1's resting
+    // state — not because a request from the previous opening is still out.
+    expect(primary).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    expect(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' })).toBeEnabled();
+  });
+
   it('asks for the proposal with the picked days in ascending order', async () => {
     const { user } = setup();
     // Picked out of order on purpose.
