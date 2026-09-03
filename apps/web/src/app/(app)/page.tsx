@@ -1,12 +1,13 @@
-import { SectionPlaceholder } from '../../shell/section-placeholder';
+import { LotScreen } from '../../lot/lot-screen';
 
 /**
- * The parking overview — the application's home screen.
+ * The parking overview — the application's home screen (Task 24).
  *
- * Task 24 builds it: the IT/Shared groups, the spots as boxes, the coloured
- * cars, the waitlist badges and the realtime cell-lock indicator. This task
- * only routes to it.
+ * A server component that renders one client component and nothing else. The
+ * screen needs the session, the query cache and the socket, all of which live
+ * below `app/providers.tsx`'s single `'use client'` boundary; there is nothing
+ * left for this file to do on the server.
  */
 export default function LotPage() {
-  return <SectionPlaceholder section="lot" />;
+  return <LotScreen />;
 }

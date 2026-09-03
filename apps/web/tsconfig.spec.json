@@ -2,11 +2,17 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "module": "commonjs",
+    "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "types": ["jest", "node"]
   },
+  // Without its own `exclude`, this config would inherit `tsconfig.json`'s —
+  // and since that parent's exclude glob deliberately matches every
+  // `.spec.*`/`.test.*` extension this file's own `include` below lists,
+  // inheriting it would silently empty this program to zero files (see
+  // `doc/decision/0126-*`). An explicit empty override is the fix.
+  "exclude": [],
   "include": [
     "index.d.ts",
     "next-env.d.ts",

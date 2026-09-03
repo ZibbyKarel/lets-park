@@ -50,3 +50,65 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * Geometry of the parking-lot map (Task 24).
+ *
+ * These four are the only numbers on that screen the token scale cannot
+ * express: a parking bay is a physical shape from the design
+ * (`doc/design/lets-park-design.dc.html`, the `sc-for` over `group.spots`),
+ * not a step on a 4px spacing ramp, and rounding 236px onto `--space-*`
+ * would change the drawing. They live here — one place, named, with the
+ * design line beside them — rather than as literals sprinkled through TSX,
+ * and are spent as `h-[var(--lot-tile-h)]`, exactly the way
+ * `--control-h-*`, `--modal-w-*` and `--z-*` are spent (see the note at the
+ * bottom of `theme.css` for why those have no Tailwind namespace either).
+ *
+ * They are deliberately NOT in `libs/design-system/tokens`: a parking bay is
+ * domain geometry, and the design system must stay domain-free.
+ */
+:root {
+  /* `height:236px` on the bay. */
+  --lot-tile-h: 236px;
+  /* `flex:1 0 116px; max-width:152px` — a bay never stretches into a hall. */
+  --lot-tile-min-w: 116px;
+  --lot-tile-max-w: 152px;
+  /* The painted lines between bays: `3px` sides, `4px` at the kerb. */
+  --lot-line-w: 3px;
+  --lot-kerb-w: 4px;
+}
+
+/*
+ * The asphalt: two offset dot grids over the base fill, straight from the
+ * design's `background-image` on the map surface. Written as a class rather
+ * than a Tailwind arbitrary value because it is four comma-separated
+ * multi-value properties, which arbitrary-value syntax cannot carry legibly.
+ *
+ * Colours are token references, the same treatment `.lot-hatch` gives its own
+ * `rgba()` below: `color-mix(…, var(--neutral-0|--neutral-900) …, transparent)`
+ * in place of the design's literal white/black, so a token change (a theme
+ * pass, a brand refresh) moves the speckle along with everything else that
+ * reads `--neutral-0`/`--neutral-900` rather than leaving it behind.
+ */
+.lot-asphalt {
+  background-image:
+    radial-gradient(color-mix(in srgb, var(--neutral-0) 4.5%, transparent) 1px, transparent 1px),
+    radial-gradient(color-mix(in srgb, var(--neutral-900) 6%, transparent) 1px, transparent 1px);
+  background-size:
+    7px 7px,
+    11px 11px;
+  background-position:
+    0 0,
+    4px 6px;
+}
+
+/* The hatching over a cell somebody else is editing. */
+.lot-hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--brand-yellow) 22%, transparent) 0px,
+    color-mix(in srgb, var(--brand-yellow) 22%, transparent) 7px,
+    transparent 7px,
+    transparent 15px
+  );
+}

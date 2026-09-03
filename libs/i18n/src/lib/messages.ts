@@ -158,6 +158,138 @@ export interface CzechSettingsMessages {
   readonly preferredSpotUnavailable: string;
 }
 
+/**
+ * The parking-lot screen (Task 24) — `doc/design/screens/07-lot.png`,
+ * `12-lot-user.png`, `08-modal-reserve.png`, `09-modal-queue.png`.
+ *
+ * Every string below is transcribed from `doc/design/lets-park-design.dc.html`
+ * rather than written fresh, so the wording on screen is the wording the
+ * design was signed off with. Three groups of keys have no design original and
+ * say so on the key itself:
+ *
+ * - `bannerNotYetOpen*` — the design's `monthOpen()` is a boolean and only ever
+ *   draws "open" or "locked", but the contract's `MonthLockState` has a third
+ *   member the admin screen already labels "Zatím neotevřeno".
+ * - `bannerOpenForced` / `bannerNotYetOpenForced` — the dated sentence is only
+ *   true under `lockMode: 'AUTO'` (`monthWindowOverviewSchema`).
+ * - `realtime*` — the `rejected` socket status has no design state.
+ *
+ * **Counts are not ICU-pluralised, deliberately.** The design writes
+ * `freeCount + " volných"` flat, and `"{n} ve frontě"` / `"{free} z {total}
+ * volných"` are idiomatic Czech at every count. Where the design *does*
+ * decline (the admin screen's "1 den / 2 dny / 5 dní") that screen is Task 27's.
+ */
+export interface CzechLotMessages {
+  /** `4 volných` — the green-dot pill in the header. */
+  readonly freeCount: string;
+  /** `5 obsazených` — the blue-dot pill next to it. */
+  readonly takenCount: string;
+  /** The header's primary action. The modal behind it is Task 31. */
+  readonly bulkReservation: string;
+  /** Shown when the bulk modal is asked for before Task 31 has built it. */
+  readonly bulkComingSoon: string;
+
+  /** `1 z 4 volných` — right-hand meta of a group's rule. */
+  readonly groupFree: string;
+  /** Accessible name of a group's region. */
+  readonly groupLabel: string;
+
+  /** Body of a free tile. */
+  readonly free: string;
+  /** Accessible name of a free tile's button. */
+  readonly reserveSpotAction: string;
+  /** Accessible name of an occupied tile's button. */
+  readonly openSpotAction: string;
+  /** First line of the `⊘` tile in a month this caller may not book. */
+  readonly tileLocked: string;
+  /** First line of a cell held by somebody else. */
+  readonly tileEditing: string;
+  /** The yellow waitlist pill on a tile. */
+  readonly waiting: string;
+  /**
+   * Accessible name of the `⋯` admin button on a tile. Not a menu — it opens
+   * the same dialog `onOpen` does; see `doc/decision/0125-*`.
+   */
+  readonly spotMenu: string;
+  /** Spoken form of a plate for assistive technology, and the modal's fallback. */
+  readonly noPlate: string;
+
+  readonly legendTaken: string;
+  readonly legendFree: string;
+  readonly legendWaitlist: string;
+
+  /** `‹` / `›` / `Dnes` and the two selectors of the sticky day bar. */
+  readonly previousDay: string;
+  readonly nextDay: string;
+  readonly today: string;
+  readonly monthLabel: string;
+  readonly yearLabel: string;
+  /** Second line of the day bar on an ordinary day. */
+  readonly workday: string;
+  /** Second line on a public holiday: `STÁTNÍ SVÁTEK · Den české státnosti`. */
+  readonly holiday: string;
+  /** Second line on a Saturday or Sunday. */
+  readonly weekend: string;
+
+  /** Green banner, `lockMode: 'AUTO'` — carries the window's last day. */
+  readonly bannerOpen: string;
+  /** Green banner under `FORCE_OPEN`, where `windowTo` is hypothetical. */
+  readonly bannerOpenForced: string;
+  readonly bannerLockedAdmin: string;
+  readonly bannerLockedUser: string;
+  /** No design original — see the interface docs. */
+  readonly bannerNotYetOpen: string;
+  readonly bannerNotYetOpenForced: string;
+
+  /** `Místo E2.92` — the modal's eyebrow pill. */
+  readonly modalEyebrow: string;
+  readonly titleReserve: string;
+  readonly titleQueue: string;
+  /**
+   * The caller is **already** in this cell's queue. Distinct from
+   * {@link titleQueue}: the design's prototype had no notion of queue
+   * membership, so it offered only "join", and a browser run of the real
+   * screen showed the modal headed "Přidat se do fronty" above a button
+   * reading "Odejít z fronty".
+   */
+  readonly titleQueued: string;
+  readonly titleMine: string;
+  readonly titleEdit: string;
+  readonly titleInfo: string;
+  readonly subReserve: string;
+  readonly subQueue: string;
+  /** Pairs with {@link titleQueued}. */
+  readonly subQueued: string;
+  readonly subMine: string;
+  readonly subMineLocked: string;
+  readonly subInfo: string;
+  readonly subAdmin: string;
+  readonly subTaken: string;
+  readonly ctaReserve: string;
+  readonly ctaQueue: string;
+  readonly cancelReservation: string;
+  readonly close: string;
+  readonly queueHeading: string;
+  readonly queueEmpty: string;
+  readonly occupiedBy: string;
+  /** Shown to a caller who is already queued for the spot. */
+  readonly queuePosition: string;
+  readonly leaveQueue: string;
+  readonly lockNote: string;
+
+  /** The lot has no active spots at all. */
+  readonly emptyTitle: string;
+  readonly emptyDescription: string;
+
+  /**
+   * The socket's `rejected` status — terminal until somebody asks again
+   * (`doc/decision/0061-*`). `realtimeReconnect` is the control that calls
+   * `reconnect()`; without it the grid stops updating silently.
+   */
+  readonly realtimeRejected: string;
+  readonly realtimeReconnect: string;
+}
+
 export interface CzechMessages {
   readonly errors: CzechErrorMessages;
   readonly shell: CzechShellMessages;
@@ -165,6 +297,7 @@ export interface CzechMessages {
   readonly nav: CzechNavMessages;
   readonly sections: CzechSectionMessages;
   readonly settings: CzechSettingsMessages;
+  readonly lot: CzechLotMessages;
 }
 
 export const csMessages: CzechMessages = {
@@ -224,6 +357,81 @@ export const csMessages: CzechMessages = {
     icsUnavailable: 'Odkaz na kalendář teď není k dispozici. Zkuste to prosím znovu za chvíli.',
     preferredSpotUnavailable:
       'Preferované místo už není k dispozici. Zvolte prosím jiné, nebo možnost Bez preference.',
+  },
+  lot: {
+    freeCount: '{count} volných',
+    takenCount: '{count} obsazených',
+    bulkReservation: 'Hromadná rezervace',
+    bulkComingSoon: 'Hromadná rezervace se právě připravuje.',
+
+    groupFree: '{free} z {total} volných',
+    groupLabel: 'Skupina {group}',
+
+    free: 'Volné',
+    reserveSpotAction: 'Rezervovat místo {label}',
+    openSpotAction: 'Otevřít místo {label}',
+    tileLocked: 'rezervace uzamčeny',
+    tileEditing: 'právě upravuje',
+    waiting: '{count} ve frontě',
+    spotMenu: 'Možnosti místa {label}',
+    noPlate: 'SPZ neuvedena',
+
+    legendTaken: 'obsazeno',
+    legendFree: 'volné',
+    legendWaitlist: 'waitlist / editace',
+
+    previousDay: 'Předchozí den',
+    nextDay: 'Následující den',
+    today: 'Dnes',
+    monthLabel: 'Měsíc',
+    yearLabel: 'Rok',
+    workday: 'Pracovní den',
+    holiday: 'Státní svátek · {name}',
+    weekend: 'Víkend',
+
+    bannerOpen: 'Rezervace na {month} jsou otevřené — zapisovat lze do {until}.',
+    bannerOpenForced: 'Rezervace na {month} jsou otevřené.',
+    bannerLockedAdmin:
+      'Rezervace na {month} jsou uzamčené. Jako admin je můžete dál upravovat i rušit.',
+    bannerLockedUser:
+      'Rezervace na {month} jsou uzamčené. Novou rezervaci už nezaložíte, svoji můžete kdykoliv zrušit.',
+    bannerNotYetOpen: 'Rezervace na {month} se zatím neotevřely — otevřou se {from}.',
+    bannerNotYetOpenForced: 'Rezervace na {month} se zatím neotevřely.',
+
+    modalEyebrow: 'Místo {label}',
+    titleReserve: 'Rezervovat místo',
+    titleQueue: 'Přidat se do fronty',
+    titleQueued: 'Jste ve frontě',
+    titleMine: 'Vaše rezervace',
+    titleEdit: 'Upravit rezervaci',
+    titleInfo: 'Rezervace uzamčeny',
+    subReserve: 'Zapište se na {date}.',
+    subQueue:
+      'Místo je na tento den obsazené. Zařadíme vás do fronty — pokud se uvolní, místo dostane první v řadě.',
+    subQueued: 'Až se místo uvolní, dostane ho první v řadě. Z fronty můžete kdykoliv odejít.',
+    subMine: 'Rezervaci můžete zrušit — místo se tím uvolní prvnímu ve frontě.',
+    subMineLocked:
+      'Měsíc je uzamčený — novou rezervaci už nezaložíte, tuhle ale můžete kdykoliv zrušit.',
+    subInfo:
+      'Tohle místo je volné, ale měsíc už je pro rezervace zavřený. Obraťte se na admina, který může místo přiřadit i po uzamčení.',
+    subAdmin: 'Jako admin můžete rezervaci kdykoliv zrušit.',
+    subTaken: 'Místo je na tento den obsazené.',
+    ctaReserve: 'Rezervovat',
+    ctaQueue: 'Přidat se do fronty',
+    cancelReservation: 'Zrušit rezervaci',
+    close: 'Zavřít',
+    queueHeading: 'Fronta',
+    queueEmpty: 'Nikdo nečeká — budete první v řadě.',
+    occupiedBy: 'obsazeno · {plate}',
+    queuePosition: 'Ve frontě jste {position}. v pořadí.',
+    leaveQueue: 'Odejít z fronty',
+    lockNote: 'Rezervace na {month} jsou uzamčené — nové zápisy ani frontu už nelze měnit.',
+
+    emptyTitle: 'Na parkovišti nejsou žádná aktivní místa.',
+    emptyDescription: 'Jakmile admin nějaké místo přidá, objeví se tady.',
+
+    realtimeRejected: 'Živé aktualizace jsou odpojené — přehled se nemusí sám obnovovat.',
+    realtimeReconnect: 'Připojit znovu',
   },
   errors: {
     SPOT_ALREADY_RESERVED: 'Toto parkovací místo je na daný den už rezervované.',
