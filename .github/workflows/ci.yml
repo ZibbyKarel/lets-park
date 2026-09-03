@@ -5,7 +5,7 @@
 #
 #   verify    formatting, lint, typecheck, the unit suites and both builds.
 #             No Docker, no database — this is the fast lane.
-#   database  the seven `*.db.spec.ts` suites, against a real PostgreSQL 17.
+#   database  the eight `*.db.spec.ts` suites, against a real PostgreSQL 17.
 #   images    the two production images actually build.
 #
 # `database` is not a nicety. `apps/api/jest.config.cts` **excludes**

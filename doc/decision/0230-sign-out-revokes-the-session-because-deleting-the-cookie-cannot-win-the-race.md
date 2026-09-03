@@ -77,9 +77,41 @@ sent. Every ordering variant considered — a form POST navigation instead of
 `fetch`, a Server Action, `signOut({ redirect: false })` followed by
 `location.replace`, dropping `prefetch` on the top bar's `<Link>` — narrows the
 window without closing it, and each leaves the fix depending on *which* request
-happened to race, which the trace never captured.
+happened to race.
 
-Revocation does not depend on knowing which request raced. That is the argument.
+**And that request was never identified.** It does not need to be, but saying so
+is only worth anything with the candidate set written down — otherwise "it does
+not matter which" is indistinguishable from "we did not look". The capture
+bounds the set completely: across 20 sign-out journeys, exactly **three classes**
+of session-bearing request appear on the sign-out path, and they are the three in
+the trace above.
+
+| request | carries the session cookie | re-issues it | why |
+| --- | --- | --- | --- |
+| `GET /` (the document) | yes | **yes** | the root layout `await auth()`s |
+| `GET /?_rsc` (RSC prefetch) | yes | **yes** | same layout, same `auth()` |
+| `GET /?_rsc` (second prefetch) | yes | **yes** | same |
+| `GET /api/auth/csrf` | yes | no | excluded from the proxy matcher; returns a token without reading the session |
+| `POST /api/auth/signout` | yes | no — it *clears* | same exclusion; this is the sign-out itself |
+| `GET /api/auth/session` | — | — | **0 occurrences**; not on this path at all (§1) |
+
+The three that re-issue do so through **one mechanism, not three**: the proxy's
+`auth()` (`apps/web/src/proxy.ts`, `doc/decision/0100-*`), which under
+`strategy: 'jwt'` re-encodes and re-sets the cookie on every read. `/` and both
+`?_rsc` requests match `proxy.ts`'s `config.matcher`; the two `/api/auth/*`
+requests are excluded by it by name, which is why their non-re-issuance is a
+property of the routing table rather than an observation that could have gone
+the other way on a different run. The three differ only in which happens to
+answer last, and that ordering belongs to Next.js's prefetcher, not to this
+application.
+
+So the enumeration is exhaustive over the observed path, every member of the
+re-issuing class shares one cause, and the two `/api/auth/*` requests plus the
+absent `session` endpoint are excluded by mechanism rather than by not having
+been seen. Naming the winner would identify which prefetch finished last; it
+would not name a different defect, and no fix follows from it. **Revocation does
+not depend on knowing which request raced** — it refuses all three, and anything
+else carrying that `sub`. That is the argument.
 
 ### Why the key is `sub`, and why that is enough
 

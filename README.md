@@ -53,7 +53,7 @@ npm run format:check   # add --all to check the whole tree, as CI does
 npx nx run api:test-db                     # the database suites (needs Postgres)
 npx nx run web:test -- lot-view            # one file, by name pattern
 npx nx run api-e2e:e2e                     # the API over real HTTP
-npx nx run web-e2e:e2e                     # the six Playwright journeys
+npx nx run web-e2e:e2e                     # the eight Playwright journeys
 ```
 
 `doc/testing.md` explains what each layer covers and what has to be running.
@@ -190,11 +190,11 @@ The MVP targets a single instance, and there is no Redis, no BullMQ and no
 broker. The seams for adding them exist and are documented; none of them is
 built:
 
-| What                       | Where the seam is                                                                                                                                     | The upgrade                                                                                                                                                         |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Socket.io across instances | `configureRealtime` in `apps/api/src/realtime/realtime-io.adapter.ts`                                                                                 | Give the adapter `@socket.io/redis-adapter` so a broadcast from one instance reaches sockets held by another. Nothing above the adapter changes.                    |
-| Cell locks                 | `LockService` (`apps/api/src/realtime/`) — an interface over an in-process map with a TTL                                                             | Back it with Redis `SET NX PX`. The TTL is already the contract (`REALTIME_LOCK_TTL_MS`, `doc/decision/0110-the-cell-lock-ttl-is-thirty-seconds-and-configurable`). |
-| Scheduled work             | any in-process schedule — today the daily Slack summary, which arrives with the Slack module on `feat/lets-park-mvp` (this branch's base predates it) | An in-process schedule fires once per instance, so N instances post N summaries. BullMQ with a repeatable job, or a single elected leader, is the fix.              |
+| What                       | Where the seam is                                                                                                           | The upgrade                                                                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Socket.io across instances | `configureRealtime` in `apps/api/src/realtime/realtime-io.adapter.ts`                                                       | Give the adapter `@socket.io/redis-adapter` so a broadcast from one instance reaches sockets held by another. Nothing above the adapter changes.                    |
+| Cell locks                 | `LockService` (`apps/api/src/realtime/`) — an interface over an in-process map with a TTL                                   | Back it with Redis `SET NX PX`. The TTL is already the contract (`REALTIME_LOCK_TTL_MS`, `doc/decision/0110-the-cell-lock-ttl-is-thirty-seconds-and-configurable`). |
+| Scheduled work             | `ScheduledJobRunner` (`apps/api/src/scheduling/`) — today the daily Slack summary in `apps/api/src/slack/` (`doc/slack.md`) | An in-process schedule fires once per instance, so N instances post N summaries. BullMQ with a repeatable job, or a single elected leader, is the fix.              |
 
 Until then: **run one instance.** `doc/realtime.md` and `doc/api-operations.md`
 describe what each seam guarantees today.

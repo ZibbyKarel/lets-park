@@ -101,7 +101,10 @@ describe('createSignOutRegistry', () => {
     expect(registry.isRevoked({ sub: SESSION_A })).toBe(true);
   });
 
-  it('drops a revocation once the token it refuses could no longer be valid', () => {
+  // The boundary is retention, not token validity — those differ by δ + 15 s,
+  // and `retentionSeconds`' docblock derives the difference. These two tests
+  // assert the window the code actually implements.
+  it('drops a revocation once the retention window has closed', () => {
     const { registry, setNow } = registryAt(1000);
     registry.revoke({ sub: SESSION_A });
     expect(registry.size()).toBe(1);
@@ -114,7 +117,7 @@ describe('createSignOutRegistry', () => {
     expect(registry.isRevoked({ sub: SESSION_A })).toBe(false);
   });
 
-  it('keeps a revocation for as long as a session cookie can live', () => {
+  it('keeps a revocation for the whole retention window', () => {
     const { registry, setNow } = registryAt(1000);
     registry.revoke({ sub: SESSION_A });
 
@@ -151,5 +154,23 @@ describe('sharedRevokedStore', () => {
     process.env['NEXT_RUNTIME'] = 'edge';
 
     expect(() => sharedRevokedStore()).toThrow(SignOutRevocationUnavailableError);
+  });
+
+  it('refuses a set-but-empty NEXT_RUNTIME rather than reading it as "not Next.js"', () => {
+    // `''` is a variable that was *set*, to something that is not `nodejs`. An
+    // earlier guard exempted it beside `undefined`, so the one value that looks
+    // most like a misconfiguration was the one value that slipped through — a
+    // security guard failing open on its most likely bad input.
+    process.env['NEXT_RUNTIME'] = '';
+
+    expect(() => sharedRevokedStore()).toThrow(SignOutRevocationUnavailableError);
+  });
+
+  it('serves a process where NEXT_RUNTIME is absent, which is not the same as blank', () => {
+    // Jest is such a process, and so is any plain Node import of `libs/auth`.
+    // Absent means "not Next.js at all"; there is no non-Node runtime to refuse.
+    delete process.env['NEXT_RUNTIME'];
+
+    expect(() => sharedRevokedStore()).not.toThrow();
   });
 });

@@ -97,7 +97,10 @@ not double-invoke effects. **The cause is unknown.** It is somewhere in
 >
 > Measured **per document** — an init script, which Playwright runs once per
 > document, tagging each socket with the realm that opened it — across four full
-> traced runs: **89 documents, 89 sockets, none with more than one.** The
+> traced runs: **89 documents, 89 sockets, none with more than one.** (That
+> histogram was collected with a counter since replaced, and has not been
+> re-collected; `doc/decision/0221-*` labels its provenance and says why the
+> retraction does not rest on it.) The
 > paragraph above was written having correctly ruled `StrictMode` out and then
 > having kept the phenomenon anyway; and it was checkable from the traces
 > already quoted in this record, where every "second socket" re-walks the

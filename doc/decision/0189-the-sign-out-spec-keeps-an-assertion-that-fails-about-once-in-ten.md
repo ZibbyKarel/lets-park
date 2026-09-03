@@ -35,9 +35,13 @@
 > part that remains open, deliberately and with reasons, is the Okta **access
 > token**, which is not revoked at the issuer.
 >
-> `login.spec.ts:94` is unchanged — not retried, not relaxed, not `fixme` — and
-> is joined by a deterministic sibling that asserts the same property without
-> needing the race to occur.
+> `login.spec.ts:100` — the same test this record opens on at `:76`, moved down
+> the file by the specs added since — is unchanged: not retried, not relaxed,
+> not `fixme`. It is joined by a deterministic sibling that asserts the same
+> property without needing the race to occur.
+>
+> Line numbers below are as of this record's writing. `:76` and `:100` are the
+> same test; the sections after this one are left as the record of their moment.
 
 ## What
 

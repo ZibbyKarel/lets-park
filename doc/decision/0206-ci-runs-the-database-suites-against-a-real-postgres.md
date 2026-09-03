@@ -10,7 +10,7 @@ container) and `images` (both production images build).
 
 - **Without `database`, a green pipeline would say nothing about the code most
   likely to be wrong.** `apps/api/jest.config.cts` excludes `*.db.spec.ts` from
-  `api:test` on purpose — they need a server. That is seven suites and 80 tests
+  `api:test` on purpose — they need a server. That is eight suites and 92 tests
   covering `SELECT … FOR UPDATE`, transaction isolation, and the waitlist
   promotion that shares a cancellation's transaction. A test double cannot
   exercise a row lock, so there is no version of this that runs without a
@@ -20,10 +20,10 @@ container) and `images` (both production images build).
 
   | what was broken | exit |
   | --- | --- |
-  | nothing (control) | `0`, 7 suites / 80 tests |
+  | nothing (control) | `0`, 8 suites / 92 tests |
   | Postgres unreachable (port 59999) | `1`, `Got error running globalSetup … [AggregateError]` |
   | `DATABASE_URL` absent, no `.env` present | `1`, `DATABASE_URL is not set. … It does not skip itself, on purpose.` |
-  | `FOR UPDATE` removed from `WaitlistPromotionService` | `1`, 1 of 80 tests |
+  | `FOR UPDATE` removed from `WaitlistPromotionService` | `1`, 1 of 92 tests |
 
   The third row is the one that matters most: a suite that skipped itself
   without a database would turn a missing service into a green build.

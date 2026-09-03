@@ -307,6 +307,13 @@ A hold this client never acquired is never released: a `HELD_BY_OTHER` answer
 leaves nothing to give back, and emitting `cell:unlock` for it would ask the
 server to drop somebody else's lock.
 
+**One case is not fully closed, and it is a product question rather than a bug:**
+when the same person has the same bay open in **two tabs**, closing the second
+tab's dialog still drops the hold the first tab is showing. What that costs, how
+long it lasts (~15 s) and why closing it means changing how a hold is *acquired*
+are in ["Known residual: one user, two tabs, one bay"](#known-residual-one-user-two-tabs-one-bay)
+under The gateway.
+
 ### 3. The hold is re-taken after a reconnect
 
 A dropped socket drops the server's lock with it, so the hook re-requests on the

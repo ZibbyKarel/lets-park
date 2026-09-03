@@ -200,17 +200,18 @@ services:
       - THROTTLE_LIMIT
       - THROTTLE_STRICT_TTL_MS
       - THROTTLE_STRICT_LIMIT
-      # Slack. These belong to `apps/api/src/slack`, which lives on
-      # `feat/lets-park-mvp` and which this branch's base (`task-28-e2e`)
-      # predates — so they are listed, not defaulted: unset here today, and
-      # forwarded the moment the module and its `.env` arrive.
-      # `SLACK_ENABLED` already defaults to `false`, so an unset Slack is a
-      # working Slack-less API rather than a broken one
-      # (`doc/decision/0130-slack-is-off-by-default-and-there-is-no-dev-only-branch`,
-      # on that branch).
+      # Slack. These belong to `apps/api/src/slack` (`doc/slack.md`). Listed,
+      # not defaulted: a bare entry is forwarded only when it is set, so an
+      # unset Slack is a working Slack-less API rather than a broken one —
+      # `SLACK_ENABLED` defaults to `false` in `apps/api/src/env.ts`
+      # (`doc/decision/0130-slack-is-off-by-default-and-there-is-no-dev-only-branch`).
       #
-      # **`SLACK_BOT_TOKEN` is a secret.** It is here and nowhere else: not in
-      # `.env.docker.example`, not in an image layer, not in a log line.
+      # **`SLACK_BOT_TOKEN` is a secret, and no committed file carries its
+      # value.** `.env.docker.example` names it — commented and empty, beside
+      # `SLACK_ENABLED=false` — so the containerised stack documents it; the
+      # value itself belongs only in `.env.docker` (git-ignored) or the
+      # platform's secret store, never in an image layer and never in a log
+      # line.
       - SLACK_ENABLED
       - SLACK_BOT_TOKEN
       - SLACK_CHANNEL_ID
