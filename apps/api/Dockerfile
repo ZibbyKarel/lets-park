@@ -117,8 +117,8 @@ RUN npm install --no-save --ignore-scripts --no-audit --no-fund \
 # `prisma.config.ts` resolves the schema as
 # `join(import.meta.dirname, 'libs', 'database')`, so the two have to keep this
 # relative layout.
-COPY --from=builder --chown=node:node /workspace/prisma.config.ts ./prisma.config.ts
-COPY --from=builder --chown=node:node /workspace/libs/database/prisma ./libs/database/prisma
+COPY --from=builder /workspace/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /workspace/libs/database/prisma ./libs/database/prisma
 
 CMD ["npx", "prisma", "migrate", "deploy"]
 
@@ -134,12 +134,14 @@ ENV PORT=3000
 
 WORKDIR /app
 
-# Owned by `node`, not root: the process must not be able to rewrite its own
-# code. `--chown` on COPY rather than a `chown -R` layer, which would duplicate
-# every file it touches.
-COPY --from=runtime-deps --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /workspace/dist/apps/api/package.json ./package.json
-COPY --from=builder --chown=node:node /workspace/dist/apps/api/main.js ./main.js
+# Left owned by **root** and merely readable by the user that runs it, so the
+# process cannot rewrite its own code. This is the opposite of the usual
+# `COPY --chown=node:node` recipe, and the difference is measurable: with
+# `--chown`, `docker exec … sh -c 'echo x >> /app/main.js'` inside the running
+# container succeeds.
+COPY --from=runtime-deps /app/node_modules ./node_modules
+COPY --from=builder /workspace/dist/apps/api/package.json ./package.json
+COPY --from=builder /workspace/dist/apps/api/main.js ./main.js
 
 # The `node` user (uid 1000) ships with the base image. Everything after this
 # line runs as it — including the HEALTHCHECK.

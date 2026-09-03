@@ -71,9 +71,17 @@ WORKDIR /app
 # (see next.config.ts). The two things the trace deliberately does not copy —
 # the client-side static chunks and `public/` — are placed where the server
 # looks for them: it chdir's to its own directory and reads `./.next`.
-COPY --from=builder --chown=node:node /workspace/apps/web/.next/standalone ./
-COPY --from=builder --chown=node:node /workspace/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder --chown=node:node /workspace/apps/web/public ./apps/web/public
+# Root-owned and read-only to the user that runs them, so the server cannot
+# rewrite its own bundle. (The usual Next.js Docker recipe chowns all of this
+# to the app user; with that, `echo x >> apps/web/server.js` from inside the
+# running container succeeds.)
+COPY --from=builder /workspace/apps/web/.next/standalone ./
+COPY --from=builder /workspace/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /workspace/apps/web/public ./apps/web/public
+
+# The one directory the server legitimately writes to at runtime: Next's
+# incremental cache. Nothing else under /app is writable by `node`.
+RUN mkdir -p ./apps/web/.next/cache && chown -R node:node ./apps/web/.next/cache
 
 USER node
 

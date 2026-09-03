@@ -157,6 +157,19 @@ services:
       # prop, so it must be one URL that works from both — hence the
       # `lets-park-api` alias and the /etc/hosts line above.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL in .env.docker}
+      # The app's **public** origin, and required in a container for a reason
+      # that only shows up in one: Next's request interceptor (`proxy.ts`) sees
+      # a request URL built from the address the server bound, not from the
+      # Host header. Auth.js then writes that origin into the `callbackUrl` it
+      # sends to the sign-in page, and after a successful sign-in redirects the
+      # browser to it. Measured: without this variable the browser finished a
+      # complete, valid OIDC round trip and then landed on
+      # `http://0.0.0.0:3000` — `chrome-error://chromewebdata/`, with a good
+      # session cookie already set. With it, the same run reaches `/`. The
+      # redirect_uri is *not* affected (it was correct either way), which is
+      # what makes this fail so late and look like an issuer problem.
+      # See doc/decision/0202-*.
+      AUTH_URL: ${AUTH_URL:?set AUTH_URL in .env.docker}
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env.docker}
       AUTH_OKTA_ISSUER: ${AUTH_OKTA_ISSUER:?set AUTH_OKTA_ISSUER in .env.docker}
       AUTH_OKTA_CLIENT_ID: ${AUTH_OKTA_CLIENT_ID:?set AUTH_OKTA_CLIENT_ID in .env.docker}
