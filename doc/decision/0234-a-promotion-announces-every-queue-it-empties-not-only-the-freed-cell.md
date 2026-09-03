@@ -47,3 +47,13 @@ holding row locks. Bounded by how many queues one person can be in on one day �
 at most the number of spots — and in practice one or two. The recounts are
 sequential rather than fanned out for that reason: an interactive Prisma
 transaction is not a place to run queries in parallel.
+
+**This record named the wrong risk, and the right one went unnamed.** The
+recounts are harmless: a `SELECT count(*)` takes no row locks and cannot be a
+party to a deadlock. What actually broke was the *other* change above — swapping
+`deleteMany` for `DELETE … RETURNING` moved that statement onto `$queryRaw`, and
+a deadlock on a raw statement comes back as `P2010`, which the cancellation
+retry did not recognise. Half the concurrent cancellations in
+`waitlist-concurrency.db.spec.ts` started failing. Fixed and measured in
+`doc/decision/0240-*`; `doc/decision/0241-*` records why the recounts stayed
+where they are.

@@ -32,6 +32,7 @@ import { Prisma } from '@lets-park/database';
 import type { PrismaClient } from '@lets-park/database';
 import { createPrismaClient } from '@lets-park/database';
 import {
+  isWriteConflict,
   mapPrismaErrorCode,
   mapUniqueConstraintViolation,
 } from '../common/filters/contract-exception.filter';
@@ -326,6 +327,73 @@ describe('what PostgreSQL actually does', () => {
       } finally {
         // Undo whichever side committed — this case cannot use `rejectedBy`,
         // because it needs both transactions to really run.
+        await prisma.parkingSpot.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+      }
+    });
+
+    /**
+     * The same deadlock, lost by a **raw** statement — a different error code
+     * for an identical condition.
+     *
+     * This is the shape nobody had pinned, and its absence cost a real
+     * regression: `WaitlistPromotionService` was changed from `deleteMany` to
+     * `DELETE … RETURNING`, which moved its cross-cell delete off the query API
+     * and onto `$queryRaw`, and from that moment a deadlock whose victim was
+     * that statement stopped matching the cancellation retry's `P2034` test.
+     * Half of `waitlist-concurrency.db.spec.ts`'s concurrent cancellations
+     * failed. `doc/decision/0240-*`.
+     *
+     * Deliberately the same two-`ParkingSpot` cycle as above, with only the
+     * second statement swapped for `$executeRaw`, so the *one* thing that
+     * differs between the two assertions is how the statement was sent.
+     */
+    it('is P2010 wrapping the driver’s 40P01 when the victim is a raw statement', async () => {
+      const [first, second] = await Promise.all([
+        prisma.parkingSpot.create({ data: { label: unique('SPOT'), group: 'IT' } }),
+        prisma.parkingSpot.create({ data: { label: unique('SPOT'), group: 'IT' } }),
+      ]);
+
+      try {
+        const reached = { one: resolvable(), two: resolvable() };
+        const lockThen = async (own: string, other: string, mine: keyof typeof reached) => {
+          await prisma.$transaction(
+            async (tx) => {
+              await tx.$executeRaw`
+                UPDATE "ParkingSpot" SET "group" = 'SHARED' WHERE "id" = ${own}::uuid
+              `;
+              reached[mine].resolve();
+              await Promise.all([reached.one.promise, reached.two.promise]);
+              await tx.$executeRaw`
+                UPDATE "ParkingSpot" SET "group" = 'SHARED' WHERE "id" = ${other}::uuid
+              `;
+            },
+            { maxWait: 10_000, timeout: 30_000 }
+          );
+        };
+
+        const outcomes = await Promise.allSettled([
+          lockThen(first.id, second.id, 'one'),
+          lockThen(second.id, first.id, 'two'),
+        ]);
+        const failure = outcomes.find((outcome) => outcome.status === 'rejected');
+        expect(failure).toBeDefined();
+
+        const error = (failure as PromiseRejectedResult).reason as unknown;
+        expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+        const known = error as Prisma.PrismaClientKnownRequestError;
+
+        // The whole point: **not** P2034.
+        expect(known.code).toBe('P2010');
+        expect(known.meta).toMatchObject({
+          driverAdapterError: {
+            cause: { originalCode: '40P01', kind: 'TransactionWriteConflict' },
+          },
+        });
+
+        // And both consumers of that shape agree it is a lost race, not a bug.
+        expect(isWriteConflict(known)).toBe(true);
+        expect(mapPrismaErrorCode(known)).toBe('CONFLICT');
+      } finally {
         await prisma.parkingSpot.deleteMany({ where: { id: { in: [first.id, second.id] } } });
       }
     });

@@ -98,6 +98,31 @@ const PRISMA_FOREIGN_KEY_CONSTRAINT = 'P2003';
  */
 export const PRISMA_WRITE_CONFLICT = 'P2034';
 
+/**
+ * The same failure, arriving from a **raw** statement instead of the query API.
+ *
+ * `P2034` is what Prisma raises when *its own* generated SQL is the deadlock
+ * victim. A statement sent through `$queryRaw` / `$executeRaw` never gets that
+ * code: the driver's error is wrapped verbatim as `P2010` ("Raw query failed"),
+ * and the `40P01` survives only inside `meta`. Two codes, one condition — which
+ * is why {@link isWriteConflict} exists rather than a bare `=== P2034`.
+ *
+ * `doc/decision/0240-*` has the regression this cost. Pinned against a live
+ * server by `database-contract.db.spec.ts` ("a deadlock on a raw statement").
+ */
+const PRISMA_RAW_QUERY_FAILED = 'P2010';
+
+/**
+ * PostgreSQL SQLSTATE class 40, *transaction rollback* — the only class whose
+ * remedy is "run the whole transaction again".
+ *
+ * `40001` serialization_failure, `40P01` deadlock_detected. Matched by the
+ * two-character class rather than by listing the members, because the class is
+ * the property that matters: the server has already rolled the transaction back
+ * and nothing it did survives, so a retry starts from a clean slate.
+ */
+const SQLSTATE_TRANSACTION_ROLLBACK = '40';
+
 /** Narrows an unknown to a plain object without asserting its contents. */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -147,6 +172,55 @@ function driverAdapterConstraint(meta: Record<string, unknown> | undefined): str
     return fields.filter((entry): entry is string => typeof entry === 'string');
   }
   return [];
+}
+
+/**
+ * The SQLSTATE the server actually returned, for a `P2010`.
+ *
+ * Both places it can hide are read, for the same reason `uniqueConstraintTarget`
+ * reads two: `meta.code` is what Prisma documents for `P2010` and what the
+ * query-engine-backed client emits, and `meta.driverAdapterError.cause.
+ * originalCode` is what `@prisma/adapter-pg` actually produces today. Measured,
+ * for a raw `DELETE` that lost a deadlock:
+ *
+ * ```
+ * code: 'P2010'
+ * message: 'Raw query failed. Code: `40P01`. Message: `deadlock detected`'
+ * meta: { driverAdapterError: { cause: {
+ *          originalCode: '40P01', originalMessage: 'deadlock detected',
+ *          kind: 'TransactionWriteConflict' } } }
+ * ```
+ *
+ * The message is *not* parsed. It carries the same code, but a predicate that
+ * decides whether to re-run a transaction on the strength of a substring in a
+ * human-readable string is one upstream rewording away from silently doing the
+ * wrong thing, and the wrong thing here is invisible: it does not throw, it just
+ * stops retrying.
+ */
+function rawQuerySqlState(meta: Record<string, unknown> | undefined): string | undefined {
+  const documented = meta?.['code'];
+  if (typeof documented === 'string') {
+    return documented;
+  }
+  const original = asRecord(asRecord(meta?.['driverAdapterError'])?.['cause'])?.['originalCode'];
+  return typeof original === 'string' ? original : undefined;
+}
+
+/**
+ * True when the transaction lost a race and the server rolled it back — whether
+ * the losing statement was Prisma's own SQL or one of ours.
+ *
+ * This is the predicate a retry loop wants; `mapPrismaErrorCode` answers the
+ * separate question of what to tell a client once retrying has stopped.
+ */
+export function isWriteConflict(error: Prisma.PrismaClientKnownRequestError): boolean {
+  if (error.code === PRISMA_WRITE_CONFLICT) {
+    return true;
+  }
+  if (error.code !== PRISMA_RAW_QUERY_FAILED) {
+    return false;
+  }
+  return rawQuerySqlState(error.meta)?.startsWith(SQLSTATE_TRANSACTION_ROLLBACK) === true;
 }
 
 /**
@@ -254,6 +328,11 @@ export function mapPrismaErrorCode(
       // race against a concurrent change". Retrying is the right advice, and it
       // is what the Czech copy for this code already tells the user.
       return 'CONFLICT';
+    case PRISMA_RAW_QUERY_FAILED:
+      // The same fact about a raw statement — but only for class 40. Every
+      // *other* `P2010` is a broken query or a bad cast, which is a defect and
+      // must keep its 500 rather than be dressed up as somebody else's race.
+      return isWriteConflict(error) ? 'CONFLICT' : undefined;
     default:
       return undefined;
   }

@@ -137,6 +137,65 @@ describe('a cancellation whose retries all lose', () => {
     expect(attempts()).toBe(MAX_CANCEL_ATTEMPTS);
   });
 
+  it('retries the same deadlock when it arrives from a raw statement, as P2010', async () => {
+    // The regression `doc/decision/0240-*` records. `promote`'s cross-cell
+    // `DELETE … RETURNING` is a `$queryRaw`, so when *it* is the deadlock victim
+    // the driver's error is wrapped rather than translated, and the code is
+    // `P2010`, not `P2034`. A predicate that tested only `P2034` stopped
+    // retrying — silently, because nothing throws when a retry does not happen.
+    //
+    // Transcribed from a live server, like every other shape in this file:
+    // `database-contract.db.spec.ts` ("a deadlock on a raw statement") asserts
+    // it against PostgreSQL 17, so an upstream change fails there and this
+    // constant is what gets corrected.
+    const rawDeadlock = new Prisma.PrismaClientKnownRequestError(
+      '\nInvalid `prisma.$queryRaw()` invocation:\n\n\nRaw query failed. Code: `40P01`. Message: `deadlock detected`',
+      {
+        code: 'P2010',
+        clientVersion: '7.10.0',
+        meta: {
+          driverAdapterError: {
+            name: 'DriverAdapterError',
+            cause: {
+              originalCode: '40P01',
+              originalMessage: 'deadlock detected',
+              kind: 'TransactionWriteConflict',
+            },
+          },
+        },
+      }
+    );
+    const { prisma, attempts } = alwaysFailing(rawDeadlock);
+
+    await expect(serviceOver(prisma).cancel({ reservationId: 'r-1' }, ACTOR)).rejects.toMatchObject(
+      { code: 'CONFLICT' }
+    );
+    expect(attempts()).toBe(MAX_CANCEL_ATTEMPTS);
+  });
+
+  it('does not retry a raw query that failed for any other reason — that is a defect', async () => {
+    // The other half of the same predicate, and the reason it matches SQLSTATE
+    // class 40 rather than "any P2010": a malformed cast or a typo in raw SQL
+    // fails identically on every attempt, so retrying it only makes the defect
+    // take three times as long to report and holds row locks while it does.
+    const badCast = new Prisma.PrismaClientKnownRequestError(
+      'Raw query failed. Code: `22P02`. Message: `invalid input syntax for type uuid`',
+      {
+        code: 'P2010',
+        clientVersion: '7.10.0',
+        meta: {
+          driverAdapterError: {
+            cause: { originalCode: '22P02', kind: 'QueryError' },
+          },
+        },
+      }
+    );
+    const { prisma, attempts } = alwaysFailing(badCast);
+
+    await expect(serviceOver(prisma).cancel({ reservationId: 'r-1' }, ACTOR)).rejects.toBe(badCast);
+    expect(attempts()).toBe(1);
+  });
+
   it('does not retry anything else — a NOT_FOUND is final on the first attempt', async () => {
     const notFound = new DomainError('NOT_FOUND');
     const { prisma, attempts } = alwaysFailing(notFound);

@@ -70,7 +70,7 @@ import { AuditLogService } from '../audit/audit-log.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { DomainError } from '../common/errors/domain-error';
 import {
-  PRISMA_WRITE_CONFLICT,
+  isWriteConflict,
   mapUniqueConstraintViolation,
 } from '../common/filters/contract-exception.filter';
 import {
@@ -378,10 +378,10 @@ export class ReservationsService {
    * acquired a reservation elsewhere on that day between this transaction's
    * eligibility read and its insert.
    *
-   * **`P2034`, a deadlock** (`40P01`). Found by
-   * `waitlist-concurrency.db.spec.ts`, not by reasoning, and worth spelling out
-   * because it is not obvious. Two cancellations on different spots, same day,
-   * whose queues are headed by the same person:
+   * **A deadlock** (`40P01`). Found by `waitlist-concurrency.db.spec.ts`, not by
+   * reasoning, and worth spelling out because it is not obvious. Two
+   * cancellations on different spots, same day, whose queues are headed by the
+   * same person:
    *
    * ```
    * T1 (spot A)                            T2 (spot B)
@@ -405,6 +405,15 @@ export class ReservationsService {
    * reservation is committed by then, so the retry skips that candidate and
    * never reaches for the other cell at all.
    *
+   * Which of the two statements the server picks as the victim is not ours to
+   * choose, and it decides how the failure is *spelled*: the promotion's
+   * `INSERT` is Prisma's own SQL and comes back `P2034`, while the cross-cell
+   * `DELETE … RETURNING` is a `$queryRaw` and comes back `P2010` wrapping the
+   * same `40P01`. Both are the identical condition and both must be retried,
+   * which is why the test is {@link isWriteConflict} and not `code === 'P2034'`.
+   * Getting that wrong made half of `waitlist-concurrency.db.spec.ts`'s
+   * concurrent-cancellation runs fail — `doc/decision/0240-*`.
+   *
    * See `doc/decision/0065-*` for the full deadlock analysis and the
    * advisory-lock upgrade path.
    *
@@ -418,7 +427,7 @@ export class ReservationsService {
     if (!(error instanceof PrismaNamespace.PrismaClientKnownRequestError)) {
       return false;
     }
-    if (error.code === PRISMA_WRITE_CONFLICT) {
+    if (isWriteConflict(error)) {
       return true;
     }
     return (
