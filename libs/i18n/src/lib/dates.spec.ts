@@ -1,5 +1,6 @@
 import {
   formatDayAndMonth,
+  formatDayMonthAndYear,
   formatFullDate,
   formatMonthAndYear,
   formatMonthName,
@@ -37,6 +38,30 @@ describe('formatDayAndMonth', () => {
 
   it('uses the genitive form for říjen (října), distinct from its nominative', () => {
     expect(formatDayAndMonth('2026-10-25')).toBe('25. října');
+  });
+});
+
+describe('formatDayMonthAndYear', () => {
+  it('matches the design exactly: day, genitive month, year, and no weekday', () => {
+    // doc/design/screens/05-admin-window.png — "dnes je 28. srpna 2026"
+    expect(formatDayMonthAndYear('2026-08-28')).toBe('28. srpna 2026');
+  });
+
+  it('omits the weekday that formatFullDate includes', () => {
+    // The two differ by exactly one component; asserting the pair is what
+    // stops this from being re-implemented as `formatFullDate` by mistake.
+    expect(formatFullDate('2026-09-28')).toBe('pondělí 28. září 2026');
+    expect(formatDayMonthAndYear('2026-09-28')).toBe('28. září 2026');
+  });
+
+  it('keeps the genitive month, unlike formatMonthAndYear', () => {
+    expect(formatDayMonthAndYear('2026-08-01')).toBe('1. srpna 2026');
+    expect(formatMonthAndYear('2026-08-01')).toBe('srpen 2026');
+  });
+
+  it('is correct at a year boundary', () => {
+    expect(formatDayMonthAndYear('2025-12-31')).toBe('31. prosince 2025');
+    expect(formatDayMonthAndYear('2026-01-01')).toBe('1. ledna 2026');
   });
 });
 

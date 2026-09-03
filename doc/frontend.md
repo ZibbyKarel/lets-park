@@ -52,6 +52,11 @@ src/app/
     sprava/page.tsx             /sprava    administration (admin only)
 ```
 
+`shell/admin/` holds the administration section's own components — one
+screen/panel pair per tab, plus the shared failure-copy table, the window
+banner and the lock-mode control. See `doc/admin.md`.
+
+
 Paths are Czech and every one of them is declared once, in
 `src/routes.ts` — `LOT_ROUTE`, `LOGIN_ROUTE`, `SETTINGS_ROUTE`, `ADMIN_ROUTE`,
 `AUTH_API_ROUTE_PREFIX`, `HEALTH_ROUTE`. `auth.ts` and `proxy.ts` both read
@@ -223,6 +228,9 @@ selected (Task 26 review, I1). `spotsPending`/`spotsError`, passed down from
 `SettingsPage`'s `spot.list` query, also drive a loading hint and an inline
 error under the picker, so a failed spot list is not silently indistinguishable
 from "no active spots" (review, M8).
+
+See `doc/admin.md` for the administration section (`/sprava`), which follows
+the same screen/panel split, one pair per tab.
 
 Below the form, a second section — `IcsSection` — shows the caller's ICS feed
 URL (`buildIcsFeedUrl(apiOrigin, icsToken)`), a copy-to-clipboard button, and

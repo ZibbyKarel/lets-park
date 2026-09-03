@@ -1,17 +1,22 @@
 'use client';
 
 /**
- * Administration: users, parking spots, the reservation window. Task 26 builds
- * the screens; this task routes the avatar menu's `Správa` entry here and
- * closes the door behind it.
+ * Administration: the day overview, users, parking spots and the reservation
+ * window (Task 27). Task 23 routed the avatar menu's `Správa` entry here and
+ * closed the door behind it; this file now hands `AdminScreen` the four tab
+ * bodies.
  *
- * The whole file is the wiring — where the profile comes from and what retry
- * does. Every *rule*, the role gate included, lives in `AdminScreen`, which is
- * why this one is a single expression with no branches. Same split, and same
- * reason, as `app-top-bar.tsx` / `top-bar.tsx`.
+ * The whole file is the wiring — where the profile comes from, what retry does,
+ * and which connected panel goes in which tab. Every *rule*, the role gate
+ * included, lives in `AdminScreen`; each panel owns its own fetching. Same
+ * split, and same reason, as `app-top-bar.tsx` / `top-bar.tsx`.
  */
 
 import { AdminScreen } from '../../../shell/admin-screen';
+import { AdminDayPanel } from '../../../shell/admin/admin-day-panel';
+import { AdminSpotsPanel } from '../../../shell/admin/admin-spots-panel';
+import { AdminUsersPanel } from '../../../shell/admin/admin-users-panel';
+import { AdminWindowPanel } from '../../../shell/admin/admin-window-panel';
 import { useCurrentUser } from '../../../shell/use-current-user';
 
 export default function AdminPage() {
@@ -24,6 +29,12 @@ export default function AdminPage() {
       isError={isError}
       error={error}
       onRetry={() => void refetch()}
+      panels={{
+        overview: <AdminDayPanel />,
+        users: <AdminUsersPanel />,
+        spots: <AdminSpotsPanel />,
+        window: <AdminWindowPanel />,
+      }}
     />
   );
 }

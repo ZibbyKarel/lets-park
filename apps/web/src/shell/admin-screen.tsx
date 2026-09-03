@@ -9,6 +9,12 @@
  * on what) belong somewhere a test can reach without a session, a query client
  * and a live API. The page keeps the wiring and has no branches of its own.
  *
+ * The four tab bodies arrive as {@link AdminScreenProps.panels} rather than
+ * being imported here, for the same reason: each of them is a connected
+ * component that fetches, and this file has to stay renderable with nothing but
+ * an `IntlProvider`. React elements are inert until rendered, so passing all
+ * four costs nothing — `Tabs` mounts only the selected one.
+ *
  * The role gate here is a **courtesy**, not the enforcement. Authorization
  * lives on the API, where every admin procedure carries `@Roles('ADMIN')` and
  * `RolesGuard` answers 403 regardless of what any browser believes
@@ -18,11 +24,20 @@
  * admin.
  */
 
+import type { ReactNode } from 'react';
 import type { UserRole } from '@lets-park/contract';
 import { useTranslations } from '@lets-park/i18n';
+import { Tabs } from '@lets-park/design-system/primitives';
 import { EmptyState } from '@lets-park/design-system/compounds';
 import { ScreenError, ScreenLoading } from './screen-state';
-import { SectionPlaceholder } from './section-placeholder';
+
+/** The body of each tab, in the order the design's strip lists them. */
+export interface AdminPanels {
+  readonly overview: ReactNode;
+  readonly users: ReactNode;
+  readonly spots: ReactNode;
+  readonly window: ReactNode;
+}
 
 export interface AdminScreenProps {
   /** The caller's role, or `undefined` while it is not known. */
@@ -34,10 +49,20 @@ export interface AdminScreenProps {
   /** Whatever the failing call threw. See `ScreenErrorProps.error`. */
   readonly error: unknown;
   readonly onRetry: () => void;
+  readonly panels: AdminPanels;
 }
 
-export function AdminScreen({ role, isPending, isError, error, onRetry }: AdminScreenProps) {
+export function AdminScreen({
+  role,
+  isPending,
+  isError,
+  error,
+  onRetry,
+  panels,
+}: AdminScreenProps) {
   const errors = useTranslations('errors');
+  const sections = useTranslations('sections');
+  const t = useTranslations('admin');
 
   if (isPending) {
     return <ScreenLoading />;
@@ -51,5 +76,21 @@ export function AdminScreen({ role, isPending, isError, error, onRetry }: AdminS
     return <EmptyState title={errors('FORBIDDEN')} headingLevel={2} />;
   }
 
-  return <SectionPlaceholder section="administration" />;
+  return (
+    <>
+      <p className="text-xs font-bold uppercase tracking-caps text-fg-3">{t('eyebrow')}</p>
+      <h1 className="mt-2 mb-6 text-3xl font-bold tracking-tight text-fg">
+        {sections('administration')}
+      </h1>
+      <Tabs
+        label={t('tabsLabel')}
+        items={[
+          { id: 'overview', label: t('tabOverview'), content: panels.overview },
+          { id: 'users', label: t('tabUsers'), content: panels.users },
+          { id: 'spots', label: t('tabSpots'), content: panels.spots },
+          { id: 'window', label: t('tabWindow'), content: panels.window },
+        ]}
+      />
+    </>
+  );
 }

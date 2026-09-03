@@ -3,6 +3,7 @@
  * `05-admin-window.png` exactly:
  *
  * - full date:        `pondělí 28. září 2026`   (weekday + day + month + year)
+ * - day, month, year: `28. srpna 2026`          (no weekday; "dnes je …")
  * - day and month:     `25. srpna`               (used for window ranges)
  * - month and year:    `srpen 2026`              (used for the month list)
  * - standalone month:  `září`                    (used in the month selector)
@@ -50,6 +51,28 @@ export function formatFullDate(date: DateOnly): string {
   return formatter.dateTime(toUtcMidnight(date), {
     timeZone: 'UTC',
     weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/**
+ * `28. srpna 2026` — day, genitive month and year, **without** the weekday.
+ *
+ * Distinct from {@link formatFullDate} rather than derived from it: the
+ * reservation-window tab's "dnes je 28. srpna 2026"
+ * (`doc/design/screens/05-admin-window.png`) is a parenthetical inside a longer
+ * sentence, where a weekday would be noise. Stripping one from the long form by
+ * hand would mean cutting a locale-formatted string apart, which is exactly the
+ * thing `Intl` exists to avoid.
+ *
+ * The genitive month (`srpna`, not `srpen`) comes from `day` being part of the
+ * same format call — see the module docs.
+ */
+export function formatDayMonthAndYear(date: DateOnly): string {
+  return formatter.dateTime(toUtcMidnight(date), {
+    timeZone: 'UTC',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
