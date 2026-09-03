@@ -203,16 +203,32 @@ export function sharedRefreshStates(): Map<string, TokenRefreshState> {
  * `sharedRevokedStore` throws off the Node.js runtime because its failure mode
  * is a **security control quietly not holding**. This one's failure mode is a
  * redundant token grant — the exact behaviour that shipped before this fix. A
- * boot failure would be the wrong trade for that on its own, and it is
- * unreachable anyway: `createAuthConfig` calls `sharedRevokedStore()` on the
- * same line, so a non-Node runtime has already refused to boot before any
- * refresher is built.
+ * boot failure would be the wrong trade for that on its own.
+ *
+ * A non-Node runtime does still fail to boot, but **not** in the order an
+ * earlier version of this comment claimed. Measured: `createAuthConfig` calls
+ * `sharedRefreshState()` at `config.ts:288` and `sharedRevokedStore()` at
+ * `config.ts:301`, so this function runs *first* and this state is created
+ * before the revocation store's runtime guard ever fires. What saves it is not
+ * ordering but that both calls sit in the same expression evaluation:
+ * `sharedRevokedStore()` throws thirteen lines later, `createAuthConfig` throws
+ * with it, and the half-built config is never returned to a caller. The state
+ * left on `globalThis` is unreachable garbage in a process that is already
+ * failing to start.
+ *
+ * The distinction matters if these two calls are ever separated — moved into
+ * different functions, or one made lazy. Then this one would run alone, and
+ * would need its own guard.
  */
 export function sharedRefreshState(issuer: string, clientId: string): TokenRefreshState {
   const states = sharedRefreshStates();
-  // ` ` cannot occur in a URL or an Okta client id, so no pair of
-  // (issuer, clientId) can collide with another by concatenation.
-  const key = `${issuer} ${clientId}`;
+  // `JSON.stringify` rather than a delimiter: any separator character good
+  // enough to be collision-proof is one that cannot appear in a URL, and the
+  // obvious choice (`\0`) makes this file *binary* to `grep` and `rg`, which
+  // skip it silently. That cost a reviewer real time — the C-1 fix looked
+  // deleted because searching for it returned nothing. Encoding the pair is
+  // collision-proof for the same reason and stays greppable.
+  const key = JSON.stringify([issuer, clientId]);
   let state = states.get(key);
   if (state === undefined) {
     state = {};

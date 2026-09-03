@@ -142,6 +142,17 @@ jobs:
       #
       # It runs here rather than in `verify` because it needs a live PostgreSQL,
       # which only this job has.
+      #
+      # The migration step above it is **required**, and its absence made the
+      # first version of this step fail on every run. The comment on `api:test-db`
+      # explains why that target needs no migration: it builds a throwaway
+      # database per run and repoints `DATABASE_URL` **in-process**. So the
+      # database this job's `DATABASE_URL` actually names is still empty when
+      # `api:test-db` finishes, and `check-schema` compares the schema against
+      # nothing: `migrate status` exits 1 and `migrate diff --exit-code` exits 2.
+      # Measured both ways — empty database exit 1, same database after
+      # `migrate deploy` exit 0.
+      - run: npx prisma migrate deploy
       - run: npx nx run database:check-schema
 
   e2e:

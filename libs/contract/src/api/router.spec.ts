@@ -107,7 +107,7 @@ const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
   ],
   // `waitlist.leave` deliberately carries neither window error. Leaving a queue
   // is not gated by the reservation window — see
-  // `doc/decision/0233-leaving-a-queue-is-not-gated-by-the-reservation-window`,
+  // `doc/decision/0233-leaving-a-waitlist-is-exempt-from-the-reservation-window`,
   // which amends `doc/decision/0004-*`'s "enforcing the lock on
   // create/join/leave". Under the shipped `AUTO`/`openDaysBefore=7` defaults the
   // old rule made leaving impossible for the whole month a queue is live in.
