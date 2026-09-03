@@ -85,9 +85,12 @@ while another opens none:
   socket that document's own React tree opened.
 - **`installRealtimeSocketCounter`** — an init script, which Playwright runs
   once **per document**. It tags the document with an id and writes one console
-  line per realtime socket the document constructs, so every socket is
+  line per realtime connection the document *starts*, so every connection is
   attributed from *inside* the realm that opened it. This is the instrument that
-  makes the claim rather than infers it.
+  makes the claim rather than infers it. It hooks the opening engine.io
+  handshake — the one request to the gateway that carries no `sid` — on
+  `XMLHttpRequest`, `fetch` and `WebSocket`, rather than the WebSocket upgrade;
+  see the note on that in the source, and in Risk below.
 
 Per document, across four traced full-suite runs (`E2E_TRACE_REALTIME=1`, own
 API on 3010 and own web server on 4210 against a dedicated database, so no other
@@ -101,6 +104,17 @@ pages that opened >=2 sockets: 7 of 18   ← the "one page in three", per run
 ```
 
 The seventh page is this task's own new spec, which reloads on purpose.
+
+**The conclusion does not depend on the new instrument.** Review reproduced it
+using only the two outside-the-page Playwright streams — including the very
+`page.on('websocket')` recorder that produced the 23-of-68 figure — in one full
+traced run: 18 pages, 25 `OPEN`, 25 `LOAD`, 7 pages with two sockets (the "one
+in three", faithfully reproduced), and `OPEN` count **equal to** `LOAD` count for
+**every one of the 18 pages**, not merely in total. Per-page equality is what
+rules out the alternative that one document opened two while another opened
+none. The init-script counter agrees with it (25 documents, 25 connections), and
+that is the right order of dependency: the retraction rests on the original
+instrument, and the new one confirms it.
 
 ### Why `StrictMode` was never the story either
 
@@ -145,12 +159,35 @@ the connection's lifetime.
 - **A per-document counter cannot see a socket opened before the init script
   runs.** Nothing opens one that early — the connection is built in an effect,
   after hydration — but a future `<script>` in `<head>` that dialled the gateway
-  would be invisible to this instrument. The `LOAD`/`OPEN` totals, which are
-  collected from outside the page, are the cross-check that would still catch
-  it.
-- **The counter wraps `window.WebSocket` for every document of every persona
-  page whenever `E2E_TRACE_REALTIME` is set.** It is a `Proxy`, so
-  `instanceof`, statics and `prototype` are the originals; it is installed once
-  per document (guarded), and it is off by default.
+  would be invisible to this instrument.
+- **What the `LOAD`/`OPEN` cross-check does and does not cover.** An earlier
+  version of this section offered those totals as a check on the init script.
+  They are not one, for the case that matters: both are Playwright's
+  WebSocket-and-navigation event streams, so **a socket.io connection that never
+  upgrades off HTTP long-polling is invisible to both of them** — and this
+  client is polling-first, which is exactly the blind spot that made the first
+  version of the counter (a `window.WebSocket` wrapper) unable to see a
+  duplicate socket that was abandoned before its upgrade. The counter now hooks
+  the *opening handshake* on `XMLHttpRequest`, `fetch` and `WebSocket`, so it
+  sees a polling-only connection; `LOAD`/`OPEN` still do not. What they
+  genuinely cross-check is narrower and still worth having: that the number of
+  documents a page loaded matches the number of sockets it upgraded, computed
+  entirely outside the page and from the *original* 23-of-68 instrument. That
+  is the check which reproduces this record's conclusion without the new
+  tooling, and it is the one review used.
+  A polling-only connection cannot, in any case, be the lingering socket
+  `0187` described: that claim was about a connection sitting in a day room
+  hearing broadcasts, which requires a completed socket.io handshake, and the
+  `DOC` counter would now see it.
+- **The counter wraps `XMLHttpRequest.prototype.open`, `window.fetch` and
+  `window.WebSocket` for every document of every persona page whenever
+  `E2E_TRACE_REALTIME` is set.** The `WebSocket` wrapper is a `Proxy`, so
+  `instanceof`, statics and `prototype` are the originals; the other two
+  delegate to the captured original with the same arguments. It is installed
+  once per document (guarded) and off by default.
+- **A reconnect counts as a second connection.** A genuine transport drop makes
+  engine.io re-handshake, which is a new connection and is counted as one. That
+  is the honest reading, but it means `realtime-connection.spec.ts` would go red
+  on a dropped transport — a real event worth seeing, not a defence to suppress.
 - **This record does not prove one-per-document for a browser other than
   Chromium**, which is the only one this suite runs (`doc/decision/0182-*`).

@@ -475,6 +475,48 @@ describe('the realtime gateway', () => {
       const ack = (await neighbour.emitWithAck('cell:lock', cell)) as CellLockAck;
       expect(ack.result).toBe('HELD_BY_OTHER');
     });
+
+    it('still lets the newest connection of a user drop a hold their older tab is showing', async () => {
+      // **This documents a hazard that is open, not one that is closed**, and it
+      // is the exact counterpart of the test above.
+      //
+      // `release` matching `(user, socketId)` stops a *superseded* connection
+      // dropping the current hold. It cannot stop the reverse, because
+      // `acquire` is keyed by user by design (that is what makes a reconnect a
+      // renewal): the second tab's `cell:lock` re-keys the hold onto itself, so
+      // when *it* unlocks, it is the recorded owner and the release is
+      // legitimate — while the first tab's dialog is still open and still says
+      // `held`.
+      //
+      // The window is bounded by the renewal heartbeat, not by anything here:
+      // `CELL_LOCK_RENEW_FRACTION` is 0.5, so the older tab re-takes the cell
+      // within half a TTL (~15 s at the shipped 30 s). Closing it properly
+      // means changing how a hold is *acquired*, which is a product decision
+      // about what a courtesy lock means across a user's own tabs — see
+      // `doc/decision/0220-*` §"What it costs" and `doc/realtime.md`.
+      const older = await connectAs(alice);
+      const newer = await connectAs(alice);
+      const neighbour = await connectAs(bob);
+      const cell = freshCell();
+      await watch(neighbour, DAY);
+      await older.emitWithAck('cell:lock', cell);
+      await newer.emitWithAck('cell:lock', cell);
+
+      newer.emit('cell:unlock', cell);
+      await settle();
+
+      // The room is told the bay is free…
+      expect(
+        neighbour.received.filter(
+          (event) =>
+            event.name === 'cell:unlocked' &&
+            (event.payload as { parkingSpotId: string }).parkingSpotId === cell.parkingSpotId
+        )
+      ).toHaveLength(1);
+      // …and it really is, to somebody else, while `older` still has its form open.
+      const ack = (await neighbour.emitWithAck('cell:lock', cell)) as CellLockAck;
+      expect(ack.result).toBe('ACQUIRED');
+    });
   });
 
   describe('a hold that nobody gives back', () => {

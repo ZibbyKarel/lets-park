@@ -46,9 +46,12 @@ const DATE = e2eDayForSlot(SPEC_DAY_SLOTS.cellLock);
  * assertion says it means.
  *
  * Since `doc/decision/0220-*` a *release* also has to come from the connection
- * that holds the cell, so one test's `closeDialog` no longer drops the other's
- * hold outright. That narrows the collision; it does not remove it, and it is
- * not why these bays are separate.
+ * that holds the cell. That helps in one direction only: the test whose dialog
+ * opened **first** can no longer drop the other's hold. The one that opened
+ * second still can — its `cell:lock` re-keyed the hold onto its own socket, so
+ * its `closeDialog` is a legitimate release, and the first test's tile goes back
+ * to `Volné` under an open dialog. Sharing a bay is still a bug, and this is
+ * still why these two are separate.
  *
  * Review measured it before the split: 4 failures in 14 runs at default
  * parallelism, 0 in 8 at `--workers=1`, 0 in 10 with distinct bays. A later

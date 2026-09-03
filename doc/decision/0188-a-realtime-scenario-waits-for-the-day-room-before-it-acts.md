@@ -41,13 +41,16 @@ built app, where `StrictMode` does not double-invoke effects.
 The cause was the spec colliding with itself: two tests sharing one bay as one
 persona under `fullyParallel: true`, against a `LockService.release` keyed by
 user, so one test's `closeDialog` dropped the other's hold. Fixed by giving each
-test its own bay (`cell-lock.spec.ts`, `doc/decision/0187-*`). The
-`StrictMode` correction was itself corrected once more in
-`doc/decision/0221-*`: there was no second connection to blame in the built app
-either, and the release keyed by user is fixed in `doc/decision/0220-*`. This wait is kept
-anyway, for two reasons that stand on their own: the race it closes is real regardless of which server is running, and
-a socket that never connects now fails with a sentence naming the date it never
-subscribed to, instead of a tile that quietly stayed grey for five seconds.
+test its own bay (`cell-lock.spec.ts`, `doc/decision/0187-*`). The `StrictMode`
+correction was itself corrected once more in `doc/decision/0221-*`: there was no
+second connection to blame in the built app either. The release keyed by user is
+narrowed in `doc/decision/0220-*` — a superseded connection can no longer drop
+the hold, though the newer one still can.
+
+This wait is kept anyway, for two reasons that stand on their own: the race it
+closes is real regardless of which server is running, and a socket that never
+connects now fails with a sentence naming the date it never subscribed to,
+instead of a tile that quietly stayed grey for five seconds.
 
 ### Why it reads the wire rather than the page
 

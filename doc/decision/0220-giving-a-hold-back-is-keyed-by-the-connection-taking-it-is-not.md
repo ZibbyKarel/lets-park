@@ -80,11 +80,34 @@ in the same cleanup regardless of what the server answers, and it has no
 acknowledgement to be misled by (the contract declares one for `cell:lock`
 only).
 
-The state that remains is the one user-keyed ownership implies and this change
-does not claim to fix: two tabs of one user on one cell both believe they hold
-it, and their renewal heartbeats hand `socketId` back and forth. That is a
-courtesy lock behaving as a courtesy lock; `reservation.create` re-checks
-everything and the unique indexes are what enforce correctness.
+**This fixes one direction of the two-tab hazard and not the other, and the
+difference matters enough to tabulate.** Ownership is by user, so two tabs of
+one user on one cell both believe they hold it and their heartbeats hand
+`socketId` back and forth:
+
+| what happens | before | after |
+| --- | --- | --- |
+| the tab that opened **first** closes its dialog | drops the hold the second tab is showing | refused — it is not the recorded connection |
+| the tab that opened **second** closes its dialog | drops the hold the first tab is showing | **unchanged: still drops it** |
+
+The second row is not an omission and cannot be fixed here: that tab's
+`cell:lock` was a renewal that re-keyed the hold onto its own socket, so its
+`cell:unlock` *is* a release by the recorded owner. Refusing it would mean
+changing `acquire`, which is the thing that makes a reconnect a renewal.
+
+Exercised rather than argued —
+`realtime.gateway.spec.ts`, "still lets the newest connection of a user drop a
+hold their older tab is showing": the `cell:unlocked` broadcast count is 1 and a
+third user's `cell:lock` answers `ACQUIRED`, while the older connection's dialog
+is still open. Its counterpart in the same file asserts the opposite for the
+superseded direction. Both pass, and the pair is the honest statement of what
+this change bought.
+
+What is left is a courtesy lock behaving as a courtesy lock, bounded by the
+renewal heartbeat (half a TTL, ~15 s), and it is written up for a product owner
+in `doc/realtime.md` §"Known residual: one user, two tabs, one bay".
+`reservation.create` re-checks everything and the unique indexes are what
+enforce correctness.
 
 ## How
 

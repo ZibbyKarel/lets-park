@@ -58,14 +58,18 @@
  * ## The tracing switch
  *
  * `E2E_TRACE_REALTIME=1` prints every `day:*` and `cell:*` packet each page
- * sends or receives, plus each WebSocket it opens and each document it loads.
- * (A socket belongs to the document whose `LOAD` line precedes it; the pairing
- * is the whole point — see the third wrong reading above.) That filter is a **safety
- * property, not a convenience**: the socket.io CONNECT packet carries the
- * access token in its `auth` payload, and it matches neither name, so no
- * credential can reach the log. Nothing else is ever printed — except the
- * socket URLs on `OPEN`/`CLOSE`, which are credential-free for a reason that
- * lives in `libs/realtime-client` rather than here (see {@link tracer}).
+ * sends or receives, plus each WebSocket it opens (`OPEN`), each document it
+ * loads (`LOAD`) and, per document, one `DOC` line per realtime connection that
+ * document started. `DOC` is the one to count: `OPEN` and `LOAD` are page-wide
+ * event streams whose order can interleave, and counting `OPEN` per page rather
+ * than per document is the third wrong reading described above.
+ *
+ * That filter is a **safety property, not a convenience**: the socket.io CONNECT
+ * packet carries the access token in its `auth` payload, and it matches neither
+ * name, so no credential can reach the log. The four directions that bypass it
+ * each carry their own guarantee rather than an assumption about URLs — see
+ * {@link tracer}, and {@link APP_ROUTES} for why a `LOAD` line names a route
+ * from a closed list instead of printing the page's URL.
  *
  * Each line names a **page**, not a persona — `user#1`, `user#2` — because two
  * pages of one persona can be live at once and a shared label makes their
@@ -150,7 +154,7 @@ export async function recordDayRoomSubscriptions(page: Page, persona = '?'): Pro
   // The `DOC` lines below are what attribute a socket to a document, and they
   // do it from inside the document rather than by reading the order of two
   // event streams.
-  page.on('load', () => trace('LOAD', page.url()));
+  page.on('load', () => trace('LOAD', appRouteOf(page.url())));
 
   if (isTracing()) {
     await installRealtimeSocketCounter(page);
@@ -189,6 +193,31 @@ const TRACEABLE = /"(day|cell):[a-z]+"/u;
 
 /** Trace directions whose text is a URL or an id rather than a socket.io packet. */
 const URL_DIRECTIONS = new Set(['OPEN', 'CLOSE', 'LOAD', 'DOC']);
+
+/**
+ * The routes a `LOAD` line is allowed to name. A **closed set**, and that is the
+ * whole point.
+ *
+ * A `LOAD` line used to print `page.url()` on the reasoning that this app puts
+ * nothing secret in a page URL. That premise is already false: the ICS feed URL
+ * carries a token in its path (`/api/calendar/<token>.ics`), and a trace file is
+ * an artifact. The rule in this project is absolute — a credential never reaches
+ * a log — and a rule that depends on a premise about URLs is not that rule. So
+ * the printer does not sanitise a URL; it maps it onto a fixed list of route
+ * names and prints `(other)` for anything else. Nothing a URL contains can
+ * escape through a value this file already knew before the run started.
+ */
+const APP_ROUTES = new Set(['/', '/prihlaseni', '/nastaveni', '/sprava']);
+
+/** The route name for a page URL, or `(other)`. Never any part of the URL itself. */
+function appRouteOf(url: string): string {
+  try {
+    const { pathname } = new URL(url);
+    return APP_ROUTES.has(pathname) ? pathname : '(other)';
+  } catch {
+    return '(other)';
+  }
+}
 
 /** Prefix the in-page counter puts on the console line it writes per socket. */
 const DOC_MARKER = '[rt-doc]';
@@ -232,13 +261,18 @@ function nextPageLabel(persona: string): string {
 function tracer(label: string): (direction: string, text: string) => void {
   if (!isTracing()) return () => undefined;
   return (direction, text) => {
-    // `OPEN`/`CLOSE`/`LOAD` bypass the filter because their text is a URL, not
-    // a packet. That is safe here and not by accident: `socket.ts` sends the
-    // token only through the handshake `auth` callback — no `query`, no
-    // `extraHeaders` — so a socket.io URL carries no credential, and this app
-    // puts nothing in a page URL either. The guarantee therefore lives in
-    // `libs/realtime-client` and in the routes, not in this line; if either
-    // ever changes, this branch needs a filter of its own.
+    // `OPEN`/`CLOSE`/`LOAD`/`DOC` bypass the packet filter because their text
+    // is not a packet. Each has its own reason for being safe, and none of them
+    // is "URLs here happen not to contain secrets":
+    //
+    //   OPEN/CLOSE — a socket.io URL, and `socket.ts` sends the token *only*
+    //                through the handshake `auth` callback (no `query`, no
+    //                `extraHeaders`). That guarantee lives in
+    //                `libs/realtime-client` and is asserted by its
+    //                `socket.spec.ts`, not by this line.
+    //   LOAD       — never a URL at all: `appRouteOf` maps it onto a closed set
+    //                of route names decided before the run.
+    //   DOC        — a random per-document id and an ordinal, both minted here.
     if (!URL_DIRECTIONS.has(direction) && !TRACEABLE.test(text)) return;
     // A short clock rather than a timestamp: what these lines are read for is
     // the *order* of packets across two pages, and milliseconds-within-the-run
@@ -248,7 +282,7 @@ function tracer(label: string): (direction: string, text: string) => void {
 }
 
 /** Where the counter installed by {@link installRealtimeSocketCounter} keeps its tally. */
-const COUNTER_KEY = '__letsParkRealtimeSocketUrls';
+const COUNTER_KEY = '__letsParkRealtimeConnections';
 
 /**
  * Counts the realtime connections **one document** opens.
@@ -265,24 +299,46 @@ const COUNTER_KEY = '__letsParkRealtimeSocketUrls';
  * {@link realtimeSocketsInDocument} returns is scoped to the document currently
  * loaded and to nothing else.
  *
- * Install before the page navigates. Counts constructions rather than open
- * connections deliberately: a socket that was built and immediately abandoned
- * is still a connection this app asked for, and hiding it would be the sort of
- * defence that lets the bug it is guarding against back in.
+ * ## What exactly is counted, and why not the WebSocket
+ *
+ * **The engine.io handshake, not the WebSocket upgrade.** The first version of
+ * this counter wrapped `window.WebSocket`, and its docstring said it counted
+ * "constructions". It did not: socket.io opens on HTTP long-polling and
+ * upgrades afterwards, so a second connection that is abandoned before the
+ * upgrade never constructs a `WebSocket` and was invisible. Review demonstrated
+ * that directly — a duplicate socket disconnected synchronously made the
+ * regression spec go **green**. An instrument that misses the case it is
+ * pointed at is this project's signature defect, sitting inside the tooling
+ * used to retire one.
+ *
+ * So the wrapper is on the *request that starts a connection*, whichever
+ * transport carries it. Every engine.io request to the socket.io path carries a
+ * `sid` **except** the opening handshake, so a request without one is a new
+ * connection and nothing else is: subsequent polls, the POST that carries the
+ * socket.io CONNECT packet, and the WebSocket upgrade probe all carry the `sid`
+ * the handshake returned. `XMLHttpRequest` and `fetch` are both wrapped because
+ * either may carry polling depending on the build, and `WebSocket` still is,
+ * because a client configured `transports: ['websocket']` would have no
+ * polling phase at all.
+ *
+ * That makes the count "connection **attempts** this document started", which
+ * is the honest unit: a socket that was built and abandoned is still a
+ * connection this app asked for. It also means a genuine transport drop and
+ * reconnect counts as a second connection — correct, and worth seeing.
  */
 export async function installRealtimeSocketCounter(page: Page): Promise<void> {
   await page.addInitScript(
-    ([socketPath, marker]: readonly [string, string]) => {
+    ([socketPath, marker, counterKey]: readonly [string, string, string]) => {
       // Idempotent: a spec may ask for the counter on a page the fixture has
       // already instrumented (both do, whenever `E2E_TRACE_REALTIME` is set),
-      // and installing twice would both double-wrap `WebSocket` and throw on
+      // and installing twice would both double-wrap the globals and throw on
       // the non-configurable property below.
-      if ('__letsParkRealtimeSocketUrls' in window) return;
+      if (counterKey in window) return;
 
-      const urls: string[] = [];
+      const connections: string[] = [];
       // `Object.defineProperty` rather than a plain assignment so the tally
       // cannot be overwritten by anything the app does.
-      Object.defineProperty(window, '__letsParkRealtimeSocketUrls', { value: urls });
+      Object.defineProperty(window, counterKey, { value: connections });
 
       // An id for *this document*. It is what makes a trace line attributable:
       // a page's `websocket` and `load` events are two streams whose order can
@@ -290,24 +346,40 @@ export async function installRealtimeSocketCounter(page: Page): Promise<void> {
       // mistaken for one written from a different document.
       const documentId = Math.random().toString(36).slice(2, 8);
 
-      const OriginalWebSocket = window.WebSocket;
+      /** A request to the gateway with no `sid` is a connection being opened. */
+      const note = (raw: unknown): void => {
+        const url = String(raw ?? '');
+        if (!url.includes(socketPath) || /[?&]sid=/u.test(url)) return;
+        connections.push(url);
+        // Never the URL: this line is for counting, and a URL is the one thing
+        // a trace file must not be trusted to carry.
+        console.log(`${marker} ${documentId} #${connections.length}`);
+      };
+
+      const originalOpen = XMLHttpRequest.prototype.open;
+      // A `function`, not an arrow: `this` has to be the XHR instance.
+      XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, ...args: unknown[]) {
+        note(args[1]);
+        return (originalOpen as (...a: unknown[]) => void).apply(this, args);
+      } as typeof XMLHttpRequest.prototype.open;
+
+      const originalFetch = window.fetch;
+      window.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
+        note(typeof input === 'string' || input instanceof URL ? input : input.url);
+        return originalFetch.call(window, input, init);
+      };
+
       // A `Proxy` rather than a subclass: it forwards `prototype`, statics and
       // `instanceof` unchanged, so nothing the socket.io client does can tell
       // the difference between this and the constructor it expected.
-      window.WebSocket = new Proxy(OriginalWebSocket, {
+      window.WebSocket = new Proxy(window.WebSocket, {
         construct(target, args: [string | URL, (string | string[])?]) {
-          const url = String(args[0] ?? '');
-          if (url.includes(socketPath)) {
-            urls.push(url);
-            // Never the URL: this line is for counting, and the trace already
-            // prints the URL once per socket from outside the page.
-            console.log(`${marker} ${documentId} #${urls.length}`);
-          }
+          note(args[0]);
           return Reflect.construct(target, args, target);
         },
       });
     },
-    [SOCKET_IO_PATH, DOC_MARKER] as const
+    [SOCKET_IO_PATH, DOC_MARKER, COUNTER_KEY] as const
   );
 }
 
@@ -321,11 +393,11 @@ export async function installRealtimeSocketCounter(page: Page): Promise<void> {
  */
 export async function realtimeSocketsInDocument(page: Page): Promise<number> {
   return page.evaluate((key: string) => {
-    const urls = (window as unknown as Record<string, string[] | undefined>)[key];
-    if (urls === undefined) {
+    const connections = (window as unknown as Record<string, string[] | undefined>)[key];
+    if (connections === undefined) {
       throw new Error(`installRealtimeSocketCounter() did not run for ${window.location.href}`);
     }
-    return urls.length;
+    return connections.length;
   }, COUNTER_KEY);
 }
 

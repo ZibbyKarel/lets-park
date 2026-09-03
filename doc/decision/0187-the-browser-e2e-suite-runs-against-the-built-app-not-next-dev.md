@@ -163,12 +163,15 @@ So the two candidate fixes, stated correctly:
   `libs/realtime-client/src/lib/connection.tsx`. Harder, and the one that makes
   the first unnecessary.
 
-> **Both were settled in Task 32.** The first was done —
-> `doc/decision/0220-*`, `release` now matches `(user, socketId)` exactly as
-> `releaseSocket` does. The second had no root cause to find: a page ends up
-> with two connections by loading two documents (`doc/decision/0221-*`), so it
-> does *not* make the first unnecessary. The two-tab hazard named below is the
-> whole of the exposure, and it is now closed.
+> **Both were addressed in Task 32; only one of them was a defect.** The first
+> was done — `doc/decision/0220-*`, `release` now matches `(user, socketId)`
+> exactly as `releaseSocket` does. The second had no root cause to find: a page
+> ends up with two connections by loading two documents
+> (`doc/decision/0221-*`), so it does *not* make the first unnecessary.
+>
+> **The two-tab hazard named below is narrowed, not closed** — see the
+> correction under it. An earlier version of this note said "closed", which was
+> the fourth wrong statement this record has carried.
 
 There is also a real (narrow) product consequence of user-keyed release worth
 naming: **two tabs, same user, same cell — closing the dialog in one releases
@@ -178,11 +181,30 @@ half the TTL, ~15 s). A courtesy lock briefly lying is within what
 `reservation.create` regardless. Recorded as a finding, not smuggled into a test
 change.
 
-> **Fixed in Task 32** (`doc/decision/0220-*`). This finding turned out to be
-> the *entire* defect the "duplicate connection" was thought to be a symptom of:
-> a user really can have two live connections on one cell, and the way they get
-> them is a second tab or a reload rather than anything wrong in
-> `libs/realtime-client`.
+> **Narrowed in Task 32, and still open in one direction**
+> (`doc/decision/0220-*`). This finding turned out to be the *entire* defect the
+> "duplicate connection" was thought to be a symptom of: a user really can have
+> two live connections on one cell, and the way they get them is a second tab or
+> a reload rather than anything wrong in `libs/realtime-client`.
+>
+> What changed: `release` now matches `(user, socketId)`, so the tab whose
+> dialog opened **first** can no longer drop the hold. What did **not** change:
+> the tab that opened **second** still can. Its `cell:lock` was a renewal that
+> re-keyed the hold onto its own socket, so its `cell:unlock` is a legitimate
+> release by the recorded owner — and the first tab's form is still open, still
+> saying `held`, for up to half a TTL (~15 s at 30 s, `CELL_LOCK_RENEW_FRACTION
+> = 0.5`) until its heartbeat takes the cell back.
+>
+> Measured, not argued, over real sockets — `realtime.gateway.spec.ts`, "still
+> lets the newest connection of a user drop a hold their older tab is showing":
+> `cell:unlocked` broadcast count **1**, and a third user's `cell:lock` answers
+> **ACQUIRED**. Its counterpart in the same file asserts the opposite for the
+> superseded direction, and both pass.
+>
+> Closing it properly means changing how a hold is *acquired*, which is what
+> makes a reconnect a renewal — a product decision about what a courtesy lock
+> means across one user's own tabs, not a bug fix. It is written up for a
+> product owner in `doc/realtime.md` §"The editing hold".
 
 ### Why not just disable `StrictMode`
 

@@ -294,9 +294,12 @@ In order of likelihood:
   `web:start` itself.
 - **Another tab, or a page that reloaded.** One user with two live connections
   on one cell is ordinary use, and it was the whole of the exposure the
-  "duplicate connection" scare was standing in for. Since
-  `doc/decision/0220-*` a superseded connection can no longer release the hold;
-  it can still *renew* it, because acquisition is per user by design.
+  "duplicate connection" scare was standing in for. Since `doc/decision/0220-*`
+  the connection that opened **first** can no longer release the hold — but the
+  one that opened **second** still can, because its `cell:lock` re-keyed the
+  hold onto itself and acquisition is per user by design. If a tile drops to
+  `Volné` under an open dialog, look for a second connection of the same
+  persona before looking anywhere else. `doc/realtime.md` §"Known residual".
 
 *Not* a cause, despite an earlier version of this section: "about one page in
 three opens a second socket.io connection against the built app". That number
