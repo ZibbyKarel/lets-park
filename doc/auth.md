@@ -356,6 +356,69 @@ Not a silent 401. Three things happen, in the three places they have to:
 
 ---
 
+## Signing out
+
+Sign-out does two things, and only the second one is load-bearing:
+
+1. Auth.js clears the session cookie, as it always has.
+2. **The server adds that session's subject to a revoked set**, and every later session read
+   refuses a token carrying it.
+
+The second exists because the first cannot be relied on. Under `strategy: 'jwt'` the session
+lives in the cookie, and Auth.js re-issues that cookie on **every** request that reads the
+session — a page render, an RSC prefetch, the proxy's own check. A single navigation to `/`
+was measured setting three different session cookies, one per request. So the clearing
+`Set-Cookie` from `POST /api/auth/signout` is racing every render that was already in flight,
+and the browser keeps whichever arrives last. Under load, sometimes it is not the clear.
+
+The application cannot fix that by ordering — it does not decide when Next.js prefetches, and
+it cannot recall a response already sent — so it makes the surviving token useless instead.
+`doc/decision/0230-*` has the measurements and the alternatives that were rejected.
+
+### How revocation works
+
+`libs/auth/src/lib/revocation.ts`. On `events.signOut` the session's `sub` goes into a revoked
+set; in the `jwt` callback, a token whose `sub` is in that set makes the callback return
+`null`. Two things follow from that `null`, both from `@auth/core`:
+
+- `auth()` yields no session, so `callbacks.authorized` is `false` and the proxy redirects the
+  navigation to `/prihlaseni`;
+- the response **clears the session cookie** rather than re-issuing it — so a cookie that
+  survived the race deletes itself the first time it is used.
+
+The key is `sub`, and the reason it works is that **`sub` is not a per-person id**. `@auth/core`
+sets the user id to a fresh `crypto.randomUUID()` on every completed sign-in, ignoring the
+provider's profile id, and copies it to `token.sub`. So `sub` names one *sign-in session*:
+
+- revoking it ends exactly the session that signed out, and no other device or later sign-in;
+- re-encoding a session's cookie never changes it, so the token a racing render re-installs is
+  refused on a value the race cannot move;
+- signing out and back in needs no special case — the new session is a subject the set has
+  never seen.
+
+Nothing compares clocks. An earlier design keyed on `sub` plus an `iat` cutoff and was unsound:
+`iat` is stamped at *encode* time, and a token refresh can run between the revocation check and
+that encode, so a racing render could emit a later `iat` than the cutoff and be honoured. A set
+has no window to lose. The clock survives only as retention — an entry is dropped once the token
+it refuses could no longer be valid anyway.
+
+A token with no `sub` is refused outright: the registry cannot key it, so it could never clear
+it, and `isAuthorized` would not catch it either (it reads `auth.user`, never `sub`).
+`@auth/core` always sets one, so this is unreachable in practice.
+
+### What it does not cover
+
+- **The Okta access token is not revoked at the issuer.** Anyone holding a copy of it can keep
+  calling `apps/api` directly until it expires — measured at one hour against the dev issuer,
+  and set on the Okta authorization server in production, which this repository does not
+  configure. Named as a deliberate boundary in `doc/decision/0230-*`.
+- **The revoked set is in memory**, shared across Next.js's bundles via `globalThis`
+  (`doc/decision/0231-*` — and it is not optional; a module-level map silently does nothing,
+  which is why it now refuses to boot on the Edge runtime rather than quietly not enforcing).
+  A restart forgets it, and a second web instance would not see the first's sign-outs.
+
+---
+
 ## Diagnosing a 401
 
 Every rejection above reaches the caller as the same bare 401. That is deliberate — telling

@@ -315,33 +315,32 @@ loads — compare them against that page's `LOAD` lines.
 There is no retry configured, and there should not be: this failure is a bug
 report.
 
-**`login.spec.ts:76` fails on the *second* `toHaveURL`, with
-`Received string: "http://localhost:4200/"`.** This one is expected, in the
-sense that it is understood: **sign-out is not reliably durable, and the spec is
-reporting it.** Measured at 3 failures in 35 full-suite runs, 0 in 12 runs of
-the spec alone — it needs the load of the rest of the suite. In the retained
-trace, `POST /api/auth/signout` clears the cookie, `GET /prihlaseni` renders the
-login screen with no session, and then `GET /` comes back **200 with a freshly
-issued `authjs.session-token`** and the lot renders signed in. No `/authorize`
-request follows the sign-out, so nothing re-authenticated — the session that
-comes back is the same one.
+**`login.spec.ts` fails on the *second* `toHaveURL` of the sign-out test, with
+`Received string: "http://localhost:4200/"`.** This **was** a known open defect —
+sign-out was not reliably durable, measured at 3 failures in 35 full-suite runs.
+**It is fixed** (`doc/decision/0230-*`): sign-out now revokes the session
+server-side, so a cookie that survives the clear is refused and deleted on its
+next use.
 
-**How it comes back is not yet known**, and the record is careful about that:
-the trace captured response headers only, so the request `Cookie` header on that
-`GET /` — the datum that would settle it — is missing. Re-issuing the cookie is
-the ordinary behaviour of a request that *arrived* with a valid one under
-`strategy: 'jwt'`. The leading hypothesis is a concurrent `GET
-/api/auth/session` (which next-auth's own `signOut` triggers, and which re-issues
-the cookie) racing the sign-out and re-installing it — which also explains the
-load dependence. `doc/decision/0189-*` has the full trace, the severity
-assessment, and why the assertion is kept rather than retried or relaxed.
+If you see it again, it is a regression, not the known flake. What was measured,
+so you can tell them apart: `/api/auth/session` is never requested **on the
+sign-out path** — the hypothesis in the original record was wrong — and the
+cookie came back because **every render that reads the session re-issues it**,
+so the sign-out clear was racing concurrent `?_rsc` prefetches. The fix does not
+depend on winning that race: it revokes the session's subject, and re-encoding
+never changes that subject.
 
-If you need to reproduce it: run the whole suite in a loop with
-`--trace retain-on-failure` and read `0-trace.network` out of the retained
-`trace.zip`. Running the spec on its own will not do it.
+The property is now also asserted deterministically, by *a session cookie kept
+from before sign-out is refused afterwards* in the same spec: it takes the
+cookie while signed in, signs out through the menu, puts the cookie back and
+expects a redirect. That one needs no load and fails every time on a
+cookie-deletion-only sign-out, so it — not the racy one — is the test to look at
+first when this area breaks.
 
-Do not mistake a *different* failure for this one. It is always
-`login.spec.ts:76`, always the second `toHaveURL`, always that received value.
+To capture cookie traffic while diagnosing anything in this area, set
+`E2E_AUTH_LOG_DIR=/some/tmp/dir`; `src/support/auth-network-log.ts` writes the
+request and response cookie **names** and a one-way digest of each value, in
+order, and never a token (`doc/decision/0232-*`).
 
 **A spec times out on the first visit to a route.** Same cause as above, seen
 from a different angle: `next dev` compiles a route on demand — `/nastaveni` has

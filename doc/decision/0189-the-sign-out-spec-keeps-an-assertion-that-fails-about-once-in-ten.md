@@ -1,5 +1,44 @@
 # 0189 – The sign-out spec keeps an assertion that fails about once in ten
 
+> **Resolved by Task 33. The hypothesis below was wrong; the defect was real.**
+>
+> The missing datum this record asked for — the request `Cookie` header, and the
+> ordering of `/api/auth/session` against `/api/auth/signout` — was captured.
+> The result overturns *Hypothesis one*: **`/api/auth/session` is not on the
+> sign-out path** — 0 requests to it in any of 20 recorded sign-out journeys.
+> It cannot be there: `AuthProvider` always receives the session the root layout
+> already read, so `SessionProvider`'s mount fetch early-returns, and `signOut()`
+> with the default `redirect: true` returns before its own session fetch. (The
+> endpoint is not dead in general — a long-lived tab polls it every 300 s and on
+> window focus — it is simply never in flight during a sign-out, which is all
+> the hypothesis needed.)
+>
+> What the capture showed instead is broader than one endpoint: under
+> `strategy: 'jwt'` **every** server render that reads the session re-issues the
+> cookie. One navigation to `/` was measured answering with three different
+> session cookies — the document render plus two `?_rsc` prefetches, each
+> request carrying the one the previous response set. The sign-out clear is
+> therefore racing every concurrent render, and the browser keeps whichever
+> `Set-Cookie` lands last. (Deleting a cookie is not a revocation mechanism at
+> all: the token stays valid, and a copy of it keeps working.)
+>
+> Because that ordering is not the application's to control, the fix is **not**
+> the client-side ordering change this record expected. Sign-out now revokes the
+> session server-side. The measurement, the reasoning, and the ordering
+> alternatives that were rejected are in `doc/decision/0230-*`; the
+> Next.js-specific trap that made the first attempt silently do nothing is in
+> `doc/decision/0231-*`; the recorder is `doc/decision/0232-*`.
+>
+> The severity note below stands as written, and its open question — "with no
+> server-side revocation, a surviving JWT cannot be invalidated even once the
+> race is fixed" — is answered in `0230-*`: revocation was implemented. The one
+> part that remains open, deliberately and with reasons, is the Okta **access
+> token**, which is not revoked at the issuer.
+>
+> `login.spec.ts:94` is unchanged — not retried, not relaxed, not `fixme` — and
+> is joined by a deterministic sibling that asserts the same property without
+> needing the race to occur.
+
 ## What
 
 `login.spec.ts:76` — *"signing out returns to the sign-in screen and the lot is
@@ -71,6 +110,12 @@ The datum that would settle it was not captured: **the request `Cookie` header
 on that `GET /`.** The trace records response headers only. So the honest
 statement is that the cookie was present again by the time of that request, and
 *how* it got there is not yet known.
+
+**Hypothesis one — since measured and found wrong; see the note at the top of
+this file and `doc/decision/0230-*`. Kept as written because the reasoning that
+led to it is sound and the way it failed is instructive: the endpoint it names
+is never called by this application, and the real re-issuer is every ordinary
+page render.**
 
 **Hypothesis one: a concurrent `GET /api/auth/session` re-installs it.**
 next-auth's own client `signOut` triggers a session fetch, and under `jwt` that

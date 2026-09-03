@@ -24,12 +24,25 @@ export type { Auth } from './lib/create-auth';
 
 export {
   createAuthConfig,
+  DEFAULT_SESSION_MAX_AGE_SECONDS,
   isAuthorized,
   OKTA_SCOPES,
   projectSession,
   rotateAccessToken,
 } from './lib/config';
 export type { AuthOptions } from './lib/config';
+
+/**
+ * `createSignOutRegistry` and `SignOutRevocationUnavailableError` are the
+ * sign-out revocation surface. `sharedRevokedStore` is deliberately **not**
+ * re-exported: it hands out a process-global mutable map that any importer
+ * could `.clear()`, wiping every revocation in the process. The tests that need
+ * to reset it deep-import `./lib/revocation` instead, so the sharp edge stays
+ * inside the lib. `applySessionLifecycle` is likewise internal — its only
+ * production caller is `createAuthConfig`.
+ */
+export { createSignOutRegistry, SignOutRevocationUnavailableError } from './lib/revocation';
+export type { RevocableToken, SignOutRegistry, SignOutRegistryOptions } from './lib/revocation';
 
 export { accessTokenOf, createAccessTokenProvider } from './lib/access-token';
 
