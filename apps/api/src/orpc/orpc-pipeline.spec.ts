@@ -29,6 +29,8 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AddressInfo } from 'node:net';
+import { isContractProcedure } from '@orpc/contract';
+import { contract } from '@lets-park/contract';
 import { PrismaService } from '../database/prisma.service';
 import { configureApp } from '../configure-app';
 import type { OidcTestIssuer, TestSigningKey } from '../auth/testing/oidc-test-issuer';
@@ -42,6 +44,25 @@ const ALLOWED_ORIGIN = 'http://localhost:4200';
 interface RpcResponse {
   status: number;
   body: { json?: unknown; meta?: unknown } & Record<string, unknown>;
+}
+
+/**
+ * Every `admin.*` procedure in the contract, as a dotted name.
+ *
+ * Read off the contract rather than listed by hand, so the sweep below cannot
+ * quietly stop covering a procedure that was added later. Same walker as
+ * `orpc-route-parity.spec.ts`, restricted to the admin branch.
+ */
+function adminProcedureNames(node: unknown, prefix: string[] = []): string[] {
+  if (isContractProcedure(node)) {
+    return prefix[0] === 'admin' ? [prefix.join('.')] : [];
+  }
+  if (typeof node !== 'object' || node === null) {
+    return [];
+  }
+  return Object.entries(node).flatMap(([key, child]) =>
+    adminProcedureNames(child, [...prefix, key])
+  );
 }
 
 describe('the oRPC transport through the assembled application', () => {
@@ -185,6 +206,73 @@ describe('the oRPC transport through the assembled application', () => {
       expect(double.spots.map((spot) => spot.label)).toEqual(['A1']);
       expect(double.auditLogs).toHaveLength(0);
     });
+
+    /**
+     * The two assertions above pin `admin.spot.list` and `admin.spot.create`.
+     * They say nothing about the other seven admin procedures, and the failure
+     * this whole section exists to catch — one route whose `@Roles('ADMIN')`
+     * was never written, or was lost in an edit — is by definition on a
+     * procedure nobody thought to test.
+     *
+     * `orpc-route-parity.spec.ts` reads the decorator off Nest's metadata,
+     * which is close but not the same claim: metadata being present is not the
+     * guard running. This drives every one of them over real HTTP with a real
+     * non-admin token and requires a real 403.
+     *
+     * The list is checked against the contract below, so an admin procedure
+     * added without a row here fails rather than being silently skipped.
+     */
+    const ADMIN_CALLS: Record<string, () => unknown> = {
+      'admin.spot.list': () => ({ includeInactive: true }),
+      'admin.spot.create': () => ({ label: 'FORBIDDEN-1', group: 'IT' }),
+      'admin.spot.update': () => ({ id: double.spots[0]?.id, label: 'FORBIDDEN-2' }),
+      'admin.spot.deactivate': () => ({ id: double.spots[0]?.id }),
+      'admin.user.list': () => ({}),
+      'admin.user.update': () => ({ id: double.users[0]?.id, role: 'ADMIN' }),
+      'admin.window.get': () => undefined,
+      'admin.window.update': () => ({ openDaysBefore: 21, lockMode: 'FORCE_OPEN' }),
+      'admin.window.months': () => ({ from: '2026-09', to: '2026-10' }),
+    };
+
+    it('lists exactly the admin procedures the contract declares', () => {
+      // Without this, adding `admin.something.new` and forgetting to add it
+      // below would leave it untested while every assertion still passed.
+      const declared = adminProcedureNames(contract);
+
+      expect(declared.length).toBeGreaterThan(0);
+      expect(Object.keys(ADMIN_CALLS).sort()).toEqual([...declared].sort());
+    });
+
+    it.each(Object.keys(ADMIN_CALLS).sort())(
+      'refuses a non-admin on %s, over real HTTP',
+      async (procedure) => {
+        double.seedSpot({ label: 'A1', group: 'IT' });
+        const before = {
+          spots: double.spots.map((spot) => ({ ...spot })),
+          users: double.users.map((user) => ({ ...user })),
+          settings: { ...double.windowSettings },
+        };
+
+        const response = await call(procedure, ADMIN_CALLS[procedure]?.(), tokenFor('okta-user'));
+
+        expect(response.status).toBe(403);
+        expect(response.body).toEqual({
+          json: expect.objectContaining({ code: 'FORBIDDEN', status: 403 }),
+        });
+
+        // A refused *read* returning data would be as bad as a refused write
+        // landing, so the body is checked for the shape of an answer too.
+        expect(response.body.json).not.toHaveProperty('spots');
+        expect(response.body.json).not.toHaveProperty('users');
+
+        // Nothing moved. `admin.window.update` in particular would otherwise
+        // have flipped `lockMode` for every user in the company.
+        expect(double.spots).toEqual(before.spots);
+        expect(double.users).toEqual(before.users);
+        expect(double.windowSettings).toEqual(before.settings);
+        expect(double.auditLogs).toHaveLength(0);
+      }
+    );
 
     it('lets an admin through, and the mutation reaches the database and the audit log', async () => {
       const response = await call(

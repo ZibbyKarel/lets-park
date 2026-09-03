@@ -1,0 +1,288 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createApiClient } from '@lets-park/api-client';
+import { ERROR_DEFINITIONS } from '@lets-park/contract';
+import type { ErrorCode, MonthWindowOverview } from '@lets-park/contract';
+import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { AdminWindowScreen } from './admin-window-screen';
+import type { AdminWindowScreenProps } from './admin-window-screen';
+
+/** See `admin-errors.spec.tsx` — a real `RPCLink` failure, only `fetch` stubbed. */
+async function failureWithCode(code: ErrorCode): Promise<unknown> {
+  const status = ERROR_DEFINITIONS[code].status;
+  const client = createApiClient({
+    url: 'https://api.test/rpc',
+    fetch: async () =>
+      new Response(
+        JSON.stringify({
+          json: { defined: false as const, code, status, message: 'developer-facing' },
+          meta: [],
+        }),
+        { status, headers: { 'content-type': 'application/json' } }
+      ),
+  });
+
+  const marker = Symbol('resolved');
+  const outcome = await client.me.get().then(
+    () => marker,
+    (error: unknown) => error
+  );
+  if (outcome === marker) {
+    throw new Error('expected the call to reject, but it resolved');
+  }
+  return outcome;
+}
+
+/** September, named because two tests reach for it on its own. */
+const SEPTEMBER: MonthWindowOverview = {
+  month: '2026-09',
+  windowFrom: '2026-08-25',
+  windowTo: '2026-08-31',
+  state: 'OPEN',
+  lockMode: 'AUTO',
+};
+
+/** The four months the design lists, from a day in August 2026. */
+const MONTHS: MonthWindowOverview[] = [
+  {
+    month: '2026-08',
+    windowFrom: '2026-07-25',
+    windowTo: '2026-07-31',
+    state: 'LOCKED',
+    lockMode: 'AUTO',
+  },
+  SEPTEMBER,
+  {
+    month: '2026-10',
+    windowFrom: '2026-09-24',
+    windowTo: '2026-09-30',
+    state: 'NOT_YET_OPEN',
+    lockMode: 'AUTO',
+  },
+  {
+    month: '2026-11',
+    windowFrom: '2026-10-25',
+    windowTo: '2026-10-31',
+    state: 'NOT_YET_OPEN',
+    lockMode: 'AUTO',
+  },
+];
+
+function renderScreen(overrides: Partial<AdminWindowScreenProps> = {}) {
+  const onRetry = jest.fn();
+  const onChange = jest.fn();
+
+  const props: AdminWindowScreenProps = {
+    isPending: false,
+    isError: false,
+    error: null,
+    onRetry,
+    openDaysBefore: 7,
+    lockMode: 'AUTO',
+    months: MONTHS,
+    today: '2026-08-28',
+    onChange,
+    isSaving: false,
+    saveError: null,
+    isSaved: false,
+    ...overrides,
+  };
+
+  render(
+    <IntlProvider>
+      <AdminWindowScreen {...props} />
+    </IntlProvider>
+  );
+
+  return { onRetry, onChange, user: userEvent.setup() };
+}
+
+/** The `<li>` for one month, found by its heading text. */
+function monthRow(name: string): HTMLElement {
+  const row = screen.getByText(name).closest('li');
+  if (!(row instanceof HTMLElement)) {
+    throw new Error(`no row rendered for ${name}`);
+  }
+  return row;
+}
+
+describe('AdminWindowScreen', () => {
+  describe('the settings card', () => {
+    it('carries the design’s explanation verbatim', () => {
+      // doc/design/screens/05-admin-window.png
+      renderScreen();
+
+      expect(
+        screen.getByText(
+          'Kolik dní před začátkem měsíce se otevřou rezervace na ten měsíc. Po začátku měsíce se rezervace uzamknou — upravovat je pak může jen admin, uživatel může svoji rezervaci kdykoliv zrušit.'
+        )
+      ).toBeInTheDocument();
+    });
+
+    it('shows the current setting declined into Czech', () => {
+      renderScreen({ openDaysBefore: 7 });
+
+      expect(screen.getByRole('spinbutton', { name: 'Otevřít X dní předem' })).toHaveAttribute(
+        'aria-valuetext',
+        '7 dní'
+      );
+    });
+
+    it.each([
+      [1, '1 den'],
+      [3, '3 dny'],
+      [7, '7 dní'],
+      [21, '21 dní'],
+    ])('declines %i as "%s"', (days, text) => {
+      renderScreen({ openDaysBefore: days });
+
+      expect(screen.getByRole('spinbutton', { name: 'Otevřít X dní předem' })).toHaveAttribute(
+        'aria-valuetext',
+        text
+      );
+    });
+
+    it('stays inside the range the contract accepts', () => {
+      renderScreen({ openDaysBefore: 7 });
+
+      const stepper = screen.getByRole('spinbutton', { name: 'Otevřít X dní předem' });
+      expect(stepper).toHaveAttribute('aria-valuemin', '1');
+      expect(stepper).toHaveAttribute('aria-valuemax', '31');
+    });
+
+    it('sends both fields on a day change, because the contract replaces rather than patches', async () => {
+      const { onChange, user } = renderScreen({ openDaysBefore: 7, lockMode: 'FORCE_OPEN' });
+
+      await user.click(screen.getByRole('button', { name: 'O den více' }));
+
+      expect(onChange).toHaveBeenCalledWith({ openDaysBefore: 8, lockMode: 'FORCE_OPEN' });
+    });
+
+    it('sends both fields on a lock-mode change too', async () => {
+      const { onChange, user } = renderScreen({ openDaysBefore: 12, lockMode: 'AUTO' });
+
+      await user.click(screen.getByRole('radio', { name: 'Vynutit uzamčeno' }));
+
+      expect(onChange).toHaveBeenCalledWith({ openDaysBefore: 12, lockMode: 'FORCE_LOCKED' });
+    });
+
+    it('offers the three lock modes the design draws', () => {
+      renderScreen();
+
+      expect(screen.getAllByRole('radio').map((pill) => pill.textContent)).toEqual([
+        'Automaticky',
+        'Vynutit otevřeno',
+        'Vynutit uzamčeno',
+      ]);
+    });
+
+    it('freezes both controls while a save is in flight', () => {
+      renderScreen({ isSaving: true });
+
+      expect(screen.getByRole('button', { name: 'O den více' })).toBeDisabled();
+      expect(screen.getByRole('radio', { name: 'Vynutit otevřeno' })).toBeDisabled();
+    });
+
+    it('confirms a save, and stops confirming once something changes again', () => {
+      renderScreen({ isSaved: true });
+      expect(screen.getByText('Nastavení uloženo.')).toBeInTheDocument();
+    });
+
+    it('says nothing while nothing has been saved', () => {
+      renderScreen({ isSaved: false });
+      expect(screen.queryByText('Nastavení uloženo.')).not.toBeInTheDocument();
+    });
+
+    it('names the real limit for a refused day count, not the reservation rule', async () => {
+      renderScreen({ saveError: await failureWithCode('VALIDATION_FAILED') });
+
+      expect(screen.getByText('Počet dní musí být mezi 1 a 31.')).toBeInTheDocument();
+      expect(screen.queryByText(csMessages.errors.VALIDATION_FAILED)).not.toBeInTheDocument();
+    });
+
+    it('does not confirm a save that failed', async () => {
+      renderScreen({ isSaved: true, saveError: await failureWithCode('CONFLICT') });
+
+      expect(screen.queryByText('Nastavení uloženo.')).not.toBeInTheDocument();
+      expect(
+        screen.getByText('Nastavení mezitím změnil někdo jiný. Obnovte prosím stránku.')
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('the month list', () => {
+    it('says which day it was derived against', () => {
+      renderScreen({ today: '2026-08-28' });
+
+      expect(
+        screen.getByText('Podle nastavení vlevo · dnes je 28. srpna 2026')
+      ).toBeInTheDocument();
+    });
+
+    it('names every month in the nominative with its year', () => {
+      renderScreen();
+
+      for (const name of ['srpen 2026', 'září 2026', 'říjen 2026', 'listopad 2026']) {
+        expect(screen.getByText(name)).toBeInTheDocument();
+      }
+    });
+
+    it('prints each month’s window as the design does', () => {
+      renderScreen();
+
+      expect(
+        within(monthRow('srpen 2026')).getByText('otevřeno 25. července – 31. července')
+      ).toBeInTheDocument();
+      expect(
+        within(monthRow('září 2026')).getByText('otevřeno 25. srpna – 31. srpna')
+      ).toBeInTheDocument();
+    });
+
+    it.each([
+      ['srpen 2026', 'Uzamčeno'],
+      ['září 2026', 'Otevřeno'],
+      ['říjen 2026', 'Zatím neotevřeno'],
+    ])('badges %s as %s', (month, badge) => {
+      renderScreen();
+
+      expect(within(monthRow(month)).getByText(badge)).toBeInTheDocument();
+    });
+
+    it('marks a forced month’s range as hypothetical rather than stating it', () => {
+      // Under a forced lock mode `windowFrom`/`windowTo` describe what the
+      // automatic rule *would* have done. Printing "otevřeno 25. srpna – 31.
+      // srpna" next to an "Otevřeno" badge that an admin forced would be a
+      // false statement about when booking closes.
+      renderScreen({
+        lockMode: 'FORCE_OPEN',
+        months: [{ ...SEPTEMBER, state: 'OPEN', lockMode: 'FORCE_OPEN' }],
+      });
+
+      expect(
+        screen.getByText('automaticky by bylo otevřeno 25. srpna – 31. srpna')
+      ).toBeInTheDocument();
+      expect(screen.queryByText('otevřeno 25. srpna – 31. srpna')).not.toBeInTheDocument();
+    });
+  });
+
+  it('waits while the settings are in flight', () => {
+    renderScreen({ isPending: true, openDaysBefore: undefined, lockMode: undefined, months: [] });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  });
+
+  it('offers a retry when the settings could not be loaded', async () => {
+    const { onRetry, user } = renderScreen({
+      isError: true,
+      openDaysBefore: undefined,
+      lockMode: undefined,
+      months: [],
+      error: new Error('connection refused'),
+    });
+
+    expect(screen.queryByText(/connection refused/u)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});

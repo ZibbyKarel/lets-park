@@ -146,6 +146,163 @@ export interface CzechSettingsMessages {
   readonly icsUnavailable: string;
 }
 
+/**
+ * The `/sprava` section: its four tabs and everything inside them (Task 27,
+ * `doc/design/screens/03-admin-users.png`, `04-admin-spots.png`,
+ * `05-admin-window.png`, `06-admin-overview.png`).
+ *
+ * Three groups of strings need a note:
+ *
+ * - **Plurals go through ICU**, not through a hand-written table. Czech has
+ *   three integer plural categories (`one` = 1, `few` = 2–4, `other` = 5+), and
+ *   "7 dní"/"1 den"/"3 dny" differ in all three. next-intl parses these as ICU
+ *   MessageFormat with CLDR's Czech rules, so the declension is data, not code.
+ * - **`bannerOpenAuto` and friends come in AUTO / forced pairs.** A month whose
+ *   `lockMode` is not `AUTO` has a `windowFrom`/`windowTo` that describes what
+ *   the automatic rule *would* have done, not what is true
+ *   (`libs/contract/src/schemas/reservation-window.ts`). Printing the range in
+ *   that case would be a false statement, so the forced wording never names a
+ *   date.
+ * - **`windowState*` are looked up by the contract's `MonthLockState`**, one key
+ *   per member. The suffixes are the enum members verbatim.
+ */
+export interface CzechAdminMessages {
+  /** Small-caps line above the page title. */
+  readonly eyebrow: string;
+  /** Accessible name of the tab strip. */
+  readonly tabsLabel: string;
+  readonly tabOverview: string;
+  readonly tabUsers: string;
+  readonly tabSpots: string;
+  readonly tabWindow: string;
+
+  /** Day overview (`06-admin-overview.png`). */
+  readonly dayEyebrow: string;
+  readonly dayFree: string;
+  readonly dayTaken: string;
+  readonly dayTableTitle: string;
+  readonly dayTableDescription: string;
+  readonly dayColumnLabel: string;
+  readonly dayColumnGroup: string;
+  readonly dayColumnStatus: string;
+  readonly dayColumnQueue: string;
+  readonly dayStatusFree: string;
+  readonly dayStatusTaken: string;
+  readonly dayQueueCount: string;
+  readonly dayQueueNone: string;
+  readonly dayEmpty: string;
+  readonly dayEmptyDescription: string;
+  /** Link to the full parking grid, which is the lot screen's own rendering. */
+  readonly dayOpenLot: string;
+
+  /** The window banner, in AUTO / admin-forced pairs. See the note above. */
+  readonly bannerOpenAuto: string;
+  readonly bannerOpenForced: string;
+  readonly bannerLockedAuto: string;
+  readonly bannerLockedForced: string;
+  readonly bannerNotYetOpenAuto: string;
+  readonly bannerNotYetOpenForced: string;
+
+  /** Users (`03-admin-users.png`). */
+  readonly usersTitle: string;
+  readonly usersDescription: string;
+  readonly usersSearchLabel: string;
+  readonly usersSearchPlaceholder: string;
+  readonly usersColumnName: string;
+  readonly usersColumnEmail: string;
+  readonly usersColumnAdmin: string;
+  readonly usersColumnActive: string;
+  readonly usersAdminToggleLabel: string;
+  readonly usersActiveToggleLabel: string;
+  /** Why an admin's own "aktivní" switch is disabled. */
+  readonly usersSelfActiveHint: string;
+  readonly usersEmpty: string;
+  readonly usersEmptySearch: string;
+  readonly usersEmptySearchDescription: string;
+
+  /** Parking spots (`04-admin-spots.png`). */
+  readonly spotsTitle: string;
+  readonly spotsDescription: string;
+  readonly spotsAdd: string;
+  readonly spotsCategories: string;
+  readonly spotsCategoriesFixed: string;
+  readonly spotsColumnLabel: string;
+  readonly spotsColumnGroup: string;
+  readonly spotsColumnToday: string;
+  readonly spotsColumnActive: string;
+  readonly spotsColumnActions: string;
+  readonly spotsGroupSelectLabel: string;
+  readonly spotsActiveToggleLabel: string;
+  readonly spotsEdit: string;
+  readonly spotsDelete: string;
+  readonly spotsEmpty: string;
+  readonly spotsEmptyDescription: string;
+  readonly spotsCreateTitle: string;
+  readonly spotsEditTitle: string;
+  readonly spotsLabelField: string;
+  readonly spotsLabelRequired: string;
+  readonly spotsGroupField: string;
+  readonly spotsSave: string;
+  readonly spotsCancel: string;
+  /** `CONFLICT` from `admin.spot.create`/`update`: the label is taken. */
+  readonly spotsDuplicateLabel: string;
+  readonly spotsDeleteTitle: string;
+  readonly spotsDeleteDescription: string;
+  readonly spotsDeleteConfirm: string;
+  /** `CONFLICT` from `admin.spot.deactivate`: reservations still point at it. */
+  readonly spotsDeleteConflict: string;
+  readonly spotsInactive: string;
+  readonly spotsTodayUnknown: string;
+
+  /** Reservation window (`05-admin-window.png`). */
+  readonly windowOpenTitle: string;
+  readonly windowOpenDescription: string;
+  readonly windowDaysLabel: string;
+  readonly windowDaysValue: string;
+  readonly windowDaysDecrement: string;
+  readonly windowDaysIncrement: string;
+  readonly windowLockLabel: string;
+  readonly windowLockAUTO: string;
+  readonly windowLockFORCE_OPEN: string;
+  readonly windowLockFORCE_LOCKED: string;
+  readonly windowMonthsTitle: string;
+  readonly windowMonthsDescription: string;
+  readonly windowMonthRangeAuto: string;
+  readonly windowMonthRangeForced: string;
+  readonly windowStateOPEN: string;
+  readonly windowStateLOCKED: string;
+  readonly windowStateNOT_YET_OPEN: string;
+  readonly windowSaved: string;
+
+  /**
+   * Failure copy for the admin **writes**, one sentence per (operation, error
+   * code) pair rather than one per code.
+   *
+   * The `errors` namespace above translates the contract's codes for a reader
+   * who has no other context — which is the right thing for a whole screen that
+   * failed to load, and the wrong thing here. `CONFLICT` is the clearest case:
+   * on `admin.user.update` it means the last active administrator would be gone,
+   * on `admin.spot.create` it means the label is taken, and on
+   * `admin.spot.deactivate` it means somebody still holds the spot. One sentence
+   * covering all three would have to be vague enough to explain none of them.
+   *
+   * `errFallback*` is what an operation shows for a code it has no specific
+   * sentence for. It says the operation failed and invites a retry, which is
+   * true of anything unexpected; it never guesses at a cause.
+   */
+  readonly errForbidden: string;
+  readonly errUserConflict: string;
+  readonly errUserNotFound: string;
+  readonly errUserValidation: string;
+  readonly errFallbackUser: string;
+  readonly errSpotNotFound: string;
+  readonly errSpotValidation: string;
+  readonly errFallbackSpot: string;
+  readonly errWindowConflict: string;
+  readonly errWindowValidation: string;
+  readonly errFallbackWindow: string;
+}
+
 export interface CzechMessages {
   readonly errors: CzechErrorMessages;
   readonly shell: CzechShellMessages;
@@ -153,6 +310,7 @@ export interface CzechMessages {
   readonly nav: CzechNavMessages;
   readonly sections: CzechSectionMessages;
   readonly settings: CzechSettingsMessages;
+  readonly admin: CzechAdminMessages;
 }
 
 export const csMessages: CzechMessages = {
@@ -208,6 +366,118 @@ export const csMessages: CzechMessages = {
       'Starý odkaz přestane fungovat a kalendáře, které ho používají, se přestanou aktualizovat. Budete ho muset všude nahradit novým.',
     icsRegenerateConfirmButton: 'Vygenerovat',
     icsUnavailable: 'Odkaz na kalendář teď není k dispozici. Zkuste to prosím znovu za chvíli.',
+  },
+  admin: {
+    eyebrow: 'Administrace',
+    tabsLabel: 'Sekce správy',
+    tabOverview: 'Přehled parkoviště',
+    tabUsers: 'Uživatelé',
+    tabSpots: 'Parkovací místa',
+    tabWindow: 'Rezervační okno',
+
+    dayEyebrow: 'Přehled parkoviště',
+    dayFree: '{count} volných',
+    dayTaken: '{count} obsazených',
+    dayTableTitle: 'Místa dnes',
+    dayTableDescription: 'Kdo kde parkuje a kolik lidí čeká ve frontě',
+    dayColumnLabel: 'Štítek',
+    dayColumnGroup: 'Kategorie',
+    dayColumnStatus: 'Stav',
+    dayColumnQueue: 'Fronta',
+    dayStatusFree: 'Volné',
+    dayStatusTaken: 'Obsazeno — {name}',
+    dayQueueCount: '{count} ve frontě',
+    dayQueueNone: 'Nikdo nečeká',
+    dayEmpty: 'Na parkovišti nejsou žádná aktivní místa',
+    dayEmptyDescription: 'Přidejte místa v záložce Parkovací místa.',
+    dayOpenLot: 'Otevřít parkoviště',
+
+    bannerOpenAuto: 'Rezervace na {month} jsou otevřené — zapisovat lze do {until}.',
+    bannerOpenForced: 'Rezervace na {month} jsou otevřené — otevření vynutil admin.',
+    bannerLockedAuto: 'Rezervace na {month} jsou uzamčené.',
+    bannerLockedForced: 'Rezervace na {month} jsou uzamčené — uzamčení vynutil admin.',
+    bannerNotYetOpenAuto: 'Rezervace na {month} se otevřou {from}.',
+    bannerNotYetOpenForced: 'Rezervace na {month} zatím nejsou otevřené.',
+
+    usersTitle: 'Uživatelé',
+    usersDescription:
+      '{count, plural, one {# účet} few {# účty} other {# účtů}} ze SSO · admin roli lze kdykoliv přidat i odebrat',
+    usersSearchLabel: 'Hledat uživatele',
+    usersSearchPlaceholder: 'Hledat jméno nebo e-mail',
+    usersColumnName: 'Jméno',
+    usersColumnEmail: 'E-mail',
+    usersColumnAdmin: 'Admin',
+    usersColumnActive: 'Aktivní',
+    usersAdminToggleLabel: 'Admin role — {name}',
+    usersActiveToggleLabel: 'Aktivní účet — {name}',
+    usersSelfActiveHint: 'Vlastní účet nelze deaktivovat.',
+    usersEmpty: 'Žádní uživatelé',
+    usersEmptySearch: 'Hledání nic nenašlo',
+    usersEmptySearchDescription: 'Zkuste jiné jméno nebo e-mail.',
+
+    spotsTitle: 'Parkovací místa',
+    spotsDescription: 'Štítek, kategorie a dostupnost míst',
+    spotsAdd: 'Přidat místo',
+    spotsCategories: 'Kategorie',
+    spotsCategoriesFixed: 'Kategorie jsou pevně dané — IT a Shared.',
+    spotsColumnLabel: 'Štítek',
+    spotsColumnGroup: 'Kategorie',
+    spotsColumnToday: 'Stav dnes',
+    spotsColumnActive: 'Aktivní',
+    spotsColumnActions: 'Akce',
+    spotsGroupSelectLabel: 'Kategorie místa {label}',
+    spotsActiveToggleLabel: 'Aktivní místo {label}',
+    spotsEdit: 'Upravit',
+    spotsDelete: 'Smazat',
+    spotsEmpty: 'Zatím tu nejsou žádná místa',
+    spotsEmptyDescription: 'Přidejte první parkovací místo.',
+    spotsCreateTitle: 'Nové parkovací místo',
+    spotsEditTitle: 'Upravit místo {label}',
+    spotsLabelField: 'Štítek',
+    spotsLabelRequired: 'Zadejte štítek místa.',
+    spotsGroupField: 'Kategorie',
+    spotsSave: 'Uložit',
+    spotsCancel: 'Zrušit',
+    spotsDuplicateLabel: 'Místo s tímto štítkem už existuje.',
+    spotsDeleteTitle: 'Smazat místo {label}?',
+    spotsDeleteDescription:
+      'Místo zmizí z parkoviště, ale historie rezervací zůstane zachovaná. Smazat ho nelze, dokud na něj někdo má rezervaci ode dneška dál.',
+    spotsDeleteConfirm: 'Smazat',
+    spotsDeleteConflict: 'Na tomto místě jsou rezervace ode dneška dál. Nejdřív je zrušte.',
+    spotsInactive: 'Neaktivní',
+    spotsTodayUnknown: '—',
+
+    windowOpenTitle: 'Otevření nového měsíce',
+    windowOpenDescription:
+      'Kolik dní před začátkem měsíce se otevřou rezervace na ten měsíc. Po začátku měsíce se rezervace uzamknou — upravovat je pak může jen admin, uživatel může svoji rezervaci kdykoliv zrušit.',
+    windowDaysLabel: 'Otevřít X dní předem',
+    windowDaysValue: '{count, plural, one {# den} few {# dny} other {# dní}}',
+    windowDaysDecrement: 'O den méně',
+    windowDaysIncrement: 'O den více',
+    windowLockLabel: 'Režim zámku',
+    windowLockAUTO: 'Automaticky',
+    windowLockFORCE_OPEN: 'Vynutit otevřeno',
+    windowLockFORCE_LOCKED: 'Vynutit uzamčeno',
+    windowMonthsTitle: 'Stav měsíců',
+    windowMonthsDescription: 'Podle nastavení vlevo · dnes je {today}',
+    windowMonthRangeAuto: 'otevřeno {from} – {to}',
+    windowMonthRangeForced: 'automaticky by bylo otevřeno {from} – {to}',
+    windowStateOPEN: 'Otevřeno',
+    windowStateLOCKED: 'Uzamčeno',
+    windowStateNOT_YET_OPEN: 'Zatím neotevřeno',
+    windowSaved: 'Nastavení uloženo.',
+
+    errForbidden: 'K této akci nemáte oprávnění.',
+    errUserConflict: 'Poslední aktivní administrátor nemůže přijít o roli ani být deaktivován.',
+    errUserNotFound: 'Tento účet už neexistuje. Obnovte prosím stránku.',
+    errUserValidation: 'Tuto změnu role ani aktivity účtu nelze provést.',
+    errFallbackUser: 'Změnu účtu se nepodařilo uložit. Zkuste to prosím znovu.',
+    errSpotNotFound: 'Toto místo už neexistuje. Obnovte prosím stránku.',
+    errSpotValidation: 'Štítek nebo kategorie místa nejsou platné.',
+    errFallbackSpot: 'Změnu místa se nepodařilo uložit. Zkuste to prosím znovu.',
+    errWindowConflict: 'Nastavení mezitím změnil někdo jiný. Obnovte prosím stránku.',
+    errWindowValidation: 'Počet dní musí být mezi 1 a 31.',
+    errFallbackWindow: 'Nastavení se nepodařilo uložit. Zkuste to prosím znovu.',
   },
   errors: {
     SPOT_ALREADY_RESERVED: 'Toto parkovací místo je na daný den už rezervované.',

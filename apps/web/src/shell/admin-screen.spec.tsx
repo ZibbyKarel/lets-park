@@ -9,6 +9,11 @@ import { AdminScreen } from './admin-screen';
  * half of what is under test — the other half being which of the four states
  * is chosen. Nothing is fetched here: that is the point of the split, and the
  * page's own wiring is exercised in the browser.
+ *
+ * The four panels are inert markers rather than the real connected components,
+ * for the same reason: this file asserts *which* tab is mounted, and the real
+ * panels would drag a query client and a session in with them. That they are
+ * distinguishable is what lets the tab assertions below say anything.
  */
 function renderAdminScreen(
   overrides: {
@@ -28,6 +33,12 @@ function renderAdminScreen(
         isError={overrides.isError ?? false}
         error={overrides.error ?? null}
         onRetry={onRetry}
+        panels={{
+          overview: <p>panel-prehled</p>,
+          users: <p>panel-uzivatele</p>,
+          spots: <p>panel-mista</p>,
+          window: <p>panel-okno</p>,
+        }}
       />
     </IntlProvider>
   );
@@ -48,7 +59,45 @@ describe('AdminScreen', () => {
 
     expect(screen.getByText('K této akci nemáte oprávnění.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Správa' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Tato část se právě připravuje.')).not.toBeInTheDocument();
+    // Not one of the four tab bodies is mounted. A gate that rendered the
+    // strip but hid the heading would still be leaking the admin screens.
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByText('panel-uzivatele')).not.toBeInTheDocument();
+  });
+
+  it('names the four tabs from the design, in the design’s order', () => {
+    renderAdminScreen({ role: 'ADMIN' });
+
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Přehled parkoviště',
+      'Uživatelé',
+      'Parkovací místa',
+      'Rezervační okno',
+    ]);
+  });
+
+  it('opens on the day overview and mounts no other panel', () => {
+    renderAdminScreen({ role: 'ADMIN' });
+
+    expect(screen.getByText('panel-prehled')).toBeInTheDocument();
+    expect(screen.queryByText('panel-uzivatele')).not.toBeInTheDocument();
+    expect(screen.queryByText('panel-mista')).not.toBeInTheDocument();
+    expect(screen.queryByText('panel-okno')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['Uživatelé', 'panel-uzivatele'],
+    ['Parkovací místa', 'panel-mista'],
+    ['Rezervační okno', 'panel-okno'],
+  ])('shows the %s panel when its tab is chosen', async (tab, body) => {
+    const { user } = renderAdminScreen({ role: 'ADMIN' });
+
+    await user.click(screen.getByRole('tab', { name: tab }));
+
+    expect(screen.getByText(body)).toBeInTheDocument();
+    // The panel that was showing a moment ago is gone, not merely hidden: a
+    // mounted panel keeps fetching.
+    expect(screen.queryByText('panel-prehled')).not.toBeInTheDocument();
   });
 
   it('fails closed when the role is not known', () => {

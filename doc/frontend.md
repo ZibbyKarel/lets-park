@@ -52,6 +52,11 @@ src/app/
     sprava/page.tsx             /sprava    administration (admin only)
 ```
 
+`shell/admin/` holds the administration section's own components — one
+screen/panel pair per tab, plus the shared failure-copy table, the window
+banner and the lock-mode control. See `doc/admin.md`.
+
+
 Paths are Czech and every one of them is declared once, in
 `src/routes.ts` — `LOT_ROUTE`, `LOGIN_ROUTE`, `SETTINGS_ROUTE`, `ADMIN_ROUTE`,
 `AUTH_API_ROUTE_PREFIX`, `HEALTH_ROUTE`. `auth.ts` and `proxy.ts` both read
@@ -205,6 +210,9 @@ both fields). The form is seeded from the profile exactly **once**, in an
 effect guarded by a `useRef`, so a background refetch (e.g. after the ICS
 token regenerates and invalidates `me.get`) never overwrites an edit in
 progress.
+
+See `doc/admin.md` for the administration section (`/sprava`), which follows
+the same screen/panel split, one pair per tab.
 
 Below the form, a second section — `IcsSection` — shows the caller's ICS feed
 URL (`buildIcsFeedUrl(apiOrigin, icsToken)`), a copy-to-clipboard button, and
