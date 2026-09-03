@@ -2,7 +2,7 @@ import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 
 import { CONTROL_TRANSITION, FOCUS_RING } from './control-size';
 import { cx } from './cx';
-import { useFieldIds, type FieldOwnProps } from './field';
+import { mergeDescribedBy, useFieldIds, type FieldOwnProps } from './field';
 
 export interface RadioProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'size'>,
@@ -19,7 +19,19 @@ export interface RadioProps
  * the platform; only the ring and dot are drawn here.
  */
 export const Radio = forwardRef<HTMLInputElement, RadioProps>(function Radio(
-  { label, hint, error, id, className, wrapperClassName, disabled = false, ...rest },
+  {
+    label,
+    hint,
+    error,
+    id,
+    className,
+    wrapperClassName,
+    disabled = false,
+    // Pulled out of `rest` so it can be merged below rather than overwritten —
+    // see `mergeDescribedBy` in `field.tsx`.
+    'aria-describedby': callerDescribedBy,
+    ...rest
+  },
   ref
 ) {
   const ids = useFieldIds(id, { hint, error });
@@ -36,7 +48,7 @@ export const Radio = forwardRef<HTMLInputElement, RadioProps>(function Radio(
             disabled={disabled}
             // No `aria-invalid` here: `role="radio"` does not support it —
             // validity belongs to the group, so `RadioGroup` carries it.
-            aria-describedby={ids.describedBy}
+            aria-describedby={mergeDescribedBy(callerDescribedBy, ids.describedBy)}
             className={cx(
               'peer size-5 appearance-none rounded-cta border',
               CONTROL_TRANSITION,

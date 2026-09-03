@@ -9,7 +9,7 @@ import {
   type ControlSize,
 } from './control-size';
 import { cx } from './cx';
-import { Field, useFieldIds, type FieldOwnProps } from './field';
+import { Field, mergeDescribedBy, useFieldIds, type FieldOwnProps } from './field';
 
 export interface InputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>,
@@ -38,6 +38,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     className,
     wrapperClassName,
     disabled = false,
+    // Pulled out of `rest` so it can be merged below rather than overwritten —
+    // see `mergeDescribedBy` in `field.tsx`.
+    'aria-describedby': callerDescribedBy,
     ...rest
   },
   ref
@@ -52,7 +55,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         id={ids.controlId}
         disabled={disabled}
         aria-invalid={ids.invalid || undefined}
-        aria-describedby={ids.describedBy}
+        aria-describedby={mergeDescribedBy(callerDescribedBy, ids.describedBy)}
         className={cx(
           'rounded-md border placeholder:text-fg-3',
           CONTROL_HEIGHT[size],

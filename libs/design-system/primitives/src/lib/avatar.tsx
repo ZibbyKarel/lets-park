@@ -5,9 +5,15 @@ import { cx } from './cx';
 export type AvatarTone = 'dark' | 'info' | 'neutral' | 'warning';
 export type AvatarSize = 'sm' | 'md' | 'lg';
 
+/**
+ * Initials are 12–14px, so AA wants 4.5:1. `--brand-blue` on `--brand-blue-100`
+ * is 2.88:1 and the `-700` step only reaches 4.29:1, so `info` reads its text
+ * off the neutral scale (`--fg-2`, 9.14:1) and lets the tint carry the tone —
+ * the same rule `badge.tsx` states at length.
+ */
 const TONE_CLASSES: Record<AvatarTone, string> = {
   dark: 'bg-bg-inverse text-fg-on-dark',
-  info: 'bg-brand-blue-100 text-brand-blue',
+  info: 'bg-brand-blue-100 text-fg-2',
   neutral: 'bg-bg-muted text-fg-2',
   warning: 'bg-brand-yellow-100 text-fg-on-yellow',
 };

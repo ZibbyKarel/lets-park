@@ -249,6 +249,54 @@ describe('Dropdown', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  describe('when every item is disabled', () => {
+    const ALL_DISABLED: DropdownItem[] = [
+      { id: 'settings', label: 'Nastavení', disabled: true },
+      { id: 'sep', separator: true },
+      { id: 'admin', label: 'Správa', disabled: true },
+    ];
+
+    it('puts focus on the panel rather than leaving it on the trigger behind it', async () => {
+      const user = userEvent.setup();
+      renderDropdown({ items: ALL_DISABLED });
+
+      const trigger = screen.getByRole('button', { name: 'Karel Z.' });
+      await user.click(trigger);
+
+      const menu = screen.getByRole('menu');
+
+      expect(menu).toBeInTheDocument();
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // Focus is not on the trigger: an open menu the keyboard cannot reach is
+      // the failure this guards. `.focus()` on a disabled button is a no-op, so
+      // before the fallback existed focus stayed here.
+      expect(trigger).not.toHaveFocus();
+      expect(menu).toHaveFocus();
+    });
+
+    it('still closes on Escape and hands focus back', async () => {
+      const user = userEvent.setup();
+      renderDropdown({ items: ALL_DISABLED });
+
+      const trigger = screen.getByRole('button', { name: 'Karel Z.' });
+      await user.click(trigger);
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
+
+    it('adds no tab stop of its own — the panel is reachable only programmatically', async () => {
+      const user = userEvent.setup();
+      renderDropdown({ items: ALL_DISABLED });
+
+      await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+
+      expect(screen.getByRole('menu')).toHaveAttribute('tabindex', '-1');
+    });
+  });
+
   it('names the menu after its trigger unless given a name of its own', async () => {
     const user = userEvent.setup();
     renderDropdown();

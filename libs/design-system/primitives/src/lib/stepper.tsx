@@ -178,8 +178,12 @@ function StepButton({ label, size, disabled, onClick, children }: StepButtonProp
         CONTROL_SQUARE_WIDTH[size],
         CONTROL_TRANSITION,
         FOCUS_RING,
+        // `text-fg-3`, not `text-border-strong`: the latter is 1.38:1 on
+        // `--bg-muted` and effectively invisible, the former 4.40:1 and still
+        // clearly inactive. Same reasoning as `DISABLED_CLASSES` in
+        // `button.tsx`.
         disabled
-          ? 'cursor-not-allowed border-border bg-bg-muted text-border-strong'
+          ? 'cursor-not-allowed border-border bg-bg-muted text-fg-3'
           : 'cursor-pointer border-border bg-bg text-fg hover:border-brand-dark'
       )}
     >

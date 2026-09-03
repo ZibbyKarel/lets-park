@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { Input } from './input';
 import { Modal } from './modal';
+import { Select } from './select';
 import { Tooltip } from './tooltip';
 
 describe('Tooltip', () => {
@@ -187,11 +189,18 @@ describe('Tooltip', () => {
     expect(screen.getByRole('button', { name: 'Za' })).toHaveFocus();
   });
 
-  it('also describes a non-button trigger, such as a field', async () => {
+  // These two use the real `Input`/`Select` rather than a bare `<input>`,
+  // because a bare element has nothing of its own to write to
+  // `aria-describedby` and so passes whether or not the description survives.
+  // The design-system controls do write one, and they used to overwrite the
+  // cloned attribute with `undefined`; `mergeDescribedBy` in `field.tsx` is
+  // what stops them. This is also the shape `tooltip.stories.tsx` ships, so
+  // story and test now exercise the same path.
+  it('also describes a design-system Input', async () => {
     const user = userEvent.setup();
     render(
       <Tooltip content="Formát REF-4821">
-        <input aria-label="Kód" />
+        <Input label="Kód" />
       </Tooltip>
     );
 
@@ -200,6 +209,39 @@ describe('Tooltip', () => {
 
     expect(input).toHaveFocus();
     expect(input).toHaveAccessibleDescription('Formát REF-4821');
+  });
+
+  it('also describes a design-system Select', async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip content="Jen volná patra">
+        <Select label="Patro">
+          <option value="1">1</option>
+        </Select>
+      </Tooltip>
+    );
+
+    const select = screen.getByLabelText('Patro');
+    await user.click(select);
+
+    expect(select).toHaveFocus();
+    expect(select).toHaveAccessibleDescription('Jen volná patra');
+  });
+
+  it("keeps a field's own hint alongside the tooltip's description", async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip content="Formát REF-4821">
+        <Input label="Kód" hint="Najdete ho na kartě" />
+      </Tooltip>
+    );
+
+    const input = screen.getByLabelText('Kód');
+    expect(input).toHaveAccessibleDescription('Najdete ho na kartě');
+
+    await user.click(input);
+
+    expect(input).toHaveAccessibleDescription('Formát REF-4821 Najdete ho na kartě');
   });
 
   describe('inside an open Modal', () => {

@@ -93,6 +93,7 @@ export function Dropdown({
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   /** Indices of the items the keyboard is allowed to land on. */
@@ -125,7 +126,22 @@ export function Dropdown({
     if (!open) {
       return;
     }
-    itemRefs.current[activeIndex]?.focus();
+
+    const item = itemRefs.current[activeIndex];
+    if (item && !item.disabled) {
+      item.focus();
+
+      return;
+    }
+
+    // Nothing focusable to land on — a menu whose every item is disabled, or an
+    // active index that fell on a separator. `.focus()` on a `disabled` button
+    // is a silent no-op, so without this the panel would open with
+    // `aria-expanded="true"` while focus stayed on the trigger behind it: a
+    // keyboard user would have opened something they cannot reach, and Escape
+    // would not be delivered to it either. Focusing the panel itself keeps the
+    // menu announced and dismissable.
+    menuRef.current?.focus();
   }, [open, activeIndex]);
 
   // Escape closes and hands focus back to the trigger — but only when this menu
@@ -280,10 +296,14 @@ export function Dropdown({
 
         {open ? (
           <div
+            ref={menuRef}
             id={menuId}
             role="menu"
             aria-label={label}
             aria-labelledby={label ? undefined : triggerId}
+            // Focusable only programmatically, and only as the fallback above:
+            // -1 keeps it out of the tab order, so the menu is still one stop.
+            tabIndex={-1}
             onKeyDown={onMenuKeyDown}
             className={cx(
               'absolute top-full mt-2 flex flex-col gap-1 rounded-md border border-border bg-bg p-2',

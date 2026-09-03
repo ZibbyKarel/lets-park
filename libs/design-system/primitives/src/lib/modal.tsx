@@ -175,7 +175,11 @@ export function Modal({
             <div
               className={cx(
                 'mb-3 inline-flex h-6 items-center rounded-cta bg-brand-light px-3',
-                'text-xs font-bold uppercase tracking-caps text-brand-blue'
+                // `--fg-2`, not `--brand-blue`: `--brand-light` and
+                // `--brand-blue-100` are the same #E2F2FF, so blue-on-blue-tint
+                // here is the 2.88:1 pairing `badge.tsx` describes, spelled with
+                // the other alias. `--fg-2` on it is 9.14:1.
+                'text-xs font-bold uppercase tracking-caps text-fg-2'
               )}
             >
               {eyebrow}

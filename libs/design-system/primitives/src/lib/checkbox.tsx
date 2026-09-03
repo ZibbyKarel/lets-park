@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
 import { CONTROL_TRANSITION, FOCUS_RING } from './control-size';
 import { cx } from './cx';
-import { useFieldIds, type FieldOwnProps } from './field';
+import { mergeDescribedBy, useFieldIds, type FieldOwnProps } from './field';
 
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'size'>,
@@ -33,6 +33,9 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
     className,
     wrapperClassName,
     disabled = false,
+    // Pulled out of `rest` so it can be merged below rather than overwritten —
+    // see `mergeDescribedBy` in `field.tsx`.
+    'aria-describedby': callerDescribedBy,
     ...rest
   },
   ref
@@ -64,7 +67,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
             id={ids.controlId}
             disabled={disabled}
             aria-invalid={ids.invalid || undefined}
-            aria-describedby={ids.describedBy}
+            aria-describedby={mergeDescribedBy(callerDescribedBy, ids.describedBy)}
             className={cx(
               'peer size-5 appearance-none rounded-xs border',
               CONTROL_TRANSITION,
