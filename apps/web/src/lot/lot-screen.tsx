@@ -34,6 +34,7 @@ import { useCurrentUser } from '../shell/use-current-user';
 import { ScreenError, ScreenLoading } from '../shell/screen-state';
 import { DayBar, LotHeader, RealtimeNotice, WindowBanner } from './lot-header';
 import { LotGrid } from './lot-grid';
+import { BulkReservationModal } from './bulk-modal';
 import { SpotDialog } from './spot-dialog';
 import { useCellLocks } from './use-cell-locks';
 import { useLotRealtime } from './use-lot-realtime';
@@ -70,17 +71,13 @@ export function LotScreen() {
   const [date, setDate] = useState<DateOnly>(() => todayInPrague());
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
-  // The seam for Task 31. A boolean rather than a fake error: pushing a
-  // hand-made `Error` through `ScreenError` would render the generic "try
-  // again later" sentence, which is not what "not built yet" means.
-  const [bulkNoticeOpen, setBulkNoticeOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
-  // Otherwise this is a one-way door: once shown, it would sit above the
-  // window banner — the screen's most-read element — for the rest of the
-  // session, with no dismiss control of its own. Moving to another day is a
-  // deliberate enough action to treat as "not asking about that any more".
+  // The modal's grid is the month of `date`, and its selection belongs to that
+  // month — the contract refuses a batch spanning two. Moving the day is
+  // deliberate enough to treat as leaving the flow.
   useEffect(() => {
-    setBulkNoticeOpen(false);
+    setBulkOpen(false);
   }, [date]);
 
   const profile = useCurrentUser();
@@ -233,21 +230,24 @@ export function LotScreen() {
         // bulk action to take.
         showBulk={day.canReserve}
         onBulk={() => {
-          // Task 31 builds the modal. The seam is here so the button is real
-          // rather than dead, and so the window gating above is already
-          // written and tested when it lands.
-          setBulkNoticeOpen(true);
+          setBulkOpen(true);
         }}
       />
 
-      {bulkNoticeOpen ? (
-        <p
-          role="status"
-          className="mb-5 rounded-md border border-border bg-bg px-4 py-3 text-base text-fg-3"
-        >
-          {t('bulkComingSoon')}
-        </p>
-      ) : null}
+      {/*
+        `canReserve` is passed as well as consulted by `showBulk` above,
+        because hiding a control is not enforcement: the window can close
+        while the modal is already open, and the modal is what refuses then
+        (`doc/decision/0173-*`).
+      */}
+      <BulkReservationModal
+        open={bulkOpen}
+        onClose={() => {
+          setBulkOpen(false);
+        }}
+        anchorDate={date}
+        canReserve={day.canReserve}
+      />
 
       <WindowBanner banner={banner} />
       {realtimeStatus === 'rejected' ? <RealtimeNotice onReconnect={reconnect} /> : null}

@@ -75,14 +75,23 @@ const apiMocks = {
   waitlistJoin: jest.fn(),
   waitlistLeave: jest.fn(),
   meGet: jest.fn(),
+  spotList: jest.fn(),
+  previewBulk: jest.fn(),
+  confirmBulk: jest.fn(),
 };
 
 function buildClient() {
   return {
     overview: { day: apiMocks.overviewDay },
-    reservation: { create: apiMocks.reservationCreate, cancel: apiMocks.reservationCancel },
+    reservation: {
+      create: apiMocks.reservationCreate,
+      cancel: apiMocks.reservationCancel,
+      previewBulk: apiMocks.previewBulk,
+      confirmBulk: apiMocks.confirmBulk,
+    },
     waitlist: { join: apiMocks.waitlistJoin, leave: apiMocks.waitlistLeave },
     me: { get: apiMocks.meGet },
+    spot: { list: apiMocks.spotList },
   };
 }
 
@@ -219,6 +228,9 @@ function setup(
   apiMocks.reservationCancel.mockResolvedValue(undefined);
   apiMocks.waitlistJoin.mockResolvedValue(undefined);
   apiMocks.waitlistLeave.mockResolvedValue(undefined);
+  // The bulk modal reads the spot list for its preferred-spot label. Its own
+  // behaviour is `bulk-modal.spec.tsx`'s; here it only has to not fail.
+  apiMocks.spotList.mockResolvedValue({ spots: [] });
 
   sessionStatusValue = options.sessionStatus ?? 'authenticated';
 
@@ -309,17 +321,30 @@ describe('LotScreen — loading, error and empty', () => {
   });
 });
 
-describe('LotScreen — the bulk notice is not a one-way door', () => {
-  it('closes again when the day changes', async () => {
+describe('LotScreen — the bulk modal', () => {
+  it('opens on the header button, anchored to the day on screen', async () => {
     const { user } = setup();
 
     await user.click(screen.getByRole('button', { name: 'Hromadná rezervace' }));
-    expect(screen.getByText('Hromadná rezervace se právě připravuje.')).toBeInTheDocument();
+
+    expect(await screen.findByRole('dialog', { name: 'Hromadná rezervace' })).toBeInTheDocument();
+    // The month of `FIXED_TODAY` (2026-01-31), in the locative — proof the
+    // grid is anchored to the screen's day rather than to "now".
+    expect(screen.getByText(/Vyberte dny v lednu\./)).toBeInTheDocument();
+  });
+
+  it('closes again when the day changes', async () => {
+    // The selection belongs to one month; carrying it across a day change
+    // would be a batch the contract refuses.
+    const { user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Hromadná rezervace' }));
+    expect(await screen.findByRole('dialog', { name: 'Hromadná rezervace' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Následující den' }));
 
     await waitFor(() =>
-      expect(screen.queryByText('Hromadná rezervace se právě připravuje.')).not.toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'Hromadná rezervace' })).not.toBeInTheDocument()
     );
   });
 });

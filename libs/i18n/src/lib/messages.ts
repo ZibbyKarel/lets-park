@@ -184,10 +184,8 @@ export interface CzechLotMessages {
   readonly freeCount: string;
   /** `5 obsazených` — the blue-dot pill next to it. */
   readonly takenCount: string;
-  /** The header's primary action. The modal behind it is Task 31. */
+  /** The header's primary action. Its modal's copy is the `bulk` namespace. */
   readonly bulkReservation: string;
-  /** Shown when the bulk modal is asked for before Task 31 has built it. */
-  readonly bulkComingSoon: string;
 
   /** `1 z 4 volných` — right-hand meta of a group's rule. */
   readonly groupFree: string;
@@ -290,6 +288,90 @@ export interface CzechLotMessages {
   readonly realtimeReconnect: string;
 }
 
+/**
+ * The bulk-reservation modal (Task 31, `doc/bulk-reservation-modal.md`).
+ *
+ * Its own namespace rather than more keys under `lot`, for one reason that is
+ * not tidiness: the modal has to say what went wrong when a *bulk* request
+ * fails, and the `errors` namespace's sentences are written for a single-day
+ * reservation. `VALIDATION_FAILED` is the clearest case — under `errors` it
+ * says "weekend or holiday", which for a bulk request is never true
+ * (`doc/decision/0090-*` makes a weekend a per-day fact, not an error), so
+ * reusing it would tell the user something that did not happen.
+ */
+export interface CzechBulkMessages {
+  readonly title: string;
+  readonly description: string;
+
+  /** Column heads of the month grid, Monday first (`doc/design/screens/10-modal-bulk.png`). */
+  readonly weekdayMon: string;
+  readonly weekdayTue: string;
+  readonly weekdayWed: string;
+  readonly weekdayThu: string;
+  readonly weekdayFri: string;
+  readonly weekdaySat: string;
+  readonly weekdaySun: string;
+
+  /** Accessible name of one selectable day cell, and of one that is blocked. */
+  readonly dayCell: string;
+  readonly dayCellBlocked: string;
+  readonly gridLabel: string;
+
+  readonly nonSelectableNote: string;
+  /** `Preferované místo: E2.92` and the three cases where there is no label. */
+  readonly preferredSpot: string;
+  readonly preferredSpotNone: string;
+  readonly preferredSpotLoading: string;
+  /**
+   * The preferred spot is set but is not among the active spots — it was
+   * deactivated after the user chose it. Saying so is the point: a blank label
+   * would leave the user thinking the plan starts from a spot it cannot.
+   */
+  readonly preferredSpotUnavailable: string;
+
+  readonly close: string;
+  readonly ctaSelectDays: string;
+  readonly ctaGenerate: string;
+  readonly ctaConfirm: string;
+  readonly ctaBack: string;
+  readonly ctaDone: string;
+
+  readonly scheduleTitle: string;
+  readonly scheduleDescription: string;
+  readonly scheduleSummary: string;
+  readonly scheduleEmpty: string;
+
+  readonly badgeAssignedPreferred: string;
+  readonly badgeAssigned: string;
+  readonly badgeQueued: string;
+  readonly badgeAlreadyReserved: string;
+  readonly badgeNotBusinessDay: string;
+  readonly badgeNoSpots: string;
+
+  readonly resultTitle: string;
+  readonly resultDescription: string;
+  /** Shown when the confirmation matched the proposal day for day. */
+  readonly resultUnchanged: string;
+  /** Shown when it did not — the whole reason the flow has two steps. */
+  readonly resultChangedTitle: string;
+  readonly resultChangedDescription: string;
+  readonly resultChangedProposed: string;
+  readonly resultChangedActual: string;
+  readonly resultChangedMissing: string;
+
+  /** The month is locked for this caller — see `doc/decision/0173-*`. */
+  readonly lockedTitle: string;
+  readonly lockedDescription: string;
+
+  readonly errorPastDate: string;
+  readonly errorOutOfHorizon: string;
+  readonly errorLocked: string;
+  readonly errorValidation: string;
+  readonly errorConflict: string;
+  readonly errorForbidden: string;
+  readonly errorUnknown: string;
+}
+
 export interface CzechMessages {
   readonly errors: CzechErrorMessages;
   readonly shell: CzechShellMessages;
@@ -298,6 +380,7 @@ export interface CzechMessages {
   readonly sections: CzechSectionMessages;
   readonly settings: CzechSettingsMessages;
   readonly lot: CzechLotMessages;
+  readonly bulk: CzechBulkMessages;
 }
 
 export const csMessages: CzechMessages = {
@@ -362,7 +445,6 @@ export const csMessages: CzechMessages = {
     freeCount: '{count} volných',
     takenCount: '{count} obsazených',
     bulkReservation: 'Hromadná rezervace',
-    bulkComingSoon: 'Hromadná rezervace se právě připravuje.',
 
     groupFree: '{free} z {total} volných',
     groupLabel: 'Skupina {group}',
@@ -446,5 +528,73 @@ export const csMessages: CzechMessages = {
     SPOT_NOT_OCCUPIED: 'Toto místo je volné — místo čekání ve frontě si ho rovnou rezervujte.',
     VALIDATION_FAILED: 'Požadavek porušuje pravidlo rezervací (např. víkend nebo svátek).',
     CONFLICT: 'Někdo jiný mezitím provedl stejnou změnu — zkuste to prosím znovu.',
+  },
+  bulk: {
+    title: 'Hromadná rezervace',
+    description:
+      'Vyberte dny v {month}. Místo přiřadíme automaticky — kde nebude volno, zařadíme vás do fronty.',
+
+    weekdayMon: 'PO',
+    weekdayTue: 'ÚT',
+    weekdayWed: 'ST',
+    weekdayThu: 'ČT',
+    weekdayFri: 'PÁ',
+    weekdaySat: 'SO',
+    weekdaySun: 'NE',
+
+    dayCell: '{date}',
+    dayCellBlocked: '{date} — nelze vybrat',
+    gridLabel: 'Výběr dní',
+
+    nonSelectableNote: 'Víkendy a svátky nelze vybrat.',
+    preferredSpot: 'Preferované místo: {label}',
+    preferredSpotNone: 'Preferované místo: nemáte nastavené',
+    preferredSpotLoading: 'Preferované místo: načítá se…',
+    preferredSpotUnavailable: 'Preferované místo: už není k dispozici',
+
+    close: 'Zavřít',
+    ctaSelectDays: 'Vyberte dny',
+    ctaGenerate: 'Vygenerovat rozvrh ({count, plural, one {# den} few {# dny} other {# dní}})',
+    ctaConfirm: 'Potvrdit rozvrh',
+    ctaBack: 'Zpět na výběr',
+    ctaDone: 'Hotovo',
+
+    scheduleTitle: 'Návrh rozvrhu',
+    scheduleDescription:
+      'Takhle vás zapíšeme. Než rozvrh potvrdíte, může se stav parkoviště změnit — po potvrzení uvidíte, co se skutečně stalo.',
+    scheduleSummary:
+      '{assigned, plural, one {# den} few {# dny} other {# dní}} s místem, {queued, plural, one {# den} few {# dny} other {# dní}} ve frontě.',
+    scheduleEmpty: 'Pro vybrané dny nemáme co navrhnout.',
+
+    badgeAssignedPreferred: 'Rezervováno · preferované',
+    badgeAssigned: 'Rezervováno',
+    badgeQueued: '{position}. ve frontě',
+    badgeAlreadyReserved: 'Už máte rezervaci',
+    badgeNotBusinessDay: 'Víkend nebo svátek',
+    badgeNoSpots: 'Žádné místo',
+
+    resultTitle: 'Rozvrh potvrzen',
+    resultDescription: 'Takhle jsme vás zapsali.',
+    resultUnchanged: 'Zapsali jsme vás přesně podle návrhu.',
+    resultChangedTitle: 'Rozvrh se od návrhu liší',
+    resultChangedDescription:
+      'Než jste rozvrh potvrdili, změnil se stav parkoviště. U těchto dnů jsme vás zapsali jinak, než návrh sliboval:',
+    resultChangedProposed: 'Návrh',
+    resultChangedActual: 'Skutečnost',
+    resultChangedMissing: 'nic',
+
+    lockedTitle: 'Rezervace jsou uzamčené',
+    lockedDescription:
+      'Rezervace na tento měsíc jsou uzamčené — hromadnou rezervaci teď založit nelze.',
+
+    errorPastDate: 'Ve výběru je den, který už je v minulosti. Odeberte ho a zkuste to znovu.',
+    errorOutOfHorizon: 'Rezervace na tento měsíc se zatím neotevřely.',
+    errorLocked: 'Rezervace na tento měsíc jsou uzamčené — hromadnou rezervaci už založit nelze.',
+    errorValidation:
+      'Výběr dní neprošel kontrolou — vyberte alespoň jeden den a všechny v jednom měsíci.',
+    errorConflict:
+      'Někdo jiný mezitím obsadil místa, se kterými rozvrh počítal. Nezapsali jsme nic — vygenerujte rozvrh znovu.',
+    errorForbidden: 'K hromadné rezervaci nemáte oprávnění.',
+    errorUnknown: 'Hromadnou rezervaci se nepodařilo dokončit. Zkuste to prosím znovu za chvíli.',
   },
 };

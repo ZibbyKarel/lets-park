@@ -2,7 +2,9 @@ import {
   formatDayAndMonth,
   formatFullDate,
   formatMonthAndYear,
+  formatMonthLocative,
   formatMonthName,
+  formatWeekdayName,
   formatYear,
 } from './dates';
 
@@ -74,5 +76,75 @@ describe('formatMonthName', () => {
 describe('formatYear', () => {
   it('renders a plain four-digit year with no thousands separator', () => {
     expect(formatYear(2026)).toBe('2026');
+  });
+});
+
+describe('formatMonthLocative', () => {
+  it('names all twelve months in the locative, the case that follows “v”', () => {
+    const expected = [
+      'lednu',
+      'únoru',
+      'březnu',
+      'dubnu',
+      'květnu',
+      'červnu',
+      'červenci',
+      'srpnu',
+      'září',
+      'říjnu',
+      'listopadu',
+      'prosinci',
+    ];
+    for (let month = 1; month <= 12; month += 1) {
+      expect(formatMonthLocative(month)).toBe(expected[month - 1]);
+    }
+  });
+
+  it('differs from the nominative for every month but září', () => {
+    // The check that would have caught a table copied from `formatMonthName`:
+    // September is the only month whose two forms coincide.
+    for (let month = 1; month <= 12; month += 1) {
+      if (month === 9) {
+        expect(formatMonthLocative(month)).toBe(formatMonthName(month));
+      } else {
+        expect(formatMonthLocative(month)).not.toBe(formatMonthName(month));
+      }
+    }
+  });
+
+  it('throws rather than returning undefined outside 1–12', () => {
+    expect(() => formatMonthLocative(0)).toThrow(RangeError);
+    expect(() => formatMonthLocative(13)).toThrow(RangeError);
+  });
+});
+
+describe('formatWeekdayName', () => {
+  it('names every Czech weekday in the nominative, Monday first', () => {
+    // 2026-09-28 is a Monday (doc/design/screens/07-lot.png), so this week
+    // runs Monday to Sunday with no arithmetic of its own.
+    const week = [
+      '2026-09-28',
+      '2026-09-29',
+      '2026-09-30',
+      '2026-10-01',
+      '2026-10-02',
+      '2026-10-03',
+      '2026-10-04',
+    ];
+    expect(week.map(formatWeekdayName)).toEqual([
+      'pondělí',
+      'úterý',
+      'středa',
+      'čtvrtek',
+      'pátek',
+      'sobota',
+      'neděle',
+    ]);
+  });
+
+  it('reads the calendar day, not the host time zone', () => {
+    // Would be the previous day anywhere west of UTC if the formatter built a
+    // local midnight instead of a UTC one.
+    expect(formatWeekdayName('2026-01-01')).toBe('čtvrtek');
   });
 });

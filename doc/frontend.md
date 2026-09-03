@@ -238,6 +238,22 @@ The ICS token is a bearer credential and is never logged from this screen: a
 failed clipboard write only flips a `copyState` flag, and neither mutation's
 variables or result are serialised anywhere in `SettingsPage`.
 
+## Bulk reservation (the lot screen's modal)
+
+The "Hromadná rezervace" button on the lot header opens a three-step modal that
+lives in `src/lot/bulk-modal.tsx`, with every decision it makes as a pure
+function in `src/lot/bulk-view.ts`. It has its own document:
+`doc/bulk-reservation-modal.md`.
+
+Two things about it are worth knowing from here rather than from there. Its
+third step is **not** optional: the confirmation is compared with the proposal
+the user was shown, and a difference is rendered rather than swallowed
+(`doc/decision/0170-*`), so this is the one modal on the site that does not
+close itself on a successful write. And its failures are rendered from the
+`bulk` message namespace rather than the shared `errors` one, because the
+shared sentences describe a single-day reservation
+(`doc/decision/0171-*`).
+
 ## Loading, empty and error
 
 `shell/screen-state.tsx` exports all three from one module, so a screen imports
