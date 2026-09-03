@@ -4,7 +4,7 @@
   "sourceRoot": "libs/design-system/primitives/src",
   "projectType": "library",
   "tags": ["type:ui", "scope:web", "ds:primitives"],
-  "// implicitDependencies": "Primitives consume tokens purely through CSS custom properties (see .storybook/preview.css) — there is no TS import, so Nx cannot infer the edge. Declaring it keeps `nx affected` honest: a token change re-runs primitives.",
+  "// implicitDependencies": "Primitives consume tokens through CSS custom properties (see .storybook/preview.css); the only TS import is in the specs, which read COLOR_UTILITIES so their colour lists stay derived. Nx can infer that edge now, but the declaration stays: it is what keeps `nx affected` honest for a token change that touches no TS at all.",
   "implicitDependencies": ["design-system-tokens"],
   "// targets": "to see all targets run: nx show project design-system-primitives --web",
   "targets": {

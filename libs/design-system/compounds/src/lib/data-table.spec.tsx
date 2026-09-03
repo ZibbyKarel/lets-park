@@ -82,6 +82,17 @@ describe('DataTable', () => {
       expect(screen.getAllByText('Položky')).toHaveLength(2);
     });
 
+    it('names itself once, as the table — not also as a landmark around it', () => {
+      renderTable();
+
+      // The card `<section>` deliberately carries no `aria-label`. With one it
+      // became a named `region` landmark, so the title was announced a third
+      // time and three tables on an admin screen produced three same-named
+      // landmarks to walk past.
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+      expect(screen.getByRole('table', { name: 'Položky' })).toBeInTheDocument();
+    });
+
     it('renders the actions and the toolbar slots', () => {
       renderTable({
         actions: <button type="button">Přidat</button>,

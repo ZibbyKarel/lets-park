@@ -5,10 +5,16 @@
  * a control height, and every other token module in this lib is a byte-faithful
  * copy of it. The values below are read off the finished visual design
  * (`doc/design/lets-park-design.dc.html`), which sizes its buttons, inputs and
- * selects with literal pixel heights that are not expressible on the `--space-*`
- * scale (36px, 44px, 52px, 56px). Keeping them here — rather than inline in the
- * primitives — is what lets `libs/design-system/primitives` stay free of
+ * selects with literal pixel heights. Keeping them here — rather than inline in
+ * the primitives — is what lets `libs/design-system/primitives` stay free of
  * hand-written pixel values.
+ *
+ * They are their own token group rather than aliases onto `--space-*` because
+ * two of the four (36px, 56px) are not on that scale at all, and because a
+ * control height is not a spacing value even where the numbers coincide —
+ * 40px and 48px do land on `--space-10` and `--space-12`, and routing them
+ * through the spacing namespace would also mint `w-control-lg` and
+ * `p-control-lg`, which mean nothing (see the note in `assets/theme.css`).
  *
  * See `doc/decision/0011-derived-control-tokens-and-rounding.md` for why the
  * design's seven distinct heights collapse to four steps.

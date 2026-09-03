@@ -7,6 +7,12 @@
    a literal value — the literal values live only in `tokens.css`, generated
    from `libs/design-system/tokens/src/lib/*.ts`. See `doc/design-system.md`.
 
+   Hand-written does not mean unchecked: `src/lib/theme-css.spec.ts` fails if a
+   token in `tokens.css` gets no utility here and is not on that file's explicit
+   exclusion list, if this file references a `var(--x)` that no longer exists,
+   or if the five literal `--breakpoint-*` values below drift from `BREAKPOINTS`
+   in `src/lib/layout.ts`.
+
    Import this file (not `tokens.css` directly) from the app's global CSS
    entrypoint:  @import "@lets-park/design-system/tokens/theme.css";
    ============================================================ */
@@ -122,9 +128,24 @@
   --tracking-caps: var(--tracking-caps);
 
   /* --- Spacing ---
-     Named per-key (not the single `--spacing` base unit) because the source
-     scale skips numbers (no 7, 9, 11, ...) and isn't a clean multiplier
-     table Tailwind could derive on its own. */
+     Named per-key so that `p-4` resolves to `var(--space-4)` — the generated
+     token — instead of to Tailwind v4's own `calc(var(--spacing) * 4)`. That
+     is the only thing this block buys, and it is worth having: without it the
+     `--space-*` tokens would be dead, and the scale would be rem-based where
+     the design specifies px.
+
+     It is NOT a fence. Tailwind v4's default `--spacing: 0.25rem` multiplier is
+     still in place (no `--spacing-*: initial` anywhere), so `p-7`, `w-70`,
+     `max-w-96` and every other off-scale number still mint a utility, off that
+     multiplier rather than off a token. Measured, not assumed: see the two
+     compile tests in `src/lib/theme-css.spec.ts`, which build this file with
+     the real Tailwind and read the emitted rules.
+
+     Closing the scale was considered and rejected — it removes utilities
+     silently rather than loudly (Tailwind emits nothing and reports nothing),
+     and it would take `p-0`, `m-0` and `inset-0` with it, since the zero-value
+     utilities also resolve through the multiplier. See
+     doc/decision/0268-the-spacing-scale-is-open-by-design-and-the-enumeration-is-what-binds-it-to-the-tokens.md. */
   --spacing-1: var(--space-1);
   --spacing-2: var(--space-2);
   --spacing-3: var(--space-3);

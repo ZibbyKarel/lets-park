@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
 
+import { COLOR_UTILITIES } from '@lets-park/design-system/tokens';
+
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { Input } from './input';
@@ -23,51 +25,37 @@ import { Switch } from './switch';
  * jsdom applies no stylesheet, so no rendering assertion can catch this. What
  * we *can* assert is the invariant that makes stylesheet order irrelevant:
  * **an element must never carry two unconditional classes that set the same
- * colour property.** That is checked below as a property-group count rather
- * than as a hardcoded list of known-bad pairs, so it bites for pairs nobody
- * has thought of yet, in components that do not exist yet.
+ * colour property.** That is checked as a property-group count rather than as
+ * a list of known-bad pairs, so it bites for pairs nobody has thought of yet.
+ *
+ * **What it does not do**, stated plainly because the previous version of this
+ * comment claimed otherwise: it only inspects the components named in the
+ * `describe` blocks below, and that list is written by hand. `Modal`,
+ * `Dropdown`, `Tabs`, `Toast`, `Tooltip`, `Avatar`, `Badge` and all three
+ * compounds are not checked here. A new component is not covered until someone
+ * adds it. The *token* half of the check is derived and complete (see
+ * `COLOR_TOKENS` below); the *component* half is not.
  */
 
 /**
- * Every colour token name that can appear as the value half of a `bg-*`,
- * `text-*` or `border-*` utility in this lib. Listed explicitly because the
- * three prefixes are overloaded: `text-sm` is a font size, `border-2` a width,
- * `bg-none` an image. Matching on the *token* rather than on the prefix is
- * what keeps those out of the colour groups.
+ * Every name that can appear as the value half of a `bg-*`, `text-*` or
+ * `border-*` utility. Matching on the token rather than on the prefix is what
+ * keeps `text-sm` (a font size), `border-2` (a width) and `bg-none` (an image)
+ * out of the colour groups.
+ *
+ * Derived from the tokens lib rather than transcribed. The hand-written list
+ * this replaced was missing `scrim` and every `neutral-*` step, so
+ * `bg-scrim` in `modal.tsx` and `text-neutral-600` in `data-table.tsx` were
+ * invisible to it — the exact failure mode the check exists to prevent.
+ * `theme-css.spec.ts` holds `COLOR_UTILITIES` equal to the `--color-*` block of
+ * `theme.css`, so this list cannot fall behind the utilities Tailwind actually
+ * mints.
  */
 const COLOR_TOKENS = [
-  'bg',
-  'bg-soft',
-  'bg-muted',
-  'bg-inverse',
-  'fg',
-  'fg-2',
-  'fg-3',
-  'fg-on-yellow',
-  'fg-on-green',
-  'fg-on-blue',
-  'fg-on-light',
-  'fg-on-dark',
-  'border',
-  'border-strong',
-  'divider',
-  'brand-blue',
-  'brand-blue-700',
-  'brand-blue-100',
-  'brand-green',
-  'brand-green-700',
-  'brand-green-100',
-  'brand-yellow',
-  'brand-yellow-700',
-  'brand-yellow-100',
-  'brand-light',
-  'brand-dark',
-  'brand-black',
-  'success',
-  'info',
-  'warning',
-  'danger',
-  'danger-100',
+  ...Object.keys(COLOR_UTILITIES),
+  // CSS-wide keywords Tailwind offers on every colour prefix. They are not
+  // tokens, so they are not in `COLOR_UTILITIES`, but `bg-transparent` and
+  // `bg-bg` still collide.
   'transparent',
   'current',
   'inherit',

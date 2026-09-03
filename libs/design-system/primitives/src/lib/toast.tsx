@@ -23,11 +23,20 @@ const TONE_CLASSES: Record<ToastTone, string> = {
   danger: 'bg-danger-100 border-danger',
 };
 
-/** Colour of the leading glyph's chip, matching the tone's border. */
+/**
+ * Colour of the leading glyph's chip, matching the tone's border.
+ *
+ * `success` deliberately does **not** use `--fg-on-green`. That token is white
+ * (the design's own choice, `colors_and_type.css:126`), and white on
+ * `--brand-green` #00DB33 measures 1.88:1 — the worst pairing in the lib, and
+ * unreadable at the 12px this glyph is drawn at. `--brand-dark` on the same
+ * green is 8.47:1. The token is left alone; only this pairing changed. See
+ * `doc/decision/0266-badge-avatar-and-toast-read-their-text-off-the-neutral-scale.md`.
+ */
 const GLYPH_CLASSES: Record<ToastTone, string> = {
   neutral: 'bg-bg-muted text-fg-2',
   info: 'bg-brand-blue text-fg-on-blue',
-  success: 'bg-brand-green text-fg-on-green',
+  success: 'bg-brand-green text-brand-dark',
   warning: 'bg-brand-yellow text-fg-on-yellow',
   danger: 'bg-danger text-fg-on-dark',
 };

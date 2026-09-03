@@ -9,7 +9,7 @@ import {
   type ControlSize,
 } from './control-size';
 import { cx } from './cx';
-import { Field, useFieldIds, type FieldOwnProps } from './field';
+import { Field, mergeDescribedBy, useFieldIds, type FieldOwnProps } from './field';
 
 export interface SelectProps
   extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'>,
@@ -44,6 +44,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     wrapperClassName,
     disabled = false,
     children,
+    // Pulled out of `rest` so it can be merged below rather than overwritten —
+    // see `mergeDescribedBy` in `field.tsx`.
+    'aria-describedby': callerDescribedBy,
     ...rest
   },
   ref
@@ -59,7 +62,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           id={ids.controlId}
           disabled={disabled}
           aria-invalid={ids.invalid || undefined}
-          aria-describedby={ids.describedBy}
+          aria-describedby={mergeDescribedBy(callerDescribedBy, ids.describedBy)}
           className={cx(
             'appearance-none rounded-md border',
             // Room for the chevron: the normal field padding plus its box.

@@ -1,5 +1,6 @@
 export * from './lib/colors';
 export * from './lib/car-palette';
+export * from './lib/color-utilities';
 export * from './lib/typography';
 export * from './lib/spacing';
 export * from './lib/radius';

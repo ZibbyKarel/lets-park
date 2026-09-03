@@ -49,6 +49,26 @@ export function useFieldIds(
   };
 }
 
+/**
+ * Joins an `aria-describedby` the caller already set with the ids the field
+ * owns, dropping the empty ones. Returns `undefined` when nothing is left, so
+ * React removes the attribute rather than emitting `aria-describedby=""`.
+ *
+ * **Written as a merge, never as an assignment, and that is the whole point.**
+ * A wrapper such as `Tooltip` describes the control by cloning it with its own
+ * `aria-describedby`. A control that spread `{...rest}` first and then wrote
+ * `aria-describedby={ids.describedBy}` would overwrite the cloned value with
+ * `undefined` whenever it had no hint and no error of its own — the bubble
+ * still renders, `role="tooltip"` is still in the accessibility tree, and the
+ * screen reader is told nothing. `field.spec.tsx` and the `Tooltip` field case
+ * in `tooltip.spec.tsx` both fail if this goes back to an assignment.
+ */
+export function mergeDescribedBy(...values: (string | undefined)[]): string | undefined {
+  const joined = values.filter(Boolean).join(' ');
+
+  return joined.length > 0 ? joined : undefined;
+}
+
 export interface FieldProps extends FieldOwnProps {
   ids: FieldIds;
   className?: string | undefined;

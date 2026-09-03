@@ -276,11 +276,15 @@ export function DataTable<TData extends DataTableRow>({
     <section
       className={cx(
         'overflow-x-auto rounded-lg border border-border bg-bg',
-        // A `<section>` is only a landmark once it has a name; the card's title
-        // is that name, and it is the same string the caption uses.
+        // Deliberately **unnamed**. A `<section>` is only a landmark once it
+        // has an accessible name, and naming it here made every table announce
+        // its title three times: once as a `region` landmark, once as the
+        // table's `<caption>`, once as the visible heading. Three of those on
+        // an admin screen gives a screen-reader user three same-named regions
+        // to walk past. The caption is the one that has to stay — it is what
+        // names the *table*, which is the thing being read.
         className
       )}
-      aria-label={title}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider px-6 py-5">
         <div>
