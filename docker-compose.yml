@@ -103,7 +103,7 @@ services:
       target: migrator
     restart: 'no'
     environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.docker}
+      - DATABASE_URL
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,14 +126,63 @@ services:
       default:
         aliases:
           - lets-park-api
+    # The list form, not the map, and every entry bare. Two findings, both
+    # measured:
+    #
+    # 1. An entry with no `=` is forwarded **only when the variable is set**
+    #    and is absent otherwise, whereas `KEY: ${KEY:-}` sets it to the empty
+    #    string. `apps/api/src/env.ts` gives every optional key a default that
+    #    an empty string does not satisfy — `SLACK_BOT_TOKEN` is
+    #    `z.string().min(1).optional()` — so `:-` would crash the boot on a
+    #    variable nobody set.
+    # 2. **`${VAR:?message}` cannot be used here at all.** Compose interpolates
+    #    *every* service in the file regardless of which profiles are active,
+    #    so one `:?` on `web` makes `docker compose --profile dev up -d` — the
+    #    everyday development command, and what the e2e suite depends on —
+    #    fail with `required variable AUTH_URL is missing a value`. Verified
+    #    with `--dry-run`.
+    #
+    # A missing *required* value is therefore caught where it always was: by
+    # the app's own fail-fast schema at boot (`apps/api/src/env.ts`,
+    # `apps/web/src/instrumentation-node.ts`), which names the variable and
+    # exits. `AUTH_URL` is the one exception — it is Auth.js's, not in
+    # `webEnvSchema` — and shows up instead as a bad post-login redirect on the
+    # first sign-in. See doc/decision/0205-*.
     environment:
-      NODE_ENV: production
-      PORT: '3000'
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.docker}
-      AUTH_OKTA_ISSUER: ${AUTH_OKTA_ISSUER:?set AUTH_OKTA_ISSUER in .env.docker}
-      AUTH_OKTA_AUDIENCE: ${AUTH_OKTA_AUDIENCE:?set AUTH_OKTA_AUDIENCE in .env.docker}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env.docker}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL
+      - AUTH_OKTA_ISSUER
+      - AUTH_OKTA_AUDIENCE
+      - CORS_ALLOWED_ORIGINS
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Tunables. Each has a default in `apps/api/src/env.ts`; forwarded only
+      # when someone has actually chosen a value.
+      - BODY_LIMIT
+      - HEALTH_DB_TIMEOUT_MS
+      - REALTIME_LOCK_TTL_MS
+      - THROTTLE_TTL_MS
+      - THROTTLE_LIMIT
+      - THROTTLE_STRICT_TTL_MS
+      - THROTTLE_STRICT_LIMIT
+      # Slack. These belong to `apps/api/src/slack`, which lives on
+      # `feat/lets-park-mvp` and which this branch's base (`task-28-e2e`)
+      # predates — so they are listed, not defaulted: unset here today, and
+      # forwarded the moment the module and its `.env` arrive.
+      # `SLACK_ENABLED` already defaults to `false`, so an unset Slack is a
+      # working Slack-less API rather than a broken one
+      # (`doc/decision/0130-slack-is-off-by-default-and-there-is-no-dev-only-branch`,
+      # on that branch).
+      #
+      # **`SLACK_BOT_TOKEN` is a secret.** It is here and nowhere else: not in
+      # `.env.docker.example`, not in an image layer, not in a log line.
+      - SLACK_ENABLED
+      - SLACK_BOT_TOKEN
+      - SLACK_CHANNEL_ID
+      - SLACK_DAILY_SUMMARY_AT
+      - SLACK_REQUEST_TIMEOUT_MS
+      - SLACK_RETRY_ATTEMPTS
+      - SLACK_RETRY_BASE_DELAY_MS
     ports:
       - '3000:3000'
     depends_on:
@@ -151,12 +200,12 @@ services:
     init: true
     stop_grace_period: 30s
     environment:
-      NODE_ENV: production
-      PORT: '3000'
+      - NODE_ENV=production
+      - PORT=3000
       # Read by server code at request time and handed to the browser as a
       # prop, so it must be one URL that works from both — hence the
       # `lets-park-api` alias and the /etc/hosts line above.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL in .env.docker}
+      - NEXT_PUBLIC_API_URL
       # The app's **public** origin, and required in a container for a reason
       # that only shows up in one: Next's request interceptor (`proxy.ts`) sees
       # a request URL built from the address the server bound, not from the
@@ -169,11 +218,11 @@ services:
       # redirect_uri is *not* affected (it was correct either way), which is
       # what makes this fail so late and look like an issuer problem.
       # See doc/decision/0202-*.
-      AUTH_URL: ${AUTH_URL:?set AUTH_URL in .env.docker}
-      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env.docker}
-      AUTH_OKTA_ISSUER: ${AUTH_OKTA_ISSUER:?set AUTH_OKTA_ISSUER in .env.docker}
-      AUTH_OKTA_CLIENT_ID: ${AUTH_OKTA_CLIENT_ID:?set AUTH_OKTA_CLIENT_ID in .env.docker}
-      AUTH_OKTA_CLIENT_SECRET: ${AUTH_OKTA_CLIENT_SECRET:?set AUTH_OKTA_CLIENT_SECRET in .env.docker}
+      - AUTH_URL
+      - AUTH_SECRET
+      - AUTH_OKTA_ISSUER
+      - AUTH_OKTA_CLIENT_ID
+      - AUTH_OKTA_CLIENT_SECRET
     # 4200 on the host, 3000 in the container. The host port is the one that
     # matters: `CORS_ALLOWED_ORIGINS` and the redirect URI the browser is sent
     # back to both name `http://localhost:4200`, exactly as in host-run dev.

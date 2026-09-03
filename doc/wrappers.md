@@ -185,7 +185,7 @@ parking domain instead of the generic demo schema.
 Zod in the tests is always a local `z.object(...)` schema, not an import from
 `@lets-park/contract` — `libs/form` is domain-independent, and `@orpc/contract` (ESM-only,
 see `doc/decision/0020-*`) would add a transform to its Jest config that this task doesn't
-need. So there is no fourth copy of the ESM-transform block (`doc/decision/0020-*`, `0025-*`)
+need. So there is no fourth copy of the ESM-transform block (`doc/decision/0020-*`, `0025-next-intl-esm-jest-transform`)
 in `libs/form/jest.config.cts`, nor was one needed.
 
 ---

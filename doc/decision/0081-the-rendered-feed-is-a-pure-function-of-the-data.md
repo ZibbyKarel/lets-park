@@ -62,7 +62,7 @@ trailing `Z`, becoming a floating time rendered in the server's local zone.
 With no calendar time zone and UTC-midnight `Date` values, the output is
 byte-identical under `UTC`, `America/Los_Angeles`, `Europe/Prague` and
 `Pacific/Kiritimati`. This does not weaken the Europe/Prague rule: a reservation
-day is a calendar day (`doc/decision/0013-*`), an all-day `VALUE=DATE` event has
+day is a calendar day (`doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary`), an all-day `VALUE=DATE` event has
 no time and therefore no offset, and the `@db.Date` → `YYYY-MM-DD` conversion has
 already happened in `apps/api`.
 

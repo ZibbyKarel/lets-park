@@ -13,7 +13,96 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-This repository currently contains only a specification (`plan.md`) — no Nx workspace, no source code, and no build/lint/test tooling exist yet. There are no commands to run until Fáze 0 (scaffolding) has been executed. Once the workspace is scaffolded, this file should be updated with the actual `nx`/`npm` commands (build, lint, test, test single file/project) that `nx.json`/`package.json` define.
+The workspace is scaffolded and all of Fáze 0–7 is written: `apps/api`
+(NestJS 11), `apps/web` (Next.js 16), `apps/api-e2e`, `apps/web-e2e`, and
+thirteen libs under `libs/`. `npm ci` first — several agents have skipped it in
+a fresh worktree and spent the next hour on spurious `Module not found` errors
+in `api:build`.
+
+**The documentation map is `doc/README.md`**; it indexes every topic document
+and all 132 decision records. `README.md` is the operational runbook.
+
+### Commands
+
+Every command below was run in this repository and exited 0, with one stated
+exception (`web-e2e:e2e`, below). When you add one here, run it first — a
+command that was true when it was written and is false now is worse than an
+absent one, because a reader trusts it.
+
+```bash
+npm ci                 # always, in a fresh worktree, before anything else
+
+npm run dev            # nx run-many -t serve,dev -p api,web — continuous
+npm run lint           # nx run-many -t lint
+npm run typecheck      # nx run-many -t typecheck
+npm test               # nx run-many -t test
+npm run build          # nx run-many -t build,build-storybook
+npm run format:check   # nx format:check   (CI adds --all; see below)
+npm run format         # nx format:write
+```
+
+Per project and per file:
+
+```bash
+npx nx run web:test                      # one project
+npx nx run web:test -- lot-view          # one file, by name pattern
+npx nx run api:build
+npx nx serve api                         # continuous, port 3000
+npx nx run web:dev                       # continuous, port 4200 (pinned; see below)
+npx nx show project api --json           # what targets a project actually has
+```
+
+Layers that need infrastructure — see `doc/testing.md` for what each covers:
+
+```bash
+docker compose --profile dev up -d       # PostgreSQL 17, mock OIDC issuer, adminer
+npx prisma migrate deploy
+npx prisma db seed
+npx nx run api:test-db                   # the seven *.db.spec.ts suites
+npx nx run api-e2e:e2e
+npx nx run web-e2e:e2e                   # documented in doc/testing.md, not re-measured here
+```
+
+`web-e2e:e2e` is the one command on this page whose exit code was not measured
+when it was written: port 4200 was held by another session, and
+`reuseExistingServer` would have run the suite against that `next dev` — which
+`doc/decision/0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev`
+records as the cause of a one-in-four `cell-lock.spec.ts` failure. The target
+and its caveats come from `doc/testing.md`, which the task that wrote the suite
+verified.
+
+**`npm test` does not run the database suites.** `apps/api/jest.config.cts`
+excludes `*.db.spec.ts` because they need a live PostgreSQL; they run under
+`api:test-db`, and in CI in their own job. A change to `SELECT … FOR UPDATE`,
+to transaction isolation, or to waitlist promotion is untested until you have
+run that target.
+
+### Things that are the way they are on purpose
+
+- **Ports.** The API is on 3000, the web app on 4200. `web:dev` is pinned to
+  `--port 4200` because the workspace-root `.env` carries `PORT=3000` (the
+  API's) and Nx injects it into every target; `next dev` would otherwise read
+  it and collide. `web:start` deliberately still honours `PORT`, for
+  containers — do not "fix" it.
+- **The API's probes are at `/health/live` and `/health/ready`**, not under
+  `/api`: `configureApp()` passes them to `setGlobalPrefix`'s `exclude`. The
+  web app has its own `/api/health`, which is a genuine Next.js route.
+- **The oRPC transport is at `/api/rpc/…`**, not `/api/…`. Measured:
+  `POST /api/rpc/me/get` → 401 (the route exists and the guard ran),
+  `POST /api/me/get` → 404.
+- **`.env` is git-ignored and does not travel with a worktree.** Copy it in.
+  `P1000` from anything Prisma means `DATABASE_URL` is missing or wrong.
+- **`prisma migrate reset` destroys the database** and is not part of any
+  routine here. If the schema is behind, `prisma migrate deploy` is the
+  command.
+- **`nx format:check` with no base ref checks nothing** and passes vacuously,
+  which is why CI runs `nx format:check --all`.
+
+### CI
+
+`.github/workflows/ci.yml` — three jobs: `verify` (format, lint, typecheck,
+test, build), `database` (`api:test-db` against a `postgres:17` service), and
+`images` (both production images build). `doc/decision/0206-ci-runs-the-database-suites-against-a-real-postgres`.
 
 ## Authoritative spec
 

@@ -87,7 +87,7 @@ END:VCALENDAR
 ```
 
 - **All-day, never an interval.** A reservation is a *calendar day*
-  (`doc/decision/0013-*`); what hours somebody works is not this application's
+  (`doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary`); what hours somebody works is not this application's
   business. `DTEND` is the following day because RFC 5545 §3.8.2.2 makes it
   exclusive for a `VALUE=DATE`, and because `ical-generator` omits the property
   entirely when `end` is not passed — which several clients render as a
