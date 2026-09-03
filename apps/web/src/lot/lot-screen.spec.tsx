@@ -41,9 +41,16 @@ function currentSessionStatus() {
 }
 
 jest.mock('@lets-park/auth/client', () => ({
-  useAccessTokenProvider: () => async () => 'irrelevant',
+  // A stable function reference, not `() => async () => 'irrelevant'` — that
+  // form hands `ApiProvider` a *new* function every render, which keeps its
+  // `useMemo([url, getAccessToken])` from ever settling and defeats any
+  // assertion that depends on `api`'s identity staying put across a rerender
+  // (`doc/decision/0141-*`). Same fix as `api-provider.spec.tsx`.
+  useAccessTokenProvider: () => mockGetAccessToken,
   useSession: () => ({ status: currentSessionStatus() }),
 }));
+
+const mockGetAccessToken = async () => 'irrelevant';
 
 const useCellLockMock = jest.fn();
 function callUseCellLockMock(options: unknown) {
@@ -416,6 +423,39 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
     // onError, not onSettled: the dialog stays open so the caller can see why.
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the day now on screen, not the one it left, after a day change', async () => {
+    const NEXT_DATE = '2026-02-01';
+    const { user, invalidate } = setup();
+    // `overview.day` has to answer for whichever date is actually on screen
+    // once the day changes, or the screen would be stuck loading — set
+    // directly on the mock (rather than through `setup()`'s single-date
+    // `dayImpl`, typed as a zero-argument function) so it can follow the
+    // input it was actually called with.
+    apiMocks.overviewDay.mockImplementation((input: { date: string }) =>
+      Promise.resolve(dayOverview({ date: input.date, spots: [freeSpot()] }))
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Následující den' }));
+    await user.click(await screen.findByRole('button', { name: 'Rezervovat místo E2.93' }));
+    await user.click(await screen.findByRole('button', { name: 'Rezervovat' }));
+
+    await waitFor(() =>
+      expect(apiMocks.reservationCreate.mock.calls[0]?.[0]).toEqual({
+        parkingSpotId: 'spot-free',
+        date: NEXT_DATE,
+      })
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // The write happened on the day now on screen — the invalidation has to
+    // target that key, not the one `invalidateDay` was first created with.
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: dayKey(NEXT_DATE) })
+    );
+    expect(invalidate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: dayKey(DATE) })
+    );
   });
 });
 

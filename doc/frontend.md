@@ -264,6 +264,41 @@ primitives and compounds into domain UI is app work; `EmptyState` is the
 design-system piece, and `ScreenError` is this application's opinion about how
 a contract error becomes a sentence.
 
+## The bottom date-navigation bar
+
+`DayBar` (`apps/web/src/lot/date-nav-bar.tsx`, Task 25) is the sticky bar at
+the bottom of the parking overview (`doc/design/screens/07-lot.png`,
+`13-lot-user-bottom.png`): prev/next arrows either side of the current date, a
+month and year select, and a "Dnes" button. It is pure presentation — every
+decision it draws arrives as a prop, and every interaction it reports goes
+back out through a callback, same as `LotHeader`/`WindowBanner` beside it in
+`./lot-header`. It has its own file and its own spec
+(`date-nav-bar.spec.tsx`); see `doc/decision/0140-*` for why it was split out
+of `lot-header.tsx`.
+
+The Czech public-holiday and weekend highlighting the design calls for
+("STÁTNÍ SVÁTEK · DEN ČESKÉ STÁTNOSTI" on a yellow bar, "Víkend" on a
+Saturday/Sunday, "Pracovní den" — not highlighted — otherwise) is not decided
+in `DayBar` at all: `LotScreen` computes a `DayNoteView` via
+`toDayNoteView(date)` (`./lot-view.ts`), which reads `@lets-park/i18n`'s
+Czech holiday calendar (`czechPublicHolidayOn`) and weekend check
+(`isWeekend`), and `DayBar` only maps `note.highlighted` to a class and
+`note.key`/`note.name` to translated copy. The uppercase rendering is CSS
+(`uppercase`), not the message text — same pattern as the section eyebrow
+above the heading — so `libs/i18n/src/lib/messages.ts` stores
+`'Státní svátek · {name}'`, not shouted text.
+
+Changing the day — the arrows, the month/year selects, or "Dnes" — moves
+`LotScreen`'s `date` state, and that one state drives everything downstream:
+`overview.day`'s query key (`api.overview.day.queryOptions({ input: { date
+} })`) refetches for the new day, and `useLotRealtime`'s `useDayRoom(date)`
+leaves the old day's realtime room and joins the new one. Both derive from
+the same `date` argument on purpose — there is no second place either could
+drift out of sync with the day actually on screen. `doc/decision/0141-*`
+covers where and how that "leaves the old room" guarantee is tested, on top
+of the socket-level proof already in `libs/realtime-client`'s own suite
+(`doc/realtime.md`).
+
 ## Realtime: what a broadcast is allowed to change
 
 Added by Task 24 (the parking screen), and the rule every future screen with a
