@@ -130,6 +130,20 @@ jobs:
       # unreachable Postgres fail this job instead of silently passing it.
       - run: npx nx run api:test-db
 
+      # `schema.prisma` is the artefact both parity suites derive from and
+      # neither checks: `schema-contract-parity.spec.ts` compares the *committed
+      # generated client* against the contract, and `migration-sql.spec.ts`
+      # never reads the schema at all. So editing the schema without running
+      # `prisma generate`, or without writing the migration, leaves both suites
+      # green and surfaces at runtime as `P2022`/`P2021`. This target closes
+      # that: `migrate diff --exit-code` catches a schema the migrations do not
+      # reproduce, and `prisma generate && git diff --exit-code` catches a
+      # generated client that is behind. `doc/decision/0277-*`.
+      #
+      # It runs here rather than in `verify` because it needs a live PostgreSQL,
+      # which only this job has.
+      - run: npx nx run database:check-schema
+
   e2e:
     name: end-to-end (api-e2e, web-e2e)
     runs-on: ubuntu-latest

@@ -20,7 +20,7 @@ a fresh worktree and spent the next hour on spurious `Module not found` errors
 in `api:build`.
 
 **The documentation map is `doc/README.md`**; it indexes every topic document
-and all 143 decision records. `README.md` is the operational runbook.
+and all 181 decision records. `README.md` is the operational runbook.
 
 ### Commands
 

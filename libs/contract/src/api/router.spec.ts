@@ -105,7 +105,13 @@ const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
     'VALIDATION_FAILED',
     'CONFLICT',
   ],
-  'waitlist.leave': ['FORBIDDEN', 'NOT_FOUND', 'OUT_OF_HORIZON', 'RESERVATIONS_LOCKED', 'CONFLICT'],
+  // `waitlist.leave` deliberately carries neither window error. Leaving a queue
+  // is not gated by the reservation window — see
+  // `doc/decision/0233-leaving-a-queue-is-not-gated-by-the-reservation-window`,
+  // which amends `doc/decision/0004-*`'s "enforcing the lock on
+  // create/join/leave". Under the shipped `AUTO`/`openDaysBefore=7` defaults the
+  // old rule made leaving impossible for the whole month a queue is live in.
+  'waitlist.leave': ['FORBIDDEN', 'NOT_FOUND', 'CONFLICT'],
   'spot.list': ['FORBIDDEN'],
   'me.get': ['FORBIDDEN'],
   'me.updateSettings': ['FORBIDDEN', 'NOT_FOUND', 'VALIDATION_FAILED'],
@@ -194,16 +200,36 @@ describe('contract router', () => {
   });
 
   it('declares both window errors on every write gated by the window', () => {
+    // `waitlist.leave` is absent on purpose, and its absence is asserted
+    // separately below rather than left implicit: taking a place is gated by the
+    // window, giving one back is not. `doc/decision/0233-*`.
     for (const path of [
       'reservation.create',
       'waitlist.join',
-      'waitlist.leave',
       'reservation.previewBulk',
       'reservation.confirmBulk',
     ]) {
       const codes = EXPECTED_ERROR_CODES[path] ?? [];
       expect([path, codes.includes('OUT_OF_HORIZON')]).toEqual([path, true]);
       expect([path, codes.includes('RESERVATIONS_LOCKED')]).toEqual([path, true]);
+    }
+  });
+
+  it('gates taking a place on the window and giving one back on nothing', () => {
+    // The pair that `reservation.cancel` and `waitlist.leave` form is the whole
+    // point of `doc/decision/0233-*`, so assert it against the real `errorMap`
+    // rather than against `EXPECTED_ERROR_CODES` — a table this file maintains
+    // by hand would otherwise be asserting against itself.
+    for (const giveBack of [contract.reservation.cancel, contract.waitlist.leave]) {
+      const errorMap = giveBack['~orpc'].errorMap;
+      expect(errorMap).not.toHaveProperty('RESERVATIONS_LOCKED');
+      expect(errorMap).not.toHaveProperty('OUT_OF_HORIZON');
+    }
+
+    for (const take of [contract.reservation.create, contract.waitlist.join]) {
+      const errorMap = take['~orpc'].errorMap;
+      expect(errorMap).toHaveProperty('RESERVATIONS_LOCKED');
+      expect(errorMap).toHaveProperty('OUT_OF_HORIZON');
     }
   });
 

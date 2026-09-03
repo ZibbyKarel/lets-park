@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 20 topic documents, 143 decision records, and `doc/design/`.
+`doc/`: 20 topic documents, 181 decision records, and `doc/design/`.
 
 ---
 
@@ -208,6 +208,17 @@ for why, and take the next number from the end of this list.
 - [`0230-sign-out-revokes-the-session-because-deleting-the-cookie-cannot-win-the-race`](decision/0230-sign-out-revokes-the-session-because-deleting-the-cookie-cannot-win-the-race.md) — Sign-out revokes the session, because deleting the cookie cannot win the race
 - [`0231-the-sign-out-revocations-hang-off-globalthis-because-nextjs-builds-three-auth-configs`](decision/0231-the-sign-out-revocations-hang-off-globalthis-because-nextjs-builds-three-auth-configs.md) — The sign-out revocations hang off `globalThis`, because Next.js builds three auth configs
 - [`0232-the-suite-keeps-a-cookie-recorder-that-records-no-cookie-values`](decision/0232-the-suite-keeps-a-cookie-recorder-that-records-no-cookie-values.md) — The suite keeps a cookie recorder that records no cookie values
+- [`0233-leaving-a-waitlist-is-exempt-from-the-reservation-window`](decision/0233-leaving-a-waitlist-is-exempt-from-the-reservation-window.md) — 0233 – Leaving a waitlist is exempt from the reservation window
+- [`0234-a-promotion-announces-every-queue-it-empties-not-only-the-freed-cell`](decision/0234-a-promotion-announces-every-queue-it-empties-not-only-the-freed-cell.md) — 0234 – A promotion announces every queue it empties, not only the freed cell
+- [`0235-retiring-a-spot-is-blocked-by-its-queue-as-well-as-its-reservations`](decision/0235-retiring-a-spot-is-blocked-by-its-queue-as-well-as-its-reservations.md) — 0235 – Retiring a spot is blocked by its queue as well as its reservations
+- [`0236-a-bulk-confirmation-releases-the-callers-own-queues-on-days-it-reserved`](decision/0236-a-bulk-confirmation-releases-the-callers-own-queues-on-days-it-reserved.md) — 0236 – A bulk confirmation releases the caller's own queues on days it reserved
+- [`0237-the-slack-abort-controller-is-per-call-not-per-client`](decision/0237-the-slack-abort-controller-is-per-call-not-per-client.md) — 0237 – The Slack abort controller is per call, not per client
+- [`0238-the-no-environment-branch-scan-covers-the-whole-api-source-tree`](decision/0238-the-no-environment-branch-scan-covers-the-whole-api-source-tree.md) — 0238 – The no-environment-branch scan covers the whole API source tree
+- [`0239-the-nx-scaffold-route-is-deleted-and-route-parity-is-read-from-the-compiled-app`](decision/0239-the-nx-scaffold-route-is-deleted-and-route-parity-is-read-from-the-compiled-app.md) — 0239 – The Nx scaffold route is deleted, and route parity is read from the compiled app
+- [`0245-the-token-refreshers-in-flight-slot-hangs-off-globalthis-for-the-same-reason-the-revocations-do`](decision/0245-the-token-refreshers-in-flight-slot-hangs-off-globalthis-for-the-same-reason-the-revocations-do.md) — 0245 – The token refresher's in-flight slot hangs off `globalThis`, for the same reason the revocations do
+- [`0246-a-globalthis-fix-is-only-tested-by-loading-two-module-registries`](decision/0246-a-globalthis-fix-is-only-tested-by-loading-two-module-registries.md) — 0246 – A `globalThis` fix is only tested by loading two module registries
+- [`0247-projections-of-userschema-are-allowlists-in-both-directions`](decision/0247-projections-of-userschema-are-allowlists-in-both-directions.md) — 0247 – Projections of `userSchema` are allowlists, in both directions
+- [`0248-two-contract-findings-recorded-as-open-questions-rather-than-decided`](decision/0248-two-contract-findings-recorded-as-open-questions-rather-than-decided.md) — 0248 – Two contract findings recorded as open questions rather than decided
 - [`0255-the-session-guard-is-mounted-by-the-top-bar-so-every-signed-in-route-has-it`](decision/0255-the-session-guard-is-mounted-by-the-top-bar-so-every-signed-in-route-has-it.md) — The session guard is mounted by the top bar, so every signed-in route has it
 - [`0256-the-day-overview-is-refetched-every-time-the-socket-comes-back`](decision/0256-the-day-overview-is-refetched-every-time-the-socket-comes-back.md) — The day overview is refetched every time the socket comes back
 - [`0257-a-parking-bays-state-goes-in-its-accessible-name`](decision/0257-a-parking-bays-state-goes-in-its-accessible-name.md) — A parking bay's state goes in its accessible name
@@ -216,3 +227,22 @@ for why, and take the next number from the end of this list.
 - [`0260-stepping-down-from-your-own-admin-role-is-confirmed-first`](decision/0260-stepping-down-from-your-own-admin-role-is-confirmed-first.md) — Stepping down from your own admin role is confirmed first
 - [`0261-a-dropped-realtime-connection-is-named-a-not-yet-connected-one-is-not`](decision/0261-a-dropped-realtime-connection-is-named-a-not-yet-connected-one-is-not.md) — A dropped realtime connection is named; a not-yet-connected one is not
 - [`0262-global-error-re-establishes-the-one-provider-it-can`](decision/0262-global-error-re-establishes-the-one-provider-it-can.md) — `global-error` re-establishes the one provider it can
+- [`0265-two-below-aa-pairings-the-design-owns-are-pinned-not-fixed`](decision/0265-two-below-aa-pairings-the-design-owns-are-pinned-not-fixed.md) — 0265 – Two below-AA colour pairings the design owns are pinned, not fixed
+- [`0266-badge-avatar-and-toast-read-their-text-off-the-neutral-scale`](decision/0266-badge-avatar-and-toast-read-their-text-off-the-neutral-scale.md) — 0266 – Tinted surfaces read their text off the neutral scale; the tint carries the tone
+- [`0267-disabled-labels-are-dimmed-to-fg-3-not-to-invisibility`](decision/0267-disabled-labels-are-dimmed-to-fg-3-not-to-invisibility.md) — 0267 – Disabled labels are dimmed to `--fg-3`, not to invisibility
+- [`0268-the-spacing-scale-is-open-by-design-and-the-enumeration-is-what-binds-it-to-the-tokens`](decision/0268-the-spacing-scale-is-open-by-design-and-the-enumeration-is-what-binds-it-to-the-tokens.md) — 0268 – The spacing scale stays open, the enumeration stays, and the comment that claimed otherwise is gone
+- [`0269-the-hand-written-tailwind-bridge-is-guarded-by-a-drift-test`](decision/0269-the-hand-written-tailwind-bridge-is-guarded-by-a-drift-test.md) — 0269 – The hand-written Tailwind bridge is guarded by a drift test, and the colour list is derived
+- [`0270-a-form-control-merges-aria-describedby-it-never-replaces-it`](decision/0270-a-form-control-merges-aria-describedby-it-never-replaces-it.md) — 0270 – A form control merges `aria-describedby`; it never replaces it
+- [`0271-a-datatable-names-itself-once-and-a-dropdown-always-has-somewhere-to-put-focus`](decision/0271-a-datatable-names-itself-once-and-a-dropdown-always-has-somewhere-to-put-focus.md) — 0271 – A DataTable names itself once, and a Dropdown always has somewhere to put focus
+- [`0275-the-development-seed-generates-its-ics-tokens`](decision/0275-the-development-seed-generates-its-ics-tokens.md) — 0275 – The development seed generates its ICS tokens, and never rewrites one
+- [`0276-destructive-database-scripts-are-guarded-by-the-connection-string`](decision/0276-destructive-database-scripts-are-guarded-by-the-connection-string.md) — 0276 – Destructive database scripts are guarded by the connection string, not by `NODE_ENV`
+- [`0277-a-target-checks-the-schema-against-its-own-migrations`](decision/0277-a-target-checks-the-schema-against-its-own-migrations.md) — 0277 – A target checks the schema against its own migrations and its own generated client
+- [`0278-auditlog-actor-keeps-prismas-default-on-update`](decision/0278-auditlog-actor-keeps-prismas-default-on-update.md) — 0278 – `AuditLog.actor` keeps Prisma's default `onUpdate: Cascade`, and says so
+- [`0279-the-api-e2e-suite-signs-in-for-real-before-it-asserts-a-refusal`](decision/0279-the-api-e2e-suite-signs-in-for-real-before-it-asserts-a-refusal.md) — 0279 – The api-e2e suite signs in for real before it asserts a refusal
+- [`0285-the-browser-suite-starts-a-server-it-can-kill-and-refuses-to-adopt-one`](decision/0285-the-browser-suite-starts-a-server-it-can-kill-and-refuses-to-adopt-one.md) — 0285 – The browser suite starts a server it can kill, and refuses to adopt one
+- [`0286-ci-runs-the-e2e-suites-because-nothing-else-does`](decision/0286-ci-runs-the-e2e-suites-because-nothing-else-does.md) — 0286 – CI runs the e2e suites, because nothing else does
+- [`0287-the-storage-state-path-is-absolute-and-the-dockerignore-rules-are-globstarred`](decision/0287-the-storage-state-path-is-absolute-and-the-dockerignore-rules-are-globstarred.md) — 0287 – The `storageState` path is absolute, and the `.dockerignore` rules are globstarred
+- [`0290-the-wrapper-ban-covers-require-and-dynamic-import-too`](decision/0290-the-wrapper-ban-covers-require-and-dynamic-import-too.md) — 0290 – The wrapper ban covers `require()` and dynamic `import()` too
+- [`0295-held-by-other-recovers-by-broadcast-and-by-its-own-timer`](decision/0295-held-by-other-recovers-by-broadcast-and-by-its-own-timer.md) — 0295 – `held-by-other` recovers, by the broadcast **and** by its own timer
+- [`0296-an-established-socket-is-not-re-authenticated`](decision/0296-an-established-socket-is-not-re-authenticated.md) — 0296 – An established socket is not re-authenticated mid-connection
+- [`0297-the-esm-jest-transform-block-lives-in-jest-preset-js`](decision/0297-the-esm-jest-transform-block-lives-in-jest-preset-js.md) — 0297 – The ESM `transformIgnorePatterns` block lives in `jest.preset.js`

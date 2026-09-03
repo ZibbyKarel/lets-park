@@ -16,13 +16,22 @@
  * everybody to answering nobody without a token, and `404` quietly became
  * `401`.
  *
- * The assertion below is therefore the one that is true *and* worth making:
- * the stub is not reachable by a stranger, and its body is not the scaffold's.
- * Deleting the controller would be the better end state and is deliberately
- * **not** done here — it is an API change, not a test change, and
- * `auth-pipeline.spec.ts` currently uses "a route that carries no auth
- * decorator at all" as its proof that the default is deny. That is written up
- * in the task report as a follow-up rather than smuggled in under an e2e task.
+ * **The follow-up was done, and the answer is now `404` after all.** The final
+ * whole-branch review raised the surviving scaffold as a contract-first
+ * violation in its own right — a live HTTP endpoint declared in no contract —
+ * and it found *why* nothing had caught it: `orpc-route-parity.spec.ts` is
+ * titled "registers no route that the contract does not declare", a global
+ * property, but iterated a hand-maintained list of the five RPC controllers,
+ * which `AppController` was not in. So the assertion was true of the five
+ * controllers it was handed and silent about the application. That spec now
+ * enumerates routes from the compiled Nest container instead.
+ *
+ * `AppController`, `AppService` and their specs are deleted, so the route is
+ * genuinely gone and the answer is `404` again — for the reason the original
+ * comment gave, two tasks after it gave it.
+ *
+ * The rest of the assertion is unchanged and still worth making: whatever is or
+ * is not mounted there, a stranger sees no scaffold body and no stack trace.
  *
  * `/health/live` is deliberately *not* behind the global `/api` prefix:
  * `configure-app.ts` excludes the health controller from `setGlobalPrefix`, so a
@@ -49,8 +58,9 @@ describe('the API is reachable', () => {
   it('serves nothing at the bare /api prefix to a caller with no token', async () => {
     const res = await axios.get(`/api`, anyStatus);
 
-    // 401 rather than 404 — see the correction in this file's header.
-    expect(res.status).toBe(401);
+    // 404, not 401: the scaffold controller that used to answer here is deleted.
+    // See this file's header for why it took two corrections to get here.
+    expect(res.status).toBe(404);
     const body = JSON.stringify(res.data);
     // Whatever is or is not mounted there, an anonymous caller does not see it.
     expect(body).not.toContain('Hello API');
