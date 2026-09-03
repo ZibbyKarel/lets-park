@@ -73,3 +73,6 @@ graphify-out
 
 # Session handoff notes — intentionally not committed
 handoff.md
+
+# Playwright storage state (live session cookies) — never committed
+apps/web-e2e/.auth/
