@@ -111,12 +111,48 @@ export interface CzechSectionMessages {
   readonly administration: string;
 }
 
+/**
+ * The `/nastaveni` screen: licence plate, preferred spot, and the ICS feed
+ * section (Task 26, `doc/design/screens/11-settings.png`).
+ *
+ * The ICS strings have no design to copy from — `doc/decision/0151-*` records
+ * why the section exists at all — so they are original copy, written in the
+ * same register as the rest of the shell (`errorUnknown`, `comingSoon`): short,
+ * plain sentences aimed at the person reading them, not at a developer.
+ */
+export interface CzechSettingsMessages {
+  /** Modal title. */
+  readonly title: string;
+  /** Modal description, verbatim from the design. */
+  readonly description: string;
+  readonly licensePlateLabel: string;
+  readonly licensePlateTooLong: string;
+  readonly preferredSpotLabel: string;
+  /** The select's empty option — clearing the preferred spot is allowed. */
+  readonly preferredSpotNone: string;
+  readonly cancel: string;
+  readonly save: string;
+  readonly icsHeading: string;
+  readonly icsDescription: string;
+  readonly icsUrlLabel: string;
+  readonly icsCopy: string;
+  readonly icsCopied: string;
+  readonly icsCopyFailed: string;
+  readonly icsRegenerate: string;
+  readonly icsRegenerateConfirmTitle: string;
+  readonly icsRegenerateConfirmDescription: string;
+  readonly icsRegenerateConfirmButton: string;
+  /** Shown instead of the URL while the API origin cannot be derived. */
+  readonly icsUnavailable: string;
+}
+
 export interface CzechMessages {
   readonly errors: CzechErrorMessages;
   readonly shell: CzechShellMessages;
   readonly login: CzechLoginMessages;
   readonly nav: CzechNavMessages;
   readonly sections: CzechSectionMessages;
+  readonly settings: CzechSettingsMessages;
 }
 
 export const csMessages: CzechMessages = {
@@ -148,6 +184,30 @@ export const csMessages: CzechMessages = {
     lot: 'Přehled parkoviště',
     settings: 'Nastavení',
     administration: 'Správa',
+  },
+  settings: {
+    title: 'Nastavení',
+    description:
+      'SPZ se předplní při každé rezervaci místa. Preferované místo použijeme přednostně u hromadné rezervace.',
+    licensePlateLabel: 'SPZ auta',
+    licensePlateTooLong: 'Nejvýše 16 znaků.',
+    preferredSpotLabel: 'Preferované parkovací místo',
+    preferredSpotNone: 'Bez preference',
+    cancel: 'Zrušit',
+    save: 'Uložit',
+    icsHeading: 'Odběr kalendáře (ICS)',
+    icsDescription:
+      'Své rezervace si můžete přidat do kalendáře (Outlook, Google Calendar) přes tento odkaz. Kdokoliv odkaz zná, uvidí vaše rezervace — nesdílejte ho.',
+    icsUrlLabel: 'Odkaz na kalendář',
+    icsCopy: 'Kopírovat odkaz',
+    icsCopied: 'Odkaz zkopírován do schránky.',
+    icsCopyFailed: 'Kopírování se nezdařilo — zkopírujte odkaz ručně.',
+    icsRegenerate: 'Vygenerovat nový odkaz',
+    icsRegenerateConfirmTitle: 'Vygenerovat nový odkaz?',
+    icsRegenerateConfirmDescription:
+      'Starý odkaz přestane fungovat a kalendáře, které ho používají, se přestanou aktualizovat. Budete ho muset všude nahradit novým.',
+    icsRegenerateConfirmButton: 'Vygenerovat',
+    icsUnavailable: 'Odkaz na kalendář teď není k dispozici. Zkuste to prosím znovu za chvíli.',
   },
   errors: {
     SPOT_ALREADY_RESERVED: 'Toto parkovací místo je na daný den už rezervované.',
