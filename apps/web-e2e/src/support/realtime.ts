@@ -311,20 +311,58 @@ const COUNTER_KEY = '__letsParkRealtimeConnections';
  * pointed at is this project's signature defect, sitting inside the tooling
  * used to retire one.
  *
- * So the wrapper is on the *request that starts a connection*, whichever
- * transport carries it. Every engine.io request to the socket.io path carries a
+ * So the wrapper is on the *request that starts a connection*, over **three
+ * named globals**: `XMLHttpRequest.prototype.open`, `window.fetch` and
+ * `window.WebSocket`. Every engine.io request to the socket.io path carries a
  * `sid` **except** the opening handshake, so a request without one is a new
  * connection and nothing else is: subsequent polls, the POST that carries the
  * socket.io CONNECT packet, and the WebSocket upgrade probe all carry the `sid`
  * the handshake returned. `XMLHttpRequest` and `fetch` are both wrapped because
- * either may carry polling depending on the build, and `WebSocket` still is,
- * because a client configured `transports: ['websocket']` would have no
- * polling phase at all.
+ * either may carry polling depending on the build, and `WebSocket` is wrapped
+ * because a client configured `transports: ['websocket']` would have no polling
+ * phase at all.
  *
- * That makes the count "connection **attempts** this document started", which
- * is the honest unit: a socket that was built and abandoned is still a
- * connection this app asked for. It also means a genuine transport drop and
- * reconnect counts as a second connection — correct, and worth seeing.
+ * That makes the count "connection **attempts** this document's *main frame*
+ * started over those three globals". That is the honest unit: a socket that was
+ * built and abandoned is still a connection this app asked for, and a genuine
+ * transport drop and reconnect counts as a second connection — correct, and
+ * worth seeing.
+ *
+ * ## What it does not count
+ *
+ * The claim above used to read "whichever transport carries it", which is wider
+ * than the code. That is the same defect class as the `window.WebSocket`
+ * version this replaced — an instrument described by the question it is pointed
+ * at rather than by the mechanism it hooks — so the wording is narrowed rather
+ * than the hooks widened. Three gaps, all **latent for this application** and
+ * none of them speculative; each was checked, not assumed:
+ *
+ * 1. **`WebTransport` is unhooked.** engine.io-client's default transport list
+ *    is `['polling', 'websocket', 'webtransport']` (`engine.io-client/.../socket.js`)
+ *    and `libs/realtime-client` does not override it; socket.io-client here is
+ *    4.8.3 and ships `transports/webtransport.js`. Measured in the suite's own
+ *    Chromium (151.0.7922.34) at `http://localhost:4200`: `typeof WebTransport
+ *    === 'function'` — it is a secure context, because localhost is. A
+ *    connection that opened over WebTransport would be invisible to this
+ *    counter. It does not happen today only because engine.io tries polling
+ *    first and never gets past a working upgrade; nothing here enforces that.
+ * 2. **A Worker or Service Worker realm is not instrumented at all.** An init
+ *    script patches the globals of a *document*, and a `Worker` has its own
+ *    realm with its own `fetch`, `XMLHttpRequest` and `WebSocket`. Both are
+ *    available in that browser (`typeof Worker === 'function'`,
+ *    `'serviceWorker' in navigator === true`). Nothing in `apps/web` opens a
+ *    socket from one; if anything ever does, this counter will report zero for
+ *    it rather than fail.
+ * 3. **A same-origin iframe is instrumented but never read.** Playwright runs an
+ *    init script in every frame, so a child frame gets its own counter and its
+ *    own `[rt-doc]` console lines — but {@link realtimeSocketsInDocument} calls
+ *    `page.evaluate`, which is the **main frame only**, so that frame's tally is
+ *    never returned. The suite renders no iframe; a future embed would be
+ *    silently uncounted.
+ *
+ * All three fail the same way — *undercounting*, silently. That is the direction
+ * that matters, because this counter's job is to prove a document opens **one**
+ * connection: a gap here cannot manufacture a duplicate, but it can hide one.
  */
 export async function installRealtimeSocketCounter(page: Page): Promise<void> {
   await page.addInitScript(

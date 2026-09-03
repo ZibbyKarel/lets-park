@@ -93,13 +93,38 @@ export interface SignOutRegistry {
 
 export interface SignOutRegistryOptions {
   /**
-   * How long a revocation is kept, in seconds. Must be at least as long as a
-   * session cookie can live: once the revoked token could no longer be valid
-   * anyway, the entry has nothing left to refuse.
+   * How long a revocation is kept, in seconds. Set to the session `maxAge`
+   * (`createAuthConfig`, `DEFAULT_SESSION_MAX_AGE_SECONDS` = 30 days).
    *
    * This is the **only** thing the clock is used for. It is garbage collection,
    * never part of the accept/reject decision — which is exactly what the
    * previous `iat`-cutoff design got wrong.
+   *
+   * ### The boundary is not exact, and the direction matters
+   *
+   * This used to say the entry is dropped "once the revoked token could no
+   * longer be valid anyway". Derive it instead of asserting it, and it does not
+   * quite hold — the retention window closes **δ + 15 s before** the token does:
+   *
+   * - The entry is dropped at `revokedAt + retentionSeconds` (see `prune`).
+   * - A token's `exp` is set from its **last re-encode**, not from the sign-in:
+   *   Auth.js re-issues the cookie on every session read, so a render racing the
+   *   sign-out by δ seconds carries `exp = revokedAt + δ + maxAge`.
+   * - `@auth/core`'s `decode()` verifies with `clockTolerance: 15` (`jwt.js`),
+   *   so that token is still accepted for a further 15 s past its own `exp`.
+   *
+   * With `retentionSeconds === maxAge`, the token outlives the entry that would
+   * refuse it by `δ + 15` seconds. Widening retention would close it, and that
+   * is deliberately not done, because the gap is not reachable: to use it a
+   * holder must present a copied cookie **30 days** after the sign-out, and by
+   * then its access token expired long ago and the renewal that would replace it
+   * fails on a refresh token of the same age — which fails closed and signs out
+   * (`doc/decision/0048-*`). The window buys a session that cannot make an
+   * authenticated API call.
+   *
+   * Recorded rather than rounded off because the reasoning this file was
+   * rewritten to escape was exactly this: a clock claim asserted instead of
+   * derived.
    */
   readonly retentionSeconds: number;
   /** Clock seam, in Unix seconds. Used for retention only. */
@@ -136,7 +161,9 @@ interface GlobalWithRevoked {
 export class SignOutRevocationUnavailableError extends Error {
   constructor(runtime: string) {
     super(
-      `Sign-out revocation cannot work on the "${runtime}" runtime: it keeps ` +
+      // An empty `NEXT_RUNTIME` is a real case (see `sharedRevokedStore`) and
+      // `"" runtime` would read as a formatting bug rather than the diagnosis.
+      `Sign-out revocation cannot work on the ${runtime === '' ? 'empty (set but blank) NEXT_RUNTIME' : `"${runtime}"`} runtime: it keeps ` +
         'per-process state, and the Edge runtime gives each bundle its own ' +
         'isolate. Serve apps/web on the Node.js runtime (doc/decision/0100-*, ' +
         'doc/decision/0231-*).'
@@ -174,10 +201,25 @@ export class SignOutRevocationUnavailableError extends Error {
  * A security control whose failure mode is "the property quietly does not hold"
  * must not be defended by a comment. Refusing to boot turns a silent disable
  * into an immediate, obvious failure, which is the correct direction here.
+ *
+ * ### Absent is permitted; blank is not
+ *
+ * Only `NEXT_RUNTIME` being **unset** is allowed through alongside `'nodejs'`,
+ * and it has to be: this module also runs outside Next.js entirely — Jest, and
+ * any plain Node process that imports `libs/auth` — where the variable does not
+ * exist and there is nothing to refuse.
+ *
+ * An **empty string is not that case.** `NEXT_RUNTIME=''` is a variable someone
+ * or something *set*, to a value that is not `nodejs`, and a runtime that is not
+ * Node is exactly what this guard exists to refuse. An earlier version exempted
+ * it next to `undefined`, which made the one input that looks most like a
+ * misconfiguration the one input that bypassed the check — the guard failing
+ * open on the shape most likely to reach it by accident. It is now treated like
+ * any other non-Node value: it throws.
  */
 export function sharedRevokedStore(): Map<string, number> {
   const runtime = process.env['NEXT_RUNTIME'];
-  if (runtime !== undefined && runtime !== '' && runtime !== 'nodejs') {
+  if (runtime !== undefined && runtime !== 'nodejs') {
     throw new SignOutRevocationUnavailableError(runtime);
   }
 
@@ -198,7 +240,11 @@ export function createSignOutRegistry(options: SignOutRegistryOptions): SignOutR
   const { retentionSeconds, now = unixSeconds, revoked = new Map<string, number>() } = options;
 
   /**
-   * Drops entries that can no longer refuse anything.
+   * Drops entries older than the retention window.
+   *
+   * Not quite "entries that can no longer refuse anything": that is true to
+   * within `δ + 15 s`, and {@link SignOutRegistryOptions.retentionSeconds}
+   * derives the difference and why it is left standing.
    *
    * Run on write rather than on a timer: a timer would keep the process alive
    * and would run forever in a test, and the map only grows on a sign-out —

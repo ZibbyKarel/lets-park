@@ -103,6 +103,23 @@ documents with more than one socket: none
 pages that opened >=2 sockets: 7 of 18   ← the "one page in three", per run
 ```
 
+> **Provenance of that histogram — it was collected with an instrument that no
+> longer exists.** Those four runs predate review. `installRealtimeSocketCounter`
+> then wrapped `window.WebSocket` and counted constructions; review showed it
+> could not see a connection abandoned before its upgrade (see Risk), and it was
+> replaced by the handshake hook the file ships today. The `{1: 89}` figure has
+> **not** been re-collected with the current counter.
+>
+> It is left standing, labelled rather than deleted, because the retraction does
+> not rest on it. The retired counter's blind spot is *undercounting*: it could
+> miss a second connection, never invent one. So a duplicate it failed to see
+> would have made the histogram read `{1: 89}` — which is exactly what a clean
+> result reads like, and precisely why this number is not the evidence. The
+> evidence is the per-page `OPEN`-equals-`LOAD` equality reproduced from the
+> *original* 23-of-68 instrument, described below and used by review, plus the
+> six-second-loads correspondence, neither of which passes through this counter.
+> Anyone re-opening this question should re-run the histogram before quoting it.
+
 The seventh page is this task's own new spec, which reloads on purpose.
 
 **The conclusion does not depend on the new instrument.** Review reproduced it
@@ -185,9 +202,34 @@ the connection's lifetime.
   `instanceof`, statics and `prototype` are the originals; the other two
   delegate to the captured original with the same arguments. It is installed
   once per document (guarded) and off by default.
-- **A reconnect counts as a second connection.** A genuine transport drop makes
-  engine.io re-handshake, which is a new connection and is counted as one. That
-  is the honest reading, but it means `realtime-connection.spec.ts` would go red
-  on a dropped transport — a real event worth seeing, not a defence to suppress.
+- **A second connection within one document is not by itself a defect, and a
+  transport drop is not the only innocent cause.** The counter reports
+  connection *attempts*, so `realtime-connection.spec.ts` goes red on any of
+  them — a real event worth seeing, not a defence to suppress, but it means the
+  red has to be triaged rather than read as "the duplicate socket is back".
+  There are two legitimate causes, not one:
+
+  | cause | what happened | how to tell |
+  | --- | --- | --- |
+  | **transport drop** | engine.io lost the connection and re-handshook; the socket object is the same one | `libs/realtime-client` did not tear down: no cleanup ran, `generation` is unchanged |
+  | **rebuilt socket** | `useRealtimeConnection`'s effect re-ran, disconnected and built a **new** socket | one of its four deps changed — see below |
+
+  An earlier version of this note named only the first, which would send anyone
+  triaging the second down the wrong path. `useRealtimeConnection` rebuilds on
+  `[url, path, enabled, generation]`, and each is reachable in ordinary use:
+
+  - **a rejected handshake** bumps `generation` on purpose — that *is* the
+    recovery, and it is the documented design
+    (`doc/decision/0061-a-refused-handshake-is-a-terminal-status-recovered-by-a-new-socket`);
+  - **`reconnect()`** bumps it explicitly;
+  - **`enabled` flipping** — `realtime-boundary.tsx:42` computes it as
+    `status === 'authenticated' && url !== ''`, so a session that resolves late,
+    lapses, or renews across a boundary closes and reopens the connection.
+
+  All three are one document opening two connections **correctly**. The defect
+  this spec exists to catch is a document holding two connections *at once* with
+  no such cause — which is what the trace's `DOC` lines and the surrounding
+  `day:subscribe` walk distinguish, and what the `{1: N}` histogram is for.
+  Triage the cause before reopening `0187`'s claim.
 - **This record does not prove one-per-document for a browser other than
   Chromium**, which is the only one this suite runs (`doc/decision/0182-*`).

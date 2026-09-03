@@ -20,7 +20,7 @@ a fresh worktree and spent the next hour on spurious `Module not found` errors
 in `api:build`.
 
 **The documentation map is `doc/README.md`**; it indexes every topic document
-and all 133 decision records. `README.md` is the operational runbook.
+and all 143 decision records. `README.md` is the operational runbook.
 
 ### Commands
 
@@ -58,21 +58,36 @@ Layers that need infrastructure — see `doc/testing.md` for what each covers:
 docker compose --profile dev up -d       # PostgreSQL 17, mock OIDC issuer, adminer
 npx prisma migrate deploy
 npx prisma db seed
-npx nx run api:test-db                   # the seven *.db.spec.ts suites
+npx nx run api:test-db                   # the eight *.db.spec.ts suites (needs DATABASE_URL)
 npx nx run api-e2e:e2e
 npx nx run web-e2e:e2e                   # documented in doc/testing.md, not re-measured here
 ```
 
-`web-e2e:e2e` is the one command on this page not measured green by the person
-who wrote the line. It has since been run — **18 passed** — and two things about
-it are worth knowing before you run it yourself:
+**`api:test-db` needs `DATABASE_URL` in the environment**, and in the repository
+root Nx supplies it from `.env`. In a **worktree** it does not — `.env` is
+git-ignored and does not travel — so the target fails before it reaches a test:
+`DATABASE_URL is not set. … It does not skip itself, on purpose.` (measured from
+a stripped shell: exit 1 without it, exit 0 and **8 suites / 92 tests** with it).
+Either copy `.env` in, or pass it for the one command:
+
+```bash
+DATABASE_URL=$(grep '^DATABASE_URL=' /path/to/lets-park/.env | sed 's/^DATABASE_URL=//') \
+  npx nx run api:test-db
+```
+
+`web-e2e:e2e` was once the one command on this page not measured green by the
+person who wrote the line. It has been run since, most recently in Task 34:
+**20 passed, exit 0** (`Total: 20 tests in 9 files` — the eight spec files plus
+`support/auth.setup.ts`). In a worktree it needs the whole `.env` copied in, not
+just `DATABASE_URL`; without it the API exits on its own env schema before a
+test runs. Two things are worth knowing before you run it yourself:
 
 - **Free port 4200 first.** `reuseExistingServer` will happily run the whole
   suite against whatever is already listening, including a `next dev`, which
   `doc/decision/0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev`
   records as the cause of a one-in-four `cell-lock.spec.ts` failure. A green run
   against the wrong server is the failure mode, not a red one.
-- **Exit 1 after `18 passed` is not a test failure.** Nx writes its task history
+- **Exit 1 after a passing summary line is not a test failure.** Nx writes its task history
   to a SQLite database under `.nx/`, and concurrent runs from several worktrees
   corrupt the write; the same thing has been seen here as exit 1 after 509
   passing tests. Read the suite's own summary line, not just `$?`.

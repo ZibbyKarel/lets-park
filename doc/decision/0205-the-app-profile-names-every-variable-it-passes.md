@@ -81,6 +81,29 @@ is not forwarded — so the list is correct both before and after that merge.
 `SLACK_BOT_TOKEN` appears there and in no other file: not in
 `.env.docker.example`, not in an image layer.
 
+> **Updated after the merge (Task 34).** `apps/api/src/slack` **exists** — it
+> merged with `feat/lets-park-mvp`, and this record's own prediction is the part
+> that has come true: the bare list needed no change to accommodate it, which
+> was the claim being made. Read the paragraph above as the reasoning, not as a
+> present-tense fact about the tree.
+>
+> One line of it is now literally false and is corrected here rather than left
+> to mislead. `.env.docker.example` carries a `SLACK_*` block — `SLACK_ENABLED=false`
+> and **commented, empty** placeholders for the token and the channel — so that
+> the containerised stack says about a live outbound integration what
+> `.env.example` already said. The property that matters is unchanged and is
+> about the **value**, not the name: `SLACK_BOT_TOKEN` has no value in any
+> committed file. A commented name with nothing after the `=` is documentation;
+> a token is a secret. Only the second is forbidden here.
+>
+> Note while re-reading this: `.dockerignore` excludes `**/.env` and `**/.env.*`
+> but **re-includes** `!**/.env.docker.example`, so this file does enter the
+> build context and is picked up by the builder stage's `COPY . .`. It reaches
+> no *shipped* layer — both Dockerfiles' final stages copy named build artifacts
+> only, never the context — and it carries no value to leak in either case. The
+> exclusion that protects real secrets is the unqualified `**/.env` /
+> `**/.env.*` pair above it, and it is untouched.
+
 ## Risk
 
 - **A new variable has to be added here by hand**, and forgetting it means the

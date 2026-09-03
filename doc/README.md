@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 19 topic documents, 133 decision records, and `doc/design/`.
+`doc/`: 20 topic documents, 143 decision records, and `doc/design/`.
 
 ---
 
@@ -38,6 +38,7 @@ This index is generated from the filesystem and accounts for every file under
 | [`ics.md`](ics.md) | The personal calendar subscription: what the feed serves, how its URL is authenticated, and what has been verified about it. |
 | [`implementation-plan.md`](implementation-plan.md) | `plan.md` broken into dispatchable tasks. The plan of record for what is built when. |
 | [`realtime.md`](realtime.md) | The Socket.io connection: the rooms, the events, the cell lock, and what the client does with each broadcast. |
+| [`slack.md`](slack.md) | The outbound-only Slack notifications and the scheduled jobs that carry them: what the API tells Slack, when, and what happens when Slack is broken, off, or scaled. |
 | [`testing.md`](testing.md) | The four test layers, what each is for, how to run it, and what must be running first. |
 | [`waitlist.md`](waitlist.md) | Reservations, the queue, and the auto-promotion that hands a cancelled spot to the next person in the same transaction. |
 | [`workspace.md`](workspace.md) | The Nx monorepo: project layout, the checks, the module boundaries, and how to add a lib that is governed by them. |
@@ -159,6 +160,10 @@ for why, and take the next number from the end of this list.
 - [`0124-other-users-cell-locks-are-component-state-not-query-data`](decision/0124-other-users-cell-locks-are-component-state-not-query-data.md) — Other users' cell locks are component state, not query data
 - [`0125-the-admin-ellipsis-opens-the-same-dialog-on-purpose`](decision/0125-the-admin-ellipsis-opens-the-same-dialog-on-purpose.md) — The admin `⋯` opens the same dialog `onOpen` does, on purpose
 - [`0126-a-childs-exclude-must-be-set-explicitly-or-it-silently-inherits-the-parents`](decision/0126-a-childs-exclude-must-be-set-explicitly-or-it-silently-inherits-the-parents.md) — A child tsconfig's `exclude` must be set explicitly, or it silently inherits the parent's
+- [`0130-slack-is-off-by-default-and-there-is-no-dev-only-branch`](decision/0130-slack-is-off-by-default-and-there-is-no-dev-only-branch.md) — Slack is off by an env value, not by a dev-only branch
+- [`0131-slack-czech-copy-stays-in-the-slack-module`](decision/0131-slack-czech-copy-stays-in-the-slack-module.md) — Slack's Czech copy stays in `apps/api/src/slack/`, and there is still no backend catalog
+- [`0132-the-per-attempt-timeout-is-slackclients-own-not-axioss`](decision/0132-the-per-attempt-timeout-is-slackclients-own-not-axioss.md) — The per-attempt Slack timeout is `SlackClient`'s own timer, not axios's
+- [`0135-the-after-commit-seam-is-a-composite-not-a-choice`](decision/0135-the-after-commit-seam-is-a-composite-not-a-choice.md) — The after-commit seam is a composite, not a choice between Socket.io and Slack
 - [`0140-the-day-bar-is-its-own-file`](decision/0140-the-day-bar-is-its-own-file.md) — The day bar is its own file
 - [`0141-the-old-room-unsubscribe-is-proven-at-the-hook-that-derives-both`](decision/0141-the-old-room-unsubscribe-is-proven-at-the-hook-that-derives-both.md) — The old-room unsubscribe is proven at the hook that derives both
 - [`0150-settings-renders-as-a-modal-not-a-page`](decision/0150-settings-renders-as-a-modal-not-a-page.md) — `/nastaveni` renders as a `Modal`, not a bespoke dialog shell
@@ -182,12 +187,13 @@ for why, and take the next number from the end of this list.
 - [`0180-the-e2e-login-types-the-claims-the-mock-issuer-does-not-mint`](decision/0180-the-e2e-login-types-the-claims-the-mock-issuer-does-not-mint.md) — The e2e login types the claims the mock issuer does not mint
 - [`0181-the-e2e-suite-books-into-next-month-through-a-real-admin-setting`](decision/0181-the-e2e-suite-books-into-next-month-through-a-real-admin-setting.md) — The e2e suite books into next month, through a real admin setting
 - [`0182-the-e2e-suite-runs-on-chromium-only`](decision/0182-the-e2e-suite-runs-on-chromium-only.md) — The e2e suite runs on Chromium only
-- [`0183-one-navigation-carries-a-longer-timeout-because-the-suite-runs-against-next-dev`](decision/0183-one-navigation-carries-a-longer-timeout-because-the-suite-runs-against-next-dev.md) — One navigation carries a longer timeout, for the run that meets a dev server
+- [`0183-one-navigation-carries-a-longer-timeout-for-a-reused-dev-server`](decision/0183-one-navigation-carries-a-longer-timeout-for-a-reused-dev-server.md) — One navigation carries a longer timeout, for the run that meets a dev server
 - [`0184-the-e2e-database-fixture-is-a-subprocess-not-an-import`](decision/0184-the-e2e-database-fixture-is-a-subprocess-not-an-import.md) — The e2e database fixture is a subprocess, not an import
 - [`0185-storage-state-is-regenerated-every-run-and-never-committed`](decision/0185-storage-state-is-regenerated-every-run-and-never-committed.md) — `storageState` is regenerated every run and never committed
-- [`0186-the-e2e-api-gets-throttle-limits-that-suit-a-test-run`](decision/0186-the-e2e-api-gets-throttle-limits-that-suit-a-test-run.md) — The e2e API gets throttle limits that suit a test run
+- [`0186-the-e2e-suite-cannot-raise-the-api-throttle-limits`](decision/0186-the-e2e-suite-cannot-raise-the-api-throttle-limits.md) — The e2e suite cannot raise the API throttle limits
 - [`0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev`](decision/0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev.md) — The browser e2e suite runs against the built app, not `next dev`
 - [`0188-a-realtime-scenario-waits-for-the-day-room-before-it-acts`](decision/0188-a-realtime-scenario-waits-for-the-day-room-before-it-acts.md) — A realtime scenario waits for the day room before it acts
+- [`0189-the-sign-out-spec-keeps-an-assertion-that-fails-about-once-in-ten`](decision/0189-the-sign-out-spec-keeps-an-assertion-that-fails-about-once-in-ten.md) — The sign-out spec keeps an assertion that fails about once in ten
 - [`0200-production-images-run-non-root-over-code-they-cannot-write`](decision/0200-production-images-run-non-root-over-code-they-cannot-write.md) — Production images run non-root over code they cannot write
 - [`0201-the-issuer-url-must-be-one-name-on-both-sides-of-the-network`](decision/0201-the-issuer-url-must-be-one-name-on-both-sides-of-the-network.md) — The issuer URL must be one name on both sides of the network
 - [`0202-auth-url-is-required-in-a-container-because-the-request-url-is-the-bind-address`](decision/0202-auth-url-is-required-in-a-container-because-the-request-url-is-the-bind-address.md) — `AUTH_URL` is required in a container, because the request URL is the bind address
@@ -197,3 +203,8 @@ for why, and take the next number from the end of this list.
 - [`0206-ci-runs-the-database-suites-against-a-real-postgres`](decision/0206-ci-runs-the-database-suites-against-a-real-postgres.md) — CI runs the database suites against a real PostgreSQL
 - [`0207-duplicate-decision-numbers-are-kept-and-citations-carry-slugs`](decision/0207-duplicate-decision-numbers-are-kept-and-citations-carry-slugs.md) — Duplicate decision numbers are kept; citations carry slugs
 - [`0208-every-service-carries-a-profile-and-the-database-is-a-choice`](decision/0208-every-service-carries-a-profile-and-the-database-is-a-choice.md) — Every service carries a profile, and the database is a choice
+- [`0220-giving-a-hold-back-is-keyed-by-the-connection-taking-it-is-not`](decision/0220-giving-a-hold-back-is-keyed-by-the-connection-taking-it-is-not.md) — Giving a hold back is keyed by the connection; taking one is not
+- [`0221-there-is-no-duplicate-socket-a-page-is-not-a-document`](decision/0221-there-is-no-duplicate-socket-a-page-is-not-a-document.md) — There is no duplicate socket: a page is not a document
+- [`0230-sign-out-revokes-the-session-because-deleting-the-cookie-cannot-win-the-race`](decision/0230-sign-out-revokes-the-session-because-deleting-the-cookie-cannot-win-the-race.md) — Sign-out revokes the session, because deleting the cookie cannot win the race
+- [`0231-the-sign-out-revocations-hang-off-globalthis-because-nextjs-builds-three-auth-configs`](decision/0231-the-sign-out-revocations-hang-off-globalthis-because-nextjs-builds-three-auth-configs.md) — The sign-out revocations hang off `globalThis`, because Next.js builds three auth configs
+- [`0232-the-suite-keeps-a-cookie-recorder-that-records-no-cookie-values`](decision/0232-the-suite-keeps-a-cookie-recorder-that-records-no-cookie-values.md) — The suite keeps a cookie recorder that records no cookie values
