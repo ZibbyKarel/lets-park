@@ -86,6 +86,24 @@ import { LockService } from './lock.service';
 export const MAX_DAY_ROOMS_PER_SOCKET = 64;
 
 /**
+ * Below this, `doc/decision/0110-*`'s renewal budget starts losing its
+ * margin: `CELL_LOCK_RENEW_FRACTION` (0.5) fires the renewal at half the TTL,
+ * and two `CELL_LOCK_ACK_TIMEOUT_MS` (5 s) attempts need to resolve before the
+ * hold lapses. At 20 s that is a renewal at 10 s and two attempts landing by
+ * 20 s — no margin left; below it, the second attempt can land after the
+ * hold has already lapsed.
+ *
+ * A **warning floor, not a schema floor**: `REALTIME_LOCK_TTL_MS` stays
+ * exactly as configurable as `env.ts` documents, with no environment branch —
+ * every realtime spec in this workspace deliberately runs *below* this
+ * number (`realtime.gateway.spec.ts` at 800 ms) so a hold's lifetime is
+ * something a test can watch rather than wait 30 s for. This constant only
+ * decides when {@link RealtimeGateway.onModuleInit} logs about it; it never
+ * rejects the value.
+ */
+export const REALTIME_LOCK_TTL_WARN_FLOOR_MS = 20_000;
+
+/**
  * The message every refused handshake carries to the client.
  *
  * One string for every rejection reason, deliberately: the four *operator*
@@ -177,14 +195,30 @@ export class RealtimeGateway
   ) {}
 
   /**
-   * Subscribes to lapsed holds.
+   * Subscribes to lapsed holds, and warns once if the configured TTL has
+   * fallen below the documented floor.
    *
    * In `onModuleInit` rather than `afterInit` so the subscription exists before
    * any socket does — a lock cannot lapse before it is taken, but a listener
    * registered on a path that also has to have run first is a listener that can
    * be missed.
+   *
+   * The floor check lives here rather than in `env.ts` (Task 15's review,
+   * Finding 7): a schema `.min()` on `REALTIME_LOCK_TTL_MS` would reject the
+   * short TTLs every realtime spec in this workspace deliberately runs at,
+   * forcing exactly the environment-conditional exemption
+   * `realtime-no-backdoor.spec.ts` polices against. A log line has no such
+   * cost — it fires in every environment alike, including the test suites,
+   * where it is simply true and harmless.
    */
   onModuleInit(): void {
+    if (this.locks.ttlMs < REALTIME_LOCK_TTL_WARN_FLOOR_MS) {
+      this.logger.warn(
+        { REALTIME_LOCK_TTL_MS: this.locks.ttlMs, floorMs: REALTIME_LOCK_TTL_WARN_FLOOR_MS },
+        'REALTIME_LOCK_TTL_MS is below the documented floor (doc/decision/0110-*): the client renewal budget may no longer fit inside the hold before it lapses'
+      );
+    }
+
     this.locks.onExpired((cell) => {
       // The whole point of `doc/decision/0111-*`: `useCellLock` puts a
       // contended cell into `held-by-other` and then sits still, so a hold that
