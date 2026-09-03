@@ -156,6 +156,37 @@ describe('SpotDialog — a bay somebody else holds', () => {
     expect(onLeaveWaitlist).toHaveBeenCalledTimes(1);
   });
 
+  // Found by running the screen in a browser against the real API: the heading
+  // read "Přidat se do fronty" above a button reading "Odejít z fronty".
+  it('does not head a queued caller’s modal with an invitation to join', () => {
+    renderDialog({
+      spot: { ...takenByOther, waitlistCount: 1, viewerWaitlistEntryId: 'wait-7' },
+    });
+
+    expect(screen.getByRole('heading', { name: 'Jste ve frontě' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Až se místo uvolní, dostane ho první v řadě. Z fronty můžete kdykoliv odejít.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Přidat se do fronty' })).not.toBeInTheDocument();
+  });
+
+  it('says the same to a queued admin, whose cancel button is unaffected', () => {
+    renderDialog({
+      spot: { ...takenByOther, waitlistCount: 1, viewerWaitlistEntryId: 'wait-7' },
+      isAdmin: true,
+    });
+
+    expect(screen.getByRole('heading', { name: 'Jste ve frontě' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zrušit rezervaci' })).toBeInTheDocument();
+  });
+
+  it('still invites a caller who is not queued to join', () => {
+    renderDialog({ spot: takenByOther });
+    expect(screen.getByRole('heading', { name: 'Přidat se do fronty' })).toBeInTheDocument();
+  });
+
   it('hides joining, and shows the yellow note, in a locked month', () => {
     renderDialog({ spot: takenByOther, canReserve: false });
 

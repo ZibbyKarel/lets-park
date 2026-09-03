@@ -197,11 +197,21 @@ export interface CzechLotMessages {
   readonly modalEyebrow: string;
   readonly titleReserve: string;
   readonly titleQueue: string;
+  /**
+   * The caller is **already** in this cell's queue. Distinct from
+   * {@link titleQueue}: the design's prototype had no notion of queue
+   * membership, so it offered only "join", and a browser run of the real
+   * screen showed the modal headed "Přidat se do fronty" above a button
+   * reading "Odejít z fronty".
+   */
+  readonly titleQueued: string;
   readonly titleMine: string;
   readonly titleEdit: string;
   readonly titleInfo: string;
   readonly subReserve: string;
   readonly subQueue: string;
+  /** Pairs with {@link titleQueued}. */
+  readonly subQueued: string;
   readonly subMine: string;
   readonly subMineLocked: string;
   readonly subInfo: string;
@@ -315,12 +325,14 @@ export const csMessages: CzechMessages = {
     modalEyebrow: 'Místo {label}',
     titleReserve: 'Rezervovat místo',
     titleQueue: 'Přidat se do fronty',
+    titleQueued: 'Jste ve frontě',
     titleMine: 'Vaše rezervace',
     titleEdit: 'Upravit rezervaci',
     titleInfo: 'Rezervace uzamčeny',
     subReserve: 'Zapište se na {date}.',
     subQueue:
       'Místo je na tento den obsazené. Zařadíme vás do fronty — pokud se uvolní, místo dostane první v řadě.',
+    subQueued: 'Až se místo uvolní, dostane ho první v řadě. Z fronty můžete kdykoliv odejít.',
     subMine: 'Rezervaci můžete zrušit — místo se tím uvolní prvnímu ve frontě.',
     subMineLocked:
       'Měsíc je uzamčený — novou rezervaci už nezaložíte, tuhle ale můžete kdykoliv zrušit.',

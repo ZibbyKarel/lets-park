@@ -85,16 +85,22 @@ describe('carColorIndex', () => {
     expect(indexes.size).toBeGreaterThan(1);
   });
 
-  it('maps every palette index to a distinct Tailwind class', () => {
-    const classes = new Set(
-      Array.from({ length: CAR_COLOR_PALETTE.length }, (_unused, index) =>
-        carColorClass('x'.repeat(index))
-      )
-    );
-    expect(classes.size).toBeGreaterThan(0);
-    for (const value of classes) {
-      expect(value).toMatch(/^text-car-[123]$/);
+  it('names the utility for the index it picked, not a fixed one', () => {
+    // Written as an invariant tying the two functions together rather than as
+    // a shape check. A shape check (`/^text-car-[123]$/`) was the first
+    // version and a constant `carColorClass` survived it — the hazard of
+    // mutating only the helper the tests call, when the call site is what
+    // ships.
+    for (const id of ['', 'a', VIEWER, OTHER, 'spot-holder-7', 'ř💥']) {
+      expect(carColorClass(id)).toBe(`text-car-${carColorIndex(id) + 1}`);
     }
+  });
+
+  it('does not paint every car the same colour', () => {
+    const classes = new Set(
+      Array.from({ length: 40 }, (_unused, index) => carColorClass(`user-${index}`))
+    );
+    expect(classes.size).toBe(CAR_COLOR_PALETTE.length);
   });
 });
 

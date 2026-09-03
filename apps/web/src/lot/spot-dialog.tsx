@@ -91,14 +91,24 @@ export function SpotDialog({
   // blocks, and both are absent rather than disabled when it does.
   const showPrimary = canReserve && !spot.isMine && !isInfo;
 
+  // `isQueued` is tested **before** `isAdmin`, in both the title and the
+  // description, because it is the more specific true statement about the
+  // caller and it is the one the footer button already acts on. The design's
+  // state machine has no such branch — its prototype had no waitlist
+  // membership, so it only ever offered "join" — and a browser run against the
+  // real API showed the consequence: a modal headed "Přidat se do fronty" above
+  // a button reading "Odejít z fronty". An admin who is queued sees the queue
+  // copy too; their cancel button is governed by `showCancel` and is unaffected.
   const title = isInfo
     ? t('titleInfo')
     : spot.isMine
       ? t('titleMine')
       : isTaken
-        ? isAdmin
-          ? t('titleEdit')
-          : t('titleQueue')
+        ? isQueued
+          ? t('titleQueued')
+          : isAdmin
+            ? t('titleEdit')
+            : t('titleQueue')
         : t('titleReserve');
 
   const description = isInfo
@@ -108,11 +118,13 @@ export function SpotDialog({
         ? t('subMine')
         : t('subMineLocked')
       : isTaken
-        ? isAdmin
-          ? t('subAdmin')
-          : canReserve
-            ? t('subQueue')
-            : t('subTaken')
+        ? isQueued
+          ? t('subQueued')
+          : isAdmin
+            ? t('subAdmin')
+            : canReserve
+              ? t('subQueue')
+              : t('subTaken')
         : t('subReserve', { date: formatDayAndMonth(date) });
 
   return (

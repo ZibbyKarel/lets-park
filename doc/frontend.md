@@ -215,6 +215,63 @@ primitives and compounds into domain UI is app work; `EmptyState` is the
 design-system piece, and `ScreenError` is this application's opinion about how
 a contract error becomes a sentence.
 
+## Realtime: what a broadcast is allowed to change
+
+Added by Task 24 (the parking screen), and the rule every future screen with a
+day room follows. `plan.md` (Fáze 6) asks for *one* mechanism — "realtime events
+invalidate/patch the query cache, no ad-hoc local state". That mechanism has two
+halves, and which half applies is decided by the **contract**, not by taste:
+
+> **Patch the shared fields the payload determines. Additionally invalidate when
+> the event could move a viewer-relative field the broadcast is forbidden to
+> carry.**
+
+A day room is shared by everyone looking at that day, so a payload may not say
+anything viewer-relative. `waitlistUpdatedEventSchema` states the constraint and
+the reason: "there is no way to broadcast 'your position is now 2' to a room
+without telling everyone else who is in the queue". `dayOverviewOutputSchema`
+has exactly four such fields — `canReserve`, `viewerReservationId`,
+`viewerWaitlistEntryId`, `viewerWaitlistPosition` — and none of them can be
+patched from an event. Asking for the day again is the only honest way to learn
+their new values.
+
+| event | patched | also refetched when |
+|---|---|---|
+| `reservation:created` | `spots[i].reservation` | the caller is the new holder |
+| `reservation:cancelled` | `spots[i].reservation = null` | it was the caller's own reservation |
+| `reservation:reassigned` | `spots[i].reservation` | the caller was promoted, lost the spot, or is queued for it |
+| `waitlist:updated` | `spots[i].waitlistCount` | the caller is in that queue |
+| `cell:locked` / `cell:unlocked` | *nothing* | *never* — see below |
+
+Doing both is not redundant work. The patch repaints on the tick the event
+arrived; the refetch corrects the four viewer fields a moment later, and only
+for the callers whose fields moved. Invalidating alone would leave every tile
+stale for a round trip and fire nine requests for one reservation; patching
+alone would leave "you are 2nd in the queue" wrong indefinitely.
+
+Three rules that make this safe to copy:
+
+1. **The patches are pure and identity-preserving.** They live in a module with
+   no React in it and return the *same object reference* when nothing changed —
+   wrong day, unknown spot, redelivered event, unchanged count. A client is
+   normally in several day rooms and Socket.io does not tell a handler which one
+   a message arrived through, so the day guard is load-bearing.
+2. **The query key is never written down.** The hook and its tests both derive
+   it from `createApiQueryUtils`, because a key that differs by one character
+   produces a patch nothing renders — indistinguishable from a broadcast that
+   never arrived.
+3. **`cell:locked` is the documented exception**, and it is component state
+   *because the contract says so*: no procedure returns the current holds, so
+   there is no cache entry to patch and minting a key no endpoint backs would
+   invert the contract-first rule. A hold lives about thirty seconds, is swept
+   locally on its own `expiresAt` (the contract requires this: "a lost
+   `cell:unlocked` … must not freeze a tile forever"), and is dropped wholesale
+   when the socket disconnects, since no `cell:unlocked` can arrive while it is
+   down.
+
+Full reasoning: `doc/decision/0123-*` (the two halves) and `doc/decision/0124-*`
+(why cell locks are the exception).
+
 ## `/api/health`
 
 A readiness probe for the *pair*. It calls the API's `/health/ready` with a

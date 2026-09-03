@@ -184,6 +184,14 @@ export function reservationCreatedTouchesViewer(
   event: ReservationCreatedEvent,
   viewerUserId: string | null
 ): boolean {
+  // The `!== null` half is **redundant, and knowingly so**: `user.id` is
+  // `idSchema` (a UUID string) and the payload has already been through
+  // `reservationCreatedEventSchema` by the time a handler sees it, so
+  // `id === null` is unrepresentable and the comparison alone would answer
+  // `false` for an unknown viewer anyway. Removing it is an equivalent
+  // mutation — no input distinguishes the two — and it is kept because it
+  // states the intent ("an unknown viewer matches nobody") at the one place a
+  // reader looks for it. It is not load-bearing; do not add a test for it.
   return viewerUserId !== null && event.reservation.user.id === viewerUserId;
 }
 
