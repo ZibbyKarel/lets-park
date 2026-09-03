@@ -400,7 +400,7 @@ describe('toBulkErrorMessageKey — one sentence per thing that actually went wr
     ['VALIDATION_FAILED', 422, 'errorValidation'],
     ['CONFLICT', 409, 'errorConflict'],
     ['FORBIDDEN', 403, 'errorForbidden'],
-  ])('maps %s to its own key, %s', async (code, status, key) => {
+  ])('maps %s (HTTP %i) to its own key, %s', async (code, status, key) => {
     const failure = await failureFor(errorResponse(String(code), Number(status)));
     expect(toBulkErrorMessageKey(failure)).toBe(key);
   });

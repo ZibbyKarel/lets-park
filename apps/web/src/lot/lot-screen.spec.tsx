@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryProvider, createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import { IntlProvider } from '@lets-park/i18n';
@@ -331,6 +331,25 @@ describe('LotScreen — the bulk modal', () => {
     // The month of `FIXED_TODAY` (2026-01-31), in the locative — proof the
     // grid is anchored to the screen's day rather than to "now".
     expect(screen.getByText(/Vyberte dny v lednu\./)).toBeInTheDocument();
+  });
+
+  it('hands the modal the backend’s own canReserve, so a window closing under it is refused', async () => {
+    // Hiding the header button covers "do not invite this"; it cannot cover a
+    // window that closes while the modal is already open, and this is the
+    // wiring that does (`doc/decision/0173-*`). A modal handed a hard-coded
+    // `true` would keep offering the flow here.
+    const { user, client } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Hromadná rezervace' }));
+    expect(await screen.findByRole('dialog', { name: 'Hromadná rezervace' })).toBeInTheDocument();
+
+    act(() => {
+      client.setQueryData(dayKey(DATE), dayOverview({ canReserve: false }));
+    });
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Rezervace jsou uzamčené' })
+    ).toBeInTheDocument();
   });
 
   it('closes again when the day changes', async () => {
