@@ -74,6 +74,14 @@ describe('dailySummaryMessage', () => {
     );
   });
 
+  it('stays in the 2–4 form at its upper edge, 4 free spots', () => {
+    // The 2–4/5+ boundary is exactly the place an off-by-one in `<=` vs `<`
+    // hides: 3 and 5 cannot tell `<= 4` from `< 4`, only 4 itself can.
+    expect(dailySummaryMessage({ ...base, freeSpotLabels: ['A1', 'A2', 'A3', 'A4'] })).toBe(
+      'Parkování — pondělí 28. září 2026\nVolná jsou 4 místa z 9: A1, A2, A3, A4. Nikdo nečeká ve frontě.'
+    );
+  });
+
   it('says the lot is full when nothing is free', () => {
     expect(dailySummaryMessage(base)).toBe(
       'Parkování — pondělí 28. září 2026\nVšech 9 míst je obsazených. Nikdo nečeká ve frontě.'
@@ -86,6 +94,12 @@ describe('dailySummaryMessage', () => {
     );
     expect(dailySummaryMessage({ ...base, totalSpots: 1 })).toBe(
       'Parkování — pondělí 28. září 2026\nJediné místo je obsazené. Nikdo nečeká ve frontě.'
+    );
+  });
+
+  it('stays in the 2–4 full-lot form at its upper edge, 4 spots', () => {
+    expect(dailySummaryMessage({ ...base, totalSpots: 4 })).toBe(
+      'Parkování — pondělí 28. září 2026\nVšechna 4 místa jsou obsazená. Nikdo nečeká ve frontě.'
     );
   });
 

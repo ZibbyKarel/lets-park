@@ -165,18 +165,24 @@ describe('SlackClient', () => {
 
   describe('a 5xx', () => {
     it('is retried with a doubling backoff and succeeds when Slack recovers', async () => {
+      // Four attempts, three delays: [60, 120, 240]. Two delays ([60, 120])
+      // cannot tell doubling from `base * attempt` — both produce 60 then
+      // 120 — so a third point is required to pin the growth as
+      // *exponential* rather than merely increasing.
       server.respondWith((attempt) =>
-        attempt < 3 ? { status: 503, body: { ok: false, error: 'service_unavailable' } } : SLACK_OK
+        attempt < 4 ? { status: 503, body: { ok: false, error: 'service_unavailable' } } : SLACK_OK
       );
 
       const startedAt = Date.now();
-      await expect(buildClient().postToChannel('ahoj')).resolves.toBe('delivered');
+      await expect(buildClient({ SLACK_RETRY_ATTEMPTS: 4 }).postToChannel('ahoj')).resolves.toBe(
+        'delivered'
+      );
       const elapsed = Date.now() - startedAt;
 
-      expect(server.requests).toHaveLength(3);
-      expect(linesAt('warn').map((line) => line['delayMs'])).toEqual([60, 120]);
+      expect(server.requests).toHaveLength(4);
+      expect(linesAt('warn').map((line) => line['delayMs'])).toEqual([60, 120, 240]);
       // The delays were awaited, not merely logged.
-      expect(elapsed).toBeGreaterThanOrEqual(180);
+      expect(elapsed).toBeGreaterThanOrEqual(420);
       expect(linesAt('error')).toHaveLength(0);
     });
 
