@@ -37,6 +37,27 @@
  * is what makes the late disconnect of the *old* socket release nothing —
  * exercised by `lock.service.spec.ts`, "a stale socket's disconnect does not
  * drop the hold its user re-took".
+ *
+ * ## …but *giving one back* is keyed by both
+ *
+ * {@link LockService.acquire} is keyed by user, because that is what makes a
+ * reconnect a renewal. {@link LockService.release} is keyed by user **and
+ * socket**, because the two questions are different: "may this connection take
+ * the cell?" is about the person, and "is this connection the one currently
+ * holding it?" is about the connection. Keying release by user alone answers
+ * the second question with the first one, and a user with two live connections
+ * on one cell — a second tab, or a page that reloaded before the server noticed
+ * the old socket — then has each of them able to drop the other's hold. The
+ * result a person sees is a bay that reads `Volné` to everybody while the
+ * holder's dialog is still open.
+ *
+ * The match is exactly the one {@link LockService.releaseSocket} already makes,
+ * and it works for the same reason: a renewal re-keys `socketId`, so the
+ * *current* connection always matches and a superseded one never does. It costs
+ * nothing on the reconnect path — the client re-requests the hold on the new
+ * socket before it could ever release it — which is why the objection recorded
+ * against this in `doc/decision/0187-*` was retracted there and answered here.
+ * See `doc/decision/0220-*`.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -96,7 +117,7 @@ export type LockExpiryListener = (cell: LockCell, holder: UserSummary) => void;
  * | --- | --- |
  * | {@link acquire} (new) | `SET cell <holder> NX PX <ttl>` |
  * | {@link acquire} (renewal) | the same `SET` with `XX`, guarded by a Lua compare on the holder |
- * | {@link release} | Lua: `GET` the cell, `DEL` only if the holder matches |
+ * | {@link release} | Lua: `GET` the cell, `DEL` only if the holder **and its socket** match |
  * | {@link releaseSocket} | a `SET` of cell keys per socket id, walked on disconnect |
  * | {@link onExpired} | keyspace notifications (`Ex`) on the lock key prefix |
  *
@@ -127,15 +148,19 @@ export abstract class LockService {
   abstract acquire(cell: LockCell, requester: LockRequester): LockGrant;
 
   /**
-   * Gives a hold back. Returns `true` only if this user actually held it.
+   * Gives a hold back. Returns `true` only if this **connection** is the one
+   * currently holding the cell — the same `(user, socketId)` pair
+   * {@link acquire} last recorded.
    *
-   * A `false` is not an error worth telling the client about — the two ways to
-   * get one are a client releasing a hold that already lapsed, and a client
-   * releasing a cell somebody else holds. The first is routine; the second is a
-   * client disagreeing with the contract, and the answer to it is to do
+   * A `false` is not an error worth telling the client about — the three ways
+   * to get one are a client releasing a hold that already lapsed, a client
+   * releasing a cell somebody else holds, and a *superseded* connection of the
+   * holder releasing a hold its user has since re-taken elsewhere. The first is
+   * routine; the second is a client disagreeing with the contract; the third is
+   * the one this signature exists for, and in all three the answer is to do
    * nothing, which is what returning `false` causes.
    */
-  abstract release(cell: LockCell, userId: string): boolean;
+  abstract release(cell: LockCell, requester: LockRequester): boolean;
 
   /**
    * Frees every hold whose *current* connection is this one. Returns the cells
@@ -228,10 +253,18 @@ export class InMemoryLockService extends LockService implements OnModuleDestroy 
     return { outcome: 'ACQUIRED', holder: requester.user, expiresAt: new Date(expiresAt) };
   }
 
-  release(cell: LockCell, userId: string): boolean {
+  release(cell: LockCell, requester: LockRequester): boolean {
     const key = cellKey(cell);
     const existing = this.locks.get(key);
-    if (existing === undefined || existing.holder.id !== userId) {
+    // Both halves, and `socketId` is the load-bearing one: `holder.id` alone
+    // lets a superseded connection of the same user drop the hold the current
+    // one is renewing. See the file header, "…but *giving one back* is keyed by
+    // both".
+    if (
+      existing === undefined ||
+      existing.holder.id !== requester.user.id ||
+      existing.socketId !== requester.socketId
+    ) {
       return false;
     }
     clearTimeout(existing.timer);

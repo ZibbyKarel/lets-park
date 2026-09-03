@@ -34,9 +34,10 @@ async function pageFor(
   const page = await context.newPage();
   // Attached here, before the page has navigated anywhere, because the thing it
   // records happens as soon as the socket connects and a listener added later
-  // would have missed it. Two event handlers on an otherwise idle page; see
-  // `realtime.ts` for what they are for.
-  recordDayRoomSubscriptions(page, persona.key);
+  // would have missed it — and `await`ed for the same reason, since under
+  // `E2E_TRACE_REALTIME` it registers an init script. A few event handlers on an
+  // otherwise idle page; see `realtime.ts` for what they are for.
+  await recordDayRoomSubscriptions(page, persona.key);
   try {
     await use(page);
   } finally {

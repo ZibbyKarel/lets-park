@@ -40,11 +40,15 @@ const DATE = e2eDayForSlot(SPEC_DAY_SLOTS.cellLock);
  * `nxE2EPreset` sets `fullyParallel: true`, so these two tests run in **separate
  * workers at the same time** — `dates.ts` gives each *spec file* its own day,
  * but two tests inside one file share it. They also drive the same persona, and
- * `LockService.release` keys a hold by **user** rather than by socket
- * (`lock.service.ts`, deliberately: it is what makes a reconnect a renewal).
- * Share a bay and the first test's `closeDialog` releases the second test's
- * hold: the observed tile drops back to `Volné` and an assertion that named the
- * lock fails for a reason that has nothing to do with it.
+ * a hold is *acquired* by **user** (`lock.service.ts`, deliberately: it is what
+ * makes a reconnect a renewal). Share a bay and each test's dialog takes the
+ * hold over from the other, and the observed tile stops meaning what the
+ * assertion says it means.
+ *
+ * Since `doc/decision/0220-*` a *release* also has to come from the connection
+ * that holds the cell, so one test's `closeDialog` no longer drops the other's
+ * hold outright. That narrows the collision; it does not remove it, and it is
+ * not why these bays are separate.
  *
  * Review measured it before the split: 4 failures in 14 runs at default
  * parallelism, 0 in 8 at `--workers=1`, 0 in 10 with distinct bays. A later

@@ -448,6 +448,14 @@ what makes a reconnect a renewal rather than a `HELD_BY_OTHER` against yourself,
 and it is what makes the *late* disconnect of a dead socket free nothing when
 its user has already re-taken the hold on a new one.
 
+**Giving a hold back is keyed by both**, though: `release` frees the cell only
+for the `(user, socketId)` pair currently recorded, exactly as `releaseSocket`
+matches. A user really can have two live connections on one cell — a second tab,
+or a page that reloaded before this server noticed the old socket — and a
+release keyed by user alone let either of them drop the other's hold, which
+shows up as a bay reading `Volné` to everybody while a form is still open.
+`doc/decision/0220-*`.
+
 - **TTL** — `REALTIME_LOCK_TTL_MS`, 30 s. The client's renewal budget fits
   inside it with 5 s to spare; the arithmetic is `doc/decision/0110-*`.
 - **Renewal** — there is no heartbeat command. A second `cell:lock` from the
@@ -543,7 +551,7 @@ already has its Redis equivalent — the table is in its own doc comment:
 | --- | --- |
 | `acquire` (new) | `SET cell <holder> NX PX <ttl>` |
 | `acquire` (renewal) | the same `SET` with `XX`, guarded by a Lua compare on the holder |
-| `release` | Lua: `GET` the cell, `DEL` only if the holder matches |
+| `release` | Lua: `GET` the cell, `DEL` only if the holder **and its socket** match |
 | `releaseSocket` | a `SET` of cell keys per socket id, walked on disconnect |
 | `onExpired` | keyspace notifications (`Ex`) on the lock key prefix, **paired with a sweep** |
 

@@ -76,4 +76,5 @@ export const SPEC_DAY_SLOTS = {
   cellLock: 2,
   adminReservation: 3,
   icsFeed: 4,
+  realtimeConnection: 5,
 } as const;

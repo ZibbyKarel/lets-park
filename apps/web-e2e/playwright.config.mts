@@ -92,12 +92,15 @@ export default defineConfig({
       //
       // The reason is not speed. `next dev` runs React under `StrictMode`,
       // which mounts every effect twice, so a dev server gives every page a
-      // second socket.io connection as a matter of course — and this app has a
-      // separate, unexplained way of doing the same thing, so the two compound.
-      // A page with two connections sits in the day room twice and hears its
-      // own `cell:locked`, which the gateway broadcasts to everybody *except*
-      // the asking socket. `doc/decision/0187-*` has the packet traces and the
-      // measured rates.
+      // second socket.io connection as a matter of course. A page with two
+      // connections sits in the day room twice and hears its own `cell:locked`,
+      // which the gateway broadcasts to everybody *except* the asking socket.
+      // `doc/decision/0187-*` has the packet traces and the measured rates.
+      //
+      // The built app does *not* have a second way of doing this, though that
+      // was believed and recorded for a while: measured per document rather
+      // than per page, it is one connection, 89 documents out of 89
+      // (`doc/decision/0221-*`, `src/realtime-connection.spec.ts`).
       command: 'npx nx run web:start -- --port 4200',
       url: `${baseURL}/api/health`,
       reuseExistingServer: !process.env['CI'],

@@ -447,6 +447,34 @@ describe('the realtime gateway', () => {
       const ack = (await rival.emitWithAck('cell:lock', cell)) as CellLockAck;
       expect(ack.result).toBe('HELD_BY_OTHER');
     });
+
+    it('refuses to let one connection release the hold its user re-took on another', async () => {
+      // One user, two live connections on one cell — a second tab, or a page
+      // that reloaded before this server noticed the old socket. The second
+      // `cell:lock` is a renewal and re-keys the hold onto `second`.
+      const first = await connectAs(alice);
+      const second = await connectAs(alice);
+      const neighbour = await connectAs(bob);
+      const cell = freshCell();
+      await watch(neighbour, DAY);
+      await first.emitWithAck('cell:lock', cell);
+      await second.emitWithAck('cell:lock', cell);
+
+      first.emit('cell:unlock', cell);
+      await settle();
+
+      // Nothing was announced, so no other tile went back to `Volné`…
+      expect(
+        neighbour.received.filter(
+          (event) =>
+            event.name === 'cell:unlocked' &&
+            (event.payload as { parkingSpotId: string }).parkingSpotId === cell.parkingSpotId
+        )
+      ).toHaveLength(0);
+      // …and the hold is genuinely still held, not merely unannounced.
+      const ack = (await neighbour.emitWithAck('cell:lock', cell)) as CellLockAck;
+      expect(ack.result).toBe('HELD_BY_OTHER');
+    });
   });
 
   describe('a hold that nobody gives back', () => {

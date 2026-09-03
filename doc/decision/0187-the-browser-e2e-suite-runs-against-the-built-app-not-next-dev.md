@@ -86,6 +86,28 @@ not double-invoke effects. **The cause is unknown.** It is somewhere in
 `[url, path, enabled, generation]` dependency list against a cleanup whose
 `next.disconnect()` evidently does not always take the first socket down.
 
+> **Corrected — there is no duplicate connection, and this paragraph is the
+> third wrong reading of the same log. See `doc/decision/0221-*`.**
+>
+> The count is right and the container is wrong. `page.on('websocket')` spans a
+> whole Playwright `Page`, and a `Page` is not a document: six of this suite's
+> pages `reload()` or `goto()` a second time, and a second document opens a
+> second socket because that is what a page load does. 17 pages + 6 second loads
+> = the 23 sockets counted here.
+>
+> Measured **per document** — an init script, which Playwright runs once per
+> document, tagging each socket with the realm that opened it — across four full
+> traced runs: **89 documents, 89 sockets, none with more than one.** The
+> paragraph above was written having correctly ruled `StrictMode` out and then
+> having kept the phenomenon anyway; and it was checkable from the traces
+> already quoted in this record, where every "second socket" re-walks the
+> calendar from today, which is what a fresh document does and what a
+> double-mounted React tree does not.
+>
+> Nothing in `libs/realtime-client` needed changing, and nothing was changed.
+> `apps/web-e2e/src/realtime-connection.spec.ts` now pins one-document-one-socket
+> in the built app.
+
 Two things are worth recording about the *consequences*, because they are milder
 than the earlier version of this record implied:
 
@@ -102,6 +124,12 @@ So: a real application defect, still unexplained, still worth its own task — b
 not the thing that was failing the suite, and this record should not have said
 it was. The lingering socket's practical cost is a stale room membership and
 whatever a future teardown of it would emit.
+
+> **Corrected: not a defect at all** — see the note above and
+> `doc/decision/0221-*`. There is no lingering socket. The observation in the
+> first bullet — one `cell:lock` per dialog open even on a "two-socket" page —
+> was the evidence for that and was read as a mitigation instead of as the
+> answer: only one connection was ever live, so only one could ask.
 
 `E2E_TRACE_REALTIME=1` reproduces the measurement in one command, which is why
 that switch is kept — and why its labels now name a page rather than a persona
@@ -135,6 +163,13 @@ So the two candidate fixes, stated correctly:
   `libs/realtime-client/src/lib/connection.tsx`. Harder, and the one that makes
   the first unnecessary.
 
+> **Both were settled in Task 32.** The first was done —
+> `doc/decision/0220-*`, `release` now matches `(user, socketId)` exactly as
+> `releaseSocket` does. The second had no root cause to find: a page ends up
+> with two connections by loading two documents (`doc/decision/0221-*`), so it
+> does *not* make the first unnecessary. The two-tab hazard named below is the
+> whole of the exposure, and it is now closed.
+
 There is also a real (narrow) product consequence of user-keyed release worth
 naming: **two tabs, same user, same cell — closing the dialog in one releases
 the hold the other still shows as held**, until that tab's next renewal (up to
@@ -142,6 +177,12 @@ half the TTL, ~15 s). A courtesy lock briefly lying is within what
 `lock.service.ts` documents as its remit, and the API re-checks everything on
 `reservation.create` regardless. Recorded as a finding, not smuggled into a test
 change.
+
+> **Fixed in Task 32** (`doc/decision/0220-*`). This finding turned out to be
+> the *entire* defect the "duplicate connection" was thought to be a symptom of:
+> a user really can have two live connections on one cell, and the way they get
+> them is a second tab or a reload rather than anything wrong in
+> `libs/realtime-client`.
 
 ### Why not just disable `StrictMode`
 
