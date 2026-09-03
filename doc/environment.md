@@ -85,6 +85,38 @@ another task's file set, so a required key would have broken every existing
 `apps/api/src/env.ts` (`ENV_DEFAULTS`) are also the production values, so leaving
 these keys out of a `.env` entirely is legitimate.
 
+#### Slack and scheduled jobs (Task 16)
+
+Also all optional, for the same reason. Full behaviour is in `doc/slack.md`.
+
+| variable | shape | default | what it's for |
+| --- | --- | --- | --- |
+| `SLACK_ENABLED` | exactly `true` or `false` | `false` | whether outbound Slack calls actually leave the process |
+| `SLACK_BOT_TOKEN` | non-empty string | – | the bot token (`xoxb-…`). **Required when `SLACK_ENABLED=true`** |
+| `SLACK_CHANNEL_ID` | non-empty string | – | channel for the freed-spot notice and the daily summary. **Required when `SLACK_ENABLED=true`** |
+| `SLACK_REQUEST_TIMEOUT_MS` | positive integer (ms) | `5000` | per-attempt HTTP timeout for a Slack call |
+| `SLACK_RETRY_ATTEMPTS` | positive integer | `3` | total attempts, the first included; `1` disables retrying |
+| `SLACK_RETRY_BASE_DELAY_MS` | positive integer (ms) | `500` | first backoff delay; doubles per further attempt |
+| `SLACK_DAILY_SUMMARY_AT` | `HH:MM`, 24-hour | `08:00` | when the daily summary is posted, **in Europe/Prague** |
+
+Four things that are easy to miss:
+
+- **`SLACK_ENABLED` is not coerced.** Only the two literals parse. `z.coerce.boolean()`
+  would read `false`, `0` and `no` as *true*, which is the wrong direction for a
+  switch whose off position is what keeps a laptop from posting into a real
+  workspace.
+- **`SLACK_ENABLED=true` without a token or channel refuses to boot**, naming the
+  missing variable and never its value — the same fail-fast contract as every
+  other key here.
+- **`SLACK_DAILY_SUMMARY_AT` carries no `_MS` suffix on purpose.** It is a time of
+  day, not a duration: 08:00 Prague is a different number of milliseconds from
+  midnight on the two days a year the offset changes, which is exactly why the
+  cron is registered with `timeZone: 'Europe/Prague'` rather than as an interval.
+- **The daily job runs every day** and skips weekends and Czech public holidays
+  itself, using the same `isBusinessDay` the reservation rules use. A
+  weekday-only cron expression would have covered Saturday and Sunday but not
+  28 September.
+
 ### `apps/web` (`apps/web/src/env.ts`)
 
 | variable | shape | what it's for |
