@@ -33,9 +33,26 @@
  * - Touches **no user, spot or role**: `prisma db seed` owns those, is
  *   idempotent, and `globalSetup` runs it first.
  *
- * It refuses to run with `NODE_ENV=production`, because "delete a month of
- * reservations" is not a thing that should ever be one stray environment
- * variable away from a real database.
+ * ## What stops it doing that to a real database
+ *
+ * {@link assertDisposableDatabase}, run before anything else, and the target
+ * host is printed either way. "Delete a month of reservations" is not a thing
+ * that should ever be one stray environment variable away from a real database.
+ *
+ * This file used to say the same sentence and then check
+ * `NODE_ENV === 'production'`, which is **inert in exactly the situation it
+ * existed for**: `NODE_ENV` is unset in a plain shell, `nx run
+ * database:reset-e2e` sets only `SWC_NODE_PROJECT`, and `globalSetup` spawns
+ * this script with whatever environment it inherited — while `DATABASE_URL`,
+ * the variable that actually decides which database is emptied, was never
+ * looked at. The final review found it as I-2. The guard now reads the
+ * connection string; see
+ * `doc/decision/0276-destructive-database-scripts-are-guarded-by-the-connection-string.md`.
+ *
+ * That guard is also what makes the un-restored reservation window below
+ * defensible rather than merely acknowledged: the only databases this script
+ * can reach without an explicit `LETS_PARK_ALLOW_DESTRUCTIVE_RESET=1` are ones
+ * whose settings nobody is entitled to rely on between runs.
  *
  * ## `SWC_NODE_PROJECT`
  *
@@ -57,6 +74,7 @@ import {
   type DateOnly,
 } from '@lets-park/shared-types';
 import { createPrismaClient } from '../lib/create-prisma-client';
+import { assertDisposableDatabase } from '../lib/disposable-database';
 import { RESERVATION_WINDOW_SETTINGS_ID } from '../lib/seed-data';
 
 /**
@@ -82,21 +100,18 @@ function toDateColumn(value: DateOnly): Date {
 }
 
 async function main(): Promise<void> {
-  if (process.env['NODE_ENV'] === 'production') {
-    throw new Error('reset-e2e refuses to run with NODE_ENV=production.');
-  }
-
-  const connectionString = process.env['DATABASE_URL'];
-  if (!connectionString) {
-    throw new Error(
-      'DATABASE_URL is not set — copy .env.example to .env (see doc/environment.md).'
-    );
-  }
+  // Before anything is read, and long before anything is deleted: which
+  // database is this, and am I allowed to empty a month of it?
+  const target = assertDisposableDatabase(process.env['DATABASE_URL']);
+  console.log(
+    `reset-e2e target: database "${target.database}" on ${target.host}` +
+      (target.overridden ? ' (LETS_PARK_ALLOW_DESTRUCTIVE_RESET=1).' : '.')
+  );
 
   const { from, to } = e2eTargetMonth();
   const range = { gte: toDateColumn(from), lte: toDateColumn(to) };
 
-  const prisma = createPrismaClient({ connectionString });
+  const prisma = createPrismaClient({ connectionString: target.url });
 
   try {
     // Queue entries first: nothing references them, and deleting the
@@ -105,15 +120,16 @@ async function main(): Promise<void> {
     const waitlist = await prisma.waitlistEntry.deleteMany({ where: { date: range } });
     const reservations = await prisma.reservation.deleteMany({ where: { date: range } });
 
-    // **Not restored afterwards, and that is the cost of this script.** The row
-    // is global and singular, so every run leaves the shared dev database
-    // booking-open 31 days ahead until somebody re-seeds — which means a
-    // developer who runs the suite and then goes back to clicking around the
-    // app is looking at a wider window than the product ships with. Accepted
-    // because it is a value an admin can legitimately set through the UI
-    // (`doc/decision/0181-*`), and because a teardown that restored it would
-    // still be wrong for anyone whose run was interrupted. `npx prisma db seed`
-    // puts it back to 7 days.
+    // **Not restored afterwards, and that is a stated term of this script's
+    // contract, not an oversight.** The row is global and singular, so every
+    // run leaves the database booking-open 31 days ahead until somebody
+    // re-seeds. Three things make that acceptable rather than merely
+    // acknowledged: it is a value an admin can legitimately set through the UI
+    // (`doc/decision/0181-*`); a teardown that restored it would still be wrong
+    // for anyone whose run was interrupted; and `assertDisposableDatabase`
+    // above means the only databases reachable without an explicit override are
+    // local ones whose settings nobody is entitled to rely on between runs.
+    // `npx prisma db seed` puts it back to 7 days.
     await prisma.reservationWindowSettings.upsert({
       where: { id: RESERVATION_WINDOW_SETTINGS_ID },
       update: { openDaysBefore: MAX_OPEN_DAYS_BEFORE, lockMode: 'AUTO' },

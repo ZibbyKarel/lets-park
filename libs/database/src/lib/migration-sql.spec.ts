@@ -7,29 +7,69 @@
  * Without a database these can still be asserted as SQL: what follows is not a
  * test of the schema file's prose but of the exact DDL that will be executed.
  * Every constraint the brief lists appears here by name.
+ *
+ * ## Every migration, not just the first
+ *
+ * This file used to read `directories[0]` and stop. That was right when there
+ * was one migration; there are three, and the two `audit_*` files had no test
+ * of any kind — nothing asserted they were additive, and nothing would have
+ * noticed a `DROP COLUMN` in a fourth. The final review raised it as I-4.
+ *
+ * The suite now reads all of them: the init one is asserted statement by
+ * statement as before, and every *subsequent* one has to be additive. The last
+ * describe block closes the other half of the same gap (I-3) without needing a
+ * database — it reconciles the enum members the migrations actually produce
+ * against the ones `schema.prisma` declares, which is the only place the two
+ * artefacts were previously allowed to drift in silence.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const MIGRATIONS_DIR = join(__dirname, '..', '..', 'prisma', 'migrations');
+const SCHEMA_PATH = join(__dirname, '..', '..', 'prisma', 'schema.prisma');
 
-function readInitMigration(): string {
+/** Migration directory names, in the order Prisma applies them. */
+function migrationDirectories(): readonly string[] {
   const directories = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
-  const initDirectory = directories[0];
-  if (initDirectory === undefined) {
+  if (directories.length === 0) {
     throw new Error(`No migration directory found in ${MIGRATIONS_DIR}`);
   }
-  return readFileSync(join(MIGRATIONS_DIR, initDirectory, 'migration.sql'), 'utf8');
+  return directories;
 }
 
-const sql = readInitMigration();
+function readMigration(directory: string): string {
+  return readFileSync(join(MIGRATIONS_DIR, directory, 'migration.sql'), 'utf8');
+}
+
+const MIGRATION_DIRECTORIES = migrationDirectories();
+const INIT_DIRECTORY = MIGRATION_DIRECTORIES[0];
+if (INIT_DIRECTORY === undefined) {
+  throw new Error(`No migration directory found in ${MIGRATIONS_DIR}`);
+}
+const LATER_DIRECTORIES = MIGRATION_DIRECTORIES.slice(1);
+
+const sql = readMigration(INIT_DIRECTORY);
 
 /** Collapses whitespace so assertions do not depend on line wrapping. */
 const flat = sql.replace(/\s+/g, ' ');
+
+/**
+ * SQL with `--` line comments removed.
+ *
+ * The `audit_*` migrations explain themselves at length, and both explanations
+ * contain the words `DROP` and `ALTER TYPE` while describing what they are
+ * *not* doing. Asserting on the comments would be asserting on prose.
+ */
+function statementsOnly(migrationSql: string): string {
+  return migrationSql
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n');
+}
 
 describe('init migration — tables and enums', () => {
   it.each(['ParkingGroup', 'UserRole', 'ReservationLockMode', 'AuditLogAction'])(
@@ -194,5 +234,88 @@ describe('migration_lock.toml', () => {
   it('pins the provider to postgresql', () => {
     const lock = readFileSync(join(MIGRATIONS_DIR, 'migration_lock.toml'), 'utf8');
     expect(lock).toContain('provider = "postgresql"');
+  });
+});
+
+describe('every migration after the first is additive', () => {
+  it('there is at least one, or this block is asserting nothing', () => {
+    // A guard on the guard: `it.each([])` passes vacuously, and a suite that
+    // silently stops covering the thing it names is the defect this file was
+    // written to fix.
+    expect(LATER_DIRECTORIES.length).toBeGreaterThan(0);
+  });
+
+  it.each(LATER_DIRECTORIES)('%s drops nothing', (directory) => {
+    const statements = statementsOnly(readMigration(directory));
+    // Every one of these would destroy data, and `AuditLog` cannot be rewritten
+    // at all — the append-only trigger rejects the UPDATE a column rewrite
+    // issues. A migration that needs one of them needs a decision record, and
+    // this assertion is where the conversation starts.
+    expect(statements).not.toMatch(/\bDROP\s+TABLE\b/i);
+    expect(statements).not.toMatch(/\bDROP\s+COLUMN\b/i);
+    expect(statements).not.toMatch(/\bDROP\s+TYPE\b/i);
+    expect(statements).not.toMatch(/\bTRUNCATE\b/i);
+  });
+
+  it.each(LATER_DIRECTORIES)('%s changes no enum type except by ADD VALUE', (directory) => {
+    const statements = statementsOnly(readMigration(directory));
+    for (const alter of statements.match(/ALTER\s+TYPE\b[^;]*/gi) ?? []) {
+      expect(alter).toMatch(/ADD\s+VALUE\s+IF\s+NOT\s+EXISTS/i);
+    }
+  });
+});
+
+describe('the migrations and schema.prisma agree on AuditLogAction', () => {
+  /**
+   * The one enum the two artefacts were free to drift on: the init migration
+   * creates it with six members, `schema.prisma` declares eight, and the only
+   * assertion about it used to be that the `CREATE TYPE` line exists. Nothing
+   * else in this project compares the migration history to the schema without a
+   * live database — `schema-contract-parity.spec.ts` compares the *generated
+   * client*, which is a third artefact derived from the schema and regenerated
+   * by nobody in CI.
+   */
+  function migrationMembers(): string[] {
+    const created = flat.match(/CREATE TYPE "AuditLogAction" AS ENUM \(([^)]*)\)/)?.[1];
+    expect(created).toBeDefined();
+    const members = [...(created ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1] ?? '');
+
+    for (const directory of LATER_DIRECTORIES) {
+      const statements = statementsOnly(readMigration(directory));
+      const added = statements.matchAll(
+        /ALTER\s+TYPE\s+"AuditLogAction"\s+ADD\s+VALUE(?:\s+IF\s+NOT\s+EXISTS)?\s+'([^']+)'/gi
+      );
+      for (const match of added) {
+        members.push(match[1] ?? '');
+      }
+    }
+    return members;
+  }
+
+  function schemaMembers(): string[] {
+    const schema = readFileSync(SCHEMA_PATH, 'utf8');
+    const block = schema.match(/enum AuditLogAction \{([^}]*)\}/)?.[1];
+    expect(block).toBeDefined();
+    return (block ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('//'));
+  }
+
+  it('the union of CREATE TYPE and every ADD VALUE is exactly what the schema declares', () => {
+    expect([...migrationMembers()].sort()).toEqual([...schemaMembers()].sort());
+  });
+
+  it('no member is added twice across the history', () => {
+    const members = migrationMembers();
+    expect(new Set(members).size).toBe(members.length);
+  });
+
+  it('covers the two members the init migration does not create', () => {
+    // Named rather than counted, so that deleting a migration file fails here
+    // with the name of what went missing.
+    expect(migrationMembers()).toEqual(
+      expect.arrayContaining(['RESERVATION_WINDOW_UPDATED', 'WAITLIST_JOINED'])
+    );
   });
 });

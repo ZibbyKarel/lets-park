@@ -1,4 +1,6 @@
 import {
+  BULK_DAY_OUTCOMES,
+  BULK_UNAVAILABLE_REASONS,
   CELL_LOCK_RESULTS,
   DEFAULT_OPEN_DAYS_BEFORE,
   DEFAULT_RESERVATION_LOCK_MODE,
@@ -28,6 +30,37 @@ describe('domain enumerations', () => {
 
   it('lists the month lock states', () => {
     expect(MONTH_LOCK_STATES).toEqual(['NOT_YET_OPEN', 'OPEN', 'LOCKED']);
+  });
+});
+
+/**
+ * The two enumerations this file used to skip — and the pair with the most
+ * domain reasoning attached to them, since they are what the bulk allocator
+ * reports per day and what the UI lays the preview and the result out against.
+ * Final review M-3.
+ */
+describe('bulk booking enumerations', () => {
+  it('lists what can become of one selected day', () => {
+    expect(BULK_DAY_OUTCOMES).toEqual(['SPOT_ASSIGNED', 'QUEUED', 'UNAVAILABLE']);
+  });
+
+  it('lists why a day produced neither a reservation nor a queue position', () => {
+    // Per-day facts inside a *successful* response: one impossible day must not
+    // throw away the rest of the batch. Conditions that invalidate the whole
+    // request (locked month, day in the past) are contract errors instead, so
+    // they must never appear here.
+    expect(BULK_UNAVAILABLE_REASONS).toEqual([
+      'ALREADY_HAS_RESERVATION',
+      'NOT_A_BUSINESS_DAY',
+      'NO_SPOTS_AVAILABLE',
+    ]);
+  });
+
+  it('reasons exist only for the UNAVAILABLE outcome', () => {
+    expect(BULK_DAY_OUTCOMES).toContain('UNAVAILABLE');
+    for (const reason of BULK_UNAVAILABLE_REASONS) {
+      expect(BULK_DAY_OUTCOMES).not.toContain(reason);
+    }
   });
 });
 

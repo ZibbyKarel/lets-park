@@ -1,5 +1,24 @@
 /**
- * What the API does with a request that has no business being answered.
+ * What the API does with a request that has no business being answered — and,
+ * first, what it does with one that has.
+ *
+ * ## The positive control comes first, and why
+ *
+ * Everything below the first `describe` asserts `401` or `404`. On its own that
+ * is not evidence: `return false` in `JwtAuthGuard`, a misconfigured
+ * `AUTH_OKTA_ISSUER`, an unreachable JWKS endpoint, or a verifier that threw on
+ * every token would satisfy all four negative cases at once, and a calendar
+ * route that 404s on *everything* would satisfy the ICS case. The final review
+ * raised exactly that as I-1: four different bad credentials presented as though
+ * the suite discriminated between them, when nothing in `apps/api-e2e` had ever
+ * passed the guard.
+ *
+ * So the file now opens by signing a seeded person in through the real OIDC
+ * authorization-code flow (`../support/oidc-token.ts` — no injected token, no
+ * test branch, no fabricated JWT) and asserting that the same procedure answers
+ * `200` with that person's record. Break authentication in any of the ways
+ * above and *this* test goes red; only then do the four refusals below mean the
+ * API refused these credentials rather than all of them.
  *
  * This is the half of authentication a browser suite cannot reach.
  * `apps/web-e2e` always arrives holding a session Auth.js minted, so every
@@ -22,6 +41,7 @@
  * every other one is — so what it refuses, they all refuse.
  */
 import axios from 'axios';
+import { SEEDED_USER, fetchAccessToken } from '../support/oidc-token';
 
 /** The oRPC transport sits at `/api/rpc`, not at `/api`. */
 const ME_GET = '/api/rpc/me/get';
@@ -54,6 +74,52 @@ function expectSaysNothing(data: unknown): void {
   expect(body).not.toContain('evil.example.com');
   expect(body).not.toContain('not-a-signature');
 }
+
+describe('an authenticated procedure with a real token', () => {
+  /**
+   * The whole file's positive control. If this goes red, nothing below it means
+   * anything, which is why it is first.
+   *
+   * The oRPC transport answers `{ json: … }`; the payload is `myProfileSchema`,
+   * so it carries `icsToken` — deliberately never asserted on by value and
+   * never printed, because a failure message is a log line.
+   */
+  it('answers 200 with the seeded person behind the token', async () => {
+    const token = await fetchAccessToken();
+
+    const res = await axios.post(ME_GET, EMPTY_INPUT, {
+      ...anyStatus,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const profile = (res.data as { json?: Record<string, unknown> }).json;
+    expect(profile).toMatchObject({
+      email: SEEDED_USER.claims['email'],
+      name: SEEDED_USER.claims['name'],
+    });
+    // The identity came from the database row, not from the token: nothing in
+    // the claims above could have granted it.
+    expect(profile).toHaveProperty('id');
+    expect(profile).toHaveProperty('role');
+  });
+
+  it('the very same request without the header is refused', async () => {
+    // The pair, in one test: the only difference between 200 and 401 here is
+    // the Authorization header, so the guard is discriminating on the token and
+    // not on the route.
+    const token = await fetchAccessToken();
+
+    const withToken = await axios.post(ME_GET, EMPTY_INPUT, {
+      ...anyStatus,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const without = await axios.post(ME_GET, EMPTY_INPUT, anyStatus);
+
+    expect(withToken.status).toBe(200);
+    expect(without.status).toBe(401);
+  });
+});
 
 describe('an authenticated procedure without a usable token', () => {
   it('refuses a request with no Authorization header', async () => {
@@ -97,6 +163,31 @@ describe('an authenticated procedure without a usable token', () => {
 });
 
 describe('the ICS feed hides whether a token exists', () => {
+  /**
+   * The positive control for this section, and for the same reason as the one
+   * at the top of the file: a calendar route that answered `404` to
+   * *everything* would satisfy the assertion below it. So a real token is
+   * fetched first — through `me.get`, which is where a user gets theirs — and
+   * the feed has to serve it.
+   */
+  it('serves the calendar to the holder of a real token', async () => {
+    const token = await fetchAccessToken();
+    const profile = await axios.post(ME_GET, EMPTY_INPUT, {
+      ...anyStatus,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(profile.status).toBe(200);
+
+    const icsToken = (profile.data as { json?: { icsToken?: unknown } }).json?.icsToken;
+    expect(typeof icsToken).toBe('string');
+
+    const feed = await axios.get(`/api/calendar/${String(icsToken)}.ics`, anyStatus);
+
+    expect(feed.status).toBe(200);
+    expect(feed.headers['content-type']).toContain('text/calendar');
+    expect(String(feed.data)).toContain('BEGIN:VCALENDAR');
+  });
+
   /**
    * The whole security model of the feed is the secret in its path, so the
    * response to a wrong one must be indistinguishable from the response to a

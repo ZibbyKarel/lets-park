@@ -15,6 +15,19 @@ export interface SeedParkingSpot {
   active: boolean;
 }
 
+/**
+ * One development account.
+ *
+ * There is deliberately **no `icsToken` field.** The secret in a personal ICS
+ * feed URL is the only credential that route has — `calendar.controller.ts` is
+ * `@Public()` — so a value written down here would be a published credential
+ * for every database this seed has ever touched. Four sequential UUID-shaped
+ * literals used to sit in this file, and the final review raised them as its
+ * single Critical. `src/scripts/seed.ts` now mints one per account with
+ * `generateSeedIcsToken()` (`./ics-token.ts`) and prints the feed URLs, and
+ * `seed-data.spec.ts` fails if a literal ever comes back. See
+ * `doc/decision/0275-the-development-seed-generates-its-ics-tokens.md`.
+ */
 export interface SeedUser {
   /** Natural key the seed upserts on. */
   email: string;
@@ -29,8 +42,6 @@ export interface SeedUser {
    */
   oktaId: string;
   active: boolean;
-  /** Secret in the personal ICS feed URL. Fixed here so dev URLs are stable. */
-  icsToken: string;
   /** Resolved to `preferredParkingSpotId` by the seed script. */
   preferredParkingSpotLabel: string | null;
 }
@@ -69,7 +80,6 @@ export const SEED_USERS: readonly SeedUser[] = [
     role: 'ADMIN',
     oktaId: 'dev-admin',
     active: true,
-    icsToken: '019917a0-0000-7000-8000-000000000001',
     preferredParkingSpotLabel: 'E2.92',
   },
   {
@@ -79,7 +89,6 @@ export const SEED_USERS: readonly SeedUser[] = [
     role: 'USER',
     oktaId: 'dev-user',
     active: true,
-    icsToken: '019917a0-0000-7000-8000-000000000002',
     preferredParkingSpotLabel: 'E2.96',
   },
   {
@@ -89,7 +98,6 @@ export const SEED_USERS: readonly SeedUser[] = [
     role: 'USER',
     oktaId: 'dev-user-2',
     active: true,
-    icsToken: '019917a0-0000-7000-8000-000000000003',
     preferredParkingSpotLabel: null,
   },
   {
@@ -99,7 +107,6 @@ export const SEED_USERS: readonly SeedUser[] = [
     role: 'USER',
     oktaId: 'dev-inactive',
     active: false,
-    icsToken: '019917a0-0000-7000-8000-000000000004',
     preferredParkingSpotLabel: null,
   },
 ];

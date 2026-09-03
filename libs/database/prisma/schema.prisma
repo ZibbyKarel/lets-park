@@ -169,6 +169,17 @@ model AuditLog {
   payload     Json           @db.JsonB
   createdAt   DateTime       @default(now()) @db.Timestamptz(3)
 
+  // `onUpdate: Cascade` here is Prisma's default and it contradicts the
+  // append-only trigger: a cascade fires `UPDATE "AuditLog"`, which
+  // `auditlog_reject_mutation()` aborts, taking the whole transaction with it.
+  // Left as Cascade on purpose. `User.id` is `@default(uuid(7))` and no code
+  // path in this application updates a primary key, so the cascade is
+  // unreachable; changing it to `NoAction` would be a truer declaration but
+  // needs a fourth migration altering the constraint, and applying that to the
+  // shared development database mid-review would desynchronise every other
+  // worktree's migration history for a contradiction nothing can reach. Final
+  // review M-4; recorded in
+  // doc/decision/0278-auditlog-actor-keeps-prismas-default-on-update.md.
   actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([createdAt])

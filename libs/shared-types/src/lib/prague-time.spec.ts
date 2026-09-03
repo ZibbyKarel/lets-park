@@ -15,6 +15,26 @@ import {
  */
 const PROCESS_TIME_ZONES = ['UTC', 'Europe/Prague', 'America/Los_Angeles', 'Pacific/Kiritimati'];
 
+/**
+ * Runs `assertion` once per entry in {@link PROCESS_TIME_ZONES}.
+ *
+ * **What this does and does not reach.** Mutating `process.env.TZ` mid-process
+ * really does change `Date`'s local methods (`getFullYear`, `getHours`, …) and
+ * any `Intl` formatter constructed *after* the assignment — measured in Node 24
+ * by the final review, which is why this helper catches an implementation that
+ * reads the machine's local time. What it does **not** change is a formatter
+ * constructed at *module scope*, before the first assignment ever runs: that
+ * object has already resolved its zone.
+ *
+ * `prague-time.ts:17-26` builds exactly such a module-scope formatter. It is
+ * safe here only because it pins `timeZone: PRAGUE_TIME_ZONE` explicitly, so
+ * the zone it resolved was never the process's to begin with. Delete that one
+ * property and all four iterations below would agree with each other and the
+ * suite would stay green while the module was wrong — so the loop is a guard
+ * against *reaching for local time*, not a guard against the formatter itself.
+ * The 47,847-day sweep that covers the formatter lives in the task report, and
+ * `date-only.spec.ts` pins the arithmetic it feeds. Final review M-2.
+ */
 function underEachProcessTimeZone(assertion: () => void): void {
   const original = process.env['TZ'];
   try {
