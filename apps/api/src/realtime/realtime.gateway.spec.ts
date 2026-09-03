@@ -208,8 +208,9 @@ describe('the realtime gateway', () => {
       await settle();
 
       // `client.rooms` also holds the socket's own id room, so the ceiling is
-      // the cap plus that one.
-      expect(socketRoomCount(client)).toBeLessThanOrEqual(MAX_DAY_ROOMS_PER_SOCKET + 1);
+      // the cap plus that one. `toBe`, not `toBeLessThanOrEqual`: a gateway
+      // that joined no rooms at all would also satisfy the looser assertion.
+      expect(socketRoomCount(client)).toBe(MAX_DAY_ROOMS_PER_SOCKET + 1);
     });
   });
 
@@ -498,20 +499,36 @@ describe('the realtime gateway', () => {
     it('is released, and announced, when the holder’s socket drops', async () => {
       // The other half of the same guarantee, and the one `useCellLock` relies
       // on when it sends no `cell:unlock` across a connection gap.
+      //
+      // This test used to pass on the *wrong* mechanism: at `LOCK_TTL_MS =
+      // 800`, well inside `waitForEvent`'s 5 s budget, the hold lapses on its
+      // own regardless of whether `handleDisconnect` frees anything, so
+      // mutating `releaseSocket(client.id)` into a no-op (a dropped socket
+      // frees nothing) failed **zero** tests here — the same "passes on a
+      // defence other than the one it names" shape as the ack-leak gate. The
+      // elapsed-time assertion below is what makes the two mechanisms
+      // distinguishable: a disconnect-triggered release is one WebSocket round
+      // trip, not a wait for the TTL to lapse.
       const holder = await connectAs(alice);
       const neighbour = await connectAs(bob);
       const cell = freshCell();
       await watch(neighbour, DAY);
       await holder.emitWithAck('cell:lock', cell);
 
+      const before = Date.now();
       await holder.disconnect();
 
-      await expect(
-        neighbour.waitForEvent(
-          'cell:unlocked',
-          (p: { parkingSpotId: string }) => p.parkingSpotId === cell.parkingSpotId
-        )
-      ).resolves.toEqual(cell);
+      const payload = await neighbour.waitForEvent(
+        'cell:unlocked',
+        (p: { parkingSpotId: string }) => p.parkingSpotId === cell.parkingSpotId
+      );
+      const elapsed = Date.now() - before;
+
+      expect(payload).toEqual(cell);
+      // Comfortably below `LOCK_TTL_MS` (800 ms): a real disconnect release
+      // arrives in tens of milliseconds, while a hold that only lapsed on its
+      // own would not be visible until close to the full TTL.
+      expect(elapsed).toBeLessThan(LOCK_TTL_MS / 2);
     });
   });
 

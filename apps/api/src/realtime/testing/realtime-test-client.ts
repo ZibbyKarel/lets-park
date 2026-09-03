@@ -44,6 +44,7 @@
 import { decodePacket } from 'engine.io-parser';
 import { Decoder, Encoder, PacketType } from 'socket.io-parser';
 import type { Packet } from 'socket.io-parser';
+import { SOCKET_IO_PATH } from '@lets-park/contract/realtime';
 
 /** How long any `waitFor…` helper waits before failing with a diagnosis. */
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -102,7 +103,11 @@ export class RealtimeTestClient {
       transport: 'websocket',
       ...options.query,
     });
-    const url = `${options.baseUrl.replace(/^http/, 'ws')}/socket.io/?${query.toString()}`;
+    // `SOCKET_IO_PATH` rather than a literal: this was the third undetected
+    // copy of the server's path (`doc/decision/0113-*`) — changing the real
+    // adapter's path alone used to fail nothing here, because this literal
+    // agreed with the *old* value by coincidence, not by import.
+    const url = `${options.baseUrl.replace(/^http/, 'ws')}${SOCKET_IO_PATH}/?${query.toString()}`;
     this.socket = new WebSocket(url);
 
     this.decoder.on('decoded', (packet: Packet) => {

@@ -49,6 +49,7 @@ describe('@lets-park/contract/realtime', () => {
         'CLIENT_TO_SERVER_EVENT_SCHEMAS',
         'DAY_ROOM_PREFIX',
         'SERVER_TO_CLIENT_EVENT_SCHEMAS',
+        'SOCKET_IO_PATH',
         'cellLockAckSchema',
         'cellLockCommandSchema',
         'cellLockResultSchema',

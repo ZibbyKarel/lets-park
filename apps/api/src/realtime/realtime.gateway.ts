@@ -217,10 +217,12 @@ export class RealtimeGateway
    *   already refused — the grid silently stops updating and only a reload
    *   fixes it.
    *
-   * `realtime.handshake.spec.ts` drives a real `socket.io-client` against this
-   * server and asserts the `connect_error` / `socket.active === false` pair,
-   * because that claim is a property of two libraries composed and not of any
-   * line here.
+   * `realtime-handshake.spec.ts` drives the hand-built `RealtimeTestClient`
+   * (`testing/realtime-test-client.ts`) — not `socket.io-client`, which the
+   * ESLint wrapper ban forbids in `apps/api` specs as much as in its
+   * source — against this server, and asserts the `CONNECT_ERROR` /
+   * `socket.active === false` pair, because that claim is a property of two
+   * libraries composed and not of any line here.
    */
   afterInit(server: RealtimeServer): void {
     server.use((socket, next) => {

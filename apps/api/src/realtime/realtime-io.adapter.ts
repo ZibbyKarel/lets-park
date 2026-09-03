@@ -16,9 +16,12 @@
  * one function to call, exactly as `configure-app.ts` exists so `main.ts` and
  * `http-pipeline.spec.ts` cannot drift.
  *
- * - **`path`** — {@link SOCKET_IO_PATH}. See its comment: it *cannot* be shared
- *   with the client's `DEFAULT_SOCKET_PATH`, and that is a boundary decision
- *   rather than an oversight.
+ * - **`path`** — {@link SOCKET_IO_PATH}, imported from
+ *   `@lets-park/contract/realtime` rather than declared here. See its own
+ *   comment and `doc/decision/0113-*`: `apps/api` cannot import
+ *   `libs/realtime-client` directly (a boundary decision, not an oversight),
+ *   so the contract's shared entry point is where a constant both halves of
+ *   the wire protocol must agree on lives.
  * - **`cors`** — the same `CORS_ALLOWED_ORIGINS` allow-list the HTTP side uses.
  *   Socket.io needs its own: the handshake is an HTTP request served by
  *   engine.io, which never passes through Express' CORS middleware. Without it
@@ -55,28 +58,8 @@
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import type { INestApplication } from '@nestjs/common';
 import type { Server, ServerOptions } from 'socket.io';
+import { SOCKET_IO_PATH } from '@lets-park/contract/realtime';
 import type { ApiEnv } from '../env';
-
-/**
- * Where Socket.io's HTTP endpoint lives.
- *
- * This is Socket.io's own default, and `libs/realtime-client` names the same
- * value `DEFAULT_SOCKET_PATH`. Its comment says it is "restated so the gateway
- * (Task 15) and this client have one named constant to agree on rather than two
- * independent defaults" — **that is not achievable as written**, and this is the
- * honest version of it. `libs/realtime-client` is tagged `scope:web` and
- * `apps/api` is `scope:api`, so `@nx/enforce-module-boundaries` refuses the
- * import (and rightly: the lib's entry point pulls React in). There are
- * therefore two constants, and this comment is the link between them.
- *
- * Both restate the *library's* default rather than choosing a value, so they
- * cannot drift by accident — only by somebody deliberately changing one. If a
- * shared constant is wanted, the place for it is
- * `@lets-park/contract/realtime`, which is `scope:shared` and which both halves
- * already import; that is recorded as a follow-up in the Task 15 report rather
- * than done here, because it is a change to another task's file set.
- */
-export const SOCKET_IO_PATH = '/socket.io';
 
 /** The slice of the environment the socket server needs. */
 export type RealtimeAdapterConfig = Pick<ApiEnv, 'CORS_ALLOWED_ORIGINS'>;
