@@ -60,6 +60,11 @@ function anOverview(overrides: Partial<DayOverviewOutput> = {}): DayOverviewOutp
       lockMode: 'AUTO',
     },
     canReserve: true,
+    // Required by `overview.day` since Task 31 (`doc/decision/0175-*`). This
+    // screen never reads it — it is the admin's day view, not the reserving
+    // one — but the fixture must still satisfy the contract type. `true`
+    // matches the `state: 'OPEN'` window above.
+    canReserveMonth: true,
     spots: [FREE, TAKEN, QUEUED],
     viewerReservationId: null,
     ...overrides,

@@ -53,6 +53,25 @@ export const dayOverviewOutputSchema = z.object({
    * restricted by the window at all, and that fact lives on the backend.
    */
   canReserve: z.boolean(),
+  /**
+   * Whether **this caller** may create reservations **anywhere in the month**
+   * `date` falls in — the window and the admin exemption, and nothing about
+   * `date` itself.
+   *
+   * This is `canReserve` with the two *per-day* rules removed: a past day and a
+   * non-business day both make `canReserve` false while leaving the month wide
+   * open. A screen whose subject is the month rather than the day — the bulk
+   * booking modal, which offers a whole month's grid from whatever day the user
+   * happens to be looking at — must read this one, or it switches itself off on
+   * every weekend, every Czech public holiday and every past day of an open
+   * month (`doc/decision/0175-*`).
+   *
+   * It is a separate field rather than something the client derives, for the
+   * same reason `canReserve` is (`doc/decision/0120-*`): the admin exemption
+   * does not appear anywhere in `window`, so `window.state === 'OPEN'` is not
+   * this value and never can be.
+   */
+  canReserveMonth: z.boolean(),
   /** Every active spot, in a stable order chosen by the backend. */
   spots: z.array(daySpotOverviewSchema),
   /**

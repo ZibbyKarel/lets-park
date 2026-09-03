@@ -236,7 +236,7 @@ returning an undeclared one.
 
 | procedure | input | output | other errors |
 | --- | --- | --- | --- |
-| `overview.day` | `{ date }` | `{ date, window, canReserve, spots[], viewerReservationId }` | — |
+| `overview.day` | `{ date }` | `{ date, window, canReserve, canReserveMonth, spots[], viewerReservationId }` | — |
 
 Everything the parking lot screen needs, in one query: every active spot, who
 holds it, how many people are behind it on the waitlist, where the caller
@@ -244,7 +244,7 @@ stands — **and the reservation-window state for that day**. The window
 travels with the response deliberately, so the FE never needs a second query
 and can never render the day grid against a stale window.
 
-Two fields that must not be confused:
+Three fields that must not be confused:
 
 - `window` — the `MonthWindowOverview` of the month `date` falls into. The
   truth is carried by `state`; `lockMode !== 'AUTO'` means the state was
@@ -254,6 +254,13 @@ Two fields that must not be confused:
   accounts for the window, the admin exception, the past, and business days.
   **The FE must not derive it from `window` itself** — an admin isn't bound by
   the window, and that's a fact that lives on the backend.
+- `canReserveMonth` — whether this user may reserve **anywhere in the month**
+  `date` falls in: the window and the admin exception, and nothing about `date`
+  itself. A screen whose subject is the month (the bulk-reservation modal) reads
+  this one. `canReserve: false` with `canReserveMonth: true` is every weekend
+  and every holiday of an open month, so the pair disagreeing is normal;
+  `doc/decision/0175-*` records why the month answer had to travel separately
+  rather than be inferred client-side from `canReserve` and the calendar.
 
 Read-only: a locked or not-yet-open day isn't thrown as an error, it's just
 reported in `window`.

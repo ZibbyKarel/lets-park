@@ -142,6 +142,7 @@ function dayOverview(overrides: Partial<DayOverviewOutput> = {}): DayOverviewOut
       lockMode: 'AUTO',
     },
     canReserve: true,
+    canReserveMonth: true,
     spots: [row('spot-a'), row('spot-b')],
     viewerReservationId: null,
     ...overrides,

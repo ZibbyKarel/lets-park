@@ -246,6 +246,32 @@ The ICS token is a bearer credential and is never logged from this screen: a
 failed clipboard write only flips a `copyState` flag, and neither mutation's
 variables or result are serialised anywhere in `SettingsPage`.
 
+## Bulk reservation (the lot screen's modal)
+
+The "Hromadná rezervace" button on the lot header opens a three-step modal that
+lives in `src/lot/bulk-modal.tsx`, with every decision it makes as a pure
+function in `src/lot/bulk-view.ts`. It has its own document:
+`doc/bulk-reservation-modal.md`.
+
+Three things about it are worth knowing from here rather than from there. Its
+third step is **not** optional: the confirmation is compared with the proposal
+the user was shown, and a difference is rendered rather than swallowed
+(`doc/decision/0170-*`), so this is the one modal on the site that does not
+close itself on a successful write. Its failures are rendered from the
+`bulk` message namespace rather than the shared `errors` one, because the
+shared sentences describe a single-day reservation
+(`doc/decision/0171-*`).
+
+And it is the one screen whose subject is a **month**, so it is the one that
+reads `day.canReserveMonth` rather than `day.canReserve`. The two differ by the
+day's own rules — a past date, a weekend, a Czech public holiday — which are
+facts about the anchor day and say nothing about the window;
+`doc/decision/0175-*` records why that had to become a contract field instead of
+a client-side inference. Its locked-month refusal is deliberately ordered
+*after* the result step, so a window that closes between a successful
+confirmation and its refetch cannot replace a finished comparison with a
+sentence saying nothing was created (`doc/decision/0176-*`).
+
 ## Loading, empty and error
 
 `shell/screen-state.tsx` exports all three from one module, so a screen imports
@@ -322,9 +348,11 @@ A day room is shared by everyone looking at that day, so a payload may not say
 anything viewer-relative. `waitlistUpdatedEventSchema` states the constraint and
 the reason: "there is no way to broadcast 'your position is now 2' to a room
 without telling everyone else who is in the queue". `dayOverviewOutputSchema`
-has exactly four such fields — `canReserve`, `viewerReservationId`,
-`viewerWaitlistEntryId`, `viewerWaitlistPosition` — and none of them can be
-patched from an event. Asking for the day again is the only honest way to learn
+has exactly five such fields — `canReserve`, `canReserveMonth`,
+`viewerReservationId`, `viewerWaitlistEntryId`, `viewerWaitlistPosition` — and
+none of them can be patched from an event. `canReserveMonth` joined the list
+with Task 31: it carries the admin exemption, so it too is an answer about the
+caller and not about the day. Asking for the day again is the only honest way to learn
 their new values.
 
 | event | patched | also refetched when |

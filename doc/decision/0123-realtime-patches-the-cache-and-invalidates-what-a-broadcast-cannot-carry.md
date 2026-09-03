@@ -28,7 +28,9 @@ Two mechanisms suggest themselves and both are wrong on their own.
 
 **Patch only.** Impossible for four fields. `dayOverviewOutputSchema` carries
 `canReserve`, `viewerReservationId`, `viewerWaitlistEntryId` and
-`viewerWaitlistPosition`, all of which are *this caller's* answer. A broadcast
+`viewerWaitlistPosition`, all of which are *this caller's* answer. (Task 31
+added a fifth, `canReserveMonth` — same reason, it carries the admin exemption.
+The argument below is unchanged by the count.) A broadcast
 goes to a whole day room and may not say anything viewer-relative — the
 contract states the constraint and the reason:
 

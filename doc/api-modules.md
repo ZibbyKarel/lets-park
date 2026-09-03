@@ -328,18 +328,33 @@ whether the caller is queued, and their position. A `groupBy` for the counts plu
 for the position would be two reads of the same data with nothing keeping them consistent, and the
 position *is* the row order — the same order Task 13 promotes in.
 
-### `canReserve`
+### `canReserve` and `canReserveMonth`
 
-Whether **this** caller may reserve **this** day, in the order the rules are cheapest to check:
+Two booleans, because two different screens ask two different questions. They are one composition of
+two private halves:
 
-1. A day in the past — no, admin included.
-2. A weekend or a Czech public holiday — no. The lot is a workplace car park (`isBusinessDay`).
-3. An admin — yes. Admins are exempt from the reservation window (`plan.md` §Byznys pravidla,
-   `doc/decision/0004-*`).
-4. Everybody else — `isMonthOpen(date, openDaysBefore, lockMode, today)`.
+```
+canReserveMonth = role === 'ADMIN' || isMonthOpen(date, openDaysBefore, lockMode, today)
+isReservableDay = date >= today && isBusinessDay(date)
 
-**The frontend must not re-derive this from `window`.** Rule 3 does not appear anywhere in the
-payload, so a client computing the answer from the window alone would hide the admin exemption.
+canReserve      = canReserveMonth && isReservableDay
+```
+
+- **`canReserveMonth`** — whether this caller may reserve **anywhere in the month** `date` falls in:
+  the window and the admin exemption, and nothing about `date` itself. Admins are exempt from the
+  reservation window (`plan.md` §Byznys pravidla, `doc/decision/0004-*`).
+- **`isReservableDay`** — a past day, or a weekend or Czech public holiday, is not bookable by
+  anyone. The lot is a workplace car park (`isBusinessDay`). The admin exemption is in the *other*
+  half, so it cannot rescue a Saturday.
+- **`canReserve`** — whether this caller may reserve **this** day: both halves.
+
+`canReserve: false` alongside `canReserveMonth: true` is therefore a perfectly ordinary payload —
+every weekend and every holiday of an open month — not a contradiction.
+
+**The frontend must not re-derive either from `window`.** The admin exemption does not appear
+anywhere in the payload, so a client computing the answer from the window alone would hide it. Nor
+may a month-scoped screen fall back to `canReserve`: it says "no" on a third of the calendar of an
+open month, which is how the bulk modal first shipped and what `doc/decision/0175-*` records.
 
 Deliberately *not* folded in: whether the caller already holds a reservation that day. That is the
 one-per-day rule, enforced by a unique constraint at write time, and the screen can see it directly

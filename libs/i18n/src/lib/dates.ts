@@ -115,3 +115,61 @@ export function formatMonthName(month: number): string {
 export function formatYear(year: number): string {
   return String(year);
 }
+
+/**
+ * Czech month names in the **locative** case, 1-based, for the one sentence in
+ * the UI that puts a month after a preposition: the bulk modal's
+ * "Vyberte dny v září." (`doc/design/screens/10-modal-bulk.png`).
+ *
+ * A hand-written table, unlike everything else in this module, because `Intl`
+ * genuinely cannot produce it. CLDR carries two Czech month forms — the
+ * `format` (genitive: `září`, `srpna`) and the `stand-alone` (nominative:
+ * `září`, `srpen`) — and neither is the locative (`září`, `srpnu`). There is no
+ * option object that asks for a third. The alternative was to reword the
+ * sentence around the case ("v měsíci září"), which the design does not say.
+ *
+ * September is the one month whose four cases are all `září`; the table is
+ * therefore *not* verifiable against the design alone, and `dates.spec.ts`
+ * pins all twelve.
+ */
+const CZECH_MONTHS_LOCATIVE = [
+  'lednu',
+  'únoru',
+  'březnu',
+  'dubnu',
+  'květnu',
+  'červnu',
+  'červenci',
+  'srpnu',
+  'září',
+  'říjnu',
+  'listopadu',
+  'prosinci',
+] as const;
+
+/**
+ * `září` — the month name in the locative, as it reads after `v`.
+ *
+ * @param month 1-based (1 = leden … 12 = prosinec), matching `DateParts.month`.
+ */
+export function formatMonthLocative(month: number): string {
+  const name = CZECH_MONTHS_LOCATIVE[month - 1];
+  if (name === undefined) {
+    throw new RangeError(`Not a month number (1–12): ${String(month)}`);
+  }
+  return name;
+}
+
+/**
+ * `čtvrtek` — the weekday name on its own, for a list that already prints the
+ * date beside it (the bulk schedule's `datum · den v týdnu` rows).
+ *
+ * Deliberately not derived from {@link formatFullDate} by string surgery: the
+ * long form is one ICU pattern whose parts are not separated by anything this
+ * code may assume, and slicing it would break the moment the locale data
+ * changes. Asking `Intl` for the weekday alone is the same question, answered
+ * by the same data.
+ */
+export function formatWeekdayName(date: DateOnly): string {
+  return formatter.dateTime(toUtcMidnight(date), { timeZone: 'UTC', weekday: 'long' });
+}

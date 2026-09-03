@@ -105,53 +105,68 @@ export class DayOverviewService {
 
     const viewerReservation = reservations.find((row) => row.userId === viewer.id);
 
+    const canReserveMonth = this.canReserveMonth(input.date, settings, viewer, today);
+
     return {
       date: input.date,
       window: this.window.describeDay(input.date, settings, today),
-      canReserve: this.canReserve(input.date, settings, viewer, today),
+      canReserve: canReserveMonth && this.isReservableDay(input.date, today),
+      canReserveMonth,
       spots: spotOverviews,
       viewerReservationId: viewerReservation?.id ?? null,
     };
   }
 
   /**
-   * Whether **this** caller may create a reservation on **this** day.
+   * Whether **this** caller may create reservations anywhere in the month
+   * `date` falls in — the **per-month** half of `canReserve`.
    *
-   * Four rules, in the order they are cheapest to check, and all four are the
-   * backend's alone — the frontend must not re-derive this from `window`,
-   * because an admin is not restricted by the window at all and that fact does
-   * not appear anywhere in the payload.
-   *
-   * 1. A day in the past cannot be booked by anybody, admin included.
-   * 2. Neither can a weekend or a Czech public holiday: the lot is a workplace
-   *    car park.
-   * 3. An admin is exempt from the reservation window (`plan.md`
+   * 1. An admin is exempt from the reservation window (`plan.md`
    *    §Byznys pravidla, `doc/decision/0004-*`).
-   * 4. Everybody else needs the target day's month to be open, which is
+   * 2. Everybody else needs the target day's month to be open, which is
    *    `isMonthOpen` from `@lets-park/shared-types` and is never re-implemented
    *    here.
    *
-   * Note what is deliberately *not* here: whether the caller already holds a
-   * reservation that day. That is the one-per-day rule, it is enforced by a
-   * unique constraint at write time, and the screen can see it directly in
-   * `viewerReservationId` — folding it in would make `canReserve` mean two
-   * different things at once.
+   * Both facts are the backend's alone — the frontend must not re-derive them
+   * from `window`, because the admin exemption does not appear anywhere in the
+   * payload (`doc/decision/0120-*`).
    */
-  private canReserve(
+  private canReserveMonth(
     date: DateOnly,
     settings: ReservationWindowSettings,
     viewer: AuthenticatedUser,
     today: DateOnly
   ): boolean {
-    if (compareDateOnly(date, today) < 0) {
-      return false;
-    }
-    if (!isBusinessDay(date)) {
-      return false;
-    }
     if (viewer.role === 'ADMIN') {
       return true;
     }
     return isMonthOpen(date, settings.openDaysBefore, settings.lockMode, today);
+  }
+
+  /**
+   * Whether **this** day could be booked at all, by anybody — the **per-day**
+   * half of `canReserve`.
+   *
+   * 1. A day in the past cannot be booked by anybody, admin included.
+   * 2. Neither can a weekend or a Czech public holiday: the lot is a workplace
+   *    car park.
+   *
+   * Kept apart from {@link canReserveMonth} rather than inlined into one
+   * four-rule check, because the two halves answer different questions and
+   * `canReserveMonth` is now on the wire in its own right
+   * (`doc/decision/0175-*`). Splitting them is also what makes `canReserve`'s
+   * composition visible: `canReserveMonth && isReservableDay`, in that order,
+   * is exactly the four rules the previous single method ran — the admin
+   * exemption still does **not** rescue a weekend, because this conjunct is
+   * evaluated regardless of role.
+   *
+   * Note what is deliberately *not* in either half: whether the caller already
+   * holds a reservation that day. That is the one-per-day rule, it is enforced
+   * by a unique constraint at write time, and the screen can see it directly in
+   * `viewerReservationId` — folding it in would make `canReserve` mean two
+   * different things at once.
+   */
+  private isReservableDay(date: DateOnly, today: DateOnly): boolean {
+    return compareDateOnly(date, today) >= 0 && isBusinessDay(date);
   }
 }
