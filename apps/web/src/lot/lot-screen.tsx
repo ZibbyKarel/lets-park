@@ -228,14 +228,19 @@ export function LotScreen() {
         // the field the contract tells us to read instead of re-deriving it.
         // Absent rather than disabled: a normal user in a locked month has no
         // bulk action to take.
-        showBulk={day.canReserve}
+        //
+        // `canReserveMonth`, **not** `canReserve`: the bulk modal's subject is
+        // the month, and `canReserve` is per-day — reading it hid this button
+        // on every weekend, holiday and past day of an open month
+        // (`doc/decision/0175-*`).
+        showBulk={day.canReserveMonth}
         onBulk={() => {
           setBulkOpen(true);
         }}
       />
 
       {/*
-        `canReserve` is passed as well as consulted by `showBulk` above,
+        `canReserveMonth` is passed as well as consulted by `showBulk` above,
         because hiding a control is not enforcement: the window can close
         while the modal is already open, and the modal is what refuses then
         (`doc/decision/0173-*`).
@@ -246,7 +251,7 @@ export function LotScreen() {
           setBulkOpen(false);
         }}
         anchorDate={date}
-        canReserve={day.canReserve}
+        canReserveMonth={day.canReserveMonth}
       />
 
       <WindowBanner banner={banner} />

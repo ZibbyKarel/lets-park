@@ -205,6 +205,7 @@ function dayOverview(overrides: Partial<DayOverviewOutput> = {}): DayOverviewOut
       lockMode: 'AUTO',
     },
     canReserve: true,
+    canReserveMonth: true,
     spots: [freeSpot(), takenSpot(), mineSpot()],
     viewerReservationId: 'res-mine',
     ...overrides,
@@ -333,7 +334,7 @@ describe('LotScreen — the bulk modal', () => {
     expect(screen.getByText(/Vyberte dny v lednu\./)).toBeInTheDocument();
   });
 
-  it('hands the modal the backend’s own canReserve, so a window closing under it is refused', async () => {
+  it('hands the modal the backend’s own canReserveMonth, so a window closing under it is refused', async () => {
     // Hiding the header button covers "do not invite this"; it cannot cover a
     // window that closes while the modal is already open, and this is the
     // wiring that does (`doc/decision/0173-*`). A modal handed a hard-coded
@@ -344,12 +345,27 @@ describe('LotScreen — the bulk modal', () => {
     expect(await screen.findByRole('dialog', { name: 'Hromadná rezervace' })).toBeInTheDocument();
 
     act(() => {
-      client.setQueryData(dayKey(DATE), dayOverview({ canReserve: false }));
+      client.setQueryData(dayKey(DATE), dayOverview({ canReserveMonth: false }));
     });
 
     expect(
       await screen.findByRole('dialog', { name: 'Rezervace jsou uzamčené' })
     ).toBeInTheDocument();
+  });
+
+  it('offers bulk reservation on a day that is itself unbookable, when the month is open', async () => {
+    // `canReserve` is per-day: a weekend, a Czech holiday and any past day all
+    // make it false while leaving the month wide open. Reading it here switched
+    // the feature off on roughly a third of the calendar — including 28
+    // September 2026, the holiday the design's own screenshot shows the modal
+    // open on (`doc/decision/0175-*`).
+    const { user } = setup({
+      day: dayOverview({ canReserve: false, canReserveMonth: true }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Hromadná rezervace' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Hromadná rezervace' })).toBeInTheDocument();
   });
 
   it('closes again when the day changes', async () => {
@@ -368,18 +384,20 @@ describe('LotScreen — the bulk modal', () => {
   });
 });
 
-describe('LotScreen — showBulk reads canReserve, not the window state', () => {
-  it('shows the button when canReserve is true', () => {
-    setup({ day: dayOverview({ canReserve: true }) });
+describe('LotScreen — showBulk reads canReserveMonth, not the window state and not canReserve', () => {
+  it('shows the button when canReserveMonth is true', () => {
+    setup({ day: dayOverview({ canReserveMonth: true }) });
     expect(screen.getByRole('button', { name: 'Hromadná rezervace' })).toBeInTheDocument();
   });
 
-  it('hides the button when canReserve is false, even though the window is OPEN', () => {
+  it('hides the button when canReserveMonth is false, even though the window is OPEN', () => {
     // The exact re-derivation the review names as a live hazard: reading
-    // `window.state === 'OPEN'` instead of `canReserve` would get this wrong.
+    // `window.state === 'OPEN'` instead of the backend's answer would get this
+    // wrong, because an admin is not bound by the window at all.
     setup({
       day: dayOverview({
         canReserve: false,
+        canReserveMonth: false,
         window: {
           month: '2026-01',
           windowFrom: '2025-12-25',
@@ -390,6 +408,11 @@ describe('LotScreen — showBulk reads canReserve, not the window state', () => 
       }),
     });
     expect(screen.queryByRole('button', { name: 'Hromadná rezervace' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the button on a weekend or holiday of an open month, where canReserve is false', () => {
+    setup({ day: dayOverview({ canReserve: false, canReserveMonth: true }) });
+    expect(screen.getByRole('button', { name: 'Hromadná rezervace' })).toBeInTheDocument();
   });
 });
 

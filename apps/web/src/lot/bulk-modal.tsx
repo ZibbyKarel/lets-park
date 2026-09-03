@@ -35,7 +35,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { Badge, Button, Modal, cx } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
-import type { BulkDayPlan, ConfirmBulkOutput } from '@lets-park/contract';
+import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
 import { useApi } from '../shell/api-provider';
 import { useCurrentUser } from '../shell/use-current-user';
 import {
@@ -45,6 +45,7 @@ import {
   toBulkErrorMessageKey,
   toPreferredSpotView,
   toScheduleRows,
+  weekendColumns,
   type BulkBadgeView,
   type BulkDayCell,
   type BulkDayOutcomeView,
@@ -56,18 +57,24 @@ export interface BulkReservationModalProps {
   /** Any day of the month the grid shows — the lot screen's own day. */
   readonly anchorDate: DateOnly;
   /**
-   * `overview.day.canReserve` for {@link anchorDate}: the backend's answer to
-   * "may this caller write in this window", never a re-derivation of it
-   * (`doc/decision/0120-*`). The reservation window is monthly, and the grid
-   * shows exactly that month, so the day's answer is the month's answer.
+   * `overview.day.canReserveMonth` for {@link anchorDate}'s month: the
+   * backend's answer to "may this caller create reservations anywhere in this
+   * month", never a re-derivation of it (`doc/decision/0120-*`).
+   *
+   * **`canReserve` is the wrong field here and was the wrong field once.** That
+   * one is per-**day** — a past day, a weekend and a Czech public holiday all
+   * make it `false` while leaving the month wide open — so reading it switched
+   * bulk booking off on roughly a third of the calendar, including the very
+   * holiday the design's own screenshot shows the modal open on
+   * (`doc/decision/0175-*`).
    *
    * **This is the block, not a hint.** The header hides its button when it is
    * `false`, but hiding a control is not enforcement — the window can also
    * close while the modal is already open, and then this prop is the only
-   * thing standing between the user and a request the API will refuse. See
-   * `doc/decision/0173-*`.
+   * thing standing between the user and a request the API will refuse. What it
+   * must never block is the *result* step: see `doc/decision/0176-*`.
    */
-  readonly canReserve: boolean;
+  readonly canReserveMonth: boolean;
 }
 
 const BADGE_TONES: Record<BulkBadgeView['kind'], BadgeTone> = {
@@ -92,14 +99,17 @@ export function BulkReservationModal({
   open,
   onClose,
   anchorDate,
-  canReserve,
+  canReserveMonth,
 }: BulkReservationModalProps) {
   const t = useTranslations('bulk');
   const api = useApi();
   const queryClient = useQueryClient();
 
   const [selected, setSelected] = useState<readonly DateOnly[]>([]);
-  const [proposal, setProposal] = useState<readonly BulkDayPlan[] | null>(null);
+  // The **whole** preview output, not just its days: its `summary` is the
+  // server's own count and is what step 2 prints, so the two steps quote the
+  // same authority instead of one of them re-deriving it from `days`.
+  const [proposal, setProposal] = useState<PreviewBulkOutput | null>(null);
   const [result, setResult] = useState<ConfirmBulkOutput | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
 
@@ -122,14 +132,17 @@ export function BulkReservationModal({
   const spotList = useQuery({ ...api.spot.list.queryOptions(), enabled: open });
   const preferredSpot = toPreferredSpotView(
     profile.data === undefined ? undefined : profile.data.preferredParkingSpotId,
-    spotList.data?.spots
+    spotList.data?.spots,
+    // `data` is `undefined` both in flight and after a failure, so the error
+    // flags are the only thing that tells the two apart.
+    profile.isError || spotList.isError
   );
 
   const previewBulk = useMutation({
     ...api.reservation.previewBulk.mutationOptions(),
     onSuccess: (output) => {
       setFailure(null);
-      setProposal(output.days);
+      setProposal(output);
     },
     onError: setFailure,
   });
@@ -170,6 +183,7 @@ export function BulkReservationModal({
   });
 
   const grid = buildMonthGrid(anchorDate, todayInPrague());
+  const weekendHeads = weekendColumns(grid);
   const selectedSet = new Set(selected);
 
   const toggleDay = (cell: BulkDayCell) => {
@@ -213,6 +227,8 @@ export function BulkReservationModal({
     switch (preferredSpot.kind) {
       case 'loading':
         return t('preferredSpotLoading');
+      case 'unknown':
+        return t('preferredSpotUnknown');
       case 'none':
         return t('preferredSpotNone');
       case 'unavailable':
@@ -222,11 +238,13 @@ export function BulkReservationModal({
     }
   }
 
+  // No empty-list branch: both procedures answer one entry per requested day
+  // and the call to action is disabled at zero selection, so `rows` cannot be
+  // empty. A branch that cannot render is copy nobody will ever proof-read
+  // (`doc/decision/0021-*`'s unreachable-member rule, applied to a catalog).
+  // Only a preview that filtered days out of its response would change that.
   function renderSchedule(days: readonly BulkDayOutcomeView[]) {
     const rows = toScheduleRows(days);
-    if (rows.length === 0) {
-      return <p className="text-base text-fg-3">{t('scheduleEmpty')}</p>;
-    }
     return (
       <ul className="flex flex-col gap-2">
         {rows.map((row) => (
@@ -258,31 +276,17 @@ export function BulkReservationModal({
 
   const pending = previewBulk.isPending || confirmBulk.isPending;
 
-  // ---------------------------------------------------------------- blocked
-  // Ahead of every step, so it also catches a window that closed while the
-  // modal was open — the case a hidden header button cannot cover.
-  if (!canReserve) {
-    return (
-      <Modal
-        open={open}
-        onClose={onClose}
-        size="md"
-        title={t('lockedTitle')}
-        closeLabel={t('close')}
-        footer={
-          <Button variant="secondary" onClick={onClose}>
-            {t('close')}
-          </Button>
-        }
-      >
-        <p className="text-base leading-loose text-fg-3">{t('lockedDescription')}</p>
-      </Modal>
-    );
-  }
-
   // ----------------------------------------------------------------- result
+  //
+  // **First, ahead of the locked-month refusal below.** A result is a record of
+  // writes that already happened; there is nothing left here for a closed
+  // window to block, and refusing at this point would replace the comparison
+  // with "hromadnou rezervaci teď založit nelze" over reservations that exist —
+  // the exact silent difference the whole two-step flow is built to prevent.
+  // The confirm button does not exist on this step, so nothing is weakened by
+  // letting it through. See `doc/decision/0176-*`.
   if (result !== null) {
-    const differences = diffBulkSchedule(proposal ?? [], result.days);
+    const differences = diffBulkSchedule(proposal?.days ?? [], result.days);
     return (
       <Modal
         open={open}
@@ -337,11 +341,37 @@ export function BulkReservationModal({
     );
   }
 
+  // ---------------------------------------------------------------- blocked
+  //
+  // Ahead of the two steps that can still *write* — picking days and
+  // confirming — so it catches both a modal opened in a locked month and a
+  // window that closes while the modal is open, which is the case a hidden
+  // header button cannot cover. Deliberately **after** the result step above.
+  if (!canReserveMonth) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        size="md"
+        title={t('lockedTitle')}
+        closeLabel={t('close')}
+        // Consistent with the three flow steps: whichever of them this replaced
+        // was holding a selection, and a stray click on the scrim should not be
+        // how the user finds that out.
+        closeOnScrimClick={false}
+        footer={
+          <Button variant="secondary" onClick={onClose}>
+            {t('close')}
+          </Button>
+        }
+      >
+        <p className="text-base leading-loose text-fg-3">{t('lockedDescription')}</p>
+      </Modal>
+    );
+  }
+
   // --------------------------------------------------------------- schedule
   if (proposal !== null) {
-    const assigned = proposal.filter((day) => day.outcome === 'SPOT_ASSIGNED').length;
-    const queued = proposal.filter((day) => day.outcome === 'QUEUED').length;
-
     return (
       <Modal
         open={open}
@@ -367,7 +397,12 @@ export function BulkReservationModal({
               loading={confirmBulk.isPending}
               disabled={pending}
               onClick={() => {
-                confirmBulk.mutate({ dates: [...selected] });
+                // The days of the **proposal on screen**, not of `selected`.
+                // They agree today, because both procedures answer one entry
+                // per requested day — but "we confirm exactly what you were
+                // shown" is the invariant, and reading it off the thing that
+                // was shown is the only way to state it.
+                confirmBulk.mutate({ dates: proposal.days.map((day) => day.date) });
               }}
             >
               {t('ctaConfirm')}
@@ -375,8 +410,20 @@ export function BulkReservationModal({
           </>
         }
       >
-        {renderSchedule(proposal)}
-        <p className="mt-4 text-base text-fg-2">{t('scheduleSummary', { assigned, queued })}</p>
+        {renderSchedule(proposal.days)}
+        <p className="mt-4 text-base text-fg-2">
+          {/*
+            The server's own count, exactly as the result step uses
+            `result.summary`. Re-deriving it here by filtering `days` would put
+            two authorities behind one sentence, and the moment they disagreed
+            the user would read a difference between the two steps that the
+            comparison panel cannot explain, because no day moved.
+          */}
+          {t('scheduleSummary', {
+            assigned: proposal.summary.assigned,
+            queued: proposal.summary.queued,
+          })}
+        </p>
         {failureNote}
       </Modal>
     );
@@ -417,11 +464,18 @@ export function BulkReservationModal({
         <caption className="sr-only">{t('gridLabel')}</caption>
         <thead>
           <tr>
-            {WEEKDAY_KEYS.map((key) => (
+            {WEEKDAY_KEYS.map((key, column) => (
               <th
                 key={key}
                 scope="col"
-                className="pb-1 text-xs font-bold uppercase tracking-caps text-fg-3"
+                className={cx(
+                  'pb-1 text-xs font-bold uppercase tracking-caps',
+                  // "Víkendy vizuálně v zákrytu vpravo" — the design draws the
+                  // SO/NE heads a step lighter than PO–PÁ, which is what makes
+                  // the weekend boundary readable at a glance. Which columns
+                  // those are is read off the grid, never spelled out twice.
+                  weekendHeads[column] === true ? 'text-neutral-400' : 'text-fg-3'
+                )}
               >
                 {t(key)}
               </th>

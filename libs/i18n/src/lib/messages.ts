@@ -318,10 +318,15 @@ export interface CzechBulkMessages {
   readonly gridLabel: string;
 
   readonly nonSelectableNote: string;
-  /** `Preferované místo: E2.92` and the three cases where there is no label. */
+  /** `Preferované místo: E2.92` and the four cases where there is no label. */
   readonly preferredSpot: string;
   readonly preferredSpotNone: string;
   readonly preferredSpotLoading: string;
+  /**
+   * Either read failed. Distinct from `preferredSpotLoading`, which promises a
+   * resolution that a failed query will never deliver.
+   */
+  readonly preferredSpotUnknown: string;
   /**
    * The preferred spot is set but is not among the active spots — it was
    * deactivated after the user chose it. Saying so is the point: a blank label
@@ -339,7 +344,6 @@ export interface CzechBulkMessages {
   readonly scheduleTitle: string;
   readonly scheduleDescription: string;
   readonly scheduleSummary: string;
-  readonly scheduleEmpty: string;
 
   readonly badgeAssignedPreferred: string;
   readonly badgeAssigned: string;
@@ -550,6 +554,7 @@ export const csMessages: CzechMessages = {
     preferredSpot: 'Preferované místo: {label}',
     preferredSpotNone: 'Preferované místo: nemáte nastavené',
     preferredSpotLoading: 'Preferované místo: načítá se…',
+    preferredSpotUnknown: 'Preferované místo: nepodařilo se zjistit',
     preferredSpotUnavailable: 'Preferované místo: už není k dispozici',
 
     close: 'Zavřít',
@@ -564,7 +569,6 @@ export const csMessages: CzechMessages = {
       'Takhle vás zapíšeme. Než rozvrh potvrdíte, může se stav parkoviště změnit — po potvrzení uvidíte, co se skutečně stalo.',
     scheduleSummary:
       '{assigned, plural, one {# den} few {# dny} other {# dní}} s místem, {queued, plural, one {# den} few {# dny} other {# dní}} ve frontě.',
-    scheduleEmpty: 'Pro vybrané dny nemáme co navrhnout.',
 
     badgeAssignedPreferred: 'Rezervováno · preferované',
     badgeAssigned: 'Rezervováno',

@@ -235,6 +235,22 @@ describe('DayOverviewService', () => {
       expect(result.canReserve).toBe(true);
     });
 
+    it('is exactly canReserveMonth and the day’s own reservability, never one of them alone', async () => {
+      // The composition, asserted where it can actually be seen: an open month
+      // with a weekend inside it is the case that separates the two fields.
+      // It has to be **October**, not September: the window closes at the start
+      // of the target month, so the month `TODAY` is in is locked to an
+      // ordinary user whatever `openDaysBefore` says.
+      double.seedWindowSettings({ openDaysBefore: 40, lockMode: 'AUTO' });
+
+      const saturday = await overview.getDay({ date: '2026-10-03' }, authenticated('u'), TODAY);
+      expect(saturday.window.state).toBe('OPEN');
+      expect(saturday).toMatchObject({ canReserve: false, canReserveMonth: true });
+
+      const weekday = await overview.getDay({ date: '2026-10-05' }, authenticated('u'), TODAY);
+      expect(weekday).toMatchObject({ canReserve: true, canReserveMonth: true });
+    });
+
     it('does not fold in the one-per-day rule — the screen reads that from viewerReservationId', async () => {
       double.seedWindowSettings({ openDaysBefore: 40, lockMode: 'AUTO' });
       const spot = double.seedSpot({ label: 'A1' });
@@ -249,6 +265,106 @@ describe('DayOverviewService', () => {
 
       expect(result.canReserve).toBe(true);
       expect(result.viewerReservationId).not.toBeNull();
+    });
+  });
+
+  /**
+   * The per-month answer, which `doc/decision/0175-*` added because
+   * `canReserve` cannot serve a screen whose subject is the month. Every case
+   * below is one where the two fields must **disagree** or must agree for a
+   * reason that is not the day.
+   */
+  describe('canReserveMonth', () => {
+    it('stays true on a weekend of an open month, where canReserve is false', async () => {
+      double.seedWindowSettings({ openDaysBefore: 40, lockMode: 'AUTO' });
+
+      // 2026-10-03 is a Saturday, and October is the month an ordinary user can
+      // still book on 2026-09-02 — the window closes at the start of the target
+      // month, so an open month is always a **future** one for them.
+      const result = await overview.getDay({ date: '2026-10-03' }, authenticated('u'), TODAY);
+
+      // Asserted, not assumed: without this the test would also pass on a month
+      // that is simply locked for everybody.
+      expect(result.window.state).toBe('OPEN');
+      expect(result.canReserveMonth).toBe(true);
+      expect(result.canReserve).toBe(false);
+    });
+
+    it('stays true on a Czech public holiday of an open month', async () => {
+      // 2026-09-28 — Den české státnosti, the very day the bulk modal's design
+      // screenshot is taken on (`doc/design/screens/10-modal-bulk.png`). For
+      // September to be open, "today" has to be inside its window: 40 days
+      // before 2026-09-01 is 2026-07-23, and the window runs to 2026-08-31.
+      double.seedWindowSettings({ openDaysBefore: 40, lockMode: 'AUTO' });
+
+      const result = await overview.getDay(
+        { date: '2026-09-28' },
+        authenticated('u'),
+        '2026-08-20'
+      );
+
+      expect(result.window.state).toBe('OPEN');
+      expect(result.canReserveMonth).toBe(true);
+      expect(result.canReserve).toBe(false);
+    });
+
+    it('stays true on a past day, for an admin who is not bound by the window at all', async () => {
+      // A past day of an *open* month cannot exist for an ordinary user, since
+      // the window shuts when the month begins. The admin is the one caller for
+      // whom "the month is available, this day is not" is reachable in the past,
+      // and it is the case that proves the past-day rule lives in the day half.
+      const result = await overview.getDay(
+        { date: '2026-09-01' },
+        authenticated('a', 'ADMIN'),
+        TODAY
+      );
+
+      expect(result.canReserveMonth).toBe(true);
+      expect(result.canReserve).toBe(false);
+    });
+
+    it('is false for an ordinary user when the month is not open, on a perfectly good weekday', async () => {
+      const result = await overview.getDay({ date: '2026-10-15' }, authenticated('u'), TODAY);
+
+      expect(result.window.state).toBe('NOT_YET_OPEN');
+      expect(result.canReserveMonth).toBe(false);
+    });
+
+    it('is false for an ordinary user when the month is locked', async () => {
+      double.seedWindowSettings({ openDaysBefore: 7, lockMode: 'FORCE_LOCKED' });
+
+      const result = await overview.getDay({ date: '2026-10-15' }, authenticated('u'), TODAY);
+
+      expect(result.window.state).toBe('LOCKED');
+      expect(result.canReserveMonth).toBe(false);
+    });
+
+    it('is true for an admin in a locked month — the exemption is not in the window', async () => {
+      double.seedWindowSettings({ openDaysBefore: 7, lockMode: 'FORCE_LOCKED' });
+
+      const result = await overview.getDay(
+        { date: '2026-10-15' },
+        authenticated('a', 'ADMIN'),
+        TODAY
+      );
+
+      expect(result.window.state).toBe('LOCKED');
+      expect(result.canReserveMonth).toBe(true);
+    });
+
+    it('does not let the admin exemption rescue a weekend for canReserve', async () => {
+      // The ordering that matters: `canReserveMonth && isReservableDay`. An
+      // admin gets the month, never the Saturday.
+      double.seedWindowSettings({ openDaysBefore: 7, lockMode: 'FORCE_LOCKED' });
+
+      const result = await overview.getDay(
+        { date: '2026-09-05' },
+        authenticated('a', 'ADMIN'),
+        TODAY
+      );
+
+      expect(result.canReserveMonth).toBe(true);
+      expect(result.canReserve).toBe(false);
     });
   });
 });

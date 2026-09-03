@@ -8,6 +8,7 @@ import {
   toBulkErrorMessageKey,
   toPreferredSpotView,
   toScheduleRows,
+  weekendColumns,
   type BulkDayCell,
   type BulkMonthGrid,
 } from './bulk-view';
@@ -181,30 +182,86 @@ describe('buildMonthGrid — which days may be picked', () => {
   });
 });
 
-describe('toPreferredSpotView — the label and its three ways of not existing', () => {
+describe('toPreferredSpotView — the label and its four ways of not existing', () => {
   const spots = [spot('spot-1', 'E2.92'), spot('spot-2', 'E2.93')];
 
   it('names the spot when the id resolves', () => {
-    expect(toPreferredSpotView('spot-1', spots)).toEqual({ kind: 'named', label: 'E2.92' });
+    expect(toPreferredSpotView('spot-1', spots, false)).toEqual({ kind: 'named', label: 'E2.92' });
   });
 
   it('says there is no preference when the profile stores null', () => {
-    expect(toPreferredSpotView(null, spots)).toEqual({ kind: 'none' });
+    expect(toPreferredSpotView(null, spots, false)).toEqual({ kind: 'none' });
   });
 
   it('waits while the profile has not arrived', () => {
-    expect(toPreferredSpotView(undefined, spots)).toEqual({ kind: 'loading' });
+    expect(toPreferredSpotView(undefined, spots, false)).toEqual({ kind: 'loading' });
   });
 
   it('waits while the spot list has not arrived', () => {
-    expect(toPreferredSpotView('spot-1', undefined)).toEqual({ kind: 'loading' });
+    expect(toPreferredSpotView('spot-1', undefined, false)).toEqual({ kind: 'loading' });
   });
 
   it('says so when the preferred spot is no longer among the active ones', () => {
     // `spot.list` returns active spots only. A spot deactivated after the user
     // chose it leaves an id with no label — the display and the stored value
     // disagreeing is exactly the shape that must not render as a blank.
-    expect(toPreferredSpotView('spot-retired', spots)).toEqual({ kind: 'unavailable' });
+    expect(toPreferredSpotView('spot-retired', spots, false)).toEqual({ kind: 'unavailable' });
+  });
+
+  it('stops promising a resolution when the read failed rather than being in flight', () => {
+    // A query's `data` is `undefined` in both states, so without the flag a
+    // 500 on `me.get` leaves "načítá se…" on screen for the whole flow.
+    expect(toPreferredSpotView(undefined, spots, true)).toEqual({ kind: 'unknown' });
+    expect(toPreferredSpotView('spot-1', undefined, true)).toEqual({ kind: 'unknown' });
+  });
+
+  it('prefers "we could not find out" over any answer built from a failed read', () => {
+    // Even with both reads apparently present, a failure flag means at least
+    // one of them is stale or partial — the label must not be asserted from it.
+    expect(toPreferredSpotView('spot-1', spots, true)).toEqual({ kind: 'unknown' });
+    expect(toPreferredSpotView(null, spots, true)).toEqual({ kind: 'unknown' });
+  });
+});
+
+describe('weekendColumns — the design’s recessed right-hand columns', () => {
+  it('marks exactly the sixth and seventh columns, Monday first', () => {
+    expect(weekendColumns(buildMonthGrid('2026-09-15', '2026-09-01'))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it('answers the same for a month whose first row is mostly blanks', () => {
+    // 2026-08-01 is a Saturday, so the first row has five leading blanks and
+    // its only days land in the two weekend columns.
+    expect(weekendColumns(buildMonthGrid('2026-08-10', '2026-08-01'))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it('reads the flag off the grid rather than assuming a column index', () => {
+    // The guarantee that matters: every column the function marks is one whose
+    // days really are weekend days, and every unmarked column's are not.
+    const grid = buildMonthGrid('2026-09-15', '2026-09-01');
+    const flags = weekendColumns(grid);
+    for (const week of grid.weeks) {
+      week.slots.forEach((slot, index) => {
+        if (slot.day !== null) {
+          expect(slot.day.weekendColumn).toBe(flags[index]);
+        }
+      });
+    }
   });
 });
 

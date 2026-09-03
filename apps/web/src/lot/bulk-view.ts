@@ -144,30 +144,73 @@ export function buildMonthGrid(anchor: DateOnly, today: DateOnly): BulkMonthGrid
 }
 
 /**
+ * Which of the seven columns are the weekend ones, **read off the grid itself**
+ * rather than from a second copy of "Saturday and Sunday are 6 and 7".
+ *
+ * The design sets the weekend columns apart on the right, heads included
+ * ("víkendy vizuálně v zákrytu vpravo"), and this is what lets the heads and
+ * the cells recede from the same fact — `BulkDayCell.weekendColumn` — instead
+ * of from two rules that could drift. A column is a weekend column when any
+ * day landing in it is; the scan is total, so a month whose first row is mostly
+ * blanks still answers correctly.
+ */
+export function weekendColumns(grid: BulkMonthGrid): readonly boolean[] {
+  const flags: boolean[] = Array.from({ length: DAYS_PER_WEEK }, () => false);
+  for (const week of grid.weeks) {
+    week.slots.forEach((slot, index) => {
+      if (slot.day?.weekendColumn === true) {
+        flags[index] = true;
+      }
+    });
+  }
+  return flags;
+}
+
+/**
  * What the line under the grid says about the preferred spot.
  *
- * Four cases, not two. The one that is easy to miss is `unavailable`: the
- * profile stores an id, the label comes from `spot.list`, and `spot.list`
- * returns **active spots only** — so a spot deactivated after the user chose
- * it leaves an id with no label. Rendering the label as a blank (or as the raw
- * id) would say the plan starts from a spot it cannot possibly start from.
- * This is the same hazard the settings screen already has copy for
- * (`settings.preferredSpotUnavailable`).
+ * **Five** cases, not two.
+ *
+ * `unavailable` is the one that is easy to miss: the profile stores an id, the
+ * label comes from `spot.list`, and `spot.list` returns **active spots only** —
+ * so a spot deactivated after the user chose it leaves an id with no label.
+ * Rendering the label as a blank (or as the raw id) would say the plan starts
+ * from a spot it cannot possibly start from. This is the same hazard the
+ * settings screen already has copy for (`settings.preferredSpotUnavailable`).
+ *
+ * `unknown` is the one that was missed: a TanStack query's `data` is
+ * `undefined` both **while in flight and after it failed**, so folding the two
+ * together left a user whose `me.get` 500'd reading "načítá se…" for the whole
+ * flow, being promised a resolution that was never coming. `failed` is
+ * therefore checked first and short-circuits.
+ *
+ * Note that one `failed` flag covers both queries even though they are two
+ * requests. That is not the "several typed errors, one sentence" defect
+ * (`doc/decision/0171-*`): this line answers a single question — *what is your
+ * preferred spot* — and when either read fails the honest answer to it is the
+ * same, "we could not find out". There is no action the user could take that
+ * differs between the two.
  *
  * @param preferredParkingSpotId `undefined` while the profile is loading,
  *   `null` when the user has no preference.
  * @param spots `undefined` while the spot list is loading.
+ * @param failed `true` when either read errored rather than being in flight.
  */
 export type PreferredSpotView =
   | { readonly kind: 'loading' }
+  | { readonly kind: 'unknown' }
   | { readonly kind: 'none' }
   | { readonly kind: 'named'; readonly label: string }
   | { readonly kind: 'unavailable' };
 
 export function toPreferredSpotView(
   preferredParkingSpotId: string | null | undefined,
-  spots: readonly ParkingSpot[] | undefined
+  spots: readonly ParkingSpot[] | undefined,
+  failed: boolean
 ): PreferredSpotView {
+  if (failed) {
+    return { kind: 'unknown' };
+  }
   if (preferredParkingSpotId === undefined) {
     return { kind: 'loading' };
   }

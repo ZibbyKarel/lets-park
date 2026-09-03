@@ -69,6 +69,7 @@ describe('dayOverviewOutputSchema', () => {
       lockMode: 'AUTO',
     },
     canReserve: true,
+    canReserveMonth: true,
     spots: [
       {
         spot: parkingSpotFixture,
@@ -105,6 +106,23 @@ describe('dayOverviewOutputSchema', () => {
         window: { ...valid.window, state: 'CLOSED' },
       }).success
     ).toBe(false);
+  });
+
+  it('requires canReserveMonth — a screen whose subject is the month cannot fall back to canReserve', () => {
+    const withoutMonth: Record<string, unknown> = { ...valid };
+    delete withoutMonth['canReserveMonth'];
+    expect(dayOverviewOutputSchema.safeParse(withoutMonth).success).toBe(false);
+  });
+
+  it('accepts canReserve: false alongside canReserveMonth: true — a weekend in an open month', () => {
+    // The two fields answer different questions, so this combination is not a
+    // contradiction the schema should reject: it is the normal state of every
+    // Saturday, Sunday and Czech public holiday of an open month
+    // (`doc/decision/0175-*`).
+    expect(
+      dayOverviewOutputSchema.safeParse({ ...valid, canReserve: false, canReserveMonth: true })
+        .success
+    ).toBe(true);
   });
 
   it('keeps canReserve separate from the window state', () => {

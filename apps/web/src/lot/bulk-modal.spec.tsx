@@ -188,13 +188,15 @@ function meKey() {
 }
 
 interface SetupOptions {
-  readonly canReserve?: boolean;
+  readonly canReserveMonth?: boolean;
   readonly profile?: MyProfile;
   readonly spots?: readonly ParkingSpot[];
   /** `setup` resets every mock, so a canned answer has to be passed in here. */
   readonly previewOutput?: PreviewBulkOutput;
   readonly confirmOutput?: ConfirmBulkOutput;
   readonly previewFailure?: unknown;
+  /** Makes `spot.list` reject, so the query settles into `isError`. */
+  readonly spotListFails?: boolean;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -207,9 +209,13 @@ function setup(options: SetupOptions = {}) {
     apiMocks.previewBulk.mockRejectedValue(options.previewFailure);
   }
   apiMocks.confirmBulk.mockResolvedValue(options.confirmOutput ?? confirmed());
-  apiMocks.spotList.mockResolvedValue({
-    spots: options.spots ?? [spot(PREFERRED_SPOT_ID, 'E2.92'), spot('spot-other', 'E2.93')],
-  });
+  if (options.spotListFails === true) {
+    apiMocks.spotList.mockRejectedValue(new TypeError('Failed to fetch'));
+  } else {
+    apiMocks.spotList.mockResolvedValue({
+      spots: options.spots ?? [spot(PREFERRED_SPOT_ID, 'E2.92'), spot('spot-other', 'E2.93')],
+    });
+  }
 
   const client = createQueryClient({ defaultOptions: { queries: { retry: false } } });
   const person = options.profile ?? profile();
@@ -234,7 +240,7 @@ function setup(options: SetupOptions = {}) {
       open
       onClose={onClose}
       anchorDate={ANCHOR}
-      canReserve={options.canReserve ?? true}
+      canReserveMonth={options.canReserveMonth ?? true}
     />,
     { wrapper: Wrapper }
   );
@@ -255,6 +261,21 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     setup();
     const heads = screen.getAllByRole('columnheader').map((cell) => cell.textContent);
     expect(heads).toEqual(['PO', 'ÚT', 'ST', 'ČT', 'PÁ', 'SO', 'NE']);
+  });
+
+  it('recesses the SO and NE column heads, and only those', () => {
+    // "Víkendy vizuálně v zákrytu vpravo" — the design draws the two weekend
+    // heads a step lighter, which is what makes the boundary readable when the
+    // cells below are grey for three different reasons.
+    setup();
+    const heads = screen.getAllByRole('columnheader');
+    for (const head of heads.slice(0, 5)) {
+      expect(head).toHaveClass('text-fg-3');
+    }
+    for (const head of heads.slice(5)) {
+      expect(head).toHaveClass('text-neutral-400');
+      expect(head).not.toHaveClass('text-fg-3');
+    }
   });
 
   it('names the month in the locative in its own description', () => {
@@ -304,6 +325,20 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     expect(screen.getByText('Preferované místo: nemáte nastavené')).toBeInTheDocument();
   });
 
+  it('stops promising a resolution when the spot list fails to load', async () => {
+    // `data` stays `undefined` after an error exactly as it is while in
+    // flight, so "načítá se…" would sit there for the whole flow and the user
+    // would never learn the allocator ran without a preference.
+    const { user } = setup({ spotListFails: true });
+
+    expect(await screen.findByText('Preferované místo: nepodařilo se zjistit')).toBeInTheDocument();
+    expect(screen.queryByText('Preferované místo: načítá se…')).not.toBeInTheDocument();
+
+    // And the flow is still usable — a missing preference is not a blocker.
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    expect(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' })).toBeEnabled();
+  });
+
   it('offers no way forward until a day is picked', () => {
     setup();
     expect(screen.getByRole('button', { name: 'Vyberte dny' })).toBeDisabled();
@@ -339,9 +374,9 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     expect(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' })).toBeEnabled();
 
     rerender(
-      <BulkReservationModal open={false} onClose={onClose} anchorDate={ANCHOR} canReserve />
+      <BulkReservationModal open={false} onClose={onClose} anchorDate={ANCHOR} canReserveMonth />
     );
-    rerender(<BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserve />);
+    rerender(<BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth />);
 
     expect(screen.getByRole('button', { name: 'Vyberte dny' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'úterý 1. září 2026' })).toHaveAttribute(
@@ -420,11 +455,84 @@ describe('BulkReservationModal — step 2, the proposed schedule', () => {
             waitlistPosition: 1,
           },
         ],
+        summary: { assigned: 1, queued: 1, unavailable: 0, preferredSpotHits: 1 },
       }),
     });
     await reachSchedule(user);
 
     expect(screen.getByText('1 den s místem, 1 den ve frontě.')).toBeInTheDocument();
+  });
+
+  it('quotes the server’s summary rather than counting the rows itself', async () => {
+    // The proposal and the result must print counts from the same authority.
+    // If step 2 re-derived them from `days`, a server whose summary ever meant
+    // something slightly different would make the two steps disagree and the
+    // comparison panel would have nothing to explain, because no day moved.
+    // The fixture's `summary` deliberately disagrees with its own `days`.
+    const { user } = setup({
+      previewOutput: preview({
+        days: [
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-01',
+            parkingSpotId: PREFERRED_SPOT_ID,
+            parkingSpotLabel: 'E2.92',
+            isPreferredSpot: true,
+          },
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-02',
+            parkingSpotId: 'spot-other',
+            parkingSpotLabel: 'E2.93',
+            isPreferredSpot: false,
+          },
+        ],
+        summary: { assigned: 7, queued: 3, unavailable: 0, preferredSpotHits: 1 },
+      }),
+    });
+    await reachSchedule(user);
+
+    expect(screen.getByText('7 dní s místem, 3 dny ve frontě.')).toBeInTheDocument();
+    expect(screen.queryByText('2 dny s místem, 0 dní ve frontě.')).not.toBeInTheDocument();
+  });
+
+  it('paints each badge in the tone the brief names — green, blue, yellow', async () => {
+    // Crosses three files rather than restating one: the brief's colour →
+    // `BADGE_TONES` → `badge.tsx`'s token classes. A tone swap, a `Badge` tone
+    // rename or a token remap all fail here, and none of them is visible in a
+    // diff of `bulk-modal.tsx` alone.
+    const { user } = setup({
+      previewOutput: preview({
+        days: [
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-01',
+            parkingSpotId: PREFERRED_SPOT_ID,
+            parkingSpotLabel: 'E2.92',
+            isPreferredSpot: true,
+          },
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-02',
+            parkingSpotId: 'spot-other',
+            parkingSpotLabel: 'E2.93',
+            isPreferredSpot: false,
+          },
+          {
+            outcome: 'QUEUED',
+            date: '2026-09-03',
+            parkingSpotId: 'spot-other',
+            parkingSpotLabel: 'E2.93',
+            waitlistPosition: 1,
+          },
+        ],
+      }),
+    });
+    await reachSchedule(user);
+
+    expect(screen.getByText('Rezervováno · preferované')).toHaveClass('bg-brand-green-100');
+    expect(screen.getByText('Rezervováno')).toHaveClass('bg-brand-blue-100');
+    expect(screen.getByText('1. ve frontě')).toHaveClass('bg-brand-yellow-100');
   });
 
   it('goes back to the grid with the selection intact', async () => {
@@ -448,6 +556,35 @@ describe('BulkReservationModal — step 2, the proposed schedule', () => {
     await waitFor(() => {
       expect(apiMocks.confirmBulk).toHaveBeenCalledWith(
         { dates: ['2026-09-01', '2026-09-02'] },
+        expect.anything()
+      );
+    });
+  });
+
+  it('confirms the days of the schedule on screen, not the days that were clicked', async () => {
+    // "We confirm exactly what you were shown" is the invariant. The two lists
+    // agree in production today — both procedures answer one entry per
+    // requested day — so the only way to state it is a preview whose response
+    // differs from the selection, which is what this fixture is.
+    const { user } = setup({
+      previewOutput: preview({
+        days: [
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-03',
+            parkingSpotId: PREFERRED_SPOT_ID,
+            parkingSpotLabel: 'E2.92',
+            isPreferredSpot: true,
+          },
+        ],
+        summary: { assigned: 1, queued: 0, unavailable: 0, preferredSpotHits: 1 },
+      }),
+    });
+    await user.click(await reachSchedule(user));
+
+    await waitFor(() => {
+      expect(apiMocks.confirmBulk).toHaveBeenCalledWith(
+        { dates: ['2026-09-03'] },
         expect.anything()
       );
     });
@@ -614,7 +751,7 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
   it('refuses the whole flow when the caller may not reserve in this month', () => {
     // The header hides its button in this case, but hiding a control is not
     // enforcement: this is the modal refusing on its own.
-    setup({ canReserve: false });
+    setup({ canReserveMonth: false });
 
     expect(screen.getByRole('dialog', { name: 'Rezervace jsou uzamčené' })).toBeInTheDocument();
     expect(
@@ -629,16 +766,76 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
 
   it('stops a confirmation whose window closed while the modal was open', async () => {
     // The case a hidden header button cannot cover: the user reached the
-    // proposal, then the day query refetched and `canReserve` flipped.
+    // proposal, then the day query refetched and `canReserveMonth` flipped.
     const { user, rerender, onClose } = setup();
     await reachSchedule(user);
 
     rerender(
-      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserve={false} />
+      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
     );
 
     expect(screen.getByRole('dialog', { name: 'Rezervace jsou uzamčené' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Potvrdit rozvrh' })).not.toBeInTheDocument();
     expect(apiMocks.confirmBulk).not.toHaveBeenCalled();
+  });
+
+  it('keeps the comparison on screen when the window closes after the confirmation', async () => {
+    // The gate guards *writing*, never the display of writes that already
+    // happened. Confirming invalidates `overview.day` for every day in the
+    // batch, so a refetch lands within milliseconds — if the month locked in
+    // between, `canReserveMonth` comes back false while the reservations exist.
+    // Refusing here would replace the difference panel with "hromadnou
+    // rezervaci teď založit nelze" over bookings the user just made: the exact
+    // silent difference this flow exists to prevent (`doc/decision/0176-*`).
+    const { user, rerender, onClose } = setup({
+      confirmOutput: confirmed({
+        days: [
+          {
+            outcome: 'QUEUED',
+            date: '2026-09-01',
+            parkingSpotId: PREFERRED_SPOT_ID,
+            parkingSpotLabel: 'E2.92',
+            waitlistPosition: 2,
+            waitlistEntryId: 'wl-1',
+          },
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-02',
+            parkingSpotId: 'spot-other',
+            parkingSpotLabel: 'E2.93',
+            isPreferredSpot: false,
+            reservationId: 'res-2',
+          },
+        ],
+        summary: { assigned: 1, queued: 1, unavailable: 0, preferredSpotHits: 0 },
+      }),
+    });
+    await user.click(await reachSchedule(user));
+    await screen.findByRole('alert');
+
+    rerender(
+      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Rozvrh potvrzen' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Rozvrh se od návrhu liší');
+    expect(
+      screen.queryByText(
+        'Rezervace na tento měsíc jsou uzamčené — hromadnou rezervaci teď založit nelze.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps an unchanged result on screen too, not only a differing one', async () => {
+    const { user, rerender, onClose } = setup();
+    await user.click(await reachSchedule(user));
+    await screen.findByText('Zapsali jsme vás přesně podle návrhu.');
+
+    rerender(
+      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Rozvrh potvrzen' })).toBeInTheDocument();
+    expect(screen.getByText('Zapsali jsme vás přesně podle návrhu.')).toBeInTheDocument();
   });
 });

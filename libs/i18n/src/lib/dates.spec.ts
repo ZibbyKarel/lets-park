@@ -103,6 +103,13 @@ describe('formatMonthLocative', () => {
   it('differs from the nominative for every month but září', () => {
     // The check that would have caught a table copied from `formatMonthName`:
     // September is the only month whose two forms coincide.
+    //
+    // Its ceiling, stated so nobody over-trusts it: this does **not**
+    // distinguish the locative from any other oblique case — a genitive table
+    // (`ledna, února, …`) differs from the nominative for the same eleven
+    // months and would pass. No unit test can check Czech declension; the
+    // twelve strings above are held by review, and by the design's sentence
+    // "Vyberte dny v září."
     for (let month = 1; month <= 12; month += 1) {
       if (month === 9) {
         expect(formatMonthLocative(month)).toBe(formatMonthName(month));
@@ -143,8 +150,15 @@ describe('formatWeekdayName', () => {
   });
 
   it('reads the calendar day, not the host time zone', () => {
-    // Would be the previous day anywhere west of UTC if the formatter built a
+    // Would be the previous day anywhere west of UTC if `toUtcMidnight` built a
     // local midnight instead of a UTC one.
+    //
+    // **What actually holds this is the module formatter**, which is
+    // `createFormatter({ locale: 'cs', timeZone: 'UTC' })` — not the per-call
+    // `timeZone: 'UTC'` next to `weekday: 'long'`. Deleting that option is an
+    // equivalent mutant: it survives under TZ=Europe/Prague and
+    // TZ=America/New_York alike. The option is kept only so this function reads
+    // the same as its four siblings; do not mistake it for the guard.
     expect(formatWeekdayName('2026-01-01')).toBe('čtvrtek');
   });
 });
