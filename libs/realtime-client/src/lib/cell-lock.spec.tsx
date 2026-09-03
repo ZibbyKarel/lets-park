@@ -23,6 +23,7 @@ import {
   CELL_LOCK_ACK_ATTEMPTS,
   CELL_LOCK_ACK_TIMEOUT_MS,
   MIN_CELL_LOCK_RENEW_DELAY_MS,
+  contendedRetryDelayMs,
   renewDelayMs,
   useCellLock,
 } from './cell-lock';
@@ -124,6 +125,24 @@ async function grant(offline: OfflineSocket, expiresAt = EXPIRES_AT): Promise<vo
   });
 }
 
+/** Refuse the outstanding `cell:lock`: somebody else is holding the cell. */
+async function refuse(offline: OfflineSocket, expiresAt = EXPIRES_AT): Promise<void> {
+  await act(async () => {
+    offline.acknowledge('cell:lock', {
+      result: 'HELD_BY_OTHER',
+      lockedBy: USER_SUMMARY,
+      expiresAt,
+    });
+  });
+}
+
+/** The gateway broadcasting a hold's end into the day room. */
+async function announceFree(offline: OfflineSocket, ref = cell): Promise<void> {
+  await act(async () => {
+    offline.deliver('cell:unlocked', ref);
+  });
+}
+
 beforeEach(() => {
   states = [];
   jest.useFakeTimers();
@@ -148,6 +167,28 @@ describe('renewDelayMs', () => {
 
   it('never returns NaN for an unparseable expiry', () => {
     expect(renewDelayMs('not-a-timestamp', NOW)).toBe(MIN_CELL_LOCK_RENEW_DELAY_MS);
+  });
+});
+
+describe('contendedRetryDelayMs', () => {
+  it('waits the whole remaining TTL, not half of it', () => {
+    // Half would be asking again while the other client's hold is still valid,
+    // which is the polling the `cell:unlocked` broadcast exists to avoid.
+    expect(contendedRetryDelayMs(EXPIRES_AT, NOW)).toBe(TTL_MS);
+    expect(contendedRetryDelayMs(EXPIRES_AT, NOW)).toBeGreaterThan(renewDelayMs(EXPIRES_AT, NOW));
+  });
+
+  it('never schedules faster than the floor, even for an expiry in the past', () => {
+    // Without the floor this is a busy loop and not a slow one: the answer to
+    // the immediate re-request is `HELD_BY_OTHER` carrying the same past
+    // `expiresAt`, which schedules another zero-delay timer.
+    expect(contendedRetryDelayMs(new Date(NOW - 60_000).toISOString(), NOW)).toBe(
+      MIN_CELL_LOCK_RENEW_DELAY_MS
+    );
+  });
+
+  it('never returns NaN for an unparseable expiry', () => {
+    expect(contendedRetryDelayMs('not-a-timestamp', NOW)).toBe(MIN_CELL_LOCK_RENEW_DELAY_MS);
   });
 });
 
@@ -268,13 +309,7 @@ describe('useCellLock', () => {
   it('does not try to release a hold it never got', async () => {
     const view = renderEditor();
     const offline = await connect();
-    await act(async () => {
-      offline.acknowledge('cell:lock', {
-        result: 'HELD_BY_OTHER',
-        lockedBy: USER_SUMMARY,
-        expiresAt: EXPIRES_AT,
-      });
-    });
+    await refuse(offline);
 
     expect(states.at(-1)).toEqual({
       status: 'held-by-other',
@@ -287,22 +322,126 @@ describe('useCellLock', () => {
     expect(offline.emitted()).toEqual([['cell:lock', cell]]);
   });
 
-  it('does not poll a cell somebody else is holding', async () => {
+  it('does not poll a cell somebody else is holding while their hold is still valid', async () => {
     renderEditor();
     const offline = await connect();
-    await act(async () => {
-      offline.acknowledge('cell:lock', {
-        result: 'HELD_BY_OTHER',
-        lockedBy: USER_SUMMARY,
-        expiresAt: EXPIRES_AT,
-      });
-    });
+    await refuse(offline);
 
+    // Right up to the last millisecond of the other client's TTL. Nothing is
+    // sent: polling a contended cell from every open tab is exactly the traffic
+    // the `cell:unlocked` broadcast exists to avoid.
     await act(async () => {
-      jest.advanceTimersByTime(TTL_MS * 4);
+      jest.advanceTimersByTime(TTL_MS - 1);
     });
 
     expect(offline.emitted()).toHaveLength(1);
+    expect(states.at(-1)).toEqual({
+      status: 'held-by-other',
+      expiresAt: EXPIRES_AT,
+      lockedBy: USER_SUMMARY,
+    });
+  });
+
+  it('asks again when the cell it wants is announced free', async () => {
+    renderEditor();
+    const offline = await connect();
+    await refuse(offline);
+
+    // The ordinary ending: the other client closed their form, and the gateway
+    // broadcast it. Without this the form sits on "právě upravuje Jana
+    // Dvořáková" until it is closed — the frozen tile the hook exists to
+    // prevent, one layer up.
+    await announceFree(offline);
+
+    expect(offline.emitted()).toEqual([
+      ['cell:lock', cell],
+      ['cell:lock', cell],
+    ]);
+    // And it stops naming a holder it can no longer vouch for while it asks.
+    expect(states.at(-1)).toEqual({ status: 'requesting', expiresAt: null, lockedBy: null });
+
+    const nextExpiry = new Date(Date.now() + TTL_MS).toISOString();
+    await grant(offline, nextExpiry);
+    expect(states.at(-1)).toEqual({ status: 'held', expiresAt: nextExpiry, lockedBy: null });
+  });
+
+  it('asks again when the other hold lapses and no broadcast arrives', async () => {
+    renderEditor();
+    const offline = await connect();
+    await refuse(offline);
+
+    // The backstop `doc/decision/0111-*` asks for by name. The gateway does
+    // broadcast an expiry, but a client that only believed the broadcast would
+    // be frozen by any path that loses it, and 0111 says in as many words that
+    // neither side should assume the other did it.
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS);
+    });
+
+    expect(offline.emitted()).toEqual([
+      ['cell:lock', cell],
+      ['cell:lock', cell],
+    ]);
+    expect(states.at(-1)).toEqual({ status: 'requesting', expiresAt: null, lockedBy: null });
+  });
+
+  it('does not re-ask on a broadcast about a different cell', async () => {
+    renderEditor();
+    const offline = await connect();
+    await refuse(offline);
+
+    await announceFree(offline, { date: DATE, parkingSpotId: OTHER_SPOT_ID });
+
+    expect(offline.emitted()).toHaveLength(1);
+    expect(states.at(-1)).toEqual({
+      status: 'held-by-other',
+      expiresAt: EXPIRES_AT,
+      lockedBy: USER_SUMMARY,
+    });
+  });
+
+  it('does not re-ask on a broadcast about a hold it has itself', async () => {
+    renderEditor();
+    const offline = await connect();
+    await grant(offline);
+
+    // The gateway may echo a room broadcast back to its own sender, and a
+    // supersession elsewhere can produce one for a cell this client holds.
+    // Tearing the hold down and re-taking it on that would turn somebody else's
+    // event into this form's problem.
+    await announceFree(offline);
+
+    expect(offline.emitted()).toHaveLength(1);
+    expect(states.at(-1)).toEqual({ status: 'held', expiresAt: EXPIRES_AT, lockedBy: null });
+  });
+
+  it('does not keep re-asking once the cell it recovered is its own', async () => {
+    renderEditor();
+    const offline = await connect();
+    await refuse(offline);
+    await announceFree(offline);
+
+    // The contended-retry timer scheduled by the refusal was due at `NOW +
+    // TTL_MS`. The clock has to pass that instant for this test to say anything
+    // about whether it was cancelled — stopping short of it would prove only
+    // that it had not fired *yet*, which is true of a leaked timer too.
+    await grant(offline, new Date(Date.now() + TTL_MS).toISOString());
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS / 2);
+    });
+    expect(offline.emitted()).toHaveLength(3);
+
+    await grant(offline, new Date(Date.now() + TTL_MS).toISOString());
+    await act(async () => {
+      jest.advanceTimersByTime(TTL_MS / 2);
+    });
+
+    // Now at exactly `NOW + TTL_MS`. Four packets: the refusal, the re-ask the
+    // broadcast caused, and two renewals. A contended-retry timer left running
+    // beside the renewal would have fired at this instant and made it five.
+    expect(Date.now()).toBe(NOW + TTL_MS);
+    expect(offline.emitted()).toHaveLength(4);
+    expect(states.at(-1)?.status).toBe('held');
   });
 
   it('re-takes the hold after a reconnect, because the server dropped it', async () => {

@@ -44,6 +44,7 @@ export {
   CELL_LOCK_ACK_TIMEOUT_MS,
   CELL_LOCK_RENEW_FRACTION,
   MIN_CELL_LOCK_RENEW_DELAY_MS,
+  contendedRetryDelayMs,
   renewDelayMs,
   useCellLock,
 } from './lib/cell-lock';

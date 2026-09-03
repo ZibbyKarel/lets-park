@@ -29,6 +29,15 @@
  * per-request seam `libs/api-client` uses for its `Authorization` header and
  * the reason `libs/auth`'s `useAccessTokenProvider` returns a function rather
  * than a string.
+ *
+ * **That is a guarantee about reconnects, not about the connection.** The token
+ * is checked once per handshake and never again: an **established** socket is
+ * not re-authenticated, so a session revoked or a token expired mid-connection
+ * keeps receiving room broadcasts until the transport drops. That is a decision,
+ * with its reasoning and its revisit conditions in `doc/decision/0296-*` — the
+ * short version is that the exposure is a day room's broadcasts, which are
+ * already visible to everyone in the room, and that every action a socket can
+ * take is separately authorised on the API side.
  */
 
 import { io } from 'socket.io-client';

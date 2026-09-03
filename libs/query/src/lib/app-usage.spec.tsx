@@ -154,6 +154,13 @@ describe('a feature component using only the wrapper libs', () => {
   });
 
   it('needs neither @tanstack/react-query nor @orpc/* imported directly', () => {
+    // A demonstration that the wrapper's API is *sufficient* for everything
+    // above — **not** the defence against the ban being broken. This file is
+    // inside the lib that owns `@tanstack/react-query`, where the import is
+    // legal and ESLint would not object to it. The ban lives in
+    // `eslint.config.mjs` (`no-restricted-imports`, `WRAPPED_LIBRARIES`) and is
+    // verified separately by linting `apps/**`; delete that rule and this test
+    // still passes.
     const source = readFileSync(__filename, 'utf8');
 
     expect(source).not.toMatch(/from\s+['"]@tanstack\//);

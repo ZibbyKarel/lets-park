@@ -1,16 +1,14 @@
 /**
  * `@orpc/tanstack-query` (and, through `@lets-park/api-client` and
  * `@lets-park/contract`, `@orpc/client` and `@orpc/contract`) are published
- * ESM-only — `"type": "module"`, `.mjs` builds, no `require` condition — while
- * Jest runs here as CommonJS. Same three lines as `libs/i18n/jest.config.cts`,
- * described in `doc/decision/0020-*`; `@tanstack/react-query` itself needs
- * none of this, it ships a `require` condition.
+ * ESM-only while Jest runs here as CommonJS. `@tanstack/react-query` itself
+ * needs none of this — it ships a `require` condition.
  *
- * The consolidation into `jest.preset.js` that decision 0020 asks for is
- * deliberately still not done here — see `libs/api-client/jest.config.cts`.
+ * `transformIgnorePatterns` for those packages now lives in `jest.preset.js`
+ * (`doc/decision/0020-*`, done in `doc/decision/0297-*`). The `.mjs` transform
+ * entry and `moduleFileExtensions` stay here: this project runs babel-jest,
+ * not ts-jest, so the entry is not the same one `libs/api-client` needs.
  */
-const esmOnlyPackages = ['@orpc'];
-
 module.exports = {
   displayName: 'query',
   preset: '../../jest.preset.js',
@@ -29,7 +27,6 @@ module.exports = {
     '^.+\\.[tj]sx?$': ['babel-jest', { presets: ['@nx/react/babel'] }],
     '^.+\\.mjs$': ['babel-jest', { presets: ['@nx/react/babel'] }],
   },
-  transformIgnorePatterns: [`/node_modules/(?!(?:${esmOnlyPackages.join('|')})/)`],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'mjs'],
   coverageDirectory: '../../coverage/libs/query',
 };

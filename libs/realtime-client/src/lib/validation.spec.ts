@@ -129,6 +129,14 @@ describe('the wrapper surface', () => {
     // The file's own import list is the claim; reading it back makes the claim
     // self-checking rather than something a reviewer has to take on faith
     // (same device as `libs/form/src/lib/app-form.spec.tsx`).
+    //
+    // It demonstrates the wrapper's API is *sufficient*; it is **not** the
+    // defence against the ban being broken. This file is inside the lib that
+    // owns `socket.io-client` — the import is legal here, and `__fixtures__/
+    // offline-transport.ts` two directories away makes it, correctly. The ban
+    // is `no-restricted-imports` in `eslint.config.mjs` (`WRAPPED_LIBRARIES`),
+    // verified separately by linting `apps/**`; delete that rule and this test
+    // still passes.
     const source = readFileSync(__filename, 'utf-8');
     expect(source).not.toMatch(/from ['"]socket\.io-client['"]/);
     expect(source).not.toMatch(/require\(['"]socket\.io-client['"]\)/);
