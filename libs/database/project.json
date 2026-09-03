@@ -16,6 +16,17 @@
         "parallel": false
       }
     },
+    "reset-e2e": {
+      "// purpose": "Clears the e2e target month and widens the reservation window; see the script's own docs. `apps/web-e2e`'s globalSetup runs the same file directly (one `node` process instead of an Nx invocation inside a test run); this target is the discoverable way to run it by hand.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --require @swc-node/register libs/database/src/scripts/reset-e2e.ts",
+        "cwd": "{workspaceRoot}",
+        "env": {
+          "SWC_NODE_PROJECT": "tsconfig.base.json"
+        }
+      }
+    },
     "prisma-generate": {
       "executor": "nx:run-commands",
       "options": {

@@ -166,6 +166,15 @@ export class PrismaDouble {
   readonly reservations: ReservationRow[] = [];
   readonly waitlist: WaitlistEntryRow[] = [];
   readonly auditLogs: AuditLogRow[] = [];
+  /**
+   * How many `auditLog.createMany` statements were issued.
+   *
+   * `AuditLogService.recordMany` promises one statement rather than one per
+   * row — that is its whole reason to exist — and promises *no* statement for
+   * an empty list. Neither claim is visible in {@link auditLogs}, so it is
+   * counted here.
+   */
+  auditLogCreateManyCalls = 0;
   windowSettings: WindowSettingsRow | null = null;
 
   /**
@@ -493,11 +502,26 @@ export class PrismaDouble {
   }
 
   private auditLogDelegate() {
+    const append = (data: Omit<AuditLogRow, 'id' | 'createdAt'>): AuditLogRow => {
+      const row: AuditLogRow = { id: randomUUID(), createdAt: new Date(), ...data };
+      this.auditLogs.push(row);
+      return row;
+    };
+
     return {
-      create: async (args: { data: Omit<AuditLogRow, 'id' | 'createdAt'> }) => {
-        const row: AuditLogRow = { id: randomUUID(), createdAt: new Date(), ...args.data };
-        this.auditLogs.push(row);
-        return copy(row);
+      create: async (args: { data: Omit<AuditLogRow, 'id' | 'createdAt'> }) =>
+        copy(append(args.data)),
+      /**
+       * Prisma's `createMany` returns a count, not the rows — which is exactly
+       * the difference `AuditLogService.recordMany` exists for, and the reason
+       * the double models it separately rather than looping `create`: a test
+       * that wants to know "was this one statement or several?" can count the
+       * calls to this one.
+       */
+      createMany: async (args: { data: readonly Omit<AuditLogRow, 'id' | 'createdAt'>[] }) => {
+        this.auditLogCreateManyCalls += 1;
+        for (const data of args.data) append(data);
+        return { count: args.data.length };
       },
     };
   }

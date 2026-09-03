@@ -14,6 +14,14 @@
         }
       }
     },
+    "start": {
+      "// env": "The same `.env` injection the build target guards against reaches `next start` too, and Next.js says so out loud: `⚠ You are using a non-standard \"NODE_ENV\" value in your environment.` Serving a production build under NODE_ENV=development is exactly the mixed resolution doc/decision/0028-* is about — and `web:start` is what the e2e suite runs (doc/decision/0187-*), so without this pin the suite's claim to exercise the app production runs is only half true.",
+      "options": {
+        "env": {
+          "NODE_ENV": "production"
+        }
+      }
+    },
     "dev": {
       "// port": "The same `.env` injection the build target guards against also carries PORT=3000 — the API's port (`.env`, §API). `next dev` reads PORT when no `--port` is given, so the inferred `next dev` bound 3000 and collided with `api:serve` (EADDRINUSE). The flag wins over the environment variable, which is why the port is spelled here rather than removed from `.env`. 4200 is not a preference either: `CORS_ALLOWED_ORIGINS` and the Okta redirect URI registered with the mock OIDC server both name http://localhost:4200.",
       "options": {
