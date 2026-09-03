@@ -251,17 +251,34 @@ describe('weekendColumns — the design’s recessed right-hand columns', () => 
   });
 
   it('reads the flag off the grid rather than assuming a column index', () => {
-    // The guarantee that matters: every column the function marks is one whose
-    // days really are weekend days, and every unmarked column's are not.
-    const grid = buildMonthGrid('2026-09-15', '2026-09-01');
-    const flags = weekendColumns(grid);
-    for (const week of grid.weeks) {
-      week.slots.forEach((slot, index) => {
-        if (slot.day !== null) {
-          expect(slot.day.weekendColumn).toBe(flags[index]);
-        }
-      });
-    }
+    // Deliberately **not** built by `buildMonthGrid`. Every grid it produces is
+    // Monday-first, so against a real grid `index >= 5` and "the cell says so"
+    // give the same answer for every month of every year — a test driven by
+    // `buildMonthGrid` cannot tell the two implementations apart, whatever it
+    // claims in its name. A hand-made grid with the weekend flags in the first
+    // and third columns can, and that is the whole point of deriving the heads
+    // from the cells rather than from a constant.
+    const cell = (dayOfMonth: number, weekendColumn: boolean): BulkDayCell => ({
+      date: `2026-09-${String(dayOfMonth).padStart(2, '0')}`,
+      dayOfMonth,
+      weekendColumn,
+      selectable: !weekendColumn,
+      block: weekendColumn ? 'WEEKEND' : null,
+    });
+    const grid: BulkMonthGrid = {
+      month: '2026-09',
+      weeks: [
+        {
+          key: '2026-09-w0',
+          slots: [1, 2, 3, 4, 5, 6, 7].map((dayOfMonth) => ({
+            key: `k${String(dayOfMonth)}`,
+            day: cell(dayOfMonth, dayOfMonth === 1 || dayOfMonth === 3),
+          })),
+        },
+      ],
+    };
+
+    expect(weekendColumns(grid)).toEqual([true, false, true, false, false, false, false]);
   });
 });
 

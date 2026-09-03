@@ -764,6 +764,25 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
     expect(apiMocks.previewBulk).not.toHaveBeenCalled();
   });
 
+  it('does not let a stray scrim click be how the user loses a selection', async () => {
+    // The refusal can replace a step that was holding a month's worth of picked
+    // days, and going back is not offered. Every one of the four panels sets
+    // `closeOnScrimClick={false}` for that reason; without this the refusal was
+    // the one that did not, and nothing said so.
+    const { user, rerender, onClose } = setup();
+    await reachSchedule(user);
+
+    rerender(
+      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Rezervace jsou uzamčené' });
+    await user.click(dialog.parentElement as HTMLElement);
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Rezervace jsou uzamčené' })).toBeInTheDocument();
+  });
+
   it('stops a confirmation whose window closed while the modal was open', async () => {
     // The case a hidden header button cannot cover: the user reached the
     // proposal, then the day query refetched and `canReserveMonth` flipped.
