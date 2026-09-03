@@ -1,0 +1,143 @@
+# Let's Park — continuous integration.
+#
+# Three jobs, run in parallel, each gating something the others structurally
+# cannot see:
+#
+#   verify    formatting, lint, typecheck, the unit suites and both builds.
+#             No Docker, no database — this is the fast lane.
+#   database  the seven `*.db.spec.ts` suites, against a real PostgreSQL 17.
+#   images    the two production images actually build.
+#
+# `database` is not a nicety. `apps/api/jest.config.cts` **excludes**
+# `*.db.spec.ts` from `api:test`, so without this job a green build would mean
+# nothing about the part of the reservations module whose correctness *is* the
+# database: `SELECT … FOR UPDATE`, transaction isolation, and the waitlist
+# promotion that shares a cancellation's transaction. Those cannot be covered
+# by a test double — a double cannot take a row lock — so the only way to test
+# them is to run them.
+#
+# Every command here is one a developer runs locally, unchanged. Nothing in
+# this file is CI-only behaviour in the application.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a branch cancels the run already in flight for it. Never on
+# `main`, where every commit's result is a record.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: format, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # `.nvmrc` is the single source of truth for the Node major, shared
+          # with both Dockerfiles (`node:24-alpine`).
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # `--all`, not the default: without a base ref to diff against, plain
+      # `nx format:check` checks nothing at all on a fresh checkout and passes
+      # vacuously.
+      - run: npx nx format:check --all
+
+      - run: npx nx run-many -t lint,typecheck,test,build
+
+  database:
+    name: database suites (api:test-db)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lets_park
+          POSTGRES_PASSWORD: lets_park_ci
+          POSTGRES_DB: lets_park
+        ports:
+          - 5432:5432
+        # Without a health check the job would start `npm ci` and reach the
+        # tests before Postgres finished its own initdb, and the failure would
+        # look like a flaky test rather than a race in this file.
+        options: >-
+          --health-cmd "pg_isready -U lets_park -d lets_park"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # These credentials are a throwaway container's, created and destroyed
+      # inside this job. They are not a secret and must not be turned into one:
+      # a `secrets.` reference here would make the job unrunnable from a fork
+      # and hide what it connects to.
+      DATABASE_URL: postgresql://lets_park:lets_park_ci@localhost:5432/lets_park
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # No migration step: `apps/api/src/testing/database/global-setup.ts`
+      # creates a throwaway database per run, applies the committed migrations
+      # to it and repoints `DATABASE_URL` at it — and **throws** when
+      # `DATABASE_URL` is absent rather than skipping, which is what makes an
+      # unreachable Postgres fail this job instead of silently passing it.
+      - run: npx nx run api:test-db
+
+  images:
+    name: production images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # No `push`, no registry, no credentials: this job answers one question —
+      # does the deployable artifact still build from a clean context? The
+      # `.dockerignore` that keeps `.env` out of that context is part of what
+      # is being exercised.
+      - name: api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: migrator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: migrator
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
