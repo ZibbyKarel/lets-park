@@ -497,6 +497,51 @@ describe('AdminSpotsPanel', () => {
     ]);
   });
 
+  it('does not report a later, successful write with an earlier one’s error', async () => {
+    // This is the `.reset()` calls, and nothing else.
+    //
+    // `writeError` reads whichever of the three mutations still holds an error
+    // (`deactivateSpot.error ?? updateSpot.error ?? createSpot.error`), so a
+    // create that failed keeps poisoning every later write until it is cleared
+    // — and `writeErrorFrom` then attributes that stale error to whatever was
+    // asked for last. Clearing `lastWrite` cannot help here: the next write
+    // sets it again, and it is set to the operation that *succeeded*.
+    //
+    // So: a failed create, abandoned, followed by a retire that the API
+    // accepts. Nothing failed, and nothing may be reported.
+    const failure = await failureWithCode('CONFLICT');
+    const fake = spotsApi({
+      'admin.spot.create': () => {
+        throw failure;
+      },
+      'admin.spot.update': () => ({ ...SPOT, active: false }),
+    });
+    mockApi = fake.api;
+
+    const user = renderPanel(<AdminSpotsPanel />);
+    await screen.findByText(SPOT.label);
+
+    await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+    await user.type(within(screen.getByRole('dialog')).getByLabelText('Štítek'), 'E2.93');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Uložit' }));
+    expect(await screen.findByText(csMessages.admin.spotsDuplicateLabel)).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zrušit' }));
+
+    await user.click(
+      within(await findRow(SPOT.id)).getByRole('switch', {
+        name: csMessages.admin.spotsActiveToggleLabel.replace('{label}', SPOT.label),
+      })
+    );
+    await waitFor(() =>
+      expect(fake.inputsTo('admin.spot.update')).toEqual([{ id: SPOT.id, active: false }])
+    );
+
+    // "Na tomto místě jsou rezervace ode dneška dál." over a retire that
+    // worked is the sentence this test exists to keep off the screen.
+    expect(screen.queryByText(csMessages.admin.spotsDeleteConflict)).not.toBeInTheDocument();
+    expect(screen.queryByText(csMessages.admin.spotsDuplicateLabel)).not.toBeInTheDocument();
+  });
+
   it('forgets a failure rather than hiding it, so the same dialog reopens clean', async () => {
     // The cross-dialog case below is caught by `WRITE_ORIGINS` even if nothing
     // is reset, which is precisely why this one exists: create → create is the

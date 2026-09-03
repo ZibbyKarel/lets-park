@@ -49,8 +49,12 @@ silence.
 - `changeDialog(next)` is the only writer of the dialog state. Open, swap,
   cancel and close-after-success all go through it.
 - `AdminSpotsPanel.discardFailure()` calls `reset()` on the create, update and
-  deactivate mutations and sets `lastWrite` to `null`. `startWrite` now calls it
-  too, so a new attempt still clears the previous one.
+  deactivate mutations — all three, because `writeError` reads whichever of them
+  is non-null. `startWrite` calls it too, so a new attempt still clears the
+  previous one. It deliberately does **not** clear `lastWrite`: that value is
+  only read while a mutation holds an error, so clearing it is unobservable, and
+  an unobservable line here made the observable one harder to test (see
+  §"What the reset is, and is not").
 - `failureShownIn(where)` computes `home` as the open dialog's `kind`, or
   `'table'`, and returns `null` unless `WRITE_ORIGINS[writeErrorFrom]` contains
   that home.
@@ -61,6 +65,30 @@ silence.
   `reset()` really clears TanStack's own state rather than the screen merely
   hiding it.
 
+## What the reset is, and is not
+
+Round 2 of review found this record's own test claim to be wrong, and the fix
+sharpened what each half actually does.
+
+`writeError` is `deactivateSpot.error ?? updateSpot.error ?? createSpot.error`.
+A mutation holds its `error` until `reset()`, so a create that failed keeps
+answering for *every later write* — including one that succeeded. With
+`writeErrorFrom` naming the operation asked for last, the shipped sentence would
+describe the new operation using the old operation's cause:
+
+> A **Přidat místo** is refused as a duplicate label. The admin cancels and
+> switches a spot off instead. The API accepts the retire — and the screen says
+> *"Na tomto místě jsou rezervace ode dneška dál."*
+
+That is what `reset()` prevents, and it is a different failure from the one at
+the top of this record: there, a *failed* attempt's sentence surfaced under the
+wrong dialog; here, a *successful* write is reported as failed.
+
+Both of the guards above hide the first failure. Neither hides this one — only
+`reset()` does. It therefore needs a test of its own, which is
+`AdminSpotsPanel › does not report a later, successful write with an earlier
+one's error`. Deleting the three `reset()` calls fails that test and no other.
+
 ## Risk
 
 - **`WRITE_ORIGINS` is a second place to update.** A new dialog, or a new write
@@ -68,6 +96,17 @@ silence.
   The failure direction is silence rather than a wrong sentence, which is the
   right way round, but silence is still a bug. The table sits directly above the
   function that reads it, and both are named in this record.
+- **`startWrite`'s own call to `discardFailure()` is unobservable today.**
+  Removing it fails no test in the 277-test web suite, because every route from
+  one write to a *different* one passes through a dialog change (which
+  discards), and TanStack clears a mutation's own error when it runs again. It
+  is kept rather than deleted, unlike the `setLastWrite(null)` above, because it
+  clears real error state and its redundancy depends on an invariant of a
+  *different* file — the screen routing every dialog transition through
+  `changeDialog`. That trade is recorded rather than argued away: it is a
+  surviving mutant, it is listed as one, and the reasoning is in the panel's own
+  comment so nobody later pins it with a test that is passing on something else.
+
 - **The discard is unconditional.** Cancelling a dialog also throws away a
   failure that came from the table behind it. That is intended — the admin has
   moved on — but it means a row switch that failed while a dialog was later

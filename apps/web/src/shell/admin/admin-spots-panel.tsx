@@ -92,9 +92,15 @@ export function AdminSpotsPanel() {
   /**
    * Clears the previous failure and records what is being attempted now.
    *
-   * The discard matters: without it a mutation that failed once keeps its
-   * `error` forever, so the next successful write would still be rendered under
-   * the old sentence.
+   * The discard here is **defence in depth, and currently unobservable**: every
+   * route from one write to a *different* one passes through a dialog change,
+   * which already discards, and TanStack clears a mutation's own error when it
+   * runs again. Deleting this call fails no test in the web suite (277). It is
+   * kept because without it the panel's correctness would depend on the screen
+   * never growing a dialog transition that bypasses `changeDialog` — an
+   * invariant of a different file. Said plainly here so that nobody later
+   * "proves" this line with a test that is really passing on something else,
+   * which is exactly how the `reset()` calls below went unpinned.
    */
   function startWrite(write: AdminWrite, spotId: string | null) {
     discardFailure();
@@ -111,12 +117,23 @@ export function AdminSpotsPanel() {
    * failure describes one attempt, and an attempt the admin has walked away
    * from must not follow them into the next dialog and be read as its own. See
    * `doc/decision/0167-*`.
+   *
+   * Clearing the *error* is what matters, and it matters beyond the dialogs: a
+   * mutation that failed keeps answering for every later write, so a create
+   * that was refused would report a retire that succeeded. Pinned by "does not
+   * report a later, successful write with an earlier one's error".
+   *
+   * `lastWrite` is deliberately **not** cleared. It reads as tidy and it is
+   * not: `writeErrorFrom` is `writeError == null ? null : lastWrite`, so the
+   * value is only ever read while a mutation holds an error — and after this
+   * function none does. A `setLastWrite(null)` here survived the whole web
+   * suite, and worse, it let a test pass on the intent going missing instead of
+   * on the error being cleared.
    */
   function discardFailure() {
     createSpot.reset();
     updateSpot.reset();
     deactivateSpot.reset();
-    setLastWrite(null);
   }
 
   return (
