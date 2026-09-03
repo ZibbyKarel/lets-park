@@ -40,6 +40,16 @@ function inPrague(instant: Date): string {
   return parts.replace('T', ' ');
 }
 
+/** Whole hours between two fire times, or a failure naming what was missing. */
+function hoursBetween(times: Date[], from: number, to: number): number {
+  const start = times[from];
+  const end = times[to];
+  if (start === undefined || end === undefined) {
+    throw new Error(`Expected fire times #${from} and #${to}; got ${times.length}`);
+  }
+  return (end.getTime() - start.getTime()) / 3_600_000;
+}
+
 function buildConfig(dailySummaryAt = '08:00'): SlackConfig {
   return SlackConfig.fromEnv({
     SLACK_ENABLED: false,
@@ -150,7 +160,7 @@ describe('DailySummaryJob', () => {
         '2026-03-30T06:00:00.000Z',
       ]);
       // 23 hours, not 24. An interval-based scheduler would drift here.
-      expect(times[2]!.getTime() - times[1]!.getTime()).toBe(23 * 3_600_000);
+      expect(hoursBetween(times, 1, 2)).toBe(23);
     });
 
     it('fires at 08:00 Prague on both sides of the autumn transition', () => {
@@ -170,7 +180,7 @@ describe('DailySummaryJob', () => {
         '2026-10-26T07:00:00.000Z',
       ]);
       // 25 hours.
-      expect(times[2]!.getTime() - times[1]!.getTime()).toBe(25 * 3_600_000);
+      expect(hoursBetween(times, 1, 2)).toBe(25);
     });
 
     it('follows SLACK_DAILY_SUMMARY_AT rather than a hard-coded hour', () => {

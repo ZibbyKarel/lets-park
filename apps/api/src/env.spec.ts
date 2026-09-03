@@ -35,6 +35,17 @@ describe('validateApiEnv', () => {
       THROTTLE_STRICT_LIMIT: 20,
       BODY_LIMIT: '100kb',
       HEALTH_DB_TIMEOUT_MS: 3_000,
+      // Slack (Task 16) — also all optional. `SLACK_BOT_TOKEN` and
+      // `SLACK_CHANNEL_ID` are absent rather than `undefined`: they have no
+      // default, so Zod omits the keys entirely, which is what makes
+      // `SLACK_ENABLED: false` the only Slack fact a bare `.env` produces.
+      // The rest of the Slack behaviour is asserted in
+      // `apps/api/src/slack/slack-env.spec.ts`.
+      SLACK_ENABLED: false,
+      SLACK_REQUEST_TIMEOUT_MS: 5_000,
+      SLACK_RETRY_ATTEMPTS: 3,
+      SLACK_RETRY_BASE_DELAY_MS: 500,
+      SLACK_DAILY_SUMMARY_AT: '08:00',
     });
   });
 
