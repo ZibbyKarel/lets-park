@@ -33,12 +33,19 @@ describe('DefaultSlackWebClientFactory', () => {
     MockWebClient.mockClear();
   });
 
-  it('constructs the SDK client with the token, the timeout, and the three safety-relevant options', () => {
-    new DefaultSlackWebClientFactory().create({ token: 'xoxb-configured-token', timeoutMs: 4321 });
+  it('constructs the SDK client with the token, no numeric timeout, and the four safety-relevant options', () => {
+    new DefaultSlackWebClientFactory().create({
+      token: 'xoxb-configured-token',
+      signal: () => undefined,
+    });
 
     expect(MockWebClient).toHaveBeenCalledTimes(1);
     expect(MockWebClient).toHaveBeenCalledWith('xoxb-configured-token', {
-      timeout: 4321,
+      // Not `SLACK_REQUEST_TIMEOUT_MS`: `SlackClient`'s own timer owns the
+      // per-attempt timeout so it can abort the connection itself. A second,
+      // axios-owned timeout here would tear it down the same way and make
+      // that abort untestable — see the class comment's "The timeout".
+      timeout: 0,
       // Ours, not the SDK's ten-retries-over-thirty-minutes default.
       retryConfig: { retries: 0 },
       // A 429 surfaces as `RateLimitedError` instead of the SDK sleeping
@@ -47,15 +54,57 @@ describe('DefaultSlackWebClientFactory', () => {
       // The first line of defence against the bot token reaching a log — see
       // `./slack-token-redaction.ts`.
       attachOriginalToWebAPIRequestError: false,
+      // The lever `withRetries` uses to abort a timed-out attempt before its
+      // retry goes out — see the two tests below for what it actually does.
+      requestInterceptor: expect.any(Function),
     });
   });
 
   it('passes no token through when Slack is configured with none', () => {
-    new DefaultSlackWebClientFactory().create({ token: undefined, timeoutMs: 1_000 });
+    new DefaultSlackWebClientFactory().create({
+      token: undefined,
+      signal: () => undefined,
+    });
 
-    expect(MockWebClient).toHaveBeenCalledWith(
-      undefined,
-      expect.objectContaining({ timeout: 1_000 })
-    );
+    expect(MockWebClient).toHaveBeenCalledWith(undefined, expect.objectContaining({ timeout: 0 }));
+  });
+
+  /**
+   * The interceptor is the one part of this factory's wiring that cannot be
+   * checked by asserting the options object passed to `WebClient` — it is a
+   * closure. `task-16-task-review.md`'s I2 was exactly this shape: an option
+   * present but never exercised. These two tests call it the way axios would,
+   * with a `signal()` that changes between calls, the way `withRetries` changes
+   * `currentAttempt` between attempts.
+   */
+  it('attaches the current attempt signal to an outgoing request', () => {
+    const controller = new AbortController();
+    let current: AbortSignal | undefined = controller.signal;
+    new DefaultSlackWebClientFactory().create({
+      token: 'xoxb-configured-token',
+      signal: () => current,
+    });
+    const requestInterceptor = MockWebClient.mock.calls[0]?.[1]?.requestInterceptor as (
+      config: Record<string, unknown>
+    ) => Record<string, unknown>;
+
+    const configured = requestInterceptor({ url: 'https://slack.com/api/chat.postMessage' });
+
+    expect(configured['signal']).toBe(controller.signal);
+    current = undefined;
+  });
+
+  it('leaves the request config untouched between attempts, when there is no current signal', () => {
+    new DefaultSlackWebClientFactory().create({
+      token: 'xoxb-configured-token',
+      signal: () => undefined,
+    });
+    const requestInterceptor = MockWebClient.mock.calls[0]?.[1]?.requestInterceptor as (
+      config: Record<string, unknown>
+    ) => Record<string, unknown>;
+
+    const configured = requestInterceptor({ url: 'https://slack.com/api/chat.postMessage' });
+
+    expect(configured['signal']).toBeUndefined();
   });
 });

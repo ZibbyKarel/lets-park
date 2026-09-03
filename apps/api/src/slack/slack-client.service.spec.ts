@@ -60,13 +60,26 @@ describe('SlackClient', () => {
   function buildClient(env: Partial<SlackEnv> = {}): SlackClient {
     const config = SlackConfig.fromEnv({ ...BASE_ENV, ...env });
     const factory: SlackWebClientFactory = {
-      create: ({ token, timeoutMs }) =>
+      create: ({ token, signal }) =>
         new WebClient(token, {
           slackApiUrl: server.apiUrl,
-          timeout: timeoutMs,
+          // No numeric timeout here either — mirrors `DefaultSlackWebClientFactory`.
+          // `SlackClient`'s own timer, not axios's, is what races each attempt.
+          timeout: 0,
           retryConfig: { retries: 0 },
           rejectRateLimitedCalls: true,
           attachOriginalToWebAPIRequestError: false,
+          // Mirrors `DefaultSlackWebClientFactory`: this is the wiring under
+          // test in "does not double-post" below, and every other test in
+          // this file exercises the client with it present, same as
+          // production, rather than through a different, unwired path.
+          requestInterceptor: (requestConfig) => {
+            const current = signal();
+            if (current !== undefined) {
+              requestConfig.signal = current;
+            }
+            return requestConfig;
+          },
         }),
     };
     return new SlackClient(config, logs.logger, factory);
@@ -118,6 +131,22 @@ describe('SlackClient', () => {
   });
 
   describe('a message Slack accepts', () => {
+    /**
+     * Known residual flake under severe CPU contention (`task-16-report.md`'s
+     * round-2 section) — documented rather than "fixed" because it cannot be:
+     * under a starved shared event loop, the request can fully round-trip
+     * (server records it, responds) *before* this process's own overdue
+     * timeout timer gets a turn — Node's timers phase always runs before the
+     * poll phase that would have delivered the already-arrived response, so
+     * the client cannot tell "no answer yet" from "answer already here, just
+     * not read yet" once both are stale by the time it wakes up. The abort in
+     * `withRetries` (see "a timed-out attempt…" below and `doc/slack.md` §4)
+     * closes the *other* race — a request still genuinely in flight when the
+     * timeout fires — deterministically. This one is not that: by the time
+     * any abort could run, the server has already recorded and answered the
+     * original request. No client-side timeout policy can prevent it without
+     * a server-side idempotency key, which Slack's API does not offer.
+     */
     it('posts once, with the channel, the text and the bearer token', async () => {
       server.respondWith(() => SLACK_OK);
 
@@ -278,6 +307,77 @@ describe('SlackClient', () => {
       expect(elapsed).toBeLessThan(5_000);
       expect(lineAt('error')).toMatchObject({ slackErrorCode: 'slack_webapi_request_error' });
     });
+  });
+
+  /**
+   * `task-16-task-review.md`'s fix-round-2 finding: the earlier version of
+   * this file's "posts once…" test looked like it proved single delivery, but
+   * passed on a different defence — nothing here ever put a slow-but-eventual
+   * response in the way of a retry, so a client that never aborted a timed-out
+   * attempt was indistinguishable from one that did. Isolated, that gap never
+   * failed; under real CPU contention sharing the fake server's event loop
+   * with `SlackClient`, it produced two identical `chat.postMessage` calls
+   * 13 times in 20 concurrent full-suite runs.
+   *
+   * A first attempt at reproducing this deterministically — `holdNextRequest`
+   * pausing a *small* request's read — did not discriminate: axios's own
+   * (then still enabled) numeric timeout already destroyed the connection
+   * before the pause was ever released, with or without this fix's explicit
+   * abort. What actually depends on the abort is below: an oversized body,
+   * paired with `holdNextRequest`, that has not *finished being sent* when
+   * the timeout fires — TCP flow control, not scheduling luck, is what keeps
+   * it genuinely in flight, which is why removing the abort reliably turns
+   * this red (see `task-16-report.md`'s round-2 section for that run).
+   */
+  describe('a timed-out attempt that is still in flight when the retry fires', () => {
+    // Large enough to exceed a loopback socket's send *and* receive buffers
+    // several times over (both are typically well under 1 MB). A server that
+    // never reads therefore fills its TCP receive window, which stalls the
+    // client's write at the OS level: the unsent remainder of attempt #1's
+    // body genuinely never leaves the client process. That is what makes this
+    // test deterministic rather than a hope about scheduling — it does not
+    // depend on which side a shared, starved event loop gets to first, only on
+    // TCP flow control, which every stack implements.
+    const OVERSIZED_TEXT = 'x'.repeat(8 * 1024 * 1024);
+
+    it('never lets the timed-out attempt complete on the wire once its retry has already succeeded', async () => {
+      const held = server.holdNextRequest();
+      server.respondWith(() => SLACK_OK);
+
+      // A generous timeout and retry budget: under the concurrent full-suite
+      // stress this test is specifically about (`task-16-report.md`'s
+      // round-2 section), a tight timeout produces a *different* failure —
+      // the untouched retry also missing the window — which is a fact about
+      // this test's own margins under contention, not about the mechanism
+      // under test. What matters here is the *relative* claim (attempt #1
+      // never completes once something else has already succeeded), not the
+      // absolute timing, so the budget is loose on purpose.
+      const outcome = buildClient({
+        SLACK_RETRY_ATTEMPTS: 6,
+        SLACK_REQUEST_TIMEOUT_MS: 1_000,
+        SLACK_RETRY_BASE_DELAY_MS: 50,
+      }).postToChannel(OVERSIZED_TEXT);
+
+      // Attempt #1's body cannot finish sending: the server is not reading,
+      // so its receive window fills and the client's write stalls. Its
+      // timeout fires, a retry (not held) sends the same oversized body to a
+      // server that *is* reading, and succeeds.
+      await expect(outcome).resolves.toBe('delivered');
+      const requestsBeforeRelease = server.requests.length;
+
+      // Let the server start reading again. Without an abort, attempt #1's
+      // connection is still open and its write was only *stalled*, not
+      // abandoned — Node keeps whatever was queued past what the OS had
+      // accepted, and releasing the hold lets the rest flow through,
+      // eventually completing the request and recording a second one. With
+      // the abort, attempt #1 was destroyed the moment it was classified as
+      // failed; there is nothing left to resume sending, so the connection
+      // can only end in an error, never in `'end'`.
+      held.release();
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+
+      expect(server.requests).toHaveLength(requestsBeforeRelease);
+    }, 60_000);
   });
 
   describe('users.lookupByEmail', () => {

@@ -51,6 +51,26 @@ export interface SlackTestServer {
   /** Every request received, in order. */
   readonly requests: RecordedSlackRequest[];
   respondWith(responder: SlackResponder): void;
+  /**
+   * Arms a hold on the *next* request this server receives: its socket is
+   * paused the moment it connects, before anything is read, and stays that
+   * way (so the request is not yet in {@link SlackTestServer.requests}, and no
+   * reply is sent) until the returned `release` is called.
+   *
+   * On its own this only proves "nothing has read the connection yet" — for a
+   * small body that has *already fully arrived*, that alone does not
+   * reproduce a duplicate-send bug: axios's own connection teardown on
+   * timeout already prevents that case with or without an additional abort.
+   * Paired with a body large enough to exceed the client's and server's
+   * socket buffers (see `slack-client.service.spec.ts`'s
+   * `OVERSIZED_TEXT`), the hold also stalls the *client's* write via TCP flow
+   * control — the request genuinely has not finished sending when a timeout
+   * fires — which is the shape that actually distinguishes "aborted" from
+   * "abandoned": releasing the hold either lets the stalled remainder flow
+   * through and complete (no abort) or resumes a connection the client has
+   * already destroyed, which can only end in an error (abort).
+   */
+  holdNextRequest(): { release(): void };
   close(): Promise<void>;
 }
 
@@ -72,6 +92,8 @@ export async function startSlackTestServer(): Promise<SlackTestServer> {
   // waits forever and the spec times out on Jest's generic message instead of
   // its own.
   const sockets = new Set<Socket>();
+  let holdNext = false;
+  let pendingRelease: (() => void) | undefined;
 
   const server: Server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const chunks: Buffer[] = [];
@@ -95,6 +117,19 @@ export async function startSlackTestServer(): Promise<SlackTestServer> {
       });
       response.end(JSON.stringify(reply.body));
     });
+
+    // Pausing *before* attaching the listeners above still holds: a Readable
+    // that has never flowed stays paused until something explicitly resumes
+    // it, regardless of when a `'data'` listener is attached, and `request`
+    // events are always emitted asynchronously, so there is no window in
+    // which the body could already have been delivered by the time this runs.
+    if (holdNext) {
+      holdNext = false;
+      request.pause();
+      pendingRelease = (): void => {
+        request.resume();
+      };
+    }
   });
 
   server.on('connection', (socket: Socket) => {
@@ -112,6 +147,22 @@ export async function startSlackTestServer(): Promise<SlackTestServer> {
     requests,
     respondWith(next: SlackResponder): void {
       responder = next;
+    },
+    holdNextRequest(): { release(): void } {
+      holdNext = true;
+      return {
+        release(): void {
+          // `pendingRelease` is only set once the held request has actually
+          // arrived; calling this before then would be the spec racing its
+          // own server, which is a spec bug, not something to swallow.
+          if (pendingRelease === undefined) {
+            throw new Error('holdNextRequest: release() called before the held request arrived');
+          }
+          const resume = pendingRelease;
+          pendingRelease = undefined;
+          resume();
+        },
+      };
     },
     async close(): Promise<void> {
       for (const socket of sockets) {

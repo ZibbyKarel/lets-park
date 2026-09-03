@@ -95,10 +95,10 @@ describe('Slack over a real database', () => {
 
     const prismaService = asPrismaService(client);
     const factory: SlackWebClientFactory = {
-      create: ({ token, timeoutMs }) =>
+      create: ({ token }) =>
         new WebClient(token, {
           slackApiUrl: server.apiUrl,
-          timeout: timeoutMs,
+          timeout: 0,
           retryConfig: { retries: 0 },
           rejectRateLimitedCalls: true,
           attachOriginalToWebAPIRequestError: false,
@@ -414,8 +414,7 @@ describe('Slack over a real database', () => {
         }),
         logs.logger,
         {
-          create: ({ token, timeoutMs }) =>
-            new WebClient(token, { slackApiUrl: server.apiUrl, timeout: timeoutMs }),
+          create: ({ token }) => new WebClient(token, { slackApiUrl: server.apiUrl, timeout: 0 }),
         }
       );
       const spot = await seedSpot(client, { labelPrefix: 'OFF' });

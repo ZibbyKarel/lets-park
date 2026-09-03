@@ -25,7 +25,12 @@
  * committed, on the way out of a request. Without a timeout, a Slack outage
  * that accepts connections and never answers would hold a Node socket per
  * cancellation for however long the OS keeps it. `SLACK_REQUEST_TIMEOUT_MS` is
- * per attempt.
+ * per attempt, and it is **ours**, not the SDK's: `DefaultSlackWebClientFactory`
+ * passes axios `timeout: 0` (no limit) on purpose, and `withRetries` races
+ * every attempt against its own timer instead. A `WebClient`-internal timeout
+ * would tear the connection down through the exact same mechanism the line
+ * below does — indistinguishable from it, and so nothing a test could tell
+ * apart from a version that forgot the abort entirely.
  *
  * **The retry.** The SDK's own retry policy is switched off
  * (`retryConfig: { retries: 0 }`) so that the backoff is ours and is testable:
@@ -34,6 +39,20 @@
  * response was sent. What is retried and what is not comes from
  * `describeSlackFailure` — Slack's own `{"ok": false}` answers are *not*
  * retried, because they are configuration, not weather.
+ *
+ * **The abort.** A timeout means "no answer *yet*", not "no request in
+ * flight". Deciding an attempt has failed and letting its HTTP request keep
+ * running is how a slow-but-successful response gets delivered twice: once
+ * for the attempt that timed out, once for the retry. The instant `withRetries`'
+ * own timer — not axios's, see above — fires, it aborts that attempt's
+ * `AbortController`, wired into the `WebClient`'s axios instance via
+ * `requestInterceptor` (see {@link DefaultSlackWebClientFactory}), *before*
+ * classifying the failure or sleeping the backoff, so the abort always reaches
+ * the connection before the retry goes out. `doc/slack.md` §4 spells out
+ * exactly what guarantee this does and does not buy: at-least-once, with the
+ * loser of the race torn down the moment it is known to have lost, not
+ * exactly-once — a request that had already reached Slack and been accepted
+ * before our timer fired is not something an abort sent afterwards can undo.
  *
  * **The redaction.** See `./slack-token-redaction.ts`. No raw Slack error ever
  * reaches the logger from this class.
@@ -48,7 +67,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { WebClient } from '@slack/web-api';
+import { ErrorCode, WebClient } from '@slack/web-api';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { describeSlackFailure } from './slack-failure';
 import { SlackConfig } from './slack.config';
@@ -71,16 +90,39 @@ export type SlackDeliveryOutcome =
  * `{"ok": false, …}`, and only the real SDK turns that into the rejection this
  * class branches on. A hand-written double that rejects would be a test of the
  * double.
+ *
+ * `signal` is read once per outgoing HTTP call, not once per `WebClient`: it
+ * is a getter, not a value, so a factory can wire it into an axios
+ * `requestInterceptor` and have it pick up whichever `AbortController`
+ * {@link SlackClient.withRetries} is currently attempting with. There is
+ * deliberately no `timeoutMs` here any more: the timeout is `SlackClient`'s
+ * own timer (see the class comment's "The timeout"), not something a
+ * `WebClient` needs telling.
  */
 export abstract class SlackWebClientFactory {
-  abstract create(options: { token?: string | undefined; timeoutMs: number }): WebClient;
+  abstract create(options: {
+    token?: string | undefined;
+    signal: () => AbortSignal | undefined;
+  }): WebClient;
 }
 
 /** How the running application builds its `WebClient`. */
 export class DefaultSlackWebClientFactory extends SlackWebClientFactory {
-  create({ token, timeoutMs }: { token?: string | undefined; timeoutMs: number }): WebClient {
+  create({
+    token,
+    signal,
+  }: {
+    token?: string | undefined;
+    signal: () => AbortSignal | undefined;
+  }): WebClient {
     return new WebClient(token, {
-      timeout: timeoutMs,
+      // Deliberately *not* `timeoutMs`. `withRetries` races every attempt
+      // against its own timer and aborts `signal` on firing — a second,
+      // axios-owned timeout tearing the same connection down the same way
+      // would make that abort redundant, and redundant means untestable: a
+      // spec cannot fail by removing code that was never load-bearing. See
+      // the class comment's "The timeout".
+      timeout: 0,
       // Our backoff, not the SDK's. See the class comment.
       retryConfig: { retries: 0 },
       // Surface a 429 as a `RateLimitedError` we can honour `Retry-After` from,
@@ -90,6 +132,18 @@ export class DefaultSlackWebClientFactory extends SlackWebClientFactory {
       // this, a transport failure carries the axios request — headers included
       // — on `error.original`. See `./slack-token-redaction.ts`.
       attachOriginalToWebAPIRequestError: false,
+      // Gives `withRetries` a lever on the in-flight axios request: the
+      // WebClient exposes no per-call `signal` option, but it does run this as
+      // an axios request interceptor, so attaching the current attempt's
+      // signal here reaches every `chat.postMessage`/`users.lookupByEmail`
+      // call the same way. Read fresh on every request — see the class doc.
+      requestInterceptor: (requestConfig) => {
+        const current = signal();
+        if (current !== undefined) {
+          requestConfig.signal = current;
+        }
+        return requestConfig;
+      },
     });
   }
 }
@@ -98,6 +152,10 @@ export class DefaultSlackWebClientFactory extends SlackWebClientFactory {
 export class SlackClient {
   private readonly web: WebClient;
   private readonly redact: (value: string) => string;
+  // The in-flight attempt's controller, read by the factory's
+  // `requestInterceptor` and written by `withRetries`. `undefined` between
+  // attempts (and always, once Slack is disabled and no attempt ever runs).
+  private currentAttempt: AbortController | undefined;
 
   constructor(
     private readonly config: SlackConfig,
@@ -109,7 +167,7 @@ export class SlackClient {
     // and building it unconditionally keeps one code path instead of two.
     this.web = webClientFactory.create({
       token: config.target?.botToken,
-      timeoutMs: config.requestTimeoutMs,
+      signal: () => this.currentAttempt?.signal,
     });
   }
 
@@ -197,7 +255,7 @@ export class SlackClient {
   ): Promise<boolean> {
     for (let attempt = 1; ; attempt += 1) {
       try {
-        await call();
+        await this.attempt(call);
         return true;
       } catch (error) {
         const failure = describeSlackFailure(error, this.redact);
@@ -222,6 +280,56 @@ export class SlackClient {
         await sleep(delayMs);
       }
     }
+  }
+
+  /**
+   * Runs one attempt of `call`, racing it against `SLACK_REQUEST_TIMEOUT_MS`.
+   *
+   * This is the abort described in the class comment. `call()`'s own HTTP
+   * request is given a fresh `AbortController` for {@link currentAttempt} to
+   * publish, and the *instant* our timer — never axios's; that one is
+   * disabled, see `DefaultSlackWebClientFactory` — decides the attempt is
+   * late, `controller.abort()` runs before the rejection this method throws
+   * even reaches `withRetries`'s `catch`. There is no window in this method
+   * in which an attempt is known to have timed out but has not yet been
+   * aborted.
+   *
+   * The synthetic error on timeout carries `code: ErrorCode.RequestError` so
+   * `describeSlackFailure` classifies it exactly as it would classify axios's
+   * own timeout error: retryable, logged as `slack_webapi_request_error`.
+   */
+  private attempt(call: () => Promise<void>): Promise<void> {
+    const controller = new AbortController();
+    this.currentAttempt = controller;
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        controller.abort();
+        reject(
+          Object.assign(
+            new Error(`Slack request timed out after ${this.config.requestTimeoutMs}ms`),
+            {
+              code: ErrorCode.RequestError,
+            }
+          )
+        );
+      }, this.config.requestTimeoutMs);
+
+      call().then(
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
+    }).finally(() => {
+      if (this.currentAttempt === controller) {
+        this.currentAttempt = undefined;
+      }
+    });
   }
 
   /** Exponential: base, 2×base, 4×base … for attempts 1, 2, 3 … */

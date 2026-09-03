@@ -90,8 +90,13 @@ Three properties of that placement matter, and each is exercised:
   `slack.db.spec.ts`, the fake Slack starts a read on a **second connection** at
   the moment it receives the request; finding the cancellation already gone
   proves `COMMIT` had happened first.
-- **Exactly once.** `cancel` publishes outside the retry loop, so a transaction
-  that lost a race and was retried does not produce two messages.
+- **A retried transaction publishes once, not once per retry.** `cancel`
+  publishes outside the retry loop, so a transaction that lost a race and was
+  retried does not call `SlackClient` twice. This is a *domain-layer* property
+  — how many times `SlackClient.postToChannel` gets called per cancellation —
+  and a narrower one than "exactly once end to end": §4 covers what a single
+  call can still do at the HTTP layer, which is at-least-once, not
+  exactly-once.
 - **Nothing is awaited, but nothing is untracked either.** The publisher fires
   and forgets, so a user's cancellation does not wait on a Slack round trip and
   its backoff. Every detached promise is caught **and** held in
@@ -134,15 +139,47 @@ policy:
 | `429` with `Retry-After` | yes, after that many seconds | Slack said when to come back. |
 | `500` / `503` | yes, exponential backoff | The server's problem, and it may pass. |
 | `400` / `404` | no | Ours, and it will not. |
-| connection reset, timeout | yes | No answer at all. |
+| connection reset, timeout | yes | No answer *yet* — not the same as no request in flight; see below. |
 
 The SDK's own ten-retries-over-thirty-minutes policy is switched off
-(`retryConfig: { retries: 0 }`) so this one is ours and is testable.
+(`retryConfig: { retries: 0 }`) so this one is ours and is testable. So is the
+timeout itself: `DefaultSlackWebClientFactory` passes axios `timeout: 0` (no
+limit), and `SlackClient.withRetries` races every attempt against its own
+timer instead (`doc/decision/0132-*`).
 `slack-client.service.spec.ts` produces **every row of that table from a real
 HTTP server the real `WebClient` talks to** — a double that rejected on command
 would have proved only what the double was told to do. (`slack-failure.spec.ts`
 additionally exercises the same `400`/`404` classification against a hand-built
 error object, for the branch in isolation from any transport.)
+
+### At-least-once, not exactly-once — and what would make it worse
+
+A timeout means "no answer arrived within `SLACK_REQUEST_TIMEOUT_MS`", not "no
+request reached Slack". The moment `withRetries`' own timer decides an
+attempt has failed, it calls `AbortController.abort()` on that attempt's
+connection — *before* logging, *before* the backoff sleep, *before* the retry
+is sent — so a request that is still being classified as timed-out never has
+the chance to also be the one that lands after its retry already succeeded.
+
+That is the strongest guarantee a client-side timeout can honestly make. It is
+**not** exactly-once, and nothing running only on this side of the network
+could make it so: if the original request had already reached Slack and been
+accepted *before* the timer fired, aborting the connection afterwards cannot
+un-send it — Slack, not this process, decided the outcome first. A duplicate
+under this policy requires specifically that timing: a response slow enough to
+miss `SLACK_REQUEST_TIMEOUT_MS`, but for a request Slack ultimately accepts
+anyway. A shorter timeout makes that *more* likely, not less, by racing more
+of Slack's genuinely-slow-but-successful responses against the clock. This is
+also why the retry policy has no upper bound on `SLACK_RETRY_ATTEMPTS`'
+practical safety: the abort makes each attempt exclusive of the next, not the
+whole call exactly-once end to end — a promotion DM landing twice is possible,
+just not from a timed-out attempt whose connection is still open when the
+retry goes out. `slack-client.service.spec.ts`'s "a timed-out attempt that is
+still in flight when the retry fires" proves the mechanism: an oversized body
+that cannot finish sending before the timeout fires, held at a paused fake
+server, is confirmed to *never* complete after its retry has already
+succeeded — and confirmed, by deleting the abort, to complete and duplicate
+the request when the mechanism is absent.
 
 ### Where a failure shows up
 
