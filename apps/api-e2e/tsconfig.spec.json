@@ -5,5 +5,10 @@
     "module": "commonjs",
     "types": ["jest", "node"]
   },
-  "include": ["jest.config.ts", "src/**/*.ts"]
+  // Both spellings, as `libs/database` and `libs/shared-types` do. The config
+  // here is `jest.config.cts`; naming only `jest.config.ts` matched nothing, and
+  // TypeScript treats an unmatched `include` entry as no match rather than an
+  // error — so `api-e2e:typecheck` passed while never checking the file it named
+  // (final review M-1).
+  "include": ["jest.config.ts", "jest.config.cts", "src/**/*.ts"]
 }

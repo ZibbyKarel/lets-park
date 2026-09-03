@@ -12,6 +12,8 @@ import {
   MAX_OPEN_DAYS_BEFORE,
   MIN_OPEN_DAYS_BEFORE,
 } from '@lets-park/shared-types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SEED_PARKING_SPOTS, SEED_RESERVATION_WINDOW_SETTINGS, SEED_USERS } from './seed-data';
 
 /** The contract describes entities as returned; the seed supplies the writable half. */
@@ -23,7 +25,6 @@ const seedUserSchema = userSchema.pick({
   role: true,
   oktaId: true,
   active: true,
-  icsToken: true,
 });
 
 describe('seeded parking spots', () => {
@@ -71,7 +72,6 @@ describe('seeded users', () => {
   it.each([
     ['email', (): string[] => SEED_USERS.map((user) => user.email)],
     ['oktaId', (): string[] => SEED_USERS.map((user) => user.oktaId)],
-    ['icsToken', (): string[] => SEED_USERS.map((user) => user.icsToken)],
   ])('%s is unique across the seed', (_field, values) => {
     const list = values();
     expect(new Set(list).size).toBe(list.length);
@@ -95,6 +95,44 @@ describe('seeded users', () => {
   it('uses obviously-fake example.com identities', () => {
     for (const user of SEED_USERS) {
       expect(user.email.endsWith('@example.com')).toBe(true);
+    }
+  });
+});
+
+/**
+ * The Critical the final review found, and the assertion that keeps it fixed.
+ *
+ * This file used to check only that the four `icsToken` values were *unique* —
+ * which four sequential committed literals are. Uniqueness was never the
+ * property at stake: unguessability was. `calendar.controller.ts` is
+ * `@Public()` because the token in the path is the whole credential, so any
+ * token in the repository is a published one.
+ *
+ * The source text is read rather than only the exported objects, because the
+ * defect is a *committed literal*, and a literal is a fact about the file. An
+ * object-only assertion would pass again the moment somebody re-added the field
+ * under another name.
+ */
+describe('no ICS feed token is committed to the repository', () => {
+  const source = readFileSync(join(__dirname, 'seed-data.ts'), 'utf8');
+
+  it('declares no icsToken on a seeded account', () => {
+    for (const user of SEED_USERS) {
+      expect(Object.keys(user)).not.toContain('icsToken');
+    }
+    expect(source).not.toMatch(/^\s*icsToken\s*[:?]/m);
+  });
+
+  it('contains nothing shaped like a feed token', () => {
+    // Anything long enough to be a 32-byte secret in any of the encodings this
+    // project has used: base64url (43 chars), hex (64), or a UUID.
+    const secretShaped = [
+      /['"][A-Za-z0-9_-]{32,}['"]/,
+      /['"][0-9a-fA-F]{32,}['"]/,
+      /['"][0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}['"]/i,
+    ];
+    for (const pattern of secretShaped) {
+      expect(source).not.toMatch(pattern);
     }
   });
 });
