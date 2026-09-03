@@ -187,18 +187,43 @@ describe('useAdminWriteError', () => {
           (procedure as { '~orpc': { errorMap: Record<string, unknown> } })['~orpc'].errorMap
         ) as ErrorCode[];
 
+      // Every write, including the ones that map nothing new. Leaving one out
+      // of this list is how a gap becomes invisible.
       const expectations: [AdminWrite, ErrorCode[]][] = [
         ['userUpdate', declaredOn(contract.admin.user.update)],
         ['spotCreate', declaredOn(contract.admin.spot.create)],
         ['spotRename', declaredOn(contract.admin.spot.update)],
         ['spotRetire', declaredOn(contract.admin.spot.deactivate)],
+        ['spotRevive', declaredOn(contract.admin.spot.update)],
         ['windowUpdate', declaredOn(contract.admin.window.update)],
       ];
 
+      /**
+       * Codes a write deliberately leaves to the fallback, because it has no
+       * true sentence for them. Declared rather than quietly skipped: an
+       * exemption that has to be written down is one somebody can argue with.
+       */
+      const unmapped: Partial<Record<AdminWrite, readonly ErrorCode[]>> = {
+        // Switching a spot back on collides with nothing (`SpotsService.update`
+        // only checks reservations on the way off) and sends neither a label
+        // nor a group, so neither code has a cause to name.
+        spotRevive: ['CONFLICT', 'VALIDATION_FAILED'],
+      };
+
       for (const [write, codes] of expectations) {
         expect(codes.length).toBeGreaterThan(0);
+        const exempt = unmapped[write] ?? [];
         for (const code of codes) {
-          expect(ADMIN_WRITE_MESSAGES[write].byCode[code]).toBeDefined();
+          if (exempt.includes(code)) {
+            expect(ADMIN_WRITE_MESSAGES[write].byCode[code]).toBeUndefined();
+          } else {
+            expect(ADMIN_WRITE_MESSAGES[write].byCode[code]).toBeDefined();
+          }
+        }
+        // An exemption for a code the procedure no longer declares is dead
+        // text, and dead text is how a stale reason outlives its reason.
+        for (const code of exempt) {
+          expect(codes).toContain(code);
         }
       }
     });

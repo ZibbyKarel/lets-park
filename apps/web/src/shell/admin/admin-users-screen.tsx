@@ -151,7 +151,15 @@ export function AdminUsersScreen({
             <Switch
               tone="success"
               checked={user.active}
-              aria-label={t('usersActiveToggleLabel', { name: user.name })}
+              // The reason a switch is disabled belongs in its name, not only
+              // in the `title` above: `title` is announced inconsistently and
+              // never appears on touch, and the people who most need to know
+              // why the control refuses them are the ones who cannot hover.
+              aria-label={
+                isSelf
+                  ? t('usersSelfActiveToggleLabel', { name: user.name })
+                  : t('usersActiveToggleLabel', { name: user.name })
+              }
               disabled={isSelf || isRowBusy(pendingChange, user.id)}
               onCheckedChange={(next) => onActiveChange(user.id, next)}
             />

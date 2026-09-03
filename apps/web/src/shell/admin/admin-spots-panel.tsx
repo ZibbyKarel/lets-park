@@ -92,17 +92,31 @@ export function AdminSpotsPanel() {
   /**
    * Clears the previous failure and records what is being attempted now.
    *
-   * The `reset()` calls matter: without them a mutation that failed once keeps
-   * its `error` forever, so the next successful write would still be rendered
-   * under the old sentence. All three are reset, not just the one about to run,
-   * because `writeError` reads whichever of them is non-null.
+   * The discard matters: without it a mutation that failed once keeps its
+   * `error` forever, so the next successful write would still be rendered under
+   * the old sentence.
    */
   function startWrite(write: AdminWrite, spotId: string | null) {
+    discardFailure();
+    setLastWrite(write);
+    setPendingSpotId(spotId);
+  }
+
+  /**
+   * Forgets the last failure entirely.
+   *
+   * A mutation keeps its `error` until it is cleared, and all three are cleared
+   * rather than only the one about to run, because `writeError` reads whichever
+   * of them is non-null. The screen calls this whenever its dialog changes: a
+   * failure describes one attempt, and an attempt the admin has walked away
+   * from must not follow them into the next dialog and be read as its own. See
+   * `doc/decision/0167-*`.
+   */
+  function discardFailure() {
     createSpot.reset();
     updateSpot.reset();
     deactivateSpot.reset();
-    setLastWrite(write);
-    setPendingSpotId(spotId);
+    setLastWrite(null);
   }
 
   return (
@@ -133,6 +147,7 @@ export function AdminSpotsPanel() {
       isSaving={createSpot.isPending || updateSpot.isPending || deactivateSpot.isPending}
       writeError={writeError}
       writeErrorFrom={writeError == null ? null : lastWrite}
+      onDiscardFailure={discardFailure}
     />
   );
 }

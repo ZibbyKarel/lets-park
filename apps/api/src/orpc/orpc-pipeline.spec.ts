@@ -14,10 +14,16 @@
  *   `JwtAuthGuard`; whether it actually fires for a procedure depends on the
  *   decorator being on the route that oRPC's handler sits behind.
  * - **The RPC envelope on a rejection.** A domain error raised inside a
- *   procedure is serialised by oRPC, while one raised by a guard is serialised
- *   by `ContractExceptionFilter`. Both must arrive in the `{ json, meta }`
- *   wrapper `@orpc/client` reads, or the client silently substitutes a code
- *   derived from the HTTP status (`doc/decision/0039-*`).
+ *   procedure is serialised by oRPC, and so is a `FORBIDDEN` from `RolesGuard`,
+ *   which `ContractExceptionFilter` maps: both arrive in the `{ json, meta }`
+ *   wrapper `@orpc/client` reads, and the 403 assertions below check that
+ *   shape, not just the status.
+ *
+ *   A **401** does not. An unauthenticated request comes back as Nest's own
+ *   `{"statusCode":401,"message":"Unauthorized"}`, with no `{ json, meta }`
+ *   wrapper, so the client falls back to deriving a code from the HTTP status
+ *   (`doc/decision/0039-*`). Stated here rather than glossed: this suite
+ *   asserts the envelope for 403 and only the status for 401.
  *
  * The database is `PrismaDouble` and the issuer is the same in-process OIDC
  * server `auth-pipeline.spec.ts` uses, so this suite runs anywhere — what it is

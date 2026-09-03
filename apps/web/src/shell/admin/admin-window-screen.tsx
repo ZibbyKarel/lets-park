@@ -42,8 +42,15 @@ import { ScreenError, ScreenLoading } from '../screen-state';
 import { useAdminWriteError } from './admin-errors';
 import { LockModeChoice } from './lock-mode-choice';
 
-/** Badge colour per state, matching the design's green / yellow / grey pills. */
-const STATE_TONE: Record<MonthLockState, BadgeTone> = {
+/**
+ * Badge colour per state, straight off `05-admin-window.png`: `Otevřeno` is a
+ * green pill, `Uzamčeno` a yellow one, `Zatím neotevřeno` a grey one.
+ *
+ * Exported so a spec can pin it. The colour is not decoration on this screen —
+ * it is the at-a-glance signal an admin reads before the words, so a locked
+ * month rendered green is a lie that no amount of correct text undoes.
+ */
+export const STATE_TONE: Record<MonthLockState, BadgeTone> = {
   OPEN: 'success',
   LOCKED: 'warning',
   NOT_YET_OPEN: 'neutral',

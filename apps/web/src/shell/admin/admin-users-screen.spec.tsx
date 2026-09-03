@@ -220,20 +220,33 @@ describe('AdminUsersScreen', () => {
   });
 
   describe('an admin cannot switch off their own account', () => {
+    // The switch on the viewer's own row names its own refusal. `title` alone
+    // would not: screen readers announce it inconsistently and touch devices
+    // never show it, so the people most likely to be stuck by a dead control
+    // are the ones least likely to be told why.
+    const OWN_SWITCH = 'Aktivní účet — Karel Zíbar · vlastní účet nelze deaktivovat';
+
     it('disables the active switch on the viewer’s own row', () => {
       renderScreen({ viewerId: KAREL.id });
 
+      expect(within(rowOf(KAREL)).getByRole('switch', { name: OWN_SWITCH })).toBeDisabled();
+    });
+
+    it('says in the switch’s own name why it refuses', () => {
+      renderScreen({ viewerId: KAREL.id });
+
+      // Nobody else's row carries the explanation, and this row no longer
+      // carries the plain label.
+      expect(within(rowOf(KAREL)).getByRole('switch', { name: OWN_SWITCH })).toBeInTheDocument();
       expect(
-        within(rowOf(KAREL)).getByRole('switch', { name: 'Aktivní účet — Karel Zíbar' })
-      ).toBeDisabled();
+        within(rowOf(ADELA)).queryByRole('switch', { name: /nelze deaktivovat/u })
+      ).not.toBeInTheDocument();
     });
 
     it('reports nothing when that switch is pressed', async () => {
       const { onActiveChange, user } = renderScreen({ viewerId: KAREL.id });
 
-      await user.click(
-        within(rowOf(KAREL)).getByRole('switch', { name: 'Aktivní účet — Karel Zíbar' })
-      );
+      await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_SWITCH }));
 
       expect(onActiveChange).not.toHaveBeenCalled();
     });

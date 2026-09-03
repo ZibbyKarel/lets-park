@@ -57,3 +57,20 @@ There is no add field, no remove ×, and no button.
 - **If categories ever do become data**, this band is where the editing UI goes,
   and `CategoryBand`'s `PARKING_GROUPS` iteration becomes a fetched list. The
   sentence `spotsCategoriesFixed` is the marker to delete.
+
+## Re-read against the design, fix round 1
+
+Reopened `04-admin-spots.png`: it draws `IT 4 ×`, `Shared 5 ×`, a
+`Nová kategorie` field and a `Přidat kategorii` button — three controls, all
+absent here. The premise is unchanged and so is the conclusion:
+
+- `PARKING_GROUPS` is a `const` tuple in `libs/shared-types`, `parkingGroupSchema`
+  is `z.enum(PARKING_GROUPS)`, and Prisma has it as a Postgres enum. Adding a
+  category needs a migration, a contract change and a deploy. There is no
+  procedure any of those three controls could call.
+- Shipping them anyway would mean a text field that discards what is typed and
+  an `×` that does nothing — a worse answer to "can I add a category?" than the
+  sentence that says no.
+
+**Unchanged.** This is a product decision, not a code fix: if categories should
+be data, that is a schema change and a task of its own.

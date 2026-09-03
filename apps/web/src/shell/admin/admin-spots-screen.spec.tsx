@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import type { ErrorCode, ParkingSpot } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
+import type { AdminWrite } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 import type { AdminSpotsScreenProps } from './admin-spots-screen';
 
@@ -56,30 +58,35 @@ const TODAY: ReadonlyMap<string, SpotToday> = new Map([
   [SHARED.id, { holderName: 'Lucie Marková' }],
 ]);
 
-function renderScreen(overrides: Partial<AdminSpotsScreenProps> = {}) {
-  const onRetry = jest.fn();
-  const onCreate = jest.fn<Promise<void>, [unknown]>().mockResolvedValue(undefined);
-  const onSave = jest.fn<Promise<void>, [unknown]>().mockResolvedValue(undefined);
-  const onActiveChange = jest.fn();
-  const onDeactivate = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
+function makeProps(overrides: Partial<AdminSpotsScreenProps> = {}) {
+  const spies = {
+    onRetry: jest.fn(),
+    onCreate: jest.fn<Promise<void>, [unknown]>().mockResolvedValue(undefined),
+    onSave: jest.fn<Promise<void>, [unknown]>().mockResolvedValue(undefined),
+    onActiveChange: jest.fn(),
+    onDeactivate: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
+    onDiscardFailure: jest.fn(),
+  };
 
   const props: AdminSpotsScreenProps = {
     isPending: false,
     isError: false,
     error: null,
-    onRetry,
     spots: [TAKEN, FREE, SHARED, RETIRED],
     todayBySpotId: TODAY,
-    onCreate,
-    onSave,
-    onActiveChange,
-    onDeactivate,
     pendingSpotId: null,
     isSaving: false,
     writeError: null,
     writeErrorFrom: null,
+    ...spies,
     ...overrides,
   };
+
+  return { props, spies };
+}
+
+function renderScreen(overrides: Partial<AdminSpotsScreenProps> = {}) {
+  const { props, spies } = makeProps(overrides);
 
   render(
     <IntlProvider>
@@ -87,7 +94,49 @@ function renderScreen(overrides: Partial<AdminSpotsScreenProps> = {}) {
     </IntlProvider>
   );
 
-  return { onRetry, onCreate, onSave, onActiveChange, onDeactivate, user: userEvent.setup() };
+  return { ...spies, user: userEvent.setup() };
+}
+
+/**
+ * The screen with the panel's failure bookkeeping stood up around it: a write
+ * that fails records the failure, and `onDiscardFailure` really throws it away
+ * — which is what `admin-spots-panel.tsx` does through `reset()`.
+ *
+ * Needed because the screen alone is a pure function of its props, and the
+ * defect this exists to pin — a failure outliving the attempt it belongs to —
+ * only takes shape across two clicks.
+ */
+function renderFailingWrites(failure: unknown) {
+  const { props } = makeProps();
+
+  function Harness() {
+    const [live, setLive] = useState<{ error: unknown; from: AdminWrite } | null>(null);
+
+    const fails = (from: AdminWrite) => async () => {
+      setLive({ error: failure, from });
+      throw failure;
+    };
+
+    return (
+      <AdminSpotsScreen
+        {...props}
+        onCreate={fails('spotCreate')}
+        onSave={fails('spotRename')}
+        onDeactivate={fails('spotRetire')}
+        writeError={live === null ? null : live.error}
+        writeErrorFrom={live === null ? null : live.from}
+        onDiscardFailure={() => setLive(null)}
+      />
+    );
+  }
+
+  render(
+    <IntlProvider>
+      <Harness />
+    </IntlProvider>
+  );
+
+  return userEvent.setup();
 }
 
 /**
@@ -425,6 +474,134 @@ describe('AdminSpotsScreen', () => {
       renderScreen({ writeError: null, writeErrorFrom: null });
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('a failure the admin has walked away from', () => {
+    const RETIRE_REFUSED = csMessages.admin.spotsDeleteConflict;
+    const DUPLICATE_LABEL = csMessages.admin.spotsDuplicateLabel;
+
+    it('is discarded whenever the dialog changes, so it cannot outlive its own attempt', async () => {
+      const { onDiscardFailure, user } = renderScreen();
+
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+      expect(onDiscardFailure).toHaveBeenCalledTimes(1);
+
+      await user.click(inDialog().getByRole('button', { name: 'Zrušit' }));
+      expect(onDiscardFailure).toHaveBeenCalledTimes(2);
+
+      await user.click(within(rowOf(TAKEN)).getByRole('button', { name: 'Smazat' }));
+      expect(onDiscardFailure).toHaveBeenCalledTimes(3);
+    });
+
+    it('is gone when the same dialog is opened a second time', async () => {
+      // The case the origin table cannot catch: create → create, where the
+      // stale sentence and a fresh one would come from the very same surface.
+      // Only actually forgetting the failure keeps the reopened form clean.
+      const user = renderFailingWrites(await failureWithCode('CONFLICT'));
+
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+      await user.type(inDialog().getByLabelText('Štítek'), 'E2.92');
+      await user.click(inDialog().getByRole('button', { name: 'Uložit' }));
+      expect(await inDialog().findByText(DUPLICATE_LABEL)).toBeInTheDocument();
+
+      await user.click(inDialog().getByRole('button', { name: 'Zrušit' }));
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+
+      expect(inDialog().queryByText(DUPLICATE_LABEL)).not.toBeInTheDocument();
+      expect(screen.queryByText(DUPLICATE_LABEL)).not.toBeInTheDocument();
+    });
+
+    it('is gone from the next dialog after a refused "Smazat" — the reported defect', async () => {
+      // An admin is refused a retire, cancels, then opens "Přidat místo".
+      // The empty form used to greet them with "Na tomto místě jsou rezervace
+      // ode dneška dál." before a character was typed.
+      const user = renderFailingWrites(await failureWithCode('CONFLICT'));
+
+      await user.click(within(rowOf(TAKEN)).getByRole('button', { name: 'Smazat' }));
+      const confirm = inDialog().getAllByRole('button', { name: 'Smazat' }).at(-1);
+      await user.click(confirm as HTMLElement);
+      expect(await inDialog().findByText(RETIRE_REFUSED)).toBeInTheDocument();
+
+      await user.click(inDialog().getByRole('button', { name: 'Zrušit' }));
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+
+      expect(inDialog().queryByText(RETIRE_REFUSED)).not.toBeInTheDocument();
+      expect(screen.queryByText(RETIRE_REFUSED)).not.toBeInTheDocument();
+    });
+
+    it('never appears under a dialog that could not have caused it', async () => {
+      // The second guard, tested where the first is deliberately inert: these
+      // props never change, so the discard does nothing and only `WRITE_ORIGINS`
+      // stands between a refused retire and the empty "Přidat místo" form.
+      const { user } = renderScreen({
+        writeError: await failureWithCode('CONFLICT'),
+        writeErrorFrom: 'spotRetire',
+      });
+
+      expect(await screen.findByText(RETIRE_REFUSED)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+
+      expect(inDialog().queryByText(RETIRE_REFUSED)).not.toBeInTheDocument();
+      expect(screen.queryByText(RETIRE_REFUSED)).not.toBeInTheDocument();
+    });
+
+    it('never appears in the delete confirmation when it came from the create form', async () => {
+      const { user } = renderScreen({
+        writeError: await failureWithCode('CONFLICT'),
+        writeErrorFrom: 'spotCreate',
+      });
+
+      // A create failure has no business above the table either: nothing
+      // outside the form can create a spot.
+      expect(screen.queryByText(DUPLICATE_LABEL)).not.toBeInTheDocument();
+
+      await user.click(within(rowOf(TAKEN)).getByRole('button', { name: 'Smazat' }));
+
+      expect(inDialog().queryByText(DUPLICATE_LABEL)).not.toBeInTheDocument();
+    });
+  });
+
+  it('names the actions column for a screen reader while leaving it blank on screen', () => {
+    // `04-admin-spots.png` draws that header empty. A column with no header is
+    // still a column with no name to anyone reading the table through one, so
+    // the name stays and only the pixels go.
+    renderScreen();
+
+    const header = screen.getByRole('columnheader', { name: 'Akce' });
+    expect(within(header).getByText('Akce')).toHaveClass('sr-only');
+  });
+
+  describe('what a write in flight freezes', () => {
+    it('disables the written row’s buttons, not only its switch', () => {
+      renderScreen({ pendingSpotId: TAKEN.id });
+
+      const written = within(rowOf(TAKEN));
+      expect(written.getByRole('button', { name: 'Upravit' })).toBeDisabled();
+      expect(written.getByRole('button', { name: 'Smazat' })).toBeDisabled();
+
+      const untouched = within(rowOf(FREE));
+      expect(untouched.getByRole('button', { name: 'Upravit' })).toBeEnabled();
+      expect(untouched.getByRole('button', { name: 'Smazat' })).toBeEnabled();
+    });
+
+    it('leaves a dialog alone while some other row is being written', async () => {
+      const { user } = renderScreen({ isSaving: true, pendingSpotId: TAKEN.id });
+
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+
+      // "Zrušit" must stay live: an admin who cannot cancel a form they never
+      // submitted is stuck on somebody else's request.
+      expect(inDialog().getByRole('button', { name: 'Zrušit' })).toBeEnabled();
+    });
+
+    it('does hold the dialog while the dialog’s own write is in flight', async () => {
+      const { user } = renderScreen({ isSaving: true, pendingSpotId: null });
+
+      await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
+
+      expect(inDialog().getByRole('button', { name: 'Zrušit' })).toBeDisabled();
     });
   });
 

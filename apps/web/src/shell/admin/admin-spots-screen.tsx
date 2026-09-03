@@ -91,6 +91,16 @@ export interface AdminSpotsScreenProps {
    * cannot say which one was asked for. See `./admin-errors.ts`.
    */
   readonly writeErrorFrom: AdminWrite | null;
+  /**
+   * Throws away whatever `writeError` holds.
+   *
+   * Called on every dialog change — opened, swapped, cancelled or closed after
+   * a success. A failure describes one attempt at one spot; the moment the
+   * admin moves to a different dialog it describes nothing on screen, and
+   * leaving it in state is how it gets re-shown under the wrong heading. See
+   * `doc/decision/0167-*`.
+   */
+  readonly onDiscardFailure: () => void;
 }
 
 /** Field-level validation. The contract re-checks the same shape on arrival. */
@@ -105,6 +115,32 @@ type SpotDialog =
   | { readonly kind: 'create' }
   | { readonly kind: 'edit'; readonly spot: ParkingSpot }
   | { readonly kind: 'delete'; readonly spot: ParkingSpot };
+
+/** A surface that can show a failure: the table, or one of the three dialogs. */
+type FailureHome = 'table' | SpotDialog['kind'];
+
+/**
+ * Which surfaces could have started each write.
+ *
+ * A second, independent guard behind `onDiscardFailure`. Discarding is what
+ * *should* keep a stale sentence off the next dialog; this is what makes the
+ * bad case unrepresentable even if a discard is ever missed — a `spotRetire`
+ * failure has no route to the "Nové parkovací místo" form, because nothing in
+ * that form can retire a spot.
+ *
+ * A write with no entry (`userUpdate`, `windowUpdate` — neither reaches this
+ * screen) shows nowhere. Silence is the right failure direction for a sentence
+ * whose origin this screen cannot account for.
+ */
+const WRITE_ORIGINS: Partial<Record<AdminWrite, readonly FailureHome[]>> = {
+  spotCreate: ['create'],
+  // Both the edit modal's "Uložit" and the row's inline category picker.
+  spotRename: ['edit', 'table'],
+  // Both the "Smazat" confirmation and the row's switch being turned off.
+  spotRetire: ['delete', 'table'],
+  // Only the row's switch: no dialog turns a spot back on.
+  spotRevive: ['table'],
+};
 
 export function AdminSpotsScreen({
   isPending,
@@ -121,10 +157,21 @@ export function AdminSpotsScreen({
   isSaving,
   writeError,
   writeErrorFrom,
+  onDiscardFailure,
 }: AdminSpotsScreenProps) {
   const t = useTranslations('admin');
   const describeWriteError = useAdminWriteError();
   const [dialog, setDialog] = useState<SpotDialog | null>(null);
+
+  /**
+   * The only way the dialog changes. Every open, swap, cancel and
+   * close-on-success goes through here so that the failure on screen is
+   * discarded with it — see `onDiscardFailure`.
+   */
+  function changeDialog(next: SpotDialog | null) {
+    onDiscardFailure();
+    setDialog(next);
+  }
 
   const all = spots ?? [];
 
@@ -140,15 +187,35 @@ export function AdminSpotsScreen({
    * is what puts the sentence where the user is actually looking.
    *
    * Returns `null` for a `where` that is not the current home, so each call
-   * site renders at most one `Toast`.
+   * site renders at most one `Toast`, and `null` for a failure the current
+   * surface could not have produced (`WRITE_ORIGINS`).
    */
   function failureShownIn(where: 'table' | 'dialog'): string | null {
     if (writeError == null || writeErrorFrom === null) {
       return null;
     }
-    const home = dialog === null ? 'table' : 'dialog';
-    return home === where ? describeWriteError(writeErrorFrom, writeError) : null;
+    const home: FailureHome = dialog?.kind ?? 'table';
+    if (!(WRITE_ORIGINS[writeErrorFrom] ?? []).includes(home)) {
+      return null;
+    }
+    return (home === 'table' ? 'table' : 'dialog') === where
+      ? describeWriteError(writeErrorFrom, writeError)
+      : null;
   }
+
+  /**
+   * Whether the write in flight belongs to the open dialog.
+   *
+   * `isSaving` is "any write anywhere", so using it directly put the dialog's
+   * "Uložit" into its loading state — and disabled "Zrušit" — because an
+   * unrelated row switch was mid-flight. `pendingSpotId` is the row scope the
+   * panel already keeps: `null` for a create, the spot's id for everything
+   * else.
+   */
+  const dialogSaving =
+    isSaving &&
+    dialog !== null &&
+    pendingSpotId === (dialog.kind === 'create' ? null : dialog.spot.id);
 
   const columns: DataTableColumn<ParkingSpot>[] = [
     {
@@ -221,7 +288,7 @@ export function AdminSpotsScreen({
     },
     {
       id: 'actions',
-      header: t('spotsColumnActions'),
+      header: <span className="sr-only">{t('spotsColumnActions')}</span>,
       align: 'end',
       width: '210px',
       cell: (spot) => (
@@ -229,14 +296,14 @@ export function AdminSpotsScreen({
           <Button
             variant="secondary"
             disabled={pendingSpotId === spot.id}
-            onClick={() => setDialog({ kind: 'edit', spot })}
+            onClick={() => changeDialog({ kind: 'edit', spot })}
           >
             {t('spotsEdit')}
           </Button>
           <Button
             variant="danger"
             disabled={pendingSpotId === spot.id}
-            onClick={() => setDialog({ kind: 'delete', spot })}
+            onClick={() => changeDialog({ kind: 'delete', spot })}
           >
             {t('spotsDelete')}
           </Button>
@@ -266,7 +333,7 @@ export function AdminSpotsScreen({
         title={t('spotsTitle')}
         description={t('spotsDescription')}
         actions={
-          <Button variant="primary" size="lg" onClick={() => setDialog({ kind: 'create' })}>
+          <Button variant="primary" size="lg" onClick={() => changeDialog({ kind: 'create' })}>
             {t('spotsAdd')}
           </Button>
         }
@@ -279,17 +346,20 @@ export function AdminSpotsScreen({
 
       {dialog?.kind === 'create' || dialog?.kind === 'edit' ? (
         <SpotFormDialog
+          // A fresh form per spot. Without it an edit→edit transition would
+          // reuse the mounted form and its previous `defaultValues`.
+          key={dialog.kind === 'edit' ? dialog.spot.id : 'create'}
           spot={dialog.kind === 'edit' ? dialog.spot : null}
           errorMessage={failureShownIn('dialog')}
-          saving={isSaving}
-          onCancel={() => setDialog(null)}
+          saving={dialogSaving}
+          onCancel={() => changeDialog(null)}
           onSubmit={async (values) => {
             if (dialog.kind === 'edit') {
               await onSave({ id: dialog.spot.id, ...values });
             } else {
               await onCreate(values);
             }
-            setDialog(null);
+            changeDialog(null);
           }}
         />
       ) : null}
@@ -301,20 +371,20 @@ export function AdminSpotsScreen({
         confirmLabel={t('spotsDeleteConfirm')}
         cancelLabel={t('spotsCancel')}
         tone="danger"
-        loading={isSaving}
+        loading={dialogSaving}
         onConfirm={() => {
           if (dialog?.kind !== 'delete') {
             return;
           }
           void onDeactivate(dialog.spot.id).then(
-            () => setDialog(null),
+            () => changeDialog(null),
             () => {
               // Left open on purpose: the sentence below is the retry
               // affordance, and closing would hide why nothing happened.
             }
           );
         }}
-        onCancel={() => setDialog(null)}
+        onCancel={() => changeDialog(null)}
       >
         {dialog?.kind === 'delete' ? <DeleteError message={failureShownIn('dialog')} /> : null}
       </ConfirmDialog>

@@ -214,7 +214,14 @@ export interface CzechAdminMessages {
   readonly usersColumnActive: string;
   readonly usersAdminToggleLabel: string;
   readonly usersActiveToggleLabel: string;
-  /** Why an admin's own "aktivní" switch is disabled. */
+  /**
+   * The same switch on the viewer's own row, where it is disabled. The reason
+   * is folded into the accessible name rather than left to the `title`
+   * attribute, which screen readers announce inconsistently and touch devices
+   * never show at all.
+   */
+  readonly usersSelfActiveToggleLabel: string;
+  /** Why an admin's own "aktivní" switch is disabled. Shown on hover. */
   readonly usersSelfActiveHint: string;
   readonly usersEmpty: string;
   readonly usersEmptySearch: string;
@@ -410,6 +417,7 @@ export const csMessages: CzechMessages = {
     usersColumnActive: 'Aktivní',
     usersAdminToggleLabel: 'Admin role — {name}',
     usersActiveToggleLabel: 'Aktivní účet — {name}',
+    usersSelfActiveToggleLabel: 'Aktivní účet — {name} · vlastní účet nelze deaktivovat',
     usersSelfActiveHint: 'Vlastní účet nelze deaktivovat.',
     usersEmpty: 'Žádní uživatelé',
     usersEmptySearch: 'Hledání nic nenašlo',

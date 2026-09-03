@@ -1,7 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import type { MonthWindowOverview } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
-import { WindowBanner } from './window-banner';
+import { STATE_GLYPH, STATE_TONE, WindowBanner } from './window-banner';
+
+/**
+ * One class per tone, read off `toast.tsx`'s own `TONE_CLASSES`.
+ *
+ * Asserting a class is asserting an implementation detail of the primitive, and
+ * that is deliberate: the tone is a *colour*, the design uses the colour as the
+ * signal, and the only thing a jsdom test can see of a colour is the class that
+ * carries it. A rename in `toast.tsx` failing here is the correct outcome — it
+ * is a change to what an admin sees.
+ */
+const TONE_CLASS = {
+  success: 'bg-brand-green-100',
+  warning: 'bg-brand-yellow-100',
+  neutral: 'bg-bg',
+} as const;
 
 function aWindow(overrides: Partial<MonthWindowOverview> = {}): MonthWindowOverview {
   return {
@@ -80,6 +95,37 @@ describe('WindowBanner', () => {
     renderBanner({ month: '2026-08', windowFrom: '2026-07-25', windowTo: '2026-07-31' });
 
     expect(screen.getByText(/^Rezervace na srpen 2026 /u)).toBeInTheDocument();
+  });
+
+  describe('the colour and glyph, which are the signal before the words are', () => {
+    // `06-admin-overview.png` paints the open banner green. Yellow means locked
+    // and grey means not open yet, matching the month pills in
+    // `05-admin-window.png`. A locked month drawn green is a lie an admin acts
+    // on without reading a word.
+    const DESIGN_TONE = { OPEN: 'success', LOCKED: 'warning', NOT_YET_OPEN: 'neutral' } as const;
+    const DESIGN_GLYPH = { OPEN: '✓', LOCKED: '🔒', NOT_YET_OPEN: '…' } as const;
+
+    it('maps each state to the colour the design gives it', () => {
+      expect(STATE_TONE).toEqual(DESIGN_TONE);
+    });
+
+    it('maps each state to its own glyph', () => {
+      expect(STATE_GLYPH).toEqual(DESIGN_GLYPH);
+    });
+
+    it.each(['OPEN', 'LOCKED', 'NOT_YET_OPEN'] as const)(
+      'paints a %s month in that colour, and marks it with that glyph',
+      (state) => {
+        renderBanner({ state });
+
+        // Not `STATE_TONE[state]`: reading the map the render used would pass
+        // whatever the map said, which is the mutant this exists to catch.
+        expect(screen.getByRole('status').className.split(/\s+/u)).toContain(
+          TONE_CLASS[DESIGN_TONE[state]]
+        );
+        expect(screen.getByText(DESIGN_GLYPH[state])).toBeInTheDocument();
+      }
+    );
   });
 
   it('is announced politely, as a status rather than an alert', () => {

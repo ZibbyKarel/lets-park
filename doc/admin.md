@@ -50,6 +50,15 @@ apps/web/src/
     admin-window-screen.tsx  / admin-window-panel.tsx
 ```
 
+The screens have a spec each; the four panels share one
+(`admin-panels.spec.tsx`), which runs the real screens and the real
+`@lets-park/query` against a fake `api` object. What only that spec can see is
+everything *between* a screen and the contract: which procedure a control calls,
+what input it sends, which `AdminWrite` a failure is attributed to, what is
+invalidated afterwards, and that `viewerId` really comes from `me.get` — the
+screens take it as a prop, so nothing on their side notices if a panel stops
+supplying it and the self-deactivation guard quietly disappears.
+
 Every tab is split into a **screen** (presentational, every value a prop, every
 rule testable with nothing but an `IntlProvider`) and a **panel** (wiring: the
 queries, the mutations, the router). Same split, and same reason, as
@@ -96,6 +105,12 @@ switch, `Upravit` (a `Modal` form) and `Smazat` (a `ConfirmDialog`).
   `doc/decision/0164-*`.
 - A spot missing from the day overview (every inactive spot is) shows `—`, not
   "Volné" — a claim about a spot nobody can book would be wrong.
+- The design's third value for that column, `Upravuje Jana Dvořáková`, is not
+  implemented: it is presence, it lives on the realtime channel, and no admin
+  tab subscribes to one. `doc/decision/0168-*`.
+- The actions column keeps the accessible name `Akce` but hides it
+  (`sr-only`), because the design draws that header blank and a nameless column
+  is still nameless to a screen reader.
 
 ### Rezervační okno
 
@@ -137,6 +152,18 @@ about weekends and holidays, which is nonsense next to a role switch.
 A failure is rendered inside whichever dialog is open, and above the table when
 none is: a dialog is a modal, so a message printed behind one is a message
 nobody reads.
+
+**A failure belongs to one attempt and dies with it.** Changing the open dialog
+discards it (`onDiscardFailure` → the panel's `reset()`), and `WRITE_ORIGINS`
+refuses to render a sentence on a surface that could not have produced it.
+Without the first, a refused `Smazat` greeted the admin inside the next empty
+"Přidat místo" form; without the second, forgetting one discard would bring the
+same shape back. `doc/decision/0167-*`.
+
+**Colour is copy here.** The month badges and the window banner take their tone
+from `STATE_TONE`, exported from both renderers so a spec can pin the mapping
+against the design — `Otevřeno` green, `Uzamčeno` yellow, `Zatím neotevřeno`
+grey. A locked month drawn green is read as open before a word of it is.
 
 ## Czech copy
 

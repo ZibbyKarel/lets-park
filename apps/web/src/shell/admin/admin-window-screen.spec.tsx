@@ -4,7 +4,7 @@ import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import type { ErrorCode, MonthWindowOverview } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
-import { AdminWindowScreen } from './admin-window-screen';
+import { AdminWindowScreen, STATE_TONE } from './admin-window-screen';
 import type { AdminWindowScreenProps } from './admin-window-screen';
 
 /** See `admin-errors.spec.tsx` — a real `RPCLink` failure, only `fetch` stubbed. */
@@ -270,6 +270,43 @@ describe('AdminWindowScreen', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  });
+
+  describe('the colour of a month badge, which is read before its label is', () => {
+    /**
+     * One class per tone, read off `badge.tsx`'s own `TONE_CLASSES`. Asserting
+     * a class asserts an implementation detail of the primitive on purpose: the
+     * tone is a colour, `05-admin-window.png` uses the colour as the signal,
+     * and a class is all a jsdom test can see of one.
+     */
+    const TONE_CLASS = {
+      success: 'bg-brand-green-100',
+      warning: 'bg-brand-yellow-100',
+      neutral: 'bg-bg-muted',
+    } as const;
+
+    // `Otevřeno` green, `Uzamčeno` yellow, `Zatím neotevřeno` grey.
+    const DESIGN_TONE = { OPEN: 'success', LOCKED: 'warning', NOT_YET_OPEN: 'neutral' } as const;
+    const LABEL = {
+      OPEN: 'Otevřeno',
+      LOCKED: 'Uzamčeno',
+      NOT_YET_OPEN: 'Zatím neotevřeno',
+    } as const;
+
+    it('maps each state to the colour the design gives it', () => {
+      expect(STATE_TONE).toEqual(DESIGN_TONE);
+    });
+
+    it.each(['OPEN', 'LOCKED', 'NOT_YET_OPEN'] as const)('paints a %s month in it', (state) => {
+      renderScreen({ months: [{ ...SEPTEMBER, state }] });
+
+      // The expectation is the design's colour, not `STATE_TONE[state]` —
+      // reading back the map the render used would agree with any mutation of
+      // it, which is exactly the survivor this replaces.
+      expect(screen.getByText(LABEL[state]).className.split(/\s+/u)).toContain(
+        TONE_CLASS[DESIGN_TONE[state]]
+      );
+    });
   });
 
   it('offers a retry when the settings could not be loaded', async () => {

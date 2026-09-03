@@ -62,3 +62,23 @@ It does **not** render the painted car grid that
 - **The date is fixed to today until Task 25 lands.** An admin cannot yet look
   at tomorrow from this tab. The prop is already there; only the control is
   missing.
+
+## Re-read against the designs, fix round 1
+
+Asked to look again with fresh eyes, I reopened `06-admin-overview.png` and
+`01-lot-admin.png`. The premise holds and I would make the same call:
+
+- `06` carries **no tab strip and no "Správa" heading**. Its eyebrow is
+  `PŘEHLED PARKOVIŠTĚ`, not `ADMINISTRACE`. It is the lot screen as an admin
+  sees it, filed under an admin-sounding name — not a panel that belongs inside
+  `/sprava`.
+- The tab does reproduce everything of `06` above the grid: the eyebrow, the
+  long Czech date, the two count pills, the green banner. The divergence is the
+  grid itself, and one button — `Hromadná rezervace` becomes
+  `Otevřít parkoviště`, because bulk booking is the lot screen's own action and
+  duplicating its entry point here would be duplicating the flow behind it.
+- Two implementations of one painted canvas is the outcome I was avoiding, and
+  it is still the outcome of the alternative. If the product wants the grid in
+  the tab, the fix is to render Task 24's component here.
+
+**Unchanged.**

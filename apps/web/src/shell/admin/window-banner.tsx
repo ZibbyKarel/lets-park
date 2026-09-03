@@ -29,15 +29,23 @@ import {
 } from '@lets-park/i18n';
 import type { MonthLockState } from '@lets-park/i18n';
 
-/** Colour per state, matching the design's green / yellow / grey bands. */
-const STATE_TONE: Record<MonthLockState, ToastTone> = {
+/**
+ * Colour per state, matching `06-admin-overview.png`'s green band for an open
+ * month. Exported for the same reason as the badge tones in
+ * `./admin-window-screen.tsx`: it is signal, not decoration.
+ */
+export const STATE_TONE: Record<MonthLockState, ToastTone> = {
   OPEN: 'success',
   LOCKED: 'warning',
   NOT_YET_OPEN: 'neutral',
 };
 
-/** The glyph in the design's coloured chip, one per state. Decorative. */
-const STATE_GLYPH: Record<MonthLockState, string> = {
+/**
+ * The glyph in the design's coloured chip, one per state. `aria-hidden` on
+ * `Toast`, so it is decoration — but decoration that says "open" or "locked" to
+ * anyone scanning, which is why it is exported and pinned alongside the tone.
+ */
+export const STATE_GLYPH: Record<MonthLockState, string> = {
   OPEN: '✓',
   LOCKED: '🔒',
   NOT_YET_OPEN: '…',
