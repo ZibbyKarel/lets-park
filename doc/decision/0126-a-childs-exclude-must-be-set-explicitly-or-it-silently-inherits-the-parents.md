@@ -27,10 +27,14 @@ program — the identical "Property `#private` in type `QueryClient` refers to
 a different member" failure round 2 diagnosed in the app program, now
 reappearing in the spec program because it was the first time anything
 actually type-checked there. Fixed by changing `"module"` to `"esnext"`,
-matching the app program. This is safe at runtime: `apps/web/.swcrc` shows
-Jest here is transformed by SWC, not `ts-jest` — this tsconfig is
+matching the app program. This is safe at runtime: `apps/web/jest.config.cts`
+builds its transform through `next/jest`, which constructs its own SWC
+options programmatically (`next/dist/build/swc/jest-transformer.js`) rather
+than reading this tsconfig — and unlike several other projects in this repo
+(`api`, `contract`, `database`, and others use `ts-jest`, which does read a
+`tsconfig`), `apps/web` never uses `ts-jest` at all. This tsconfig is
 `"noEmit": true` and used only for `tsc`'s static check, so its `module`
-setting has no bearing on what Jest actually executes.
+setting has no bearing on what Jest actually executes here.
 
 ## Why
 
