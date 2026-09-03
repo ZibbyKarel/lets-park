@@ -25,8 +25,17 @@ export function spotTile(page: Page, label: string): Locator {
   // `lot-grid.tsx` labels a free tile "Rezervovat místo X" and every other
   // state "Otevřít místo X"; matching either is what lets one helper serve
   // both, without matching the `⋯` button ("Možnosti místa X").
+  //
+  // `(,|$)` rather than `$`, because the accessible name does not stop at the
+  // label. `lot-grid.tsx` folds the bay's state into it — without that, a
+  // screen-reader user heard "Otevřít místo E2.93" identically for a free bay,
+  // a taken one, a window-locked one and one somebody else was editing — so
+  // the name continues past `label` with a comma and the state. Anchoring on
+  // the comma keeps the two things the original `$` was for: the tile is not
+  // confused with the `⋯` button, and "místo E2.9" does not match "místo
+  // E2.93".
   return page.getByRole('button', {
-    name: new RegExp(`^(Rezervovat|Otevřít) místo ${label}$`, 'u'),
+    name: new RegExp(`^(Rezervovat|Otevřít) místo ${label}(,|$)`, 'u'),
   });
 }
 

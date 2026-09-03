@@ -44,6 +44,21 @@ has to start without one.
   `storage-state*.json` rule covers the filenames too; both are kept, because a
   credential leaking into git is not a place to rely on one rule.
 
+  **That last sentence was written as reasoning and was half wrong for as long
+  as it stood.** `storageStatePath()` returned a relative path that both
+  callers resolved against `process.cwd()` — the *project* root under Nx — so
+  the files were really written to `apps/web-e2e/apps/web-e2e/.auth/`. In git
+  that changed nothing: `.gitignore` patterns containing no slash match at any
+  depth, so `storage-state*.json` was doing all of the work
+  (`git check-ignore -v` names it), and the directory rule matched a directory
+  that did not exist. In `.dockerignore`, where patterns *are* anchored at the
+  context root, the same pair of rules meant the files were not excluded at
+  all — measured with a real `docker build`, and fixed in
+  `doc/decision/0287-*` by making the patterns `**/`-prefixed and by resolving
+  `storageStatePath()` against the workspace root. Both rules are now true of
+  the path the files actually occupy, which is what the sentence above always
+  claimed.
+
 ## Risk
 
 - **Three extra sign-ins per run.** About a second each, and they are the

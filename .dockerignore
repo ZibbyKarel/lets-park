@@ -27,8 +27,27 @@
 **/.env.*
 !**/.env.example
 !**/.env.docker.example
-apps/web-e2e/.auth/
-storage-state*.json
+# The e2e suite's `storageState` files. Each one holds a live Auth.js session
+# cookie — the access *and* refresh token, inside its JWE — plus the mock
+# issuer's own session cookie, so a leaked one is a working session.
+#
+# `**/` on both, for the same reason as `.env` above, and this pair is what
+# proves the rule is not pedantry. They were written `apps/web-e2e/.auth/` and
+# `storage-state*.json`, which reads like a belt and braces and was recorded as
+# such. Both are anchored at the context root, and `personas.ts` was resolving
+# the path against `process.cwd()` — the *project* root under Nx — so the files
+# landed at `apps/web-e2e/apps/web-e2e/.auth/`, three directories past anything
+# either pattern could match. Measured, real `docker build` over a synthetic
+# context: `/ctx/apps/web-e2e/apps/web-e2e/.auth/storage-state-user.json` was
+# **not** excluded, while every other rule in this file held. `COPY . .` in
+# both `builder` stages would have put it in a layer, and CI exports that layer
+# whole with `cache-to: type=gha,mode=max`.
+#
+# `personas.ts` now resolves against the workspace root, so the doubled path is
+# gone as well — two fixes for one hole, because the pattern has to be right
+# for a path that a future refactor moves again. `doc/decision/0287-*`.
+**/.auth/
+**/storage-state*.json
 
 # --- build output and caches ------------------------------------------------
 node_modules

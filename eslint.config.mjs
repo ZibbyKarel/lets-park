@@ -86,6 +86,49 @@ export function restrictWrappedLibraries(allowedPackages = []) {
 }
 
 /**
+ * The same ban, for the two ways of reaching a package that are not an
+ * `import` declaration: `require('pkg')` and `await import('pkg')`.
+ *
+ * **`no-restricted-imports` does not cover either, and nothing else did.**
+ * Measured, on a throwaway `apps/web/src/__probe__.ts` holding
+ * `require('socket.io-client')` and `import('socket.io-client')`:
+ * `nx run web:lint` exited **0** with no finding. `@nx/enforce-module-boundaries`
+ * does see dynamic imports, but it constrains applications not at all here —
+ * `NPM_ALLOWLIST.app` is `['*']`, deliberately, because an app depends on
+ * whatever it ships. So the wrapper rule that the whole architecture rests on
+ * had one spelling it enforced and two it did not. No live violation existed;
+ * this closes it before one does.
+ *
+ * Selector-matched rather than pattern-matched because that is the only tool
+ * ESLint offers for a call expression. The regex accepts the package and its
+ * subpaths (`socket.io-client/debug`) and nothing that merely starts with the
+ * same letters (`next-auth-extras`), which is what the `(\/|$)` does.
+ *
+ * Exported alongside `restrictWrappedLibraries` and for the same reason: a
+ * later flat-config block that sets `no-restricted-syntax` replaces this list
+ * outright, so a lib adding its own selectors has to spread these in.
+ */
+export function restrictWrappedLibrariesDynamically(allowedPackages = []) {
+  return Object.entries(WRAPPED_LIBRARIES)
+    .filter(([pkg]) => !allowedPackages.includes(pkg))
+    .flatMap(([pkg, { owner, use }]) => {
+      // Both escapes are load-bearing: an unescaped `.` would make
+      // `socket.io-client` match `socketXio-client`, and an unescaped `/` ends
+      // the regex literal mid-selector — esquery rejected
+      // `@tanstack/react-table` outright until this was added.
+      const source = `/^${pkg.replaceAll('.', '\\.').replaceAll('/', '\\/')}(\\/|$)/`;
+      const message = `Do not reach "${pkg}" directly — use the wrapper lib ${use} (${owner}). Only ${owner} may import "${pkg}", and that includes require() and dynamic import().`;
+      return [
+        { selector: `ImportExpression[source.value=${source}]`, message },
+        {
+          selector: `CallExpression[callee.name='require'][arguments.0.value=${source}]`,
+          message,
+        },
+      ];
+    });
+}
+
+/**
  * npm allow-lists per Nx `type:` tag (`allowedExternalImports`).
  *
  * ## Why the lists hang off `type:` and nowhere else
@@ -246,6 +289,7 @@ const wrapperLibOverrides = Object.entries(WRAPPED_LIBRARIES).map(([pkg, { owner
   files: [`${owner}/**/*.ts`, `${owner}/**/*.tsx`, `${owner}/**/*.js`, `${owner}/**/*.jsx`],
   rules: {
     'no-restricted-imports': ['error', restrictWrappedLibraries([pkg])],
+    'no-restricted-syntax': ['error', ...restrictWrappedLibrariesDynamically([pkg])],
   },
 }));
 
@@ -522,6 +566,12 @@ export default [
     ],
     rules: {
       'no-restricted-imports': ['error', restrictWrappedLibraries()],
+      // The same ban for `require()` and `import()`, which
+      // `no-restricted-imports` cannot see. See
+      // `restrictWrappedLibrariesDynamically` for the probe that found the
+      // hole and `doc/decision/0290-*` for why it is worth closing when no
+      // violation exists.
+      'no-restricted-syntax': ['error', ...restrictWrappedLibrariesDynamically()],
     },
   },
   ...wrapperLibOverrides,

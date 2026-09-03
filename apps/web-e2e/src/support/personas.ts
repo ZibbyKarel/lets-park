@@ -30,6 +30,9 @@
  * See `doc/decision/0180-*`.
  */
 
+import { join } from 'node:path';
+import { workspaceRoot } from '@nx/devkit';
+
 /** One sign-in identity. */
 export interface Persona {
   /** Stable key; also the basename of the persona's `storageState` file. */
@@ -74,22 +77,32 @@ export const PERSONAS: readonly Persona[] = [ADMIN, USER, USER_TWO];
  * Where a signed-in persona's cookies are cached between the `setup` project
  * and the specs.
  *
- * These files hold a live Auth.js session cookie and the mock issuer's own
- * session cookie. They are rewritten by the `setup` project on every run, so a
- * token that expired since the last run is never reused, and `.gitignore`'s
- * `storage-state*.json` keeps them out of the repository wherever they land.
+ * These files hold a live Auth.js session cookie — carrying the access **and**
+ * refresh token inside its JWE — and the mock issuer's own session cookie.
+ * They are rewritten by the `setup` project on every run, so a token that
+ * expired since the last run is never reused.
  *
- * **Where they land is not where this string reads.** The path is relative, and
- * both callers resolve it against `process.cwd()` — `storageState({ path })` in
- * `auth.setup.ts` and `browser.newContext({ storageState })` in `fixtures.ts`,
- * neither of which is the config-directory resolution Playwright applies to
- * `use.storageState`. Nx runs the executor with the cwd set to the *project*
- * root, so the files are written to `apps/web-e2e/apps/web-e2e/.auth/`. Ugly,
- * harmless, and identical on both sides — which is why it works. Recorded
- * rather than quietly renamed: changing it would move the files for anyone who
- * invokes `playwright test` from a different directory, and nothing here needs
- * that today.
+ * **Absolute, and that is the point.** Both callers hand this string to an API
+ * that resolves it against `process.cwd()` — `storageState({ path })` in
+ * `auth.setup.ts` and `browser.newContext({ storageState })` in `fixtures.ts`
+ * — and *not* the config-directory resolution Playwright applies to
+ * `use.storageState`. It used to return the relative `apps/web-e2e/.auth/…`,
+ * and Nx runs the executor with the cwd set to the project root, so the files
+ * were actually written to `apps/web-e2e/apps/web-e2e/.auth/`. The two sides
+ * agreed, so the suite worked, and the doubled path was recorded as harmless.
+ *
+ * It was not harmless. Two rules exist to keep these files out of a Docker
+ * build context, and a `docker build` against a synthetic context measured
+ * both of them missing that path — `.dockerignore` patterns are anchored at
+ * the context root, so neither `apps/web-e2e/.auth/` nor `storage-state*.json`
+ * matched a file three directories down. `COPY . .` in the `builder` stage put
+ * live session cookies in a layer, and CI exports that layer whole with
+ * `cache-to: type=gha,mode=max`. `.dockerignore` now prefixes both rules with
+ * a globstar so they are right wherever the files land, and this resolves
+ * against the workspace root so that the location every document names is the
+ * location on disk.
+ * `doc/decision/0287-*`; `doc/decision/0185-*` for what the files hold.
  */
 export function storageStatePath(persona: Persona): string {
-  return `apps/web-e2e/.auth/storage-state-${persona.key}.json`;
+  return join(workspaceRoot, 'apps', 'web-e2e', '.auth', `storage-state-${persona.key}.json`);
 }
