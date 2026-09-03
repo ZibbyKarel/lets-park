@@ -16,6 +16,7 @@ import { HealthModule } from '../health/health.module';
 import { buildLoggerOptions } from '../logging/logger.options';
 import { MeModule } from '../me/me.module';
 import { OverviewModule } from '../overview/overview.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { ReservationWindowModule } from '../reservation-window/reservation-window.module';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { ShutdownModule } from '../shutdown/shutdown.module';
@@ -68,6 +69,11 @@ import { AppService } from './app.service';
     MeModule,
     ReservationWindowModule,
     OverviewModule,
+    // Task 15. The Socket.io gateway and the editing-hold registry. Listed
+    // explicitly even though `ReservationsModule` also imports it (for the
+    // after-commit publisher), because a gateway that exists only as somebody
+    // else's transitive import is a gateway one refactor away from vanishing.
+    RealtimeModule,
     // Task 13. Reservations, the waitlist, and the auto-promotion that couples
     // them inside one transaction.
     ReservationsModule,

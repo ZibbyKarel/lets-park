@@ -7,3 +7,7 @@
 - [ ] libs/shared-types -> czech-holidays -> není na to nějaká knihovna ? tenhle celý soubor se mi nelíbí
 
 - [ ] omezit počet registrovaný parkovacích míst na měsíc na 5x na jednoho uživatele
+
+- [ ] libs/query zrušit a importovat tanstack query napřímo v aplikaci
+
+- [ ] apps/web - všechny routy a url musejí být v EN

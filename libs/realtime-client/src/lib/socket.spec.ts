@@ -7,6 +7,7 @@
  * suite is allowed to invent the client's protocol.
  */
 
+import { SOCKET_IO_PATH } from '@lets-park/contract/realtime';
 import { createOfflineSocket } from '../__fixtures__/offline-socket';
 import type { OfflineSocket } from '../__fixtures__/offline-socket';
 import { DEFAULT_SOCKET_PATH, createRealtimeSocket, toHandshakeAuth } from './socket';
@@ -27,6 +28,18 @@ describe('toHandshakeAuth', () => {
     const auth = toHandshakeAuth(token);
     // `{ token: undefined }` would serialise as a present-but-null credential.
     expect('token' in auth).toBe(false);
+  });
+});
+
+describe('DEFAULT_SOCKET_PATH', () => {
+  it('is the contract’s shared SOCKET_IO_PATH, not a private literal', () => {
+    // The other half of the cross-halves guarantee is
+    // `apps/api/src/realtime/realtime-io.adapter.spec.ts`, which asserts the
+    // server's configured path against the same import. Each side fails its
+    // own suite the moment it stops importing `SOCKET_IO_PATH` and hardcodes a
+    // literal instead — which is the only way the two halves could disagree
+    // without either failing on its own (`doc/decision/0113-*`).
+    expect(DEFAULT_SOCKET_PATH).toBe(SOCKET_IO_PATH);
   });
 });
 

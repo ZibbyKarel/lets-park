@@ -34,6 +34,7 @@
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '@lets-park/contract/realtime';
+import { SOCKET_IO_PATH } from '@lets-park/contract/realtime';
 import type { AccessTokenProvider } from '@lets-park/api-client';
 
 /**
@@ -46,11 +47,18 @@ import type { AccessTokenProvider } from '@lets-park/api-client';
 export type RealtimeSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 /**
- * Where Socket.io's HTTP endpoint lives. Socket.io's own default, restated so
- * the gateway (Task 15) and this client have one named constant to agree on
- * rather than two independent defaults.
+ * Where Socket.io's HTTP endpoint lives.
+ *
+ * Re-exported under this lib's own name for callers that already import it
+ * from here, but the value comes from `@lets-park/contract/realtime`'s
+ * `SOCKET_IO_PATH` — the one constant `apps/api`'s `RealtimeIoAdapter` and this
+ * client both dial (`doc/decision/0113-*`). `socket.spec.ts` asserts the
+ * socket this function builds is actually configured with the contract's
+ * export, not a private literal, which is the half of the cross-halves
+ * guarantee this project can enforce from `libs/realtime-client` — the other
+ * half is `apps/api/src/realtime/realtime-io.adapter.spec.ts`.
  */
-export const DEFAULT_SOCKET_PATH = '/socket.io';
+export const DEFAULT_SOCKET_PATH: string = SOCKET_IO_PATH;
 
 export interface RealtimeSocketOptions {
   /** Origin of the API, e.g. `https://api.example.test`. */

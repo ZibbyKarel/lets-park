@@ -20,6 +20,7 @@ import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import type { ApiEnv } from './env';
 import { HEALTH_ROUTE_PREFIX } from './health/health.controller';
+import { configureRealtime } from './realtime/realtime-io.adapter';
 
 /** Everything the API serves lives under `/api`, except the probes. */
 export const GLOBAL_PREFIX = 'api';
@@ -65,6 +66,14 @@ export function configureApp(app: INestApplication, config: HttpConfig): void {
   // `HttpException`, so the filter has to recognise it explicitly).
   app.use(json({ limit: config.BODY_LIMIT }));
   app.use(urlencoded({ extended: true, limit: config.BODY_LIMIT }));
+
+  // The Socket.io server (Task 15). Here rather than in `main.ts` for this
+  // file's whole reason to exist: the specs that stand up the assembled
+  // application get the *same* socket server the running one does — the same
+  // path, the same CORS allow-list — instead of a hand-rebuilt copy that can
+  // drift. It must run before `init()`/`listen()`, which is when Nest reads the
+  // adapter to instantiate gateways.
+  configureRealtime(app, { CORS_ALLOWED_ORIGINS: config.CORS_ALLOWED_ORIGINS });
 
   // Stop accepting connections on SIGTERM/SIGINT, let in-flight requests
   // finish, then run `onModuleDestroy` (closes the database pool) and

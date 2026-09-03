@@ -16,14 +16,17 @@
  *
  * Contents:
  *
- * - `./events`     — payload schemas of the server → client events
- * - `./commands`   — payload schemas of the client → server commands, plus the
- *                    `cell:lock` acknowledgement
- * - `./event-maps` — the schema registries and the `ServerToClientEvents` /
- *                    `ClientToServerEvents` maps derived from them
- * - `./rooms`      — `roomForDate`, one room per day
+ * - `./events`      — payload schemas of the server → client events
+ * - `./commands`    — payload schemas of the client → server commands, plus the
+ *                     `cell:lock` acknowledgement
+ * - `./event-maps`  — the schema registries and the `ServerToClientEvents` /
+ *                     `ClientToServerEvents` maps derived from them
+ * - `./rooms`       — `roomForDate`, one room per day
+ * - `./socket-path` — `SOCKET_IO_PATH`, the one Socket.io endpoint path both
+ *                     the gateway and `libs/realtime-client` dial
  */
 export * from './events';
 export * from './commands';
 export * from './event-maps';
 export * from './rooms';
+export * from './socket-path';

@@ -35,6 +35,9 @@ describe('validateApiEnv', () => {
       THROTTLE_STRICT_LIMIT: 20,
       BODY_LIMIT: '100kb',
       HEALTH_DB_TIMEOUT_MS: 3_000,
+      // Task 15's cell-lock TTL. Defaulted, like every key above it, so that
+      // adding it could not break an existing `.env`.
+      REALTIME_LOCK_TTL_MS: 30_000,
     });
   });
 

@@ -69,6 +69,7 @@ used. They all belong to the operational baseline described in
 | `THROTTLE_STRICT_LIMIT` | positive integer | `20` | requests per window for the stricter tier |
 | `BODY_LIMIT` | a size **with a unit**, e.g. `100kb` | `100kb` | the maximum request body size |
 | `HEALTH_DB_TIMEOUT_MS` | positive integer (ms) | `3000` | how long `/health/ready` waits for `SELECT 1` |
+| `REALTIME_LOCK_TTL_MS` | positive integer (ms) | `30000` | how long a cell's editing hold lasts before it lapses – see `doc/realtime.md` and `doc/decision/0110-*` before changing it, because `libs/realtime-client`'s renewal budget is sized against it |
 
 Two things that are easy to miss:
 
