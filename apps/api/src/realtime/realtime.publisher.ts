@@ -28,6 +28,16 @@
  * cancellation that promoted somebody publishes two events —
  * `reservation:reassigned` and `waitlist:updated` — and they are different
  * facts about the cell. One failing must not silently take the other with it.
+ *
+ * ## What sits above this class
+ *
+ * Since Task 16 the `DomainEventPublisher` token is bound to
+ * `reservations/composite-domain-event.publisher.ts`, not to this class: Slack
+ * implements the same seam, and one token resolves to one provider. The
+ * composite hands this class one event at a time, each call in its own `try`,
+ * so the per-event isolation above is now guaranteed twice over — and a Slack
+ * failure can no more suppress a broadcast than the reverse. `RealtimeModule`
+ * therefore exports this class by name rather than binding the shared token.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -59,22 +69,22 @@ export class RealtimeDomainEventPublisher extends DomainEventPublisher {
   }
 
   /**
-   * Out-of-band notification of a promoted user — **Task 16's**, not this
-   * task's.
+   * Out-of-band notification of a promoted user — **Task 16's job, not this
+   * class's**, and it stays that way now that Task 16 has landed.
    *
-   * Left a no-op rather than removed: the method is abstract, so this class
-   * cannot exist without it, and a promoted user does already learn what
-   * happened over the socket — `reservation:reassigned` carries
-   * `fromWaitlistEntryId` precisely so their own client can drop its queue
-   * entry. What is missing is the Slack message for a user who has no tab open,
-   * which is the whole of Task 16 (`plan.md`, Fáze 5, point 7).
+   * A no-op rather than a removal: the method is abstract, so this class cannot
+   * exist without it, and a promoted user does already learn what happened over
+   * the socket — `reservation:reassigned` carries `fromWaitlistEntryId`
+   * precisely so their own client can drop its queue entry. What this class
+   * cannot give them is the Slack message for a user with no tab open, which is
+   * what `SlackDomainEventPublisher.notifyPromotions` sends.
    *
-   * When Task 16 lands there will be two things wanting this one token. The
-   * shape that keeps both honest is a publisher that fans out to a list of
-   * implementations, rather than a Slack call bolted onto this class — the
-   * realtime broadcast and an outbound HTTP call have different failure modes
-   * and must not share a `try`. Recorded here so the choice is made
-   * deliberately; see the Task 15 report.
+   * Both implementations are reached because the token is bound to
+   * `reservations/composite-domain-event.publisher.ts`, which forwards to each
+   * of them in its own `try` — a Slack outage cannot suppress a broadcast, and
+   * a broken gateway cannot suppress a Slack message. That the two must not
+   * share a `try` is the reason the composite exists rather than a Slack call
+   * bolted onto this class.
    */
   notifyPromotions(): void {
     // Intentionally empty — see the method comment.

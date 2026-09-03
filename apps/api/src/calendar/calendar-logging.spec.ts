@@ -63,6 +63,48 @@ interface LogLine {
   [key: string]: unknown;
 }
 
+/**
+ * The whole file's deadline, and the only one.
+ *
+ * This spec used to poll for the request line against a **2 s wall clock of its
+ * own**, below jest's 5 s default, which made it the tightest deadline in the
+ * suite and a function of machine load rather than of the code it guards. That
+ * matters more here than in an ordinary spec: this file exists because an ICS
+ * bearer token was once logged in four places, and a security spec that reddens
+ * on a busy CI box gets its number bumped or gets quarantined — and then nobody
+ * looks the time it goes red for a real reason. The api suite grew from 38 to
+ * 49 suites when Task 16 merged, so the trend is one-directional.
+ *
+ * The wait below is now **event-driven** — the capture stream resolves it the
+ * instant a matching line is written — so no polling interval and no starved
+ * worker can miss it. This budget is only a backstop that keeps the diagnostic
+ * ("no request line was emitted … got: …") readable instead of jest's generic
+ * timeout, and it is derived from the file's timeout rather than being an
+ * unrelated constant.
+ *
+ * ## Why the budget is not simply large
+ *
+ * A generous per-test budget makes the *failure* path unbearable: with a 25 s
+ * budget, a fully broken destination took **229 s** to report, against ~18 s
+ * before, because all nine tests wait out the full budget in turn. A test
+ * suite nobody will sit through is its own kind of unreliable.
+ *
+ * So the budget stays generous per test — a starved worker gets 10 s, five
+ * times the deadline that was failing — and {@link destinationBroken}
+ * short-circuits the *rest* of the file once one wait has actually timed out.
+ * Nothing here is per-test state: a wait that times out means the log
+ * destination produced nothing at all, which is a property of the whole
+ * fixture. The broken path now reports in ~10 s, better than the 18 s it cost
+ * before this file was touched, and the first failure still carries the full
+ * diagnostic. The trade is that a *transient* timeout in one test also
+ * short-circuits its successors; they say so in their own message rather than
+ * pretending to be independent failures.
+ */
+const TEST_TIMEOUT_MS = 15_000;
+const WAIT_BUDGET_MS = 10_000;
+
+jest.setTimeout(TEST_TIMEOUT_MS);
+
 describe('the ICS feed and the log', () => {
   let app: INestApplication;
   let issuer: OidcTestIssuer;
@@ -70,6 +112,15 @@ describe('the ICS feed and the log', () => {
   let double: PrismaDouble;
   let baseUrl: string;
   let emitted: string[] = [];
+  /** Waiters registered by {@link waitForEmitted}, resolved from the stream. */
+  let waiters: { matches: (all: string) => boolean; resolve: () => void }[] = [];
+  /**
+   * Set once any wait times out. Deliberately **not** reset per test: it
+   * records that the log destination as a whole produced nothing, which is
+   * what makes short-circuiting the remaining tests correct rather than merely
+   * fast. See the file comment.
+   */
+  let destinationBroken: string | undefined;
 
   const originalEnv = { ...process.env };
 
@@ -96,6 +147,15 @@ describe('the ICS feed and the log', () => {
     const capture = new Writable({
       write(chunk: Buffer | string, _encoding, callback) {
         emitted.push(String(chunk));
+        // Push, rather than let a poller pull: this is what makes the wait
+        // independent of how busy the machine is.
+        const all = emitted.join('');
+        for (const waiter of [...waiters]) {
+          if (waiter.matches(all)) {
+            waiters = waiters.filter((pending) => pending !== waiter);
+            waiter.resolve();
+          }
+        }
         callback();
       },
     });
@@ -138,7 +198,44 @@ describe('the ICS feed and the log', () => {
     double.waitlist.length = 0;
     double.auditLogs.length = 0;
     emitted = [];
+    waiters = [];
   });
+
+  /**
+   * Resolves as soon as the captured output satisfies `matches`.
+   *
+   * Event-driven: the capture stream resolves this from `_write`, so a busy
+   * machine delays it by exactly as long as it delays the write itself. The
+   * budget exists only so a genuine failure reports what *was* emitted instead
+   * of jest's generic timeout — see {@link DIAGNOSTIC_BUDGET_MS}.
+   */
+  async function waitForEmitted(matches: (all: string) => boolean, what: string): Promise<void> {
+    if (matches(emitted.join(''))) {
+      return;
+    }
+    if (destinationBroken !== undefined) {
+      // An earlier wait already proved the destination emits nothing. Waiting
+      // out the full budget again would add ten seconds per remaining test to
+      // a run that is already red — see the file comment.
+      throw new Error(`${what}; skipped the wait — ${destinationBroken}`);
+    }
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const waiter = { matches, resolve };
+        waiters.push(waiter);
+        timer = setTimeout(() => {
+          waiters = waiters.filter((pending) => pending !== waiter);
+          destinationBroken = `an earlier test in this file waited ${WAIT_BUDGET_MS}ms for log output and got none`;
+          reject(new Error(`${what}; got: ${emitted.join('')}`));
+        }, WAIT_BUDGET_MS);
+      });
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
 
   /**
    * Sends `path` and returns every log line the request produced.
@@ -151,13 +248,10 @@ describe('the ICS feed and the log', () => {
     const response = await fetch(`${baseUrl}${path}`);
     await response.text();
 
-    const deadline = Date.now() + 2000;
-    while (!emitted.some((line) => line.includes('"request completed"'))) {
-      if (Date.now() > deadline) {
-        throw new Error(`no request line was emitted for ${path}; got: ${emitted.join('')}`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
+    await waitForEmitted(
+      (all) => all.includes('"request completed"'),
+      `no request line was emitted for ${path}`
+    );
 
     const lines = emitted
       .join('')

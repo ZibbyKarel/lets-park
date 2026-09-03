@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { DomainEventPublisher } from '../reservations/reservation-events';
 import { InMemoryLockService, LockService } from './lock.service';
 import { RealtimeGateway } from './realtime.gateway';
 import { RealtimeDomainEventPublisher } from './realtime.publisher';
@@ -12,10 +11,17 @@ import { RealtimeDomainEventPublisher } from './realtime.publisher';
  * ## Why the publisher lives here and not in `ReservationsModule`
  *
  * `DomainEventPublisher` is declared in `reservations/reservation-events.ts`
- * because that is where the events are *produced*; it is bound here because
- * this is where they are *delivered*. `ReservationsModule` imports this module
- * and drops its `NoopDomainEventPublisher` binding, which is the one line Task
- * 13 left for this task to change.
+ * because that is where the events are *produced*; the Socket.io
+ * implementation of it lives here, because this is where they are *delivered*.
+ *
+ * What this module exports is the **concrete** {@link
+ * RealtimeDomainEventPublisher}, not the `DomainEventPublisher` token. Task 15
+ * did bind the token here, but Task 16 (outbound Slack) implements the same
+ * seam, and one token resolves to one provider: binding it in either module
+ * would silently exclude the other. So `ReservationsModule` — the module that
+ * declares the token and is the only place that can name both implementations
+ * — binds it to a composite assembled from what the two modules export. See
+ * `reservations/composite-domain-event.publisher.ts`.
  *
  * That direction — reservations importing realtime — is the one that does not
  * close a cycle: this module imports `reservation-events.ts` for the token and
@@ -35,8 +41,8 @@ import { RealtimeDomainEventPublisher } from './realtime.publisher';
     // silently have the wrong shape.
     { provide: LockService, useClass: InMemoryLockService },
     RealtimeGateway,
-    { provide: DomainEventPublisher, useClass: RealtimeDomainEventPublisher },
+    RealtimeDomainEventPublisher,
   ],
-  exports: [DomainEventPublisher, LockService, RealtimeGateway],
+  exports: [RealtimeDomainEventPublisher, LockService, RealtimeGateway],
 })
 export class RealtimeModule {}

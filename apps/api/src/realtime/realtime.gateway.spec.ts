@@ -24,6 +24,10 @@ import {
   roomForDate,
 } from '@lets-park/contract/realtime';
 import type { CellLockAck } from '@lets-park/contract/realtime';
+import {
+  CompositeDomainEventPublisher,
+  DOMAIN_EVENT_PUBLISHERS,
+} from '../reservations/composite-domain-event.publisher';
 import { DomainEventPublisher } from '../reservations/reservation-events';
 import { GracefulShutdownService } from '../shutdown/graceful-shutdown.service';
 import { RealtimeDomainEventPublisher } from './realtime.publisher';
@@ -533,11 +537,21 @@ describe('the realtime gateway', () => {
   });
 
   describe('the after-commit publisher', () => {
-    it('is the realtime one in the assembled application', () => {
+    it('reaches the realtime publisher in the assembled application', () => {
       // Task 13 bound this token to `NoopDomainEventPublisher` and said Task 15
       // would swap it. Without this assertion every broadcast test in this file
       // could pass while the reservation services still published into a void.
-      expect(harness.app.get(DomainEventPublisher)).toBeInstanceOf(RealtimeDomainEventPublisher);
+      //
+      // Since Task 16 the seam is a composite (Socket.io *and* Slack both
+      // implement it), so "is the realtime publisher" is now "fans out to the
+      // realtime publisher" — and specifically to the instance `RealtimeModule`
+      // built, the one holding this app's gateway. A second instance would
+      // resolve here and broadcast into a gateway nobody is connected to.
+      const bound = harness.app.get(DomainEventPublisher);
+      const delegates = harness.app.get<readonly DomainEventPublisher[]>(DOMAIN_EVENT_PUBLISHERS);
+
+      expect(bound).toBeInstanceOf(CompositeDomainEventPublisher);
+      expect(delegates).toContain(harness.app.get(RealtimeDomainEventPublisher));
     });
 
     it('delivers a committed reservation into its day room and no other', async () => {
