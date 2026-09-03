@@ -12,9 +12,12 @@ footer, rather than as its own route or its own dialog.
 ## Why
 
 - **It is caller-scoped settings, not a feature with its own workflow.** The
-  ICS feed is a personal credential (`libs/contract/src/api/ics.ts`'s
-  `icsToken`) exactly like the licence plate and preferred spot are personal
-  preferences — all three are read from and written back to the same `me.*`
+  ICS feed is a personal credential — `icsToken` on the user entity
+  (`libs/contract/src/schemas/entities.ts`'s `userSchema`, re-exported as part
+  of `myProfileSchema` in `libs/contract/src/api/me.ts`; `libs/contract/src/api/ics.ts`
+  only defines the URL-building helpers, not the field itself) — exactly like
+  the licence plate and preferred spot are personal preferences — all three
+  are read from and written back to the same `me.*`
   endpoints (`me.get`, `me.updateSettings`, `me.regenerateIcsToken`). Giving
   it a separate screen would split one "about me" concept across two places
   in the navigation for no functional reason.
@@ -38,11 +41,22 @@ footer, rather than as its own route or its own dialog.
 ## How
 
 - The `ConfirmDialog` for regeneration is rendered as a sibling of `Modal`
-  (both returned from `SettingsScreen`), not nested inside it. `Modal`
-  performs its own focus trap; nesting a second focus-trapping dialog inside
-  it would fight it for control of `Tab`. As a sibling, only one dialog ever
-  holds the trap at a time — `Modal`'s until `confirmOpen` is set, then
-  `ConfirmDialog`'s.
+  (both returned from `SettingsScreen`), not nested inside its JSX children.
+  **Correction (Task 26 review, M7): the primitives support nesting a second
+  focus trap perfectly well** — `DismissableLayerProvider` carries the parent
+  link through React context (which crosses a portal boundary even though the
+  DOM node itself moves to `document.body`), and `useFocusTrap`'s
+  `isActiveFocusTrap` check pauses the outer trap the moment an inner one
+  opens and resumes it when the inner one closes (`doc/decision/0056-*`
+  documents the whole layer tree). Nothing here would "fight" over `Tab`
+  either way. The reason `ConfirmDialog` is a sibling rather than a JSX child
+  is simpler: `SettingsScreen` renders it unconditionally (`open={confirmOpen}`
+  gates whether it draws anything), so it needs a stable place to live outside
+  the `ready`-gated form content — nesting it *inside* `Modal`'s children would
+  have worked exactly as well for focus, and was not the deciding factor.
+  Measured either way: Tab cycles `Zrušit → Vygenerovat → Zavřít` strictly
+  inside the confirm dialog, and Escape closes only the confirm dialog, leaving
+  the settings modal open underneath it.
 - The section degrades independently of the form: if `apiOrigin` cannot be
   derived (`app/(app)/nastaveni/page.tsx`'s fallback to `''`) or the profile
   has not delivered an `icsToken` yet, `IcsSection` shows `icsUnavailable`

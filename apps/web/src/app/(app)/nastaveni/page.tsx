@@ -1,4 +1,4 @@
-import { apiOriginOf } from '../../../api-url';
+import { apiOriginOrEmpty } from '../../../api-url';
 import { SettingsPage } from '../../../shell/settings-page';
 
 /**
@@ -10,23 +10,13 @@ import { SettingsPage } from '../../../shell/settings-page';
  * value the server already validated (`webEnvSchema`) rather than a second,
  * unvalidated `process.env` read from a client component. Everything else —
  * the session, the profile, the form — is `SettingsPage`'s job.
+ *
+ * `apiOriginOrEmpty` (`../../../api-url`) is shared with `app/layout.tsx`,
+ * which needs the identical build-time-with-no-environment fallback for its
+ * own socket URL — see that function's docstring rather than duplicating the
+ * reasoning here.
  */
 export default function SettingsRoutePage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   return <SettingsPage apiOrigin={apiOriginOrEmpty(apiUrl)} />;
-}
-
-/**
- * `apiOriginOf` throws on a value that is not an absolute URL. `webEnvSchema`
- * makes that impossible once the process has booted, so the only way to reach
- * it here is a build-time render with no environment — where an empty string
- * is the honest answer and the ICS section falls back to its "unavailable"
- * copy instead of a broken link (mirrors `app/layout.tsx`'s `originOrEmpty`).
- */
-function apiOriginOrEmpty(apiUrl: string): string {
-  try {
-    return apiOriginOf(apiUrl);
-  } catch {
-    return '';
-  }
 }

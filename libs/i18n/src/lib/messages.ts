@@ -130,6 +130,10 @@ export interface CzechSettingsMessages {
   readonly preferredSpotLabel: string;
   /** The select's empty option — clearing the preferred spot is allowed. */
   readonly preferredSpotNone: string;
+  /** Shown under the picker while `spot.list` is still in flight. */
+  readonly preferredSpotLoading: string;
+  /** Shown instead of a silent, options-less picker when `spot.list` fails. */
+  readonly preferredSpotLoadError: string;
   readonly cancel: string;
   readonly save: string;
   readonly icsHeading: string;
@@ -144,6 +148,14 @@ export interface CzechSettingsMessages {
   readonly icsRegenerateConfirmButton: string;
   /** Shown instead of the URL while the API origin cannot be derived. */
   readonly icsUnavailable: string;
+  /**
+   * `me.updateSettings`'s only reachable `VALIDATION_FAILED` on this screen:
+   * the stored preferred spot has since been retired
+   * (`MeService.requireSelectableSpot`). Shown instead of the shared error
+   * catalogue's `VALIDATION_FAILED` sentence, which talks about weekends and
+   * public holidays — a reservation-flow concept this screen never touches.
+   */
+  readonly preferredSpotUnavailable: string;
 }
 
 export interface CzechMessages {
@@ -193,6 +205,8 @@ export const csMessages: CzechMessages = {
     licensePlateTooLong: 'Nejvýše 16 znaků.',
     preferredSpotLabel: 'Preferované parkovací místo',
     preferredSpotNone: 'Bez preference',
+    preferredSpotLoading: 'Načítá se seznam parkovacích míst…',
+    preferredSpotLoadError: 'Seznam parkovacích míst se nepodařilo načíst. Zkuste to prosím znovu.',
     cancel: 'Zrušit',
     save: 'Uložit',
     icsHeading: 'Odběr kalendáře (ICS)',
@@ -208,6 +222,8 @@ export const csMessages: CzechMessages = {
       'Starý odkaz přestane fungovat a kalendáře, které ho používají, se přestanou aktualizovat. Budete ho muset všude nahradit novým.',
     icsRegenerateConfirmButton: 'Vygenerovat',
     icsUnavailable: 'Odkaz na kalendář teď není k dispozici. Zkuste to prosím znovu za chvíli.',
+    preferredSpotUnavailable:
+      'Preferované místo už není k dispozici. Zvolte prosím jiné, nebo možnost Bez preference.',
   },
   errors: {
     SPOT_ALREADY_RESERVED: 'Toto parkovací místo je na daný den už rezervované.',

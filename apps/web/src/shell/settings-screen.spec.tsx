@@ -72,6 +72,12 @@ const SPOT_A: ParkingSpot = {
 
 const SPOT_B: ParkingSpot = { ...SPOT_A, id: 'spot-2', label: 'E2.65', group: 'SHARED' };
 
+/** A profile whose stored preference points at a spot `spot.list` no longer returns — e.g. retired. */
+const PROFILE_WITH_RETIRED_PREFERENCE: MyProfile = {
+  ...PROFILE,
+  preferredParkingSpotId: 'spot-retired',
+};
+
 function renderScreen(overrides: Partial<SettingsScreenProps> = {}) {
   const onRetry = jest.fn();
   const onSave = jest.fn();
@@ -85,6 +91,8 @@ function renderScreen(overrides: Partial<SettingsScreenProps> = {}) {
     onRetry,
     profile: PROFILE,
     spots: [SPOT_A, SPOT_B],
+    spotsPending: false,
+    spotsError: false,
     onSave,
     isSaving: false,
     saveError: null,
@@ -151,6 +159,30 @@ describe('SettingsScreen — loading and error', () => {
     // `isError` for itself rather than relying on `profile` happening to be
     // `undefined` whenever `isError` is `true`.
     renderScreen({ isError: true, error: new Error('boom'), profile: PROFILE });
+
+    expect(screen.queryByLabelText('SPZ auta')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Uložit' })).not.toBeInTheDocument();
+  });
+
+  it('hides the form while isPending is set, even if a stale profile is still present', () => {
+    // Same shape as the `isError` test above, for the sibling clause: `ready`
+    // must read `isPending` for itself. Pairing `isPending: true` with
+    // `profile: undefined` (as the "shows the loading state" test above does)
+    // would let `ready` stay false via the *other* clause alone, and never
+    // prove this one (Task 26 review, I2).
+    renderScreen({ isPending: true, profile: PROFILE });
+
+    expect(screen.queryByLabelText('SPZ auta')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Uložit' })).not.toBeInTheDocument();
+  });
+
+  it('hides the form when the profile is undefined, even if isPending and isError are both false', () => {
+    // The third clause of `ready`, isolated the same way. This combination
+    // should not arise from real query state (`profile` is documented as
+    // `undefined` exactly when `isPending || isError`), but `ready` itself
+    // must not rely on that invariant holding — it reads `profile !== undefined`
+    // directly (Task 26 review, I2).
+    renderScreen({ isPending: false, isError: false, profile: undefined });
 
     expect(screen.queryByLabelText('SPZ auta')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Uložit' })).not.toBeInTheDocument();
@@ -227,7 +259,23 @@ describe('SettingsScreen — the form', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows a translated message when saving fails', async () => {
+  it('shows the generic Czech message when the failure is not a shaped contract error at all', () => {
+    // A transport-level failure (network drop, a thrown plain `Error`) is not
+    // an `ORPCError`-shaped payload, so `toContractError` returns `null` and
+    // `describeError` falls back to the shell's generic sentence rather than
+    // the settings-specific or catalogue ones.
+    renderScreen({ saveError: new Error('network dropped') });
+
+    expect(screen.getByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
+  });
+
+  it('shows settings-specific copy for VALIDATION_FAILED, not the shared reservation-rule sentence', async () => {
+    // `me.updateSettings` declares only `NOT_FOUND` and `VALIDATION_FAILED`,
+    // and on this screen `VALIDATION_FAILED` means one thing: the stored
+    // preferred spot has been retired. The shared error catalogue's sentence
+    // for that code is about reservation-day rules (weekends, holidays), which
+    // has nothing to do with this screen (Task 26 review, I3) — asserting the
+    // catalogue string here would pin the bug, not catch it.
     const error = await failureFrom(
       transportAnswering(400, rpcPayload(contractErrorBody('VALIDATION_FAILED', 400, 'nope')))
     );
@@ -235,8 +283,23 @@ describe('SettingsScreen — the form', () => {
     renderScreen({ saveError: error });
 
     expect(
-      screen.getByText('Požadavek porušuje pravidlo rezervací (např. víkend nebo svátek).')
+      screen.getByText(
+        'Preferované místo už není k dispozici. Zvolte prosím jiné, nebo možnost Bez preference.'
+      )
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Požadavek porušuje pravidlo rezervací (např. víkend nebo svátek).')
+    ).not.toBeInTheDocument();
+  });
+
+  it('still shows the shared catalogue sentence for a code other than VALIDATION_FAILED', async () => {
+    const error = await failureFrom(
+      transportAnswering(404, rpcPayload(contractErrorBody('NOT_FOUND', 404, 'nope')))
+    );
+
+    renderScreen({ saveError: error });
+
+    expect(screen.getByText('Požadovaný záznam nebyl nalezen.')).toBeInTheDocument();
   });
 
   it('does not clobber an in-progress edit when the profile silently refetches', async () => {
@@ -251,6 +314,128 @@ describe('SettingsScreen — the form', () => {
     rerenderWith({ profile: { ...PROFILE, icsToken: 'a-different-token' } });
 
     expect(screen.getByLabelText('SPZ auta')).toHaveValue('1XY 9999');
+  });
+
+  it('submits the form when Enter is pressed in a field, not just via the Save button', async () => {
+    const { onSave, user } = renderScreen();
+
+    await user.click(screen.getByLabelText('SPZ auta'));
+    await user.keyboard('{Enter}');
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a licence plate over 16 characters with the Czech message, not the browser silently truncating it', async () => {
+    // `maxLength` used to be set on the underlying `<input>`, which made this
+    // path of the schema (`.max(16)`) — and its Czech message — unreachable
+    // by construction (Task 26 review, m2). The browser attribute is gone, so
+    // typing past the limit now reaches real Zod validation.
+    const { onSave, user } = renderScreen();
+
+    await user.clear(screen.getByLabelText('SPZ auta'));
+    await user.type(screen.getByLabelText('SPZ auta'), '1234567890123456789');
+    await user.click(screen.getByRole('button', { name: 'Uložit' }));
+
+    expect(await screen.findByText('Nejvýše 16 znaků.')).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('shows a loading hint under the picker while spot.list is still in flight', () => {
+    renderScreen({ spotsPending: true });
+
+    expect(screen.getByText('Načítá se seznam parkovacích míst…')).toBeInTheDocument();
+  });
+
+  it('shows an inline error when spot.list fails, instead of silently offering only "Bez preference"', () => {
+    renderScreen({ spotsError: true, spots: [] });
+
+    expect(
+      screen.getByText('Seznam parkovacích míst se nepodařilo načíst. Zkuste to prosím znovu.')
+    ).toBeInTheDocument();
+  });
+
+  it('sends null, not the retired id, when saving after a reconciled preference', async () => {
+    // The stored id is not among the active spots — e.g. an admin retired it
+    // after it was chosen as a preference (`spot.deactivate` never clears
+    // anyone's `preferredParkingSpotId`). A real `<select>` falls back to
+    // *displaying* "Bez preference" for such a value regardless of whether
+    // this component does anything about it — jsdom does the same, which is
+    // why that display alone is not asserted here as proof of the fix. What
+    // only the fix explains is the *submitted* value: without it, Save would
+    // silently resubmit the retired id nobody can see selected (Task 26
+    // review, I1).
+    const { onSave, user } = renderScreen({
+      profile: PROFILE_WITH_RETIRED_PREFERENCE,
+      spots: [SPOT_A, SPOT_B],
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Uložit' }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ preferredParkingSpotId: null }));
+  });
+
+  it('does not reconcile away the preferred spot while spot.list is still pending — only once it is known', async () => {
+    // While `spotsPending` is true, `spots` may still be `[]` for "not loaded"
+    // rather than "no active spots" — reconciling against an empty list here
+    // would wrongly clear a still-valid preference the moment the screen
+    // opens, before `spot.list` has even answered.
+    const { onSave, user } = renderScreen({
+      profile: PROFILE_WITH_RETIRED_PREFERENCE,
+      spots: [],
+      spotsPending: true,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Uložit' }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredParkingSpotId: 'spot-retired' })
+    );
+  });
+});
+
+describe('SettingsScreen — the modal chrome', () => {
+  it('shows the pinned title and description, verbatim', () => {
+    renderScreen();
+
+    expect(screen.getByRole('heading', { name: 'Nastavení' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'SPZ se předplní při každé rezervaci místa. Preferované místo použijeme přednostně u hromadné rezervace.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('hides the description while the form is not ready', () => {
+    renderScreen({ isPending: true, profile: undefined });
+
+    expect(
+      screen.queryByText(
+        'SPZ se předplní při každé rezervaci místa. Preferované místo použijeme přednostně u hromadné rezervace.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('closes on Escape', async () => {
+    const { onClose, user } = renderScreen();
+
+    await user.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close on a scrim click, so a stray click cannot discard unsaved input', async () => {
+    const { onClose, user } = renderScreen();
+
+    const scrim = screen.getByRole('dialog').parentElement as HTMLElement;
+    await user.click(scrim);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('renders no × close button — the design draws none', () => {
+    renderScreen();
+
+    expect(screen.queryByRole('button', { name: 'Zavřít' })).not.toBeInTheDocument();
   });
 });
 
@@ -276,6 +461,12 @@ describe('SettingsScreen — the ICS section', () => {
     expect(screen.getByLabelText('Odkaz na kalendář')).toHaveValue(
       'https://api.test/api/calendar/abc.ics'
     );
+  });
+
+  it('keeps the ICS URL field read-only, so the credential cannot be edited in place', () => {
+    renderScreen();
+
+    expect(screen.getByLabelText('Odkaz na kalendář')).toHaveAttribute('readonly');
   });
 
   it('copies the feed URL and shows confirmation', async () => {
@@ -318,6 +509,32 @@ describe('SettingsScreen — the ICS section', () => {
     await user.click(screen.getByRole('button', { name: 'Vygenerovat nový odkaz' }));
 
     expect(screen.getByRole('dialog', { name: 'Vygenerovat nový odkaz?' })).toBeInTheDocument();
+  });
+
+  it('warns, in the confirmation, that the old link stops working', async () => {
+    // The entire reason this confirmation is meaningful for an irreversible
+    // action is this sentence (Task 26 review, M9) — the title and confirm
+    // label alone do not say what confirming actually does.
+    const { user } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat nový odkaz' }));
+
+    expect(
+      screen.getByText(
+        'Starý odkaz přestane fungovat a kalendáře, které ho používají, se přestanou aktualizovat. Budete ho muset všude nahradit novým.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('renders the confirming button with the destructive (danger) styling', async () => {
+    const { user } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat nový odkaz' }));
+    const dialog = screen.getByRole('dialog', { name: 'Vygenerovat nový odkaz?' });
+
+    expect(within(dialog).getByRole('button', { name: 'Vygenerovat' })).toHaveClass(
+      'bg-danger-100'
+    );
   });
 
   it('cancels the confirmation without calling back', async () => {

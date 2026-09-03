@@ -38,6 +38,15 @@ import { ScreenError, ScreenLoading } from './screen-state';
 /** The select's empty option — clearing the preferred spot is allowed. */
 const NO_PREFERRED_SPOT = '';
 
+/**
+ * Links the Save button in `Modal`'s `footer` (outside the `<form>`, by
+ * construction — see `ModalProps.footer`) to the `<form>` it submits, via the
+ * standard `form="…"` button attribute. This is also what makes pressing
+ * Enter in a field submit natively, rather than doing nothing (Task 26
+ * review, M4).
+ */
+const SETTINGS_FORM_ID = 'settings-form';
+
 /** `'idle'` before any copy attempt, then the outcome of the last one. */
 type CopyState = 'idle' | 'copied' | 'failed';
 
@@ -74,6 +83,16 @@ export interface SettingsScreenProps {
   readonly profile: MyProfile | undefined;
   /** Active spots for the preferred-spot picker (`spot.list`). */
   readonly spots: readonly ParkingSpot[];
+  /**
+   * `spot.list` has not resolved yet. While this is `true`, `spots` may still
+   * be `[]` for "not loaded" rather than "no active spots exist" — the
+   * reconciliation effect below must not treat the two the same (see I1 in
+   * the Task 26 review), and the picker shows a loading hint instead of
+   * silently offering only "Bez preference".
+   */
+  readonly spotsPending: boolean;
+  /** `spot.list` failed. The picker shows an inline notice instead of nothing. */
+  readonly spotsError: boolean;
   readonly onSave: (input: UpdateMySettingsInput) => void;
   readonly isSaving: boolean;
   /** Whatever the failing `me.updateSettings` call threw. */
@@ -96,7 +115,12 @@ export interface SettingsScreenProps {
   readonly isRegenerating: boolean;
   /** Whatever the failing `me.regenerateIcsToken` call threw. */
   readonly regenerateError: unknown;
-  /** Called for every way out: Cancel, ×, Escape, the scrim, and a saved form. */
+  /**
+   * Called for every way out: Cancel, Escape, and a saved form. There is
+   * deliberately no × (the design draws none — `doc/decision/0150-*`) and the
+   * scrim does not close the dialog either (`closeOnScrimClick={false}` below)
+   * — this modal holds unsaved input, and a stray click must not discard it.
+   */
   readonly onClose: () => void;
 }
 
@@ -107,6 +131,8 @@ export function SettingsScreen({
   onRetry,
   profile,
   spots,
+  spotsPending,
+  spotsError,
   onSave,
   isSaving,
   saveError,
@@ -148,6 +174,34 @@ export function SettingsScreen({
     }
   }, [profile, form]);
 
+  // Reconciles the seeded preferred-spot id against the *actual* set of
+  // selectable options, the moment that set is actually known — not on every
+  // render, and not before `spot.list` has resolved. A `<select>` whose value
+  // has no matching `<option>` (e.g. the stored id belonged to a spot an
+  // admin has since retired — `spot.deactivate` never clears anyone's
+  // `preferredParkingSpotId`) falls back, in the DOM, to displaying its first
+  // option — "Bez preference" here — while leaving the *form's* value
+  // untouched. Save would then silently resubmit the retired id nobody can
+  // see selected, and `MeService.requireSelectableSpot` rejects the whole
+  // request, taking the licence-plate edit down with it (Task 26 review, I1).
+  // Setting the form value to match what is now displayed is what keeps
+  // "what's shown" and "what's submitted" from ever disagreeing — treating a
+  // retired preference exactly like "no preference", which is the only
+  // description of it a user who cannot see it selected could possibly act on.
+  useEffect(() => {
+    if (spotsPending || spotsError) {
+      return;
+    }
+    const current = form.getValues('preferredParkingSpotId');
+    if (current === NO_PREFERRED_SPOT) {
+      return;
+    }
+    const stillSelectable = spots.some((spot) => spot.id === current);
+    if (!stillSelectable) {
+      form.setValue('preferredParkingSpotId', NO_PREFERRED_SPOT, { shouldDirty: false });
+    }
+  }, [spots, spotsPending, spotsError, form]);
+
   const ready = !isPending && !isError && profile !== undefined;
 
   const icsFeedUrl =
@@ -158,7 +212,24 @@ export function SettingsScreen({
       return null;
     }
     const contractError = toContractError(failure);
-    return contractError === null ? shellT('errorUnknown') : errorsT(contractError.code);
+    if (contractError === null) {
+      return shellT('errorUnknown');
+    }
+    // `me.updateSettings` declares exactly `NOT_FOUND` and `VALIDATION_FAILED`
+    // (`libs/contract/src/api/me.ts`), and on *this* screen `VALIDATION_FAILED`
+    // means one thing only: the stored preferred spot has been retired
+    // (`MeService.requireSelectableSpot`). The shared error catalogue's
+    // `VALIDATION_FAILED` sentence is about reservation-day rules (weekends,
+    // public holidays) — a true code paired with a false story. This screen
+    // renders its own copy for that one code instead (Task 26 review, I3).
+    // `me.regenerateIcsToken` never throws `VALIDATION_FAILED` (it declares
+    // nothing beyond the inherited `FORBIDDEN`), so this branch is reachable
+    // only through `saveErrorMessage`, not `regenerateErrorMessage` — but it
+    // is harmless, and correct, either way.
+    if (contractError.code === 'VALIDATION_FAILED') {
+      return t('preferredSpotUnavailable');
+    }
+    return errorsT(contractError.code);
   }
 
   const saveErrorMessage = describeError(saveError);
@@ -195,16 +266,27 @@ export function SettingsScreen({
         title={t('title')}
         description={ready ? t('description') : undefined}
         size="md"
+        // The design draws no × in the corner (`doc/decision/0150-*`), and a
+        // click on the scrim must not throw unsaved edits away — `Modal`'s own
+        // prop docs call out exactly this case for `closeOnScrimClick={false}`.
+        hideCloseButton
+        closeOnScrimClick={false}
         footer={
           ready ? (
             <>
               <Button variant="secondary" size="lg" onClick={onClose} disabled={isSaving}>
                 {t('cancel')}
               </Button>
+              {/* `type="submit" form={SETTINGS_FORM_ID}` rather than an
+                  `onClick` handler: this button lives in `Modal`'s `footer`,
+                  outside the `<form>` below, but the `form` attribute still
+                  makes it that form's submit button — which is also what
+                  makes pressing Enter in a field submit the form natively. */}
               <Button
+                type="submit"
+                form={SETTINGS_FORM_ID}
                 variant="primary"
                 size="lg"
-                onClick={form.handleSubmit((values) => onSave(toUpdateInput(values)))}
                 loading={isSaving}
               >
                 {t('save')}
@@ -219,33 +301,47 @@ export function SettingsScreen({
         {ready ? (
           <FormProvider {...form}>
             <div className="flex flex-col gap-5">
-              <FormField
-                name="licensePlate"
-                render={({ field, error: fieldError }) => (
-                  <Input
-                    label={t('licensePlateLabel')}
-                    maxLength={16}
-                    error={fieldError ? t('licensePlateTooLong') : undefined}
-                    {...field}
-                  />
-                )}
-              />
-              <FormField
-                name="preferredParkingSpotId"
-                render={({ field, error: fieldError }) => (
-                  <Select label={t('preferredSpotLabel')} error={fieldError} {...field}>
-                    <option value={NO_PREFERRED_SPOT}>{t('preferredSpotNone')}</option>
-                    {spots.map((spot) => (
-                      <option key={spot.id} value={spot.id}>
-                        {spot.label} · {spot.group}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              />
+              <form
+                id={SETTINGS_FORM_ID}
+                onSubmit={form.handleSubmit((values) => onSave(toUpdateInput(values)))}
+                className="flex flex-col gap-5"
+              >
+                <FormField
+                  name="licensePlate"
+                  render={({ field, error: fieldError }) => (
+                    <Input
+                      label={t('licensePlateLabel')}
+                      error={fieldError ? t('licensePlateTooLong') : undefined}
+                      {...field}
+                    />
+                  )}
+                />
+                <FormField
+                  name="preferredParkingSpotId"
+                  render={({ field, error: fieldError }) => (
+                    <Select label={t('preferredSpotLabel')} error={fieldError} {...field}>
+                      <option value={NO_PREFERRED_SPOT}>{t('preferredSpotNone')}</option>
+                      {spots.map((spot) => (
+                        <option key={spot.id} value={spot.id}>
+                          {spot.label} · {spot.group}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {spotsPending ? (
+                  <p className="text-sm text-fg-3">{t('preferredSpotLoading')}</p>
+                ) : null}
+                {spotsError ? <Toast tone="danger">{t('preferredSpotLoadError')}</Toast> : null}
 
-              {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
+                {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
+              </form>
 
+              {/* Deliberately outside the `<form>` above: the ICS section acts
+                  immediately on its own two buttons (both `type="button"`), not
+                  on a Save/Cancel submit, and keeping it out of the form means
+                  pressing Enter while focused on the read-only feed-URL input
+                  cannot trigger a licence-plate/preferred-spot save. */}
               <IcsSection
                 headingId="ics-heading"
                 icsFeedUrl={icsFeedUrl}
@@ -327,12 +423,15 @@ function IcsSection({
             onFocus={(event) => event.currentTarget.select()}
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="secondary" onClick={onCopy}>
+            {/* `size="lg"`, matching the footer's Cancel/Save buttons — the
+                design shows one control height throughout the modal. */}
+            <Button type="button" variant="secondary" size="lg" onClick={onCopy}>
               {t('icsCopy')}
             </Button>
             <Button
               type="button"
               variant="outline"
+              size="lg"
               onClick={onRequestRegenerate}
               disabled={isRegenerating}
             >

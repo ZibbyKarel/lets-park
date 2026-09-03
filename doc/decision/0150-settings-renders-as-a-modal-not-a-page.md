@@ -6,9 +6,10 @@
 licence plate, preferred spot, and the ICS section (`doc/decision/0151-*`) —
 inside the design system's `Modal` primitive
 (`libs/design-system/primitives/src/lib/modal.tsx`), reached at the
-`/nastaveni` route. Closing it (Cancel, ×, Escape, the scrim, or a successful
-save) pushes back to `LOT_ROUTE` (`/`), so the "page" is really an overlay on
-top of the parking overview.
+`/nastaveni` route. Closing it (Cancel, Escape, or a successful save) pushes
+back to `LOT_ROUTE` (`/`), so the "page" is really an overlay on top of the
+parking overview. There is deliberately no × and no scrim-click-to-close — see
+the fix-round note at the end of "How".
 
 ## Why
 
@@ -19,9 +20,10 @@ top of the parking overview.
   hand-rolled dialog shell to reproduce that would duplicate a primitive the
   design system already ships, for no visual difference.
 - **`Modal` already carries the accessibility work this screen needs**: a
-  portal to `document.body`, a focus trap, `Escape`-to-close, and
-  scrim-click-to-close (`closeOnScrimClick`). Settings has no requirement that
-  would justify reimplementing any of that.
+  portal to `document.body`, a focus trap, and `Escape`-to-close. Settings has
+  no requirement that would justify reimplementing any of that. (It opts out
+  of two of `Modal`'s *defaults* — the × button and scrim-click-to-close — see
+  the fix-round note under "How".)
 - **The route still exists on purpose.** `/nastaveni` is a real, linkable,
   reloadable URL — the avatar menu's "Nastavení" item and a direct paste of
   the link both work — even though what it renders is an overlay. This mirrors
@@ -51,6 +53,22 @@ top of the parking overview.
   `onSuccess`). There is no separate "did the form change" confirmation on
   close — Cancel discards silently, matching the design, which shows no
   "unsaved changes" affordance.
+- **Fix round 1 (Task 26 review, M3/M5): `closeOnScrimClick={false}` and
+  `hideCloseButton`.** Two gaps the initial review found, both now closed
+  together because they share one cause. `Modal`'s own prop docs call out
+  `closeOnScrimClick={false}` by name for "a dialog with unsaved input, where
+  a stray click should not throw work away" — this screen is exactly that, and
+  leaving the default `true` meant one misplaced click on the backdrop
+  silently discarded an in-progress edit and navigated away. `hideCloseButton`
+  is the design fidelity fix (`11-settings.png` draws no ×), but it also
+  repairs an accessibility regression the × caused as a side effect: with it
+  present, it was the first tabbable element in the dialog, so the modal
+  opened with focus on a close affordance instead of on the SPZ field.
+  Removing it lets focus land on the first real control once the form is
+  ready (`useFocusTrap` focuses the first tabbable element in DOM order), and
+  falls back to `ScreenLoading`'s/`ScreenError`'s own controls while it is
+  not. The remaining ways out — Cancel and Escape — are unaffected by either
+  change.
 
 ## Risk
 

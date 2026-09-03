@@ -71,6 +71,8 @@ export function SettingsPage({ apiOrigin }: SettingsPageProps) {
       onRetry={() => void profileQuery.refetch()}
       profile={profileQuery.data}
       spots={spotsQuery.data?.spots ?? []}
+      spotsPending={spotsQuery.isPending}
+      spotsError={spotsQuery.isError}
       onSave={(input: UpdateMySettingsInput) => updateSettings.mutate(input)}
       isSaving={updateSettings.isPending}
       saveError={updateSettings.error}
