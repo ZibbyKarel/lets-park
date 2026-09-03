@@ -79,3 +79,70 @@ Both mutations were reverted after confirming the failure; #2 is recorded
 here because a mutation that survives is the more interesting finding of the
 two, and the fix was to change the mutation, not the test — `useLotRealtime`
 was never at fault.
+
+## Fix round 1 — the instability was not local to this one spec
+
+Code review found that this file's `useAccessTokenProvider` mock —
+`() => async () => 'irrelevant'`, a **new** closure on every call — is the
+exact double used at `apps/web/src/lot/lot-screen.spec.tsx:44`, unchanged by
+this task, and proved live that dropping `date` from `invalidateDay`'s
+`useCallback` deps in `lot-screen.tsx` survived all 18 tests there. That
+mock instability is what let mutation #2 above survive in *this* file too,
+so the fix belongs at the mock's definition, not as a per-spec patch.
+
+Both files now use the same stable-reference pattern already established in
+`apps/web/src/shell/api-provider.spec.tsx`:
+
+```ts
+jest.mock('@lets-park/auth/client', () => ({
+  useAccessTokenProvider: () => mockGetAccessToken, // was: () => async () => 'irrelevant'
+}));
+
+const mockGetAccessToken = async () => 'irrelevant';
+```
+
+With the fix in place, re-running mutation #2 in *this* file no longer needs
+the `useState` workaround: the plain `[api, date] → [api]` mutation is now
+caught directly by `patches the new day's cache entry after the day changes,
+not the old one`, because `api`'s identity now actually stays put across the
+`rerender()` this suite uses. The workaround above is left in this record as
+what the trap looked like before the fix, not as ongoing advice.
+
+**`lot-screen.spec.tsx` needed something else besides the mock fix.**
+Re-running the reviewer's exact mutation (`invalidateDay`'s deps
+`[api, queryClient, date] → [api, queryClient]`) against the *fixed* mock
+still survived all 18 tests — for a different reason than mock instability.
+`LotScreen`'s day change happens through the component's own `setDate` (a
+user clicking "Následující den"), which re-renders `LotScreen` and its
+children only; it does not re-render `ApiProvider`, which sits *above*
+`LotScreen` in the tree and re-renders only when its own props/context
+change. So `api`'s identity was already stable across a day change in this
+file regardless of the mock — the real gap was that **no existing test
+combined a day change with a subsequent write** to observe which day the
+resulting invalidation targeted. A new test,
+`invalidates the day now on screen, not the one it left, after a day
+change`, closes that: it changes the day, then reserves a spot on the day
+now on screen, and asserts the invalidation's query key is the *new* day's,
+not the one `invalidateDay` was first created with. That test fails against
+the reviewer's mutation and passes against the correct code.
+
+The mock fix still matters for `lot-screen.spec.tsx` independently of that
+test: `fires the day query once the session exists, without a remount`
+calls RTL's `rerender(<LotScreen />)` directly on the wrapper root, which
+*does* re-render `ApiProvider` — exactly the path where the old, unstable
+mock would have churned `api`'s identity.
+
+### Verified by (fix round 1)
+
+- `apps/web/src/lot/use-lot-realtime.spec.tsx` — mock fixed; re-ran mutation
+  #2 above (`[api, date] → [api]`, no `useState` workaround) and confirmed
+  `patches the new day's cache entry after the day changes, not the old one`
+  now fails directly; reverted, suite green (15/15).
+- `apps/web/src/lot/lot-screen.spec.tsx` — mock fixed; new test
+  `invalidates the day now on screen, not the one it left, after a day
+  change` added (19 tests total). Re-applied the reviewer's mutation
+  (`invalidateDay`'s deps dropping `date`) and confirmed that named test
+  fails (`Expected: ...date":"2026-02-01"..., Received: ...date":
+  "2026-01-31"...`); reverted, suite green (19/19).
+- Full `nx run-many -t lint,typecheck,test,build --skip-nx-cache` across all
+  17 projects: green (`web:test` 280/280, `api:test` 487/487).

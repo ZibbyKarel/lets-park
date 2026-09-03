@@ -56,8 +56,13 @@ jest.mock('@lets-park/api-client', () => ({
 }));
 
 jest.mock('@lets-park/auth/client', () => ({
-  useAccessTokenProvider: () => async () => 'irrelevant',
+  // A stable function reference, not `() => async () => 'irrelevant'` — see
+  // `doc/decision/0141-*` for why that form defeats `api`'s identity staying
+  // put across a rerender. Same fix as `api-provider.spec.tsx`.
+  useAccessTokenProvider: () => mockGetAccessToken,
 }));
+
+const mockGetAccessToken = async () => 'irrelevant';
 
 const handlers = new Map<string, (payload: unknown) => void>();
 
