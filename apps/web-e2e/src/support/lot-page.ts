@@ -135,11 +135,14 @@ export async function expectFree(page: Page, label: string): Promise<void> {
 /**
  * How long a route may take to appear the **first** time it is visited.
  *
- * The suite runs against `next dev`, which compiles a route on demand. That is
- * measured, not guessed: the dev server logged `GET /nastaveni 200 in 4.9s
- * (compile: 1573ms, proxy.ts: 1177ms, render: 2.2s)` on a machine that was
- * also running three browsers and a webpack watch — over Playwright's 5 s
- * default, which is what made the settings step flaky before this existed.
+ * The suite starts the **built** app (`web:start`), which compiles nothing on
+ * demand — but `reuseExistingServer` is on outside CI, so a run may still meet
+ * a `next dev` somebody already had up, and that one does. Measured, not
+ * guessed: the dev server logged `GET /nastaveni 200 in 4.9s (compile: 1573ms,
+ * proxy.ts: 1177ms, render: 2.2s)` on a machine that was also running three
+ * browsers and a webpack watch — over Playwright's 5 s default, which is what
+ * made the settings step flaky before this existed. See `doc/decision/0183-*`
+ * and `doc/decision/0187-*`.
  *
  * It is deliberately **not** the global `expect` timeout: raising that would
  * make every assertion in the suite wait three times as long to report a real

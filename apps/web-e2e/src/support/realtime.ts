@@ -46,7 +46,13 @@
  * sends or receives, plus each WebSocket it opens. That filter is a **safety
  * property, not a convenience**: the socket.io CONNECT packet carries the
  * access token in its `auth` payload, and it matches neither name, so no
- * credential can reach the log. Nothing else is ever printed.
+ * credential can reach the log. Nothing else is ever printed — except the
+ * socket URLs on `OPEN`/`CLOSE`, which are credential-free for a reason that
+ * lives in `libs/realtime-client` rather than here (see {@link tracer}).
+ *
+ * Each line names a **page**, not a persona — `user#1`, `user#2` — because two
+ * pages of one persona can be live at once and a shared label makes their
+ * traces read like one page misbehaving. See {@link nextPageLabel}.
  */
 
 import { expect, type Page } from '@playwright/test';
@@ -98,12 +104,12 @@ function subscribedDatesIn(payload: string): string[] {
  * Call once, on a freshly created page and before it navigates. Idempotent, so
  * a fixture may call it without knowing whether a spec will use the result.
  */
-export function recordDayRoomSubscriptions(page: Page, label = '?'): void {
+export function recordDayRoomSubscriptions(page: Page, persona = '?'): void {
   if (recorders.has(page)) return;
 
   const dates = new Set<string>();
   recorders.set(page, dates);
-  const trace = tracer(label);
+  const trace = tracer(nextPageLabel(persona));
 
   const record = (payload: string): void => {
     trace('OUT', payload);
@@ -121,8 +127,8 @@ export function recordDayRoomSubscriptions(page: Page, label = '?'): void {
   // and no `day:subscribe` — engine.io only uses them for binary attachments,
   // which this contract has none of.
   page.on('websocket', (socket) => {
-    // How many connections a page has opened is itself a finding: two per page
-    // is what `doc/decision/0187-*` is about.
+    // How many connections *one page* opens is a claim people have got wrong
+    // from these logs before — see {@link nextPageLabel}.
     trace('OPEN', socket.url());
     socket.on('close', () => trace('CLOSE', socket.url()));
     socket.on('framesent', (frame) => {
@@ -137,6 +143,31 @@ export function recordDayRoomSubscriptions(page: Page, label = '?'): void {
 /** Packets worth printing. Deliberately narrow — see the file header. */
 const TRACEABLE = /"(day|cell):[a-z]+"/u;
 
+/** How many pages each persona has had so far, across this worker. */
+const pageOrdinals = new Map<string, number>();
+
+/**
+ * A label that identifies one **page**, not one persona.
+ *
+ * This exists because the first version did not, and it cost two people a wrong
+ * conclusion. `fullyParallel: true` runs the tests of one file in separate
+ * workers, so two `userPage`s can be live at the same moment; labelled only
+ * `user`, their traces interleave into what reads exactly like a single page
+ * opening two sockets — and, since both pages sit in the same day room, into
+ * what reads like "the holder heard its own `cell:locked`" when in fact a
+ * *different* page heard it. Both readings were made, and both were wrong.
+ *
+ * The label carries Playwright's worker index as well as a per-worker ordinal,
+ * because every worker starts its own counter and a bare `user#1` would collide
+ * across workers exactly the way a bare `user` collided across tests — the same
+ * mistake one level up. `w0/user#1` is one page and can be nothing else.
+ */
+function nextPageLabel(persona: string): string {
+  const ordinal = (pageOrdinals.get(persona) ?? 0) + 1;
+  pageOrdinals.set(persona, ordinal);
+  return `w${process.env['TEST_WORKER_INDEX'] ?? '?'}/${persona}#${ordinal}`;
+}
+
 /**
  * The `E2E_TRACE_REALTIME` printer for one page, or a no-op when it is unset.
  *
@@ -146,6 +177,12 @@ const TRACEABLE = /"(day|cell):[a-z]+"/u;
 function tracer(label: string): (direction: string, text: string) => void {
   if (!process.env['E2E_TRACE_REALTIME']) return () => undefined;
   return (direction, text) => {
+    // `OPEN`/`CLOSE` bypass the filter because their text is a URL, not a
+    // packet. That is safe here and not by accident: `socket.ts` sends the
+    // token only through the handshake `auth` callback — no `query`, no
+    // `extraHeaders` — so a socket.io URL carries no credential. The guarantee
+    // therefore lives in `libs/realtime-client`, not in this line; if that ever
+    // changes, this branch needs a filter of its own.
     if (direction !== 'OPEN' && direction !== 'CLOSE' && !TRACEABLE.test(text)) return;
     // A short clock rather than a timestamp: what these lines are read for is
     // the *order* of packets across two pages, and milliseconds-within-the-run

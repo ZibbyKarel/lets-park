@@ -143,16 +143,21 @@ Everything it needs, it arranges:
    reservation window to `AUTO` at 31 days, so that the month the suite books
    into is genuinely open (`doc/decision/0181-*`). **It leaves that setting
    behind**; `npx prisma db seed` puts it back to 7 days.
-2. **`webServer`** starts `nx run api:serve` and `nx run web:start` if they are
-   not already up, waiting on `/health/ready` (which also proves PostgreSQL is
-   reachable) and on the web app's own `/api/health`.
+2. **The servers.** These come from two different places, which matters more
+   than it sounds:
+   - **The API is started by Nx**, not by Playwright. `@nx/playwright` reads the
+     `webServer` command naming `api:serve` and turns it into a real task
+     dependency, so Nx runs it first and Playwright adopts the result. Nothing
+     set in `playwright.config.mts` reaches that process — see the throttle
+     entry under "When it goes wrong".
+   - **The web app is started by Playwright**, as `nx run web:start -- --port
+     4200`: the **built** app, not `next dev`. `next dev` runs React
+     `StrictMode`, which mounts every effect twice and gives each page a second
+     socket.io connection; the built app does that far less
+     (`doc/decision/0187-*`). The build is Nx-cached and adds about six seconds
+     cold.
 
-   `web:start`, not `web:dev`: the suite drives the **built** app.
-   `next dev` runs React `StrictMode`, which mounts every effect twice and gives
-   each page two socket.io connections — enough to make one tab's cell lock
-   release the other's, and `cell-lock.spec.ts` fail one run in four
-   (`doc/decision/0187-*`). The build is Nx-cached and adds about six seconds
-   cold.
+   Both are adopted rather than restarted if the port is already answering.
 3. **The `setup` project** signs all three personas in through the real OIDC
    redirect and caches the sessions in `apps/web-e2e/.auth/` — git-ignored, and
    rewritten on every run (`doc/decision/0185-*`).
@@ -160,12 +165,20 @@ Everything it needs, it arranges:
 Only Chromium runs (`doc/decision/0182-*`), and `retries` is `0` on purpose: a
 scenario that only passes on the second attempt is a bug report, not a nuisance.
 
-To see what the sockets are actually doing — which is how the `StrictMode`
-finding above was made — set `E2E_TRACE_REALTIME=1`. Every `day:*` and `cell:*`
-packet each page sends or receives is printed with a short clock and the
-persona's name, along with every WebSocket a page opens. Nothing else is
-printed, deliberately: the socket.io handshake carries the access token and
-matches neither name.
+`fullyParallel` is on (from `nxE2EPreset`), so **the tests inside one file run
+concurrently in separate workers**. That is easy to forget and it has bitten
+this suite once already: two tests in `cell-lock.spec.ts` shared a bay, and
+because a cell lock is keyed by user, each was releasing the other's hold. A
+test that mutates shared state needs its own bay — see `SPOTS` in that file, and
+`SPEC_DAY_SLOTS` in `support/dates.ts` for the same discipline between files.
+
+To see what the sockets are actually doing, set `E2E_TRACE_REALTIME=1`. Every
+`day:*` and `cell:*` packet each page sends or receives is printed with a short
+clock and a label identifying the **page** — `w3/user#1`, worker and ordinal —
+along with every WebSocket that page opens. Labelling by persona alone is what
+made two concurrent pages read as one page with two sockets, so the ordinal is
+load-bearing. Nothing else is printed, deliberately: the socket.io handshake
+carries the access token and matches neither name.
 
 ---
 
@@ -190,6 +203,30 @@ a slot.
 
 ## When it goes wrong
 
+### Before anything else: kill 3000 and 4200
+
+```bash
+lsof -ti tcp:3000 tcp:4200 | xargs kill -9
+```
+
+`reuseExistingServer` is `true` outside CI, so Playwright **adopts** whatever is
+already listening instead of starting its own. That is a convenience most of the
+time and a trap exactly once: a `next start` left over from an earlier run is
+serving the **previous build**, so a change you just made to application source
+is not in the app the browsers are driving.
+
+This is not hypothetical. During review of this suite, a falsification —
+`OKTA_SCOPES` with `email` removed — came back **green with the mutation in
+place**, because a stale server was serving an unmutated bundle. Killing both
+ports made the same mutation go red immediately.
+
+So: **kill both ports before any falsification run, and before believing any
+result that surprises you.** Nothing in the output tells you this happened.
+
+The same applies to the API, for a different reason — see the throttle entry
+below: Nx starts it, not Playwright, so an API left running keeps whatever
+environment it was started with.
+
 **Everything 401s, with `The token does not identify a provisionable user.`**
 The token reaching the API has no `email` claim. The e2e login types one into
 `mock-oauth2-server`'s *Optional claims JSON* field — see
@@ -204,36 +241,80 @@ its keys when its container starts, so this follows a
 **Several unrelated specs fail with `Skupina IT` missing, or a bay that never
 shows its holder.** Look for `"statusCode":429` on `/api/rpc/overview/day` in
 the API's log. The suite issues ~200 requests from one address per run, and the
-default throttle is 300 per rolling minute — so a second run inside a minute
-trips it, and the lot screen renders a throttled day query as its error state.
-The suite starts its *own* API with room to breathe
-(`doc/decision/0186-*`), but `reuseExistingServer` means a dev API you already
-had up keeps the shipped limits. Either wait a minute, or restart the API as:
+default throttle is 300 per rolling minute — so runs stacked back to back can
+trip it, and the lot screen renders a throttled day query as its error state.
+
+**The suite cannot raise those limits for you, and does not pretend to.** `nx
+show project web-e2e --json` shows `dependsOn: [{projects: ['api'], target:
+'serve'}]` — inferred by `@nx/playwright` from the `webServer` command in
+`playwright.config.mts`. So **Nx** starts the API, with Nx's environment, and
+Playwright adopts it; an `env` block in the Playwright config never reaches it.
+Verified against a running suite: `X-RateLimit-Limit: 300`, strict `20` — the
+shipped defaults. (`doc/decision/0186-*` records the measurement and why the
+inert `env` block was removed rather than left looking effective.)
+
+The remedy is to start the API yourself, before the suite, with limits that suit
+a machine driving browsers — Playwright will adopt that one:
 
 ```bash
+lsof -ti tcp:3000 | xargs kill -9
 THROTTLE_LIMIT=10000 THROTTLE_STRICT_LIMIT=1000 npx nx run api:serve
 ```
 
-**`cell-lock.spec.ts` fails, saying a tile still reads `Volné`.** The page
-opened **two** socket.io connections, both took the same cell hold, and the
-teardown of one released it for both — `LockService.release` keys a hold by
-user, not by socket. The bay really is shown as free while somebody has its
-dialog open; the test is right and the app is wrong.
+Or simply wait a minute between runs; a single run fits inside 300.
 
-Two things make it more or less likely:
+**`cell-lock.spec.ts` fails, saying a tile still reads `Volné`.** Something
+released the hold while the dialog was still open. `LockService.release` keys a
+hold by **user**, not by socket, so *anything* holding the same cell as the same
+user can drop it.
 
-- **You are running against a dev server.** `reuseExistingServer` is on outside
-  CI, so an `nx run web:dev` you already had up is what the browsers get — and
-  `StrictMode` mounts every effect twice there, so the duplicate connection is
-  the *normal* case. Measured at 5 failures in 20 runs. Stop the dev server and
-  let the suite start `web:start` itself, or run with `CI=1`.
-- **Rarely, the built app does it too** — 1 run in 26. That is a known
-  application defect, recorded in `doc/decision/0187-*` along with the packet
-  trace that identifies it. Reproduce it with `E2E_TRACE_REALTIME=1` and look
-  for two `OPEN` lines for one persona inside one test.
+In order of likelihood:
+
+- **A new test in that file shares a bay with an existing one.** `fullyParallel:
+  true` runs the tests of one file in separate workers at the same time, so one
+  test's `closeDialog` releases the other's hold. This is what the `SPOTS` map
+  at the top of the spec exists to prevent — one bay per test. Measured during
+  review, before the split: 4 failures in 14 runs at default parallelism, 0 in 8
+  at `--workers=1`, 0 in 10 with distinct bays. **It does not reproduce on
+  demand**, though: putting both tests back on one bay and running it again gave
+  22 green runs in a row. The window is small; a green run proves nothing about
+  sharing a bay.
+- **You are running against a dev server.** `StrictMode` gives every page a
+  second socket.io connection, which sits in the same day room. Measured at 5
+  failures in 20 runs against `web:dev`. Kill 4200 and let the suite start
+  `web:start` itself.
+- **The known application defect.** About one page in three opens a second
+  socket.io connection even against the built app — 23 of 68 pages across four
+  runs — for reasons that are not yet understood and are *not* `StrictMode`.
+  All four of those runs passed, so this is not usually what reddens the spec,
+  but it is real. `doc/decision/0187-*` has the traces.
+
+Reproduce any of them with `E2E_TRACE_REALTIME=1` and count `OPEN` lines per
+page label — the labels are `w<worker>/<persona>#<n>`, so two lines with the
+*same* label are one page with two sockets, and two lines differing only in the
+ordinal are two different pages.
 
 There is no retry configured, and there should not be: this failure is a bug
 report.
+
+**`login.spec.ts:76` fails on the *second* `toHaveURL`, with
+`Received string: "http://localhost:4200/"`.** This one is expected, in the
+sense that it is understood: **sign-out is not reliably durable, and the spec is
+reporting it.** Measured at 3 failures in 35 full-suite runs, 0 in 12 runs of
+the spec alone — it needs the load of the rest of the suite. In the retained
+trace, `POST /api/auth/signout` clears the cookie, `GET /prihlaseni` renders the
+login screen with no session, and then `GET /` comes back **200 with a freshly
+issued `authjs.session-token`** and the lot renders signed in. No `/authorize`
+request follows the sign-out, so the old session is being resurrected rather
+than re-established. `doc/decision/0189-*` has the full trace and says why the
+assertion is being kept rather than retried or relaxed.
+
+If you need to reproduce it: run the whole suite in a loop with
+`--trace retain-on-failure` and read `0-trace.network` out of the retained
+`trace.zip`. Running the spec on its own will not do it.
+
+Do not mistake a *different* failure for this one. It is always
+`login.spec.ts:76`, always the second `toHaveURL`, always that received value.
 
 **A spec times out on the first visit to a route.** Same cause as above, seen
 from a different angle: `next dev` compiles a route on demand — `/nastaveni` has
@@ -241,6 +322,16 @@ been measured at 4.9 s, past Playwright's 5 s default. `openSettings()` in
 `src/support/lot-page.ts` carries a 30 s allowance for exactly this
 (`doc/decision/0183-*`); a new spec visiting a new route against a reused dev
 server should use the same constant rather than inventing a number.
+
+**`auth.setup.ts` times out on `sign in as <persona>`.** Seen once during review
+of this suite, and **not reproduced since: 0 failures in 105 sign-ins** (35
+full-suite runs × 3 personas). So there is no diagnosis here, only the shape of
+the thing: the `setup` project signs all three personas in *concurrently*
+against a single `mock-oauth2-server` container, and the whole sign-in — two
+redirects, a form, a code exchange and a first render of the lot — has to fit
+inside Playwright's 30 s test timeout. If it comes back, that concurrency and
+that budget are where to look first; `--workers=1` on the `setup` project alone
+would tell you which.
 
 **`P1000` from anything Prisma.** `DATABASE_URL` is missing or wrong. It lives
 in the git-ignored `.env` at the repo root, which does not travel with a

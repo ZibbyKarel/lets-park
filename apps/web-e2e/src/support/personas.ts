@@ -74,10 +74,21 @@ export const PERSONAS: readonly Persona[] = [ADMIN, USER, USER_TWO];
  * Where a signed-in persona's cookies are cached between the `setup` project
  * and the specs.
  *
- * Under `apps/web-e2e/.auth/`, which is git-ignored: these files hold a live
- * Auth.js session cookie and the mock issuer's own session cookie. They are
- * rewritten by the `setup` project on every run, so a token that expired since
- * the last run is never reused.
+ * These files hold a live Auth.js session cookie and the mock issuer's own
+ * session cookie. They are rewritten by the `setup` project on every run, so a
+ * token that expired since the last run is never reused, and `.gitignore`'s
+ * `storage-state*.json` keeps them out of the repository wherever they land.
+ *
+ * **Where they land is not where this string reads.** The path is relative, and
+ * both callers resolve it against `process.cwd()` — `storageState({ path })` in
+ * `auth.setup.ts` and `browser.newContext({ storageState })` in `fixtures.ts`,
+ * neither of which is the config-directory resolution Playwright applies to
+ * `use.storageState`. Nx runs the executor with the cwd set to the *project*
+ * root, so the files are written to `apps/web-e2e/apps/web-e2e/.auth/`. Ugly,
+ * harmless, and identical on both sides — which is why it works. Recorded
+ * rather than quietly renamed: changing it would move the files for anyone who
+ * invokes `playwright test` from a different directory, and nothing here needs
+ * that today.
  */
 export function storageStatePath(persona: Persona): string {
   return `apps/web-e2e/.auth/storage-state-${persona.key}.json`;

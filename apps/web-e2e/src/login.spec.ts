@@ -73,6 +73,19 @@ test('a completed sign-in yields a session the API accepts', async ({ page }) =>
   await expect(page.getByRole('region', { name: 'Skupina IT' })).toBeVisible();
 });
 
+/**
+ * **This test fails about once in ten full-suite runs, and that is the point.**
+ *
+ * Not flakiness: sign-out is not reliably durable under load. The trace shows
+ * `POST /api/auth/signout` clearing the cookie, `/prihlaseni` rendering with no
+ * session — and then the next `GET /` answered `200` with a *newly issued*
+ * `authjs.session-token`, no `/authorize` anywhere in between. Measured at 3
+ * failures in 35 runs; 0 in 12 runs of this spec alone.
+ *
+ * The second assertion below is the one that catches it. Do not retry it, relax
+ * it, or mark it `fixme` — see `doc/decision/0189-*` for the trace and for why
+ * each of those is a way of not knowing.
+ */
 test('signing out returns to the sign-in screen and the lot is protected again', async ({
   page,
 }) => {

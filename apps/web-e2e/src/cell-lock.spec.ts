@@ -33,12 +33,43 @@ import { closeDialog, goToDate, openSpot, spotTile } from './support/lot-page';
 import { waitForDayRoom } from './support/realtime';
 
 const DATE = e2eDayForSlot(SPEC_DAY_SLOTS.cellLock);
-const SPOT = 'E2.61';
+
+/**
+ * One bay per test, and it has to stay that way.
+ *
+ * `nxE2EPreset` sets `fullyParallel: true`, so these two tests run in **separate
+ * workers at the same time** — `dates.ts` gives each *spec file* its own day,
+ * but two tests inside one file share it. They also drive the same persona, and
+ * `LockService.release` keys a hold by **user** rather than by socket
+ * (`lock.service.ts`, deliberately: it is what makes a reconnect a renewal).
+ * Share a bay and the first test's `closeDialog` releases the second test's
+ * hold: the observed tile drops back to `Volné` and an assertion that named the
+ * lock fails for a reason that has nothing to do with it.
+ *
+ * Review measured it before the split: 4 failures in 14 runs at default
+ * parallelism, 0 in 8 at `--workers=1`, 0 in 10 with distinct bays. A later
+ * attempt to reproduce it deliberately — this map pointed back at one bay —
+ * came back **green 22 times running** (10 of this spec alone, 12 of the full
+ * suite). So the hazard is real by construction but does not fire on demand:
+ * it needs an interleaving where one test's `closeDialog` lands between the
+ * other's `cell:lock` and its assertion, and that window is small. A green run
+ * is not evidence that sharing a bay is safe.
+ *
+ * A new test in this file needs a bay of its own — not `mode: 'serial'`, which
+ * would hide the constraint by removing the concurrency rather than by
+ * respecting it.
+ */
+const SPOTS = {
+  lockAndRelease: 'E2.61',
+  ownHold: 'E2.92',
+} as const;
 
 test('one user opening a bay locks it for the other, and releases it on close', async ({
   userPage,
   userTwoPage,
 }) => {
+  const SPOT = SPOTS.lockAndRelease;
+
   await userPage.goto(LOT_PATH);
   await goToDate(userPage, DATE);
   await userTwoPage.goto(LOT_PATH);
@@ -69,6 +100,8 @@ test('one user opening a bay locks it for the other, and releases it on close', 
 });
 
 test('the holder never sees their own hold', async ({ userPage, userTwoPage }) => {
+  const SPOT = SPOTS.ownHold;
+
   await userPage.goto(LOT_PATH);
   await goToDate(userPage, DATE);
   await userTwoPage.goto(LOT_PATH);
@@ -82,6 +115,13 @@ test('the holder never sees their own hold', async ({ userPage, userTwoPage }) =
   // …and the first page proves the holder's own tile is untouched underneath
   // the dialog. `toSpotView` drops a lock whose holder is the viewer.
   await closeDialog(userPage);
+
+  // The negated assertion below would pass against a tile that does not exist,
+  // so it is paired with a positive one on the *same* locator rather than
+  // leaning on the free-tile assertion above it: this pair stays correct even
+  // if that line is ever changed or removed.
+  const holderTile = spotTile(userPage, SPOT);
   await expect(userPage.getByRole('button', { name: `Rezervovat místo ${SPOT}` })).toBeVisible();
-  await expect(spotTile(userPage, SPOT)).not.toContainText('právě upravuje');
+  await expect(holderTile).toContainText(SPOT);
+  await expect(holderTile).not.toContainText('právě upravuje');
 });

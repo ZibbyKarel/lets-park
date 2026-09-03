@@ -105,6 +105,15 @@ async function main(): Promise<void> {
     const waitlist = await prisma.waitlistEntry.deleteMany({ where: { date: range } });
     const reservations = await prisma.reservation.deleteMany({ where: { date: range } });
 
+    // **Not restored afterwards, and that is the cost of this script.** The row
+    // is global and singular, so every run leaves the shared dev database
+    // booking-open 31 days ahead until somebody re-seeds — which means a
+    // developer who runs the suite and then goes back to clicking around the
+    // app is looking at a wider window than the product ships with. Accepted
+    // because it is a value an admin can legitimately set through the UI
+    // (`doc/decision/0181-*`), and because a teardown that restored it would
+    // still be wrong for anyone whose run was interrupted. `npx prisma db seed`
+    // puts it back to 7 days.
     await prisma.reservationWindowSettings.upsert({
       where: { id: RESERVATION_WINDOW_SETTINGS_ID },
       update: { openDaysBefore: MAX_OPEN_DAYS_BEFORE, lockMode: 'AUTO' },

@@ -55,31 +55,33 @@ export default defineConfig({
   },
   webServer: [
     {
+      // **This entry almost never starts anything, and that is not a mistake.**
+      // `@nx/playwright` reads these commands when it infers the `e2e` target
+      // and turns any that names an Nx target into a real task dependency: `nx
+      // show project web-e2e --json` shows `dependsOn: [{projects: ['api'],
+      // target: 'serve'}]`, which exists only because of the string below. So
+      // Nx starts the API first, with Nx's environment, and Playwright finds
+      // port 3000 already answering and adopts it.
+      //
+      // The entry is kept because it is what *declares* that dependency, and
+      // because it still starts an API when something runs `playwright test`
+      // directly. But nothing set here reaches an Nx-started process. An `env`
+      // block raising `THROTTLE_LIMIT` used to sit here and never applied —
+      // measured, `X-RateLimit-Limit: 300` and strict `20`, the shipped
+      // defaults — so it was removed rather than left looking effective.
+      // `doc/decision/0186-*` records what actually keeps the suite under the
+      // limit and what to do on the day it does not.
       command: 'npx nx run api:serve',
       url: `${apiUrl}/health/ready`,
-      reuseExistingServer: !process.env['CI'],
+      // Unconditionally `true`, unlike the web server below: Nx's `dependsOn`
+      // has already started this one whether or not `CI` is set, so refusing to
+      // reuse it under CI would only make Playwright try to bind an occupied
+      // port and fail.
+      reuseExistingServer: true,
       cwd: workspaceRoot,
       timeout: 180_000,
       stdout: 'pipe',
       stderr: 'pipe',
-      // A suite is not a person. Eighteen tests across up to three concurrent
-      // sessions issue roughly two hundred requests from **one** address, and
-      // the shipped default of 300 per minute is a sliding window: one run fits,
-      // two back to back do not. Measured, not guessed — running the suite in a
-      // loop produced 52 × `429` on `/api/rpc/overview/day`, which the screen
-      // renders as its error state and four unrelated specs reported as their
-      // own failure.
-      //
-      // These are **environment values, not a code path**: the same throttler,
-      // the same guard, the same defaults schema (`apps/api/src/env.ts`), just
-      // numbers that suit a machine driving browsers. Nothing in this suite
-      // tests rate limiting, so nothing is weakened by them. See
-      // `doc/decision/0186-*` — including why a *reused* dev API keeps its own
-      // values and what that looks like when it bites.
-      env: {
-        THROTTLE_LIMIT: '10000',
-        THROTTLE_STRICT_LIMIT: '1000',
-      },
     },
     {
       // `web:start`, not `web:dev` — the built app, on the port the OIDC
@@ -88,24 +90,14 @@ export default defineConfig({
       // seconds cold, so this costs less than the on-demand route compilation
       // `next dev` was paying on every first visit.
       //
-      // The reason is not speed. In development React runs the app under
-      // `StrictMode`, which mounts every effect twice — and this app comes up
-      // with **two** socket.io connections per page as a result (measured: two
-      // distinct `sid`s per tab, and the holder receiving its own `cell:locked`
-      // broadcast, which the gateway sends to everybody *except* the asking
-      // socket). Two connections means two `useCellLock` instances taking the
-      // same hold, and when one of them tears down its cleanup emits
-      // `cell:unlock` — which `LockService.release` honours, because it keys a
-      // hold by **user**, not by socket. The hold is dropped while the dialog is
-      // still open, every observer's tile goes back to "Volné", and
-      // `cell-lock.spec.ts` fails. Measured at 5 failures in 20 runs.
-      //
-      // `StrictMode`'s double invoke is development-only, so the built app
-      // opens one connection and takes one hold. Measured on this spec alone:
-      // 5 failures in 20 runs against `web:dev`, 1 in 26 against `web:start`.
-      // That last one is a residual, not a rounding error — the built app can
-      // still open two connections, rarely, and it is recorded as an
-      // application defect rather than retried away. See `doc/decision/0187-*`.
+      // The reason is not speed. `next dev` runs React under `StrictMode`,
+      // which mounts every effect twice, so a dev server gives every page a
+      // second socket.io connection as a matter of course — and this app has a
+      // separate, unexplained way of doing the same thing, so the two compound.
+      // A page with two connections sits in the day room twice and hears its
+      // own `cell:locked`, which the gateway broadcasts to everybody *except*
+      // the asking socket. `doc/decision/0187-*` has the packet traces and the
+      // measured rates.
       command: 'npx nx run web:start -- --port 4200',
       url: `${baseURL}/api/health`,
       reuseExistingServer: !process.env['CI'],

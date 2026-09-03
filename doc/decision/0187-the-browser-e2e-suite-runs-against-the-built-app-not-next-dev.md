@@ -42,29 +42,15 @@ Three facts, in order:
    broadcast to the day room *excluding the asking socket*
    (`realtime.gateway.ts`, `emitToDay('cell:locked', payload, except)`). A page
    can only hear its own lock if it has a **second socket**.
-2. It has. Logging every `WebSocket` the page opens shows two distinct
-   socket.io connections per tab — two `sid`s, fifteen milliseconds apart —
-   alongside the two `_next/webpack-hmr` sockets. Every `day:subscribe` is
-   emitted twice for the same reason. This is React `StrictMode` mounting the
-   tree twice, which is what it is *for*, and which `next dev` turns on.
-3. Two connections means two `useCellLock` effects taking the same hold. When
-   one of them tears down, its cleanup emits `cell:unlock` — and
-   `LockService.release` honours it, because a hold is keyed by **user**, not by
-   socket (deliberately, `lock.service.ts`: it is what makes a reconnect a
-   renewal rather than a self-conflict). So the dying instance drops the living
-   one's hold, every observer's tile goes back to `Volné`, and the dialog is
-   still open.
+2. It has. Logging every `WebSocket` a page opens shows two distinct socket.io
+   connections — two `sid`s, tens of milliseconds apart — and every
+   `day:subscribe` emitted twice.
 
-Whether the run failed came down to whether the surviving `cell:lock` landed
-before or after the dying instance's `cell:unlock` — a race between two effect
-instances, decided by the event loop.
-
-**`StrictMode`'s double invoke is development-only**, so a built app mounts each
-effect once and — almost always — opens one socket. Testing the bundle that
-ships is therefore both the larger part of the fix and the more honest thing to
-do: the brief for this suite says it should run the same application code
-production runs, and `next dev` was the one place in this repository where that
-was not true.
+Under `next dev` that is React `StrictMode` mounting the tree twice, which is
+what it is *for*. **`StrictMode`'s double invoke is development-only**, so
+serving the built bundle removes that cause — and the brief for this suite says
+it should run the same application code production runs, which `next dev` was
+the one place in this repository that did not.
 
 Measured, on the same machine, `cell-lock.spec.ts` alone:
 
@@ -76,46 +62,86 @@ Measured, on the same machine, `cell-lock.spec.ts` alone:
 and the whole suite is faster with it — 18 passed in 6.6 s against `next start`
 versus 13–16 s against `next dev`, because nothing is compiled on demand.
 
-### The residual, stated plainly
+### What this decision did *not* fix, corrected against measurement
 
-**One run in twenty-six still failed, and the packet trace shows the same
-shape**: the page opened *two* socket.io connections six milliseconds apart, and
-from there the story is identical — two holds, one teardown, `Volné`. So
-`StrictMode` is not the only way this app ends up with two connections; it is
-only the way that happens on *every* mount.
+An earlier version of this record claimed the built app "opens one socket" and
+duplicates "rarely — 1 run in 26". **Both were wrong**, and the second was a
+category error: 1-in-26 was the rate at which a *test went red*, not the rate at
+which a duplicate connection occurred. The two are not the same thing.
 
-That remaining duplicate connection is an **application defect**, not a test
-one, and it is left as a finding rather than fixed here: chasing it means
-changing `libs/realtime-client`'s connection lifetime, which is a different
-task's worth of care. What the suite does in the meantime is tell the truth
-about it — the assertion is correct, the app really does show a bay as free
-while somebody has its dialog open, and the failure names the tile that stayed
-grey. Adding a retry would have hidden a real bug; `retries` stays `0`.
+Counted properly — four full-suite runs, ports 3000 and 4200 killed before each,
+every page labelled by worker and ordinal so two pages of one persona cannot be
+mistaken for one page with two sockets:
 
-`E2E_TRACE_REALTIME=1` reproduces the whole diagnosis in one command, which is
-why that switch is kept.
+| sockets opened by one page | pages |
+| --- | --- |
+| 1 | 45 |
+| 2 | **23** |
 
-### Why not fix the application instead
+**68 pages, 23 of them duplicated — about one page in three, against the built
+app.** Never three. So the duplicate connection is common, not rare, and
+`StrictMode` cannot explain the ones that remain: a production React build does
+not double-invoke effects. **The cause is unknown.** It is somewhere in
+`libs/realtime-client/src/lib/connection.tsx`'s connection effect — its
+`[url, path, enabled, generation]` dependency list against a cleanup whose
+`next.disconnect()` evidently does not always take the first socket down.
 
-Two candidate fixes, both worse than they look:
+Two things are worth recording about the *consequences*, because they are milder
+than the earlier version of this record implied:
 
-- **Key `release` by socket.** That is exactly what `lock.service.ts` argues
-  against at length: a client that reconnects re-requests its hold on a *new*
-  socket, and socket-keyed ownership would answer that with `HELD_BY_OTHER` —
-  the user told they are editing against themselves. The current design is the
-  considered one.
-- **Make `useCellLock` idempotent across instances.** There is no shared place
-  for two React trees to coordinate; they are, by construction, two
-  applications.
+- In the traces, only **one** `cell:lock` is emitted per dialog open, even on a
+  page with two sockets. The second connection sits in the day room receiving
+  broadcasts nobody consumes; it is not, on this evidence, taking a second hold.
+- All four of those runs passed, 18/18. The redness this record originally
+  blamed on the duplicate connection was in fact `cell-lock.spec.ts` colliding
+  with *itself* — two tests sharing one bay under `fullyParallel: true`, so one
+  test's `closeDialog` released the other's hold. That is a test defect and it
+  is fixed in the spec (`cell-lock.spec.ts`, `SPOTS`).
 
-There is a real (narrow) product consequence of user-keyed release, and it is
-worth naming rather than fixing here: **two tabs, same user, same cell — closing
-the dialog in one releases the hold the other still shows as held**, until that
-tab's next renewal (up to half the TTL, ~15 s). That is exactly what the two
-duplicate connections do to themselves. A courtesy lock briefly lying is within
-what `lock.service.ts` already documents as its remit, and the API re-checks
-everything on `reservation.create` regardless. It is recorded in the task report
-as a finding, not smuggled into a test change.
+So: a real application defect, still unexplained, still worth its own task — but
+not the thing that was failing the suite, and this record should not have said
+it was. The lingering socket's practical cost is a stale room membership and
+whatever a future teardown of it would emit.
+
+`E2E_TRACE_REALTIME=1` reproduces the measurement in one command, which is why
+that switch is kept — and why its labels now name a page rather than a persona
+(`w3/user#1`), since the un-labelled version is exactly what made two concurrent
+pages read as one misbehaving one.
+
+### Why the application fix is not in this task — and which fix it should be
+
+Not because it is wrong. Because it is an application change with its own tests
+and its own review, and this is an e2e task.
+
+An earlier version of this record went further and **ruled out the cheap fix on
+reasoning the code contradicts**. It said keying `release` by socket would make
+a reconnect answer `HELD_BY_OTHER` — "the user told they are editing against
+themselves". That is not what happens. `LockService.acquire` takes the same-user
+branch and **overwrites `socketId`** with the requester's, so a reconnect is a
+renewal that re-keys the hold; `releaseSocket` depends on precisely that and
+says so in its own comment ("a renewal from a reconnected socket overwrote it,
+so the old socket's late disconnect matches nothing and the fresh hold
+survives"). A `release(cell, userId, socketId)` that matched the same way would
+make a duplicate connection harmless without touching reconnect behaviour at
+all.
+
+So the two candidate fixes, stated correctly:
+
+- **Key `release` by socket** — the cheap, proximate hardening. Not blocked by
+  anything in `lock.service.ts`; the objection recorded here previously was
+  simply false, and is retracted. Whoever takes it should start from `acquire`'s
+  same-user branch.
+- **Find out why a page ends up with two connections** — the root cause, in
+  `libs/realtime-client/src/lib/connection.tsx`. Harder, and the one that makes
+  the first unnecessary.
+
+There is also a real (narrow) product consequence of user-keyed release worth
+naming: **two tabs, same user, same cell — closing the dialog in one releases
+the hold the other still shows as held**, until that tab's next renewal (up to
+half the TTL, ~15 s). A courtesy lock briefly lying is within what
+`lock.service.ts` documents as its remit, and the API re-checks everything on
+`reservation.create` regardless. Recorded as a finding, not smuggled into a test
+change.
 
 ### Why not just disable `StrictMode`
 
@@ -134,13 +160,15 @@ developer, in every feature. `StrictMode` did its job here.
 
 ## Risk
 
-- **A reused dev server brings the flake back.** `reuseExistingServer` is on
-  outside CI, so a developer with `nx run web:dev` already up gets exactly the
-  behaviour described above — Playwright does not reconfigure a process it did
-  not start. `doc/testing.md` names the symptom and the fix (stop the dev
-  server, or set `CI=1`). This is the same residual as
-  `doc/decision/0186-*`'s throttle limits, and it is not silently handled
-  because it cannot be.
+- **A reused server means the suite may not exercise what this record says it
+  does.** `reuseExistingServer` is on outside CI, so a developer with
+  `nx run web:dev` already up gets the dev server and its `StrictMode`
+  duplicates — Playwright does not reconfigure a process it did not start.
+  Worse for anyone falsifying: a `next start` left over from an earlier run
+  serves the **old build**, so a mutation to application source can come back
+  green. That happened during review of this task and is the reason
+  `doc/testing.md` now opens its troubleshooting section with "kill 3000 and
+  4200 first".
 - **The suite no longer exercises `next dev`.** It never meaningfully did:
   nothing here asserts on Fast Refresh or on development-only behaviour. What is
   lost is the chance of noticing a `next dev`-only regression from the e2e

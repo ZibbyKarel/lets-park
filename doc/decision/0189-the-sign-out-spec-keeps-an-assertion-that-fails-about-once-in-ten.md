@@ -1,0 +1,112 @@
+# 0189 – The sign-out spec keeps an assertion that fails about once in ten
+
+## What
+
+`login.spec.ts:76` — *"signing out returns to the sign-in screen and the lot is
+protected again"* — fails intermittently, and is being left exactly as it is.
+No retry, no relaxed assertion, no `test.fixme`.
+
+It is not a flaky test. It is a **reproducible application defect** that only
+shows up under load, and the assertion is the thing that found it.
+
+## Why — what the trace shows
+
+Measured across 35 full-suite runs (20 + 15), ports 3000 and 4200 killed before
+each loop, `retries: 0`:
+
+| loop | runs | failures of this test |
+| --- | --- | --- |
+| 20× stability | 20 | 2 (runs 7, 8) |
+| 15× with `--trace retain-on-failure` | 15 | 1 (run 3) |
+| the spec **in isolation**, 12× | 12 | **0** |
+
+Three failures in 35, none in twelve isolated runs — and in the first loop the
+two failures were the two **slowest** runs of the twenty (22.7 s and 20.9 s
+against a ~18 s median). It needs the rest of the suite running beside it.
+
+The retained trace says what happens. Requests to the web app, in order, with
+the cookie headers that matter:
+
+```
+POST /api/auth/signout   → 200   Set-Cookie: authjs.session-token=; Max-Age=0
+GET  /prihlaseni         → 200   (login screen renders; no bounce to /)
+GET  /                   → 200   Set-Cookie: authjs.session-token=<a fresh JWT>
+POST /api/rpc/me/get     → 200
+POST /api/rpc/overview/day → 200
+```
+
+Read that middle pair twice, because it is the whole finding:
+
+1. The sign-out **worked**. The response cleared the session cookie.
+2. `GET /prihlaseni` came back **200 with the login screen**. `LoginPage` calls
+   `auth()` and redirects a signed-in visitor to `/`; it did not. So at that
+   moment there was no session. This is also why the spec's first assertion
+   (line 90) passes.
+3. The very next navigation, `GET /`, came back **200 instead of the 307 the
+   proxy issues for an unauthenticated request** — and carried a **newly issued
+   `authjs.session-token`**.
+
+There is **no `/authorize` request anywhere after the sign-out**, so this is not
+a fresh login: nothing re-authenticated against the issuer. The old session was
+brought back. The captured page snapshot confirms how completely: the lot
+renders with `Uživatelské menu: Dev User`, `9 volných`, and the group regions —
+data that only arrives with a working bearer token.
+
+So: **a completed sign-out can be undone by the next navigation.** The user
+clicked "Odhlásit se", saw the sign-in screen, and one navigation later was
+signed in again.
+
+Where inside Auth.js the cleared cookie comes back has not been pinned down, and
+this record does not guess. What is measured is the pair of responses above.
+
+## Why the test is not being adjusted
+
+Because every way of making it green is a way of not knowing.
+
+- **A retry** would pass on the second attempt and report nothing.
+  `playwright.config.mts` keeps `retries: 0` precisely so that a scenario which
+  only passes when repeated stays visible.
+- **Asserting more loosely** — dropping the second `toHaveURL`, or checking only
+  that the sign-in screen appeared — would delete the assertion that caught it.
+  The first check (line 90) passes in every failure; it is the *protection*
+  check that fails.
+- **`test.fixme`** would take the measurement away. Three in thirty-five is a
+  rate worth watching, and it will change when the defect is fixed.
+
+The cost is a suite that goes red roughly one run in ten for a known reason.
+`doc/testing.md` names the symptom and points here, so the next person to see it
+does not spend the afternoon this took.
+
+## Why the fix is not in this task
+
+It is an application change to session handling — the part of the system where
+being wrong is worst — and it needs its own tests and its own review. This is an
+e2e task; the same line was drawn for the duplicate socket.io connection in
+`doc/decision/0187-*`.
+
+For whoever picks it up, the useful starting points:
+
+- The trace above is reproducible: run the full suite in a loop with
+  `--trace retain-on-failure` and read `0-trace.network` from the retained
+  `trace.zip`. Three failures in thirty-five runs is enough to catch one in
+  under half an hour.
+- The question to answer first is how `auth()` in `proxy.ts` obtained a session
+  on a request that followed a `Max-Age=0` clear which the immediately preceding
+  request had already honoured. A same-session re-issue rather than a new login
+  points at the JWT being read from somewhere other than the request's current
+  cookie.
+- Whether the API should care is a separate question: the access token in that
+  resurrected session is still valid and unexpired, so the API is behaving
+  correctly in accepting it. Sign-out here is a web-session concern.
+
+## Risk
+
+- **The suite is not green on every run, and this record is the reason it is
+  allowed not to be.** Anyone treating a red suite as "the known sign-out flake"
+  without reading the failure will eventually wave through a different one. The
+  distinguishing marks: it is always `login.spec.ts:76`, always the second
+  `toHaveURL`, and always `http://localhost:4200/` as the received value.
+- **Recording a defect is not fixing it.** Until the session-handling task is
+  done, sign-out in this application is not reliably durable, and that is a
+  security-adjacent property. Named here so it is not discovered later as a
+  surprise.

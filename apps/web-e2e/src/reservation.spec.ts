@@ -50,10 +50,20 @@ test('a user reserves a free spot and the bay shows their name and plate', async
   await expectHeldBy(userPage, SPOT, '2CD 5678');
 });
 
-test('the reservation survives a reload — it is in the database, not in the tab', async ({
+test('the reservation survives a fresh tab and a reload — it is in the database', async ({
   userPage,
 }) => {
+  // A different browser context from the one that booked it: no in-memory query
+  // cache, no service worker, nothing carried over but the session cookie. The
+  // bay can only be held here because the API says so.
   await userPage.goto(LOT_PATH);
+  await goToDate(userPage, DATE);
+  await expectHeldBy(userPage, SPOT, USER.displayName);
+
+  // And a literal reload on top, because the name promises one: this is the
+  // cheaper, more familiar version of the same claim, and a reader who takes
+  // the title at face value should find it in the body.
+  await userPage.reload();
   await goToDate(userPage, DATE);
   await expectHeldBy(userPage, SPOT, USER.displayName);
 
