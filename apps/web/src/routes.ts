@@ -22,10 +22,10 @@ export const LOT_ROUTE = '/';
 /** The signed-out screen with the single Okta button. */
 export const LOGIN_ROUTE = '/prihlaseni';
 
-/** Personal settings: licence plate, preferred spot, ICS feed (Task 27). */
+/** Personal settings: licence plate, preferred spot, ICS feed (Task 26). */
 export const SETTINGS_ROUTE = '/nastaveni';
 
-/** Administration: users, spots, reservation window (Task 26). Admins only. */
+/** Administration: users, spots, reservation window (Task 27). Admins only. */
 export const ADMIN_ROUTE = '/sprava';
 
 /** Auth.js's own endpoints. Never proxied, never protected. */

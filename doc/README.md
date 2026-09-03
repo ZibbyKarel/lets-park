@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 20 topic documents, 181 decision records, and `doc/design/`.
+`doc/`: 22 topic documents, 181 decision records, and `doc/design/`.
 
 ---
 
@@ -35,9 +35,11 @@ This index is generated from the filesystem and accounts for every file under
 | [`environment.md`](environment.md) | Every environment variable the two apps need, how the local Docker stack is started, and how dev, e2e and production differ (values only, never code). |
 | [`frontend.md`](frontend.md) | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow and the screen states. |
 | [`i18n.md`](i18n.md) | `libs/i18n` — the only place allowed to import `next-intl` — and how Czech UI copy is organised. |
+| [`open-items.md`](open-items.md) | Everything the build deliberately left undone: deferred minors, parked findings, and the two gaps where an enforcement mechanism does not actually enforce. |
 | [`ics.md`](ics.md) | The personal calendar subscription: what the feed serves, how its URL is authenticated, and what has been verified about it. |
 | [`implementation-plan.md`](implementation-plan.md) | `plan.md` broken into dispatchable tasks. The plan of record for what is built when. |
 | [`realtime.md`](realtime.md) | The Socket.io connection: the rooms, the events, the cell lock, and what the client does with each broadcast. |
+| [`rulings.md`](rulings.md) | The 103 judgment calls the implementation run made where `plan.md` was silent — what was decided, why, and what each costs if it is wrong. |
 | [`slack.md`](slack.md) | The outbound-only Slack notifications and the scheduled jobs that carry them: what the API tells Slack, when, and what happens when Slack is broken, off, or scaled. |
 | [`testing.md`](testing.md) | The four test layers, what each is for, how to run it, and what must be running first. |
 | [`waitlist.md`](waitlist.md) | Reservations, the queue, and the auto-promotion that hands a cancelled spot to the next person in the same transaction. |

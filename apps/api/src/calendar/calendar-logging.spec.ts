@@ -207,7 +207,7 @@ describe('the ICS feed and the log', () => {
    * Event-driven: the capture stream resolves this from `_write`, so a busy
    * machine delays it by exactly as long as it delays the write itself. The
    * budget exists only so a genuine failure reports what *was* emitted instead
-   * of jest's generic timeout — see {@link DIAGNOSTIC_BUDGET_MS}.
+   * of jest's generic timeout — see {@link WAIT_BUDGET_MS}.
    */
   async function waitForEmitted(matches: (all: string) => boolean, what: string): Promise<void> {
     if (matches(emitted.join(''))) {
