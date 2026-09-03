@@ -75,18 +75,23 @@ DATABASE_URL=$(grep '^DATABASE_URL=' /path/to/lets-park/.env | sed 's/^DATABASE_
   npx nx run api:test-db
 ```
 
-`web-e2e:e2e` was once the one command on this page not measured green by the
-person who wrote the line. It has been run since, most recently in Task 34:
-**20 passed, exit 0** (`Total: 20 tests in 9 files` — the eight spec files plus
-`support/auth.setup.ts`). In a worktree it needs the whole `.env` copied in, not
-just `DATABASE_URL`; without it the API exits on its own env schema before a
-test runs. Two things are worth knowing before you run it yourself:
+`web-e2e:e2e` is **21 passed, exit 0** — the eight spec files, the three
+persona sign-ins in `support/auth.setup.ts`, and `support/build-identity.setup.ts`.
+In a worktree it needs the whole `.env` copied in, not just `DATABASE_URL`;
+without it the API exits on its own env schema before a test runs. Three things
+are worth knowing before you run it yourself:
 
-- **Free port 4200 first.** `reuseExistingServer` will happily run the whole
-  suite against whatever is already listening, including a `next dev`, which
-  `doc/decision/0187-the-browser-e2e-suite-runs-against-the-built-app-not-next-dev`
-  records as the cause of a one-in-four `cell-lock.spec.ts` failure. A green run
-  against the wrong server is the failure mode, not a red one.
+- **Free port 4200 first, and expect a loud failure if you forget.** The suite
+  no longer adopts whatever is listening: `reuseExistingServer` is `false` for
+  the web server, so an occupied 4200 stops the run with _"is already used"_.
+  It used to be `!process.env['CI']` — `true` on every path that existed —
+  while the suite leaked its own `next start` past Playwright's teardown, so
+  the _next_ run adopted the previous one's server, reported 20 passed, and
+  ran no build at all. Both mechanisms are fixed and
+  `build-identity.setup.ts` asserts the outcome;
+  `doc/decision/0285-the-browser-suite-starts-a-server-it-can-kill-and-refuses-to-adopt-one`.
+- **A run leaves both ports free.** If 4200 is still held after one, that is a
+  regression in the above, not housekeeping.
 - **Exit 1 after a passing summary line is not a test failure.** Nx writes its task history
   to a SQLite database under `.nx/`, and concurrent runs from several worktrees
   corrupt the write; the same thing has been seen here as exit 1 after 509
@@ -121,9 +126,18 @@ run that target.
 
 ### CI
 
-`.github/workflows/ci.yml` — three jobs: `verify` (format, lint, typecheck,
-test, build), `database` (`api:test-db` against a `postgres:17` service), and
-`images` (both production images build). `doc/decision/0206-ci-runs-the-database-suites-against-a-real-postgres`.
+`.github/workflows/ci.yml` — four jobs: `verify` (format, lint, typecheck,
+test, build, build-storybook), `database` (`api:test-db` against a `postgres:17`
+service), `e2e` (`api-e2e:e2e` and `web-e2e:e2e` against a `postgres:17` service
+and a `mock-oauth2-server` container), and `images` (both production images
+build). `doc/decision/0206-ci-runs-the-database-suites-against-a-real-postgres`
+and `doc/decision/0286-ci-runs-the-e2e-suites-because-nothing-else-does`.
+
+`e2e` was missing until that record: neither browser journey nor the API over
+HTTP was gated by anything, so sign-in, sign-out durability, the cell-lock
+broadcast, waitlist promotion through the UI and the ICS feed ran only when a
+developer remembered. It also means `CI` is now genuinely set for the browser
+suite, which several config comments had been assuming for a while.
 
 ## Authoritative spec
 

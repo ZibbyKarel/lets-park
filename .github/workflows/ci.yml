@@ -1,11 +1,13 @@
 # Let's Park — continuous integration.
 #
-# Three jobs, run in parallel, each gating something the others structurally
+# Four jobs, run in parallel, each gating something the others structurally
 # cannot see:
 #
-#   verify    formatting, lint, typecheck, the unit suites and both builds.
-#             No Docker, no database — this is the fast lane.
+#   verify    formatting, lint, typecheck, the unit suites, both builds and
+#             both Storybooks. No Docker, no database — this is the fast lane.
 #   database  the eight `*.db.spec.ts` suites, against a real PostgreSQL 17.
+#   e2e       the API over HTTP and the eight browser journeys, against a real
+#             PostgreSQL 17 and a real OIDC issuer.
 #   images    the two production images actually build.
 #
 # `database` is not a nicety. `apps/api/jest.config.cts` **excludes**
@@ -15,6 +17,17 @@
 # promotion that shares a cancellation's transaction. Those cannot be covered
 # by a test double — a double cannot take a row lock — so the only way to test
 # them is to run them.
+#
+# `e2e` is not a nicety either, and its absence used to be invisible in exactly
+# the way this header is meant to prevent: the sentence above once said "three
+# jobs, each gating something the others structurally cannot see", which was
+# true of the three that existed and silent about the layer that was not there.
+# Sign-in through a real OIDC redirect, sign-out durability, the cell-lock
+# broadcast, waitlist promotion through the UI and the ICS feed's
+# token-only-credential model are exercised end to end **only** in
+# `apps/web-e2e`, and `apps/api-e2e` is the only place the API is spoken to
+# over HTTP with a real token. Neither ran here; both ran when a developer
+# remembered. `doc/decision/0286-*`.
 #
 # Every command here is one a developer runs locally, unchanged. Nothing in
 # this file is CI-only behaviour in the application.
@@ -63,7 +76,13 @@ jobs:
       # vacuously.
       - run: npx nx format:check --all
 
-      - run: npx nx run-many -t lint,typecheck,test,build
+      # `build-storybook` is on this list because `npm run build` — what a
+      # developer runs — is `-t build,build-storybook`, and this job ran only
+      # `build`. `plan.md` makes a story mandatory for every primitive and
+      # every compound, so a broken story is a broken deliverable; without it
+      # here, one reaches `main` and the first person to notice is whoever runs
+      # the local script next.
+      - run: npx nx run-many -t lint,typecheck,test,build,build-storybook
 
   database:
     name: database suites (api:test-db)
@@ -110,6 +129,122 @@ jobs:
       # `DATABASE_URL` is absent rather than skipping, which is what makes an
       # unreachable Postgres fail this job instead of silently passing it.
       - run: npx nx run api:test-db
+
+  e2e:
+    name: end-to-end (api-e2e, web-e2e)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lets_park
+          POSTGRES_PASSWORD: lets_park_ci
+          POSTGRES_DB: lets_park
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lets_park -d lets_park"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      # The same issuer `docker compose --profile dev` starts, run the same
+      # way: no `JSON_CONFIG`, so its defaults apply and `personas.ts` supplies
+      # the `email` and `name` claims through the sign-in form's optional-claims
+      # field, exactly as it does locally (`doc/decision/0180-*`).
+      #
+      # It builds every URL it publishes — the authorization endpoint, the JWKS
+      # URI, the `iss` claim — from the Host header of the request it answers
+      # (`docker-compose.yml`, and `doc/decision/0201-*`). Here the browser, the
+      # API and the web app all reach it as `localhost:8080`, so there is one
+      # name and no mismatch. No health check: the image ships none, and the
+      # step below waits on its discovery document instead, which is a stronger
+      # statement than a TCP connect.
+      mock-oauth2-server:
+        image: ghcr.io/navikt/mock-oauth2-server:latest
+        ports:
+          - 8080:8080
+
+    # These are the values in `.env.example`, which is what a developer runs
+    # against, minus the log level. They are a throwaway container's and a mock
+    # issuer's — not secrets, and they must not become `secrets.` references
+    # for the same reason the `database` job's are not: it would make this job
+    # unrunnable from a fork and hide what it connects to. `AUTH_SECRET` is
+    # long enough for `webEnvSchema`'s 32-character minimum and signs sessions
+    # that exist for the length of one job.
+    env:
+      NODE_ENV: development
+      PORT: '3000'
+      DATABASE_URL: postgresql://lets_park:lets_park_ci@localhost:5432/lets_park
+      AUTH_OKTA_ISSUER: http://localhost:8080/default
+      AUTH_OKTA_AUDIENCE: default
+      CORS_ALLOWED_ORIGINS: http://localhost:4200
+      # `info` locally; `warn` here, because the API logs one line per request
+      # and the browser suite makes several hundred.
+      LOG_LEVEL: warn
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+      AUTH_SECRET: ci-e2e-secret-not-a-real-secret-0123456789
+      AUTH_OKTA_CLIENT_ID: lets-park-web-dev
+      AUTH_OKTA_CLIENT_SECRET: lets-park-web-dev-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Chromium only, matching `playwright.config.mts`: this suite drives two
+      # and three concurrent sessions against one database, so a second and
+      # third browser would triple the contention for no coverage
+      # (`doc/decision/0182-*`). `--with-deps` installs the system libraries
+      # the runner image does not carry.
+      - run: npx playwright install --with-deps chromium
+
+      # Unlike the `database` job, nothing here creates its own schema:
+      # `api-e2e` talks to a booted API over HTTP and `web-e2e` drives a
+      # browser, so both need the real database migrated and seeded first. The
+      # seed is what makes `dev-admin` an admin — the role is a column, and no
+      # token can grant it.
+      - run: npx prisma migrate deploy
+      - run: npx prisma db seed
+
+      # The issuer answers its discovery document only once it has finished
+      # starting. Without this the first sign-in would fail as a mysterious
+      # test failure rather than as a service that was not up yet.
+      - name: wait for the mock OIDC issuer
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:8080/default/.well-known/openid-configuration > /dev/null; then
+              echo "issuer ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "mock-oauth2-server did not answer its discovery document in 120s"
+          exit 1
+
+      # In this order, and in separate steps, because `api-e2e`'s teardown
+      # kills whatever holds port 3000 and `web-e2e` then has Nx start its own
+      # API. Neither carries `continue-on-error`: a red journey here is a red
+      # build, which is the whole point of the job.
+      - run: npx nx run api-e2e:e2e
+      - run: npx nx run web-e2e:e2e
+
+      # The report and the traces are the only way to read a browser failure
+      # that did not happen on your machine. `if: failure()` because on a green
+      # run they are noise.
+      - name: playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: dist/.playwright/apps/web-e2e
+          retention-days: 7
 
   images:
     name: production images build

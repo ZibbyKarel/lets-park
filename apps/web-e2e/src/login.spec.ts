@@ -1,9 +1,9 @@
 /**
  * Signing in, for real.
  *
- * This spec starts **signed out** — it overrides the project's `storageState`
- * — because it is the one that exercises the thing every other spec takes for
- * granted: an unauthenticated visitor is bounced to the sign-in screen, the
+ * This spec starts **signed out**, because it is the one that exercises the
+ * thing every other spec takes for granted: an unauthenticated visitor is
+ * bounced to the sign-in screen, the
  * button there hands them to the OIDC issuer, and the code that comes back is
  * exchanged for a session that authenticates against the API.
  *
@@ -20,6 +20,15 @@ import { LOGIN_PATH, LOT_PATH, SIGN_IN_BUTTON, issuerOrigin } from './support/oi
 import { USER } from './support/personas';
 
 // Signed out: the point of this file.
+//
+// It is not an *override*, and the difference is worth stating so nobody
+// deletes it as redundant or trusts it as a defence. Nothing gives this file a
+// session to override: neither the `chromium` project nor the root `use:` block
+// sets `storageState`, and the personas are applied per browser context in
+// `support/fixtures.ts` — whose `test` this file deliberately does not import,
+// taking the bare one from `@playwright/test` instead. This line pins the empty
+// state explicitly, so that the day a persona *is* hoisted into `use:` the spec
+// about signing in does not quietly start out signed in.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 /**

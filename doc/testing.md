@@ -150,17 +150,29 @@ Everything it needs, it arranges:
      dependency, so Nx runs it first and Playwright adopts the result. Nothing
      set in `playwright.config.mts` reaches that process — see the throttle
      entry under "When it goes wrong".
-   - **The web app is started by Playwright**, as `nx run web:start -- --port
-     4200`: the **built** app, not `next dev`. `next dev` runs React
+   - **The web app is started by Playwright**, as `npx next start --port 4200`
+     in `apps/web`: the **built** app, not `next dev`. `next dev` runs React
      `StrictMode`, which mounts every effect twice and gives each page a second
      socket.io connection; the built app does that far less
-     (`doc/decision/0187-*`). The build is Nx-cached and adds about six seconds
-     cold.
+     (`doc/decision/0187-*`). The build is a real Nx dependency of `e2e`
+     (`apps/web-e2e/project.json`), Nx-cached, about six seconds cold.
 
-   Both are adopted rather than restarted if the port is already answering.
+   The API is adopted if port 3000 is already answering — Nx has by then
+   started it. **The web app is not.** `reuseExistingServer` is `false` for it,
+   so an occupied 4200 stops the run with *"is already used"* rather than
+   letting the suite test whatever is there. It used to go through
+   `nx run web:start`, which leaked a detached `next start` past Playwright's
+   teardown and made the *next* run adopt it — 20 passed, exit 0, against the
+   previous run's build, with no build having run at all
+   (`doc/decision/0285-*`).
 3. **The `setup` project** signs all three personas in through the real OIDC
    redirect and caches the sessions in `apps/web-e2e/.auth/` — git-ignored, and
-   rewritten on every run (`doc/decision/0185-*`).
+   rewritten on every run (`doc/decision/0185-*`; the path was
+   `apps/web-e2e/apps/web-e2e/.auth/` until `doc/decision/0287-*`, which is why
+   two `.dockerignore` rules written for it excluded nothing).
+
+   It also runs `build-identity.setup.ts`, which fails the whole run when the
+   app answering on the base URL is not the build this workspace just produced.
 
 Only Chromium runs (`doc/decision/0182-*`), and `retries` is `0` on purpose: a
 scenario that only passes on the second attempt is a bug report, not a nuisance.
@@ -218,19 +230,29 @@ a slot.
 lsof -ti tcp:3000 tcp:4200 | xargs kill -9
 ```
 
-`reuseExistingServer` is `true` outside CI, so Playwright **adopts** whatever is
-already listening instead of starting its own. That is a convenience most of the
-time and a trap exactly once: a `next start` left over from an earlier run is
-serving the **previous build**, so a change you just made to application source
-is not in the app the browsers are driving.
+**This is now enforced rather than remembered, and the paragraphs below are
+kept because they are the reason.** For a long time `reuseExistingServer` was
+`!process.env['CI']` — `true` on every path that existed, since CI ran no e2e
+job at all — so Playwright **adopted** whatever was already listening instead
+of starting its own. A `next start` left over from an earlier run serves the
+**previous build**, so a change you just made to application source is not in
+the app the browsers are driving.
 
-This is not hypothetical. During review of this suite, a falsification —
-`OKTA_SCOPES` with `email` removed — came back **green with the mutation in
-place**, because a stale server was serving an unmutated bundle. Killing both
-ports made the same mutation go red immediately.
+This is not hypothetical, twice over. During review of this suite, a
+falsification — `OKTA_SCOPES` with `email` removed — came back **green with the
+mutation in place**, because a stale server was serving an unmutated bundle.
+And the suite was leaving that server behind itself: `nx run web:start` put
+`next start` in a process group Playwright's teardown could not reach, so run 2
+adopted run 1's server, reported 20 passed, and never ran a build
+(`doc/decision/0285-*`).
 
-So: **kill both ports before any falsification run, and before believing any
-result that surprises you.** Nothing in the output tells you this happened.
+Both halves are closed. The web server is started so that it dies with the run,
+`reuseExistingServer` is `false` for it, and `build-identity.setup.ts` fails
+the run if the app answering is not the build just produced. An occupied 4200
+now stops the run with *"is already used"*, which is what the command above is
+for. **Nothing in a suite's output tells you it tested the wrong server — so
+prefer the mechanism to the memory, and keep killing the ports before believing
+any result that surprises you.**
 
 The same applies to the API, for a different reason — see the throttle entry
 below: Nx starts it, not Playwright, so an API left running keeps whatever

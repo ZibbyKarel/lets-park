@@ -2,6 +2,10 @@
   "name": "@lets-park/source",
   "version": "0.0.0",
   "license": "MIT",
+  "// engines": "The Node major was pinned in three places that npm never reads: `.nvmrc`, `node-version-file` in CI, and `node:24-alpine` in both Dockerfiles. A developer on Node 22 got no warning from `npm ci` and found out later, somewhere unrelated. This is the same pin in the one file npm does read; `.nvmrc` stays the source of truth for the exact version.",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "nx run-many -t serve,dev -p api,web --parallel=2",
     "build": "nx run-many -t build,build-storybook",

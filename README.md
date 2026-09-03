@@ -57,6 +57,14 @@ npx nx run web-e2e:e2e                     # the eight Playwright journeys
 ```
 
 `doc/testing.md` explains what each layer covers and what has to be running.
+All of these run in CI, in four jobs — including the two e2e targets, which
+until recently ran only when somebody remembered
+(`doc/decision/0286-*`).
+
+Free port 4200 before the browser suite. It starts its own server and refuses
+to adopt one, so anything already listening there — a `nx run web:dev`, a
+leftover `next start` — stops the run with _"is already used"_ rather than
+letting it test the wrong app (`doc/decision/0285-*`).
 
 ## The containerised stack
 
