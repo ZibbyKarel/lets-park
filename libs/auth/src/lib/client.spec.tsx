@@ -13,7 +13,7 @@
  * Auth.js's own client persisting something.
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { signIn, signOut } from 'next-auth/react';
@@ -161,15 +161,35 @@ describe('the access token and browser storage', () => {
 
   it('is not persisted by the source of this lib either', () => {
     // The runtime check above can only speak for the paths it exercised. This
-    // one covers the whole lib, including code a future task adds.
+    // one covers the whole lib, including code a future task adds — and it now
+    // actually does. It used to name four files by hand while claiming that
+    // coverage, and the two it left out were the ones that mattered most:
+    // `lib/refresh.ts`, the only module that holds a *refresh* token in memory,
+    // and `lib/revocation.ts`. The final review found the gap; the fix is to
+    // walk the tree rather than to keep a list honest by hand, which is the
+    // same device `libs/contract/src/realtime/no-orpc.spec.ts` uses.
     const sourceDir = join(__dirname, '..');
-    const files = ['lib/client.tsx', 'lib/access-token.ts', 'lib/config.ts', 'lib/session.ts'];
+    const files = readdirSync(sourceDir, { recursive: true, encoding: 'utf8' }).filter(
+      (entry) => /\.(ts|tsx)$/.test(entry) && !/\.spec\.tsx?$/.test(entry)
+    );
+
+    // The walker carries its own control: pointed at a directory it cannot
+    // read, or with an extension filter that stops matching, it would find
+    // nothing and pass vacuously. Naming the two files the old list omitted
+    // makes that impossible to miss.
+    expect(files.length).toBeGreaterThanOrEqual(8);
+    expect(files).toEqual(
+      expect.arrayContaining([join('lib', 'refresh.ts'), join('lib', 'revocation.ts')])
+    );
 
     for (const file of files) {
       const source = readFileSync(join(sourceDir, file), 'utf8');
       // Comments explaining the ban are allowed; code is not.
       const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-      expect(withoutComments).not.toMatch(/localStorage|sessionStorage/);
+      expect({ file, matches: withoutComments.match(/localStorage|sessionStorage/) }).toEqual({
+        file,
+        matches: null,
+      });
     }
   });
 });

@@ -28,12 +28,37 @@ describe('bulkBookingInputSchema', () => {
     expect(bulkBookingInputSchema.safeParse({ dates: [] }).success).toBe(false);
   });
 
-  it('rejects more days than a month can hold', () => {
-    const tooMany = Array.from(
-      { length: MAX_BULK_BOOKING_DAYS + 1 },
-      (_unused, index) => `2026-10-${String(index + 1).padStart(2, '0')}`
-    );
-    expect(bulkBookingInputSchema.safeParse({ dates: tooMany }).success).toBe(false);
+  it('rejects more days than the cap, on the cap and not on the calendar', () => {
+    // This test used to build `2026-10-01 … 2026-10-32` and assert only
+    // `success === false`. `2026-10-32` is calendar-invalid, so `z.iso.date()`
+    // rejected the array on its own: with `.max(MAX_BULK_BOOKING_DAYS)` deleted
+    // it still failed, on `invalid_format` at `dates.31`, and nothing anywhere
+    // tested the cap. That matters — the cap is the only bound on the array
+    // driving the bulk allocator and the `confirmBulk` transaction, and
+    // `reservation-window.spec.ts` reasons from a *structural* cap existing.
+    //
+    // So: 32 days that are every one of them a real date, and an assertion on
+    // the reason rather than on the bare boolean. The 32nd falls in November
+    // because 31 is all October has — with the cap deleted the same-month
+    // refinement would reject it instead, which is why the `too_big` assertion
+    // is the load-bearing one.
+    const tooMany = [
+      ...Array.from(
+        { length: MAX_BULK_BOOKING_DAYS },
+        (_unused, index) => `2026-10-${String(index + 1).padStart(2, '0')}`
+      ),
+      '2026-11-01',
+    ];
+    expect(tooMany).toHaveLength(MAX_BULK_BOOKING_DAYS + 1);
+
+    const result = bulkBookingInputSchema.safeParse({ dates: tooMany });
+
+    expect(result.success).toBe(false);
+    const codes = result.error?.issues.map((issue) => issue.code) ?? [];
+    expect(codes).toContain('too_big');
+    // No day in the list is malformed, so nothing here can be riding on
+    // `z.iso.date()` the way the previous version of this test was.
+    expect(codes).not.toContain('invalid_format');
   });
 
   it('rejects duplicates', () => {

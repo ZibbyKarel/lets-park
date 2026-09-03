@@ -21,10 +21,11 @@ import {
   REFRESH_TOKEN_ERROR,
   rotateAccessToken,
 } from '../index';
-// Deep import on purpose: the shared store is not part of the lib's public API
-// (it is a process-global mutable map), and this file is the only thing that
-// needs to reset it between tests.
+// Deep imports on purpose: neither is part of the lib's public API (both hand
+// out process-global mutable state), and the tests are the only things that
+// need to reset them between cases.
 import { sharedRevokedStore } from './revocation';
+import { sharedRefreshStates } from './refresh';
 import type { AuthOptions, TokenRefresher } from '../index';
 import { discoveryDocument, stubFetch } from '../__fixtures__/stub-fetch';
 
@@ -39,6 +40,18 @@ const OPTIONS: AuthOptions = {
 };
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+/**
+ * `createAuthConfig` deliberately reaches for two pieces of process-global
+ * state — the revocation map and the refresh state — because Next.js runs it
+ * once per bundle and all three copies have to agree. That is exactly the state
+ * a test file has to reset, or one case inherits the previous one's sign-out or
+ * its cached discovery document.
+ */
+beforeEach(() => {
+  sharedRevokedStore().clear();
+  sharedRefreshStates().clear();
+});
 
 const ACCOUNT: Account = {
   provider: OKTA_PROVIDER_ID,
@@ -355,6 +368,73 @@ describe('createAuthConfig', () => {
     expect(token).toMatchObject({ accessToken: 'renewed' });
   });
 
+  it('sends one grant when two configurations renew the same token at once', async () => {
+    // The shape of the real deployment, and the defect `doc/decision/0245-*`
+    // fixes: Next.js builds the proxy, the `/api/auth/*` handlers and the
+    // server components separately, so `createAuthConfig` runs three times in
+    // one `next start` — the same measurement `revokes across configurations`
+    // below rests on. The proxy and the root layout then read the **same**
+    // request cookie, so inside the renewal skew they present the same refresh
+    // token. With an in-flight slot per closure they both exchanged it; the
+    // final review measured two grants where `doc/decision/0051-*` promised
+    // one, and with rotation enabled on the authorization server the second
+    // comes back `invalid_grant` and signs the user out mid-session.
+    //
+    // This drives the wired `jwt` callbacks, not the refresher, because the
+    // defect could just as easily be a missing wire as a wrong rule: a
+    // refresher that coalesces perfectly and is handed private state per
+    // configuration looks exactly like the bug from outside.
+    const tokenUrl = `${ISSUER}/token`;
+    const urls: string[] = [];
+    let openGate: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      openGate = resolve;
+    });
+    const fetchImpl: typeof globalThis.fetch = async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      urls.push(url);
+      if (url === DISCOVERY_URL) {
+        return new Response(JSON.stringify(discoveryDocument(ISSUER)), { status: 200 });
+      }
+      await gate;
+      return new Response(JSON.stringify({ access_token: 'renewed', expires_in: 3600 }), {
+        status: 200,
+      });
+    };
+
+    const proxySide = createAuthConfig({ ...OPTIONS, fetch: fetchImpl });
+    const serverComponentSide = createAuthConfig({ ...OPTIONS, fetch: fetchImpl });
+
+    const expiring = (): JWT => ({
+      sub: 'e3f1a2b4-0c7d-4e2a-9f10-8b6c5d4e3f21',
+      accessToken: 'about-to-expire',
+      expiresAt: nowSeconds() + (REFRESH_SKEW_SECONDS - 30),
+      refreshToken: 'one-cookie-one-refresh-token',
+    });
+
+    const first = proxySide.callbacks?.jwt?.({ token: expiring(), user: {}, account: null });
+    // Wait for the grant to be genuinely on the wire, so the second caller
+    // arrives mid-flight rather than in the same tick — coalescing only within
+    // one tick would not help the real case.
+    for (let attempt = 0; attempt < 1000; attempt += 1) {
+      if (urls.filter((url) => url === tokenUrl).length === 1) break;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    const second = serverComponentSide.callbacks?.jwt?.({
+      token: expiring(),
+      user: {},
+      account: null,
+    });
+
+    openGate();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(urls.filter((url) => url === tokenUrl)).toHaveLength(1);
+    expect(urls.filter((url) => url === DISCOVERY_URL)).toHaveLength(1);
+    expect(a).toMatchObject({ accessToken: 'renewed' });
+    expect(b).toMatchObject({ accessToken: 'renewed' });
+  });
+
   it('reports a failed renewal on the session rather than swallowing it', async () => {
     const server = stubFetch((url) =>
       url === DISCOVERY_URL
@@ -421,11 +501,6 @@ describe('sign-out revocation', () => {
    */
   const SESSION_A = '9efdd0ac-6b1e-4d0e-9a7d-2b5c1f0a3e11';
   const SESSION_B = '15326704-0c8a-4a1f-8d33-7e9b2c4d6a02';
-
-  // `createAuthConfig` deliberately reads a process-wide revocation map — see
-  // `sharedRevokedStore` for why it has to. That is exactly the state a test
-  // file must reset, or the second test inherits the first one's sign-out.
-  beforeEach(() => sharedRevokedStore().clear());
 
   /** A configuration whose refresher can never be reached over the network. */
   function config() {

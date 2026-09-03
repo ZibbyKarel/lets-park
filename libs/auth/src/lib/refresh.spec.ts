@@ -13,6 +13,11 @@ import {
   shouldRefresh,
   TokenRefreshError,
 } from '../index';
+// Deep import on purpose, the same way `config.spec.ts` deep-imports
+// `sharedRevokedStore`: the shared refresh state is not part of the lib's public
+// API (it is a process-global mutable table) and only its own tests touch it.
+import { sharedRefreshState, sharedRefreshStates } from './refresh';
+import type { TokenRefreshState } from './refresh';
 import { discoveryDocument, stubFetch } from '../__fixtures__/stub-fetch';
 
 const ISSUER = 'https://example.okta.test/oauth2/default';
@@ -385,6 +390,66 @@ describe('createTokenRefresher', () => {
       expect(server.calls.filter((call) => call.url === TOKEN_URL)).toHaveLength(2);
     });
 
+    it('coalesces across the separate refreshers Next.js builds, not just within one', async () => {
+      // **The case the closure version could not cover, and the reason
+      // `doc/decision/0245-*` exists.** Every other test in this describe uses
+      // one refresher, which is the one arrangement production never has:
+      // Next.js compiles the proxy, the `/api/auth/*` handlers and the server
+      // components separately, so `createAuthConfig` — and with it
+      // `createTokenRefresher` — runs three times in one process. The proxy and
+      // the root layout read the *same* request cookie, so inside the 60-second
+      // skew they hold the same refresh token and, with a private in-flight
+      // slot each, both exchange it. Measured before the fix: two grants.
+      const server = gatedOidcServer(tokenResponse({ refresh_token: 'rotated' }));
+      const shared: TokenRefreshState = {};
+      const options = {
+        issuer: ISSUER,
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        fetch: server.fetch,
+        state: shared,
+      };
+      const onTheProxyBundle = createTokenRefresher(options);
+      const onTheServerComponentBundle = createTokenRefresher(options);
+
+      const first = onTheProxyBundle(REFRESH_TOKEN);
+      await until(() => server.tokenRequests() === 1, 'the first grant to go out');
+      const second = onTheServerComponentBundle(REFRESH_TOKEN);
+
+      server.release();
+      const [a, b] = await Promise.all([first, second]);
+
+      expect(server.tokenRequests()).toBe(1);
+      expect(a).toEqual(b);
+      expect(a.refreshToken).toBe('rotated');
+      // Discovery is shared too, so the second bundle does not re-fetch the
+      // document the first already has.
+      expect(server.urls.filter((url) => url === DISCOVERY_URL)).toHaveLength(1);
+    });
+
+    it('does not share a slot between refreshers given separate state', async () => {
+      // The counterfactual for the test above, and what the default is: a
+      // refresher built without a `state` gets a private bag, so tests stay
+      // isolated from one another. This is what production looked like before
+      // the fix — two grants for one refresh token.
+      const server = gatedOidcServer(tokenResponse({ refresh_token: 'rotated' }));
+      const options = {
+        issuer: ISSUER,
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        fetch: server.fetch,
+      };
+      const first = createTokenRefresher(options)(REFRESH_TOKEN);
+      await until(() => server.tokenRequests() === 1, 'the first grant to go out');
+      const second = createTokenRefresher(options)(REFRESH_TOKEN);
+      await until(() => server.tokenRequests() === 2, 'the second grant to go out');
+
+      server.release();
+      await Promise.all([first, second]);
+
+      expect(server.tokenRequests()).toBe(2);
+    });
+
     it('clears the slot after a failure, so the next attempt is not stuck on it', async () => {
       let attempts = 0;
       const server = stubFetch((url) => {
@@ -401,6 +466,60 @@ describe('createTokenRefresher', () => {
         accessToken: 'new-access-token',
       });
       expect(attempts).toBe(2);
+    });
+  });
+
+  describe('sharedRefreshState', () => {
+    beforeEach(() => sharedRefreshStates().clear());
+
+    it('hands the same state to two independent module registries', () => {
+      // **This is the test that pins the fix**, and it is here because the
+      // equivalent one was missing for `sharedRevokedStore` — the final review
+      // deleted that function's whole `globalThis` body, replaced it with a
+      // module-level `const Map`, and got 100/100 green. Two calls inside one
+      // module registry cannot tell "one slot per module registry" (the
+      // production bug) from "one slot per realm" (the fix).
+      //
+      // `jest.isolateModules` gives a fresh registry per call, which is the
+      // closest thing in-process to what Next.js's three bundles do.
+      let first: TokenRefreshState | undefined;
+      let second: TokenRefreshState | undefined;
+
+      jest.isolateModules(() => {
+        first = jest
+          .requireActual<typeof import('./refresh')>('./refresh')
+          .sharedRefreshState(ISSUER, CLIENT_ID);
+      });
+      jest.isolateModules(() => {
+        second = jest
+          .requireActual<typeof import('./refresh')>('./refresh')
+          .sharedRefreshState(ISSUER, CLIENT_ID);
+      });
+
+      expect(first).toBeDefined();
+      expect(first).toBe(second);
+
+      // Identity is the mechanism; this is the property it buys — the grant one
+      // bundle has on the wire is visible to the next bundle that asks.
+      const inFlight = {
+        refreshToken: REFRESH_TOKEN,
+        result: Promise.resolve({ accessToken: 'a', expiresAt: 0, refreshToken: REFRESH_TOKEN }),
+      };
+      if (first !== undefined) first.inFlight = inFlight;
+      expect(second?.inFlight).toBe(inFlight);
+    });
+
+    it('keeps one issuer and client apart from another', () => {
+      // One process could serve more than one authorization server; sharing a
+      // discovery document between two issuers would send a grant to the wrong
+      // token endpoint.
+      expect(sharedRefreshState(ISSUER, CLIENT_ID)).toBe(sharedRefreshState(ISSUER, CLIENT_ID));
+      expect(sharedRefreshState(ISSUER, CLIENT_ID)).not.toBe(
+        sharedRefreshState(ISSUER, 'another-client')
+      );
+      expect(sharedRefreshState(ISSUER, CLIENT_ID)).not.toBe(
+        sharedRefreshState('https://other.okta.test/oauth2/default', CLIENT_ID)
+      );
     });
   });
 

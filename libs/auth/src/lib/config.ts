@@ -2,10 +2,28 @@
  * The Auth.js configuration: one Okta OIDC provider plus the three callbacks
  * that make a short-lived access token usable for the life of a session.
  *
- * Everything here is a pure function of its arguments — no `process.env`, no
- * module-level state, no branch on `NODE_ENV`. Dev, e2e and production build
- * this same object and differ only in the values `apps/web` passes in, which
- * is the rule Task 11 has to hold to on the API side as well.
+ * **No branch on `NODE_ENV`, and no configuration value read from the
+ * environment.** Dev, e2e and production build this same object and differ only
+ * in the values `apps/web` passes in, which is the rule Task 11 has to hold to
+ * on the API side as well.
+ *
+ * That is narrower than what this docblock used to claim ("a pure function of
+ * its arguments — no `process.env`, no module-level state"), and the difference
+ * is worth naming rather than tidying away. `createAuthConfig` reaches for two
+ * pieces of **process-global** state, because Next.js compiles the proxy, the
+ * `/api/auth/*` handlers and the server components into separate bundles and
+ * runs this function once per bundle — three times in one `next start`,
+ * measured (`doc/decision/0231-*`). Anything that has to be shared by all three
+ * cannot live in a closure:
+ *
+ * - `sharedRevokedStore()` (`revocation.ts`) — the sign-out registry's map. It
+ *   also reads `process.env.NEXT_RUNTIME` and **throws** at call time on any
+ *   runtime but Node.js, so building a configuration is not infallible.
+ * - `sharedRefreshState()` (`refresh.ts`) — the discovery promise and the
+ *   in-flight token grant (`doc/decision/0245-*`).
+ *
+ * Both are passed in explicitly at the call site below rather than reached for
+ * inside their modules, so the global state is visible here.
  */
 
 import Okta from 'next-auth/providers/okta';
@@ -13,7 +31,7 @@ import type { NextAuthConfig } from 'next-auth';
 import type { Account, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import { OKTA_PROVIDER_ID, REFRESH_TOKEN_ERROR } from './session';
-import { createTokenRefresher, shouldRefresh } from './refresh';
+import { createTokenRefresher, sharedRefreshState, shouldRefresh } from './refresh';
 import type { TokenRefresher } from './refresh';
 import { createSignOutRegistry, sharedRevokedStore } from './revocation';
 import type { SignOutRegistry } from './revocation';
@@ -256,10 +274,18 @@ export function isAuthorized(auth: Session | null): boolean {
 
 /** Builds the full Auth.js configuration. */
 export function createAuthConfig(options: AuthOptions): NextAuthConfig {
+  // The refresher object is per configuration; the discovery promise and the
+  // in-flight grant it coalesces on are shared by the whole process, and have
+  // to be — for exactly the reason stated below for the revocation map. Three
+  // refreshers with three private in-flight slots do not coalesce anything
+  // between the proxy and the layout, and those two read the *same* request
+  // cookie: measured at two token grants where `doc/decision/0051-*` promised
+  // one. See `sharedRefreshState` and `doc/decision/0245-*`.
   const refresh = createTokenRefresher({
     issuer: options.issuer,
     clientId: options.clientId,
     clientSecret: options.clientSecret,
+    state: sharedRefreshState(options.issuer, options.clientId),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 

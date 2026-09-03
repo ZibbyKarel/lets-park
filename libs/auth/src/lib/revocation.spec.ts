@@ -136,8 +136,49 @@ describe('sharedRevokedStore', () => {
   });
 
   it('hands out one map for the whole process', () => {
-    // The property Next.js's separate bundles depend on.
+    // Necessary but nowhere near sufficient: two calls into *one* module
+    // instance. A module-level `const map = new Map()` passes this identically,
+    // which is the whole point of the test below.
     expect(sharedRevokedStore()).toBe(sharedRevokedStore());
+  });
+
+  it('hands the same map to two independent module registries', () => {
+    // **This is the test that pins the fix.** `doc/decision/0231-*` exists
+    // because Next.js gives the proxy, the `/api/auth/*` handlers and the
+    // server components each their own module registry, so a module-level map
+    // would be three maps and sign-out would be enforced on none of the paths
+    // that matter. Every other test in this file — and in `config.spec.ts` —
+    // runs inside one registry, so none of them can tell "one map per module
+    // registry" from "one map per realm", and the final review measured exactly
+    // that: the whole body of `sharedRevokedStore` replaced by a module-level
+    // `const Map` left 100/100 tests green.
+    //
+    // `jest.isolateModules` gives a fresh registry per call, which is the
+    // closest thing in-process to what Next.js does. `Symbol.for` + `globalThis`
+    // is what carries the map across; a module-level map would not survive it.
+    let first: Map<string, number> | undefined;
+    let second: Map<string, number> | undefined;
+
+    jest.isolateModules(() => {
+      first = jest
+        .requireActual<typeof import('./revocation')>('./revocation')
+        .sharedRevokedStore();
+    });
+    jest.isolateModules(() => {
+      second = jest
+        .requireActual<typeof import('./revocation')>('./revocation')
+        .sharedRevokedStore();
+    });
+
+    expect(first).toBeDefined();
+    expect(first).toBe(second);
+
+    // Identity is the mechanism; this is the property it buys — a revocation
+    // written by the bundle that handled the sign-out is read by the bundle
+    // that does the authorizing.
+    first?.set('probe-subject', 1);
+    expect(second?.get('probe-subject')).toBe(1);
+    second?.delete('probe-subject');
   });
 
   it('serves the Node.js runtime', () => {

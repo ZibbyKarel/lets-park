@@ -161,12 +161,20 @@ interface GlobalWithRevoked {
 export class SignOutRevocationUnavailableError extends Error {
   constructor(runtime: string) {
     super(
-      // An empty `NEXT_RUNTIME` is a real case (see `sharedRevokedStore`) and
-      // `"" runtime` would read as a formatting bug rather than the diagnosis.
-      `Sign-out revocation cannot work on the ${runtime === '' ? 'empty (set but blank) NEXT_RUNTIME' : `"${runtime}"`} runtime: it keeps ` +
-        'per-process state, and the Edge runtime gives each bundle its own ' +
-        'isolate. Serve apps/web on the Node.js runtime (doc/decision/0100-*, ' +
-        'doc/decision/0231-*).'
+      // `''` is not a formatting accident and not a misconfiguration: it is what
+      // Next.js inlines for the **browser** compilation
+      // (`next/dist/build/define-env.js:79`), so naming it that way is the
+      // diagnosis a reader needs. `"" runtime` would read as a bug in this
+      // message instead.
+      runtime === ''
+        ? 'Sign-out revocation cannot work in a browser bundle (NEXT_RUNTIME is "", ' +
+            'which is what Next.js inlines for the client compilation): it keeps per-process ' +
+            'server state. Import @lets-park/auth/client from a client component, not ' +
+            '@lets-park/auth (doc/decision/0231-*).'
+        : `Sign-out revocation cannot work on the "${runtime}" runtime: it keeps ` +
+            'per-process state, and the Edge runtime gives each bundle its own ' +
+            'isolate. Serve apps/web on the Node.js runtime (doc/decision/0100-*, ' +
+            'doc/decision/0231-*).'
     );
     this.name = 'SignOutRevocationUnavailableError';
   }
@@ -209,13 +217,32 @@ export class SignOutRevocationUnavailableError extends Error {
  * any plain Node process that imports `libs/auth` — where the variable does not
  * exist and there is nothing to refuse.
  *
- * An **empty string is not that case.** `NEXT_RUNTIME=''` is a variable someone
- * or something *set*, to a value that is not `nodejs`, and a runtime that is not
- * Node is exactly what this guard exists to refuse. An earlier version exempted
- * it next to `undefined`, which made the one input that looks most like a
- * misconfiguration the one input that bypassed the check — the guard failing
- * open on the shape most likely to reach it by accident. It is now treated like
- * any other non-Node value: it throws.
+ * An **empty string is not that case**, and it is worth being precise about
+ * where it comes from, because an earlier version of this comment guessed and
+ * guessed wrong ("a variable someone set"). Measured, at
+ * `node_modules/next/dist/build/define-env.js:79`:
+ *
+ * ```js
+ * 'process.env.NEXT_RUNTIME': isEdgeServer ? 'edge' : isNodeServer ? 'nodejs' : ''
+ * ```
+ *
+ * `''` is the value **Next.js itself inlines into the browser compilation** —
+ * it is not a misconfiguration, it is the marker for "this bundle is the client
+ * one". Refusing it is still right: a module that keeps per-process server
+ * state has nothing to do in a browser, and `''` is not `nodejs`. But the
+ * consequence is not "an odd environment variable failed loudly". It is: **if
+ * the server/client entry-point boundary ever leaks — a client component
+ * reaching for `@lets-park/auth` instead of `@lets-park/auth/client` — this
+ * throws during module evaluation in the user's browser** rather than
+ * degrading quietly. That is the direction this guard wants, and it is a louder
+ * failure than the one the boundary tests (`client-boundary.spec.ts`) already
+ * catch at build time. Measured on the committed build: `.next/static` contains
+ * no `signed-out-sessions`, so no browser bundle carries this module today.
+ *
+ * An earlier version exempted `''` next to `undefined`, which made the value
+ * Next.js stamps on every client bundle the one value that bypassed the check —
+ * the guard failing open on the shape most likely to reach it. It is now
+ * treated like any other non-Node value: it throws.
  */
 export function sharedRevokedStore(): Map<string, number> {
   const runtime = process.env['NEXT_RUNTIME'];
