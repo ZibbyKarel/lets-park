@@ -100,6 +100,50 @@ export function SpotTile({ spot, onOpen, onAdminOpen }: SpotTileProps) {
   const t = useTranslations('lot');
   const inert = spot.action === 'none';
 
+  /**
+   * The bay's whole state, in its accessible name.
+   *
+   * `aria-label` **replaces** the button's contents as its accessible name,
+   * and a screen reader treats a `<button>` as a single node — so everything
+   * rendered inside it below ("Volné", the holder's name and plate,
+   * "rezervace uzamčeny", "právě upravuje" and the editor) used to be
+   * announced to nobody. A taken bay, a window-locked bay and a bay somebody
+   * else is editing all read as "Otevřít místo E2.93", with no way to tell
+   * them apart; the only state that survived was the waitlist `Badge`, which
+   * happens to sit outside the button. See `doc/decision/0257-*`.
+   *
+   * Built from the **same keys the tile draws**, not from a second set written
+   * for screen readers. Two catalogues saying nearly the same thing is how
+   * they drift, and the visible text is already the true statement of the
+   * state — an alternative wording could only ever be a worse copy of it.
+   *
+   * The waitlist pill is deliberately left out: it is a sibling of this
+   * button, not a child, so it already has its own place in the reading order.
+   */
+  const stateWords: readonly (string | null)[] =
+    spot.appearance === 'free'
+      ? [t('free')]
+      : spot.appearance === 'taken'
+        ? [spot.holderName, spot.holderPlate ?? t('noPlate')]
+        : spot.appearance === 'window-locked'
+          ? [t('tileLocked')]
+          : // "právě upravuje Jana Dvořáková" reads as one clause and is joined
+            // with a space; the tile draws the same two strings on two lines.
+            [
+              spot.editorName === null
+                ? t('tileEditing')
+                : `${t('tileEditing')} ${spot.editorName}`,
+            ];
+
+  const accessibleName = [
+    spot.appearance === 'free'
+      ? t('reserveSpotAction', { label: spot.label })
+      : t('openSpotAction', { label: spot.label }),
+    ...stateWords,
+  ]
+    .filter((word): word is string => word !== null && word !== '')
+    .join(', ');
+
   return (
     <div
       className={cx(
@@ -114,11 +158,7 @@ export function SpotTile({ spot, onOpen, onAdminOpen }: SpotTileProps) {
         onClick={() => {
           onOpen(spot.spotId);
         }}
-        aria-label={
-          spot.appearance === 'free'
-            ? t('reserveSpotAction', { label: spot.label })
-            : t('openSpotAction', { label: spot.label })
-        }
+        aria-label={accessibleName}
         className={cx(
           'flex h-[var(--lot-tile-h)] w-full cursor-pointer flex-col items-center',
           'px-3 py-3 text-left transition duration-[var(--dur-base)] ease-out',

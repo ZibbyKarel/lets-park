@@ -83,6 +83,17 @@ const handlers = new Map<string, (payload: unknown) => void>();
 type RoomEvent = { readonly type: 'join' | 'leave'; readonly date: string | null };
 const roomEvents: RoomEvent[] = [];
 
+/**
+ * The connection status the hook sees. A module-level `let` rather than a
+ * prop, because the real `useRealtime()` reads a context the *provider* owns —
+ * a status change is something that happens **to** this hook, not something
+ * its caller passes it, and a test that handed it in as a prop would be
+ * testing a different shape of hook.
+ */
+type MockRealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'rejected';
+
+let realtimeStatus: MockRealtimeStatus = 'connected';
+
 jest.mock('@lets-park/realtime-client', () => {
   const react = jest.requireActual('react');
   return {
@@ -94,6 +105,7 @@ jest.mock('@lets-park/realtime-client', () => {
         };
       }, [date]);
     },
+    useRealtime: () => ({ status: realtimeStatus, reconnect: jest.fn() }),
     useRealtimeEvent: (event: string, handler: (payload: unknown) => void) => {
       handlers.set(event, handler);
     },
@@ -170,8 +182,10 @@ function setup(
     date?: string | null;
     viewerUserId?: string | null;
     seed?: DayOverviewOutput | null;
+    status?: MockRealtimeStatus;
   } = {}
 ) {
+  if (options.status !== undefined) realtimeStatus = options.status;
   const date = options.date === undefined ? DATE : options.date;
   const client = createQueryClient();
   const seed = options.seed === undefined ? dayOverview() : options.seed;
@@ -195,7 +209,19 @@ function setup(
 
   const utils = render(<Harness date={date} viewerUserId={viewerUserId} />, { wrapper });
 
-  return { ...utils, client, invalidate, date, viewerUserId };
+  /**
+   * Moves the connection to another status, the way the provider would: the
+   * context value changes and every consumer re-renders. `act` so the effect
+   * that watches the status has run by the time the call returns.
+   */
+  function flipStatus(next: MockRealtimeStatus, nextDate: string | null = date) {
+    realtimeStatus = next;
+    act(() => {
+      utils.rerender(<Harness date={nextDate} viewerUserId={viewerUserId} />);
+    });
+  }
+
+  return { ...utils, client, invalidate, date, viewerUserId, flipStatus };
 }
 
 function emit(event: ServerToClientEventName, payload: unknown) {
@@ -215,6 +241,11 @@ function readDay(client: QueryClient, date = DATE): DayOverviewOutput | undefine
 beforeEach(() => {
   handlers.clear();
   roomEvents.length = 0;
+  // `connected` is the resting state, and the one every test that is not about
+  // the connection wants: a hook mounting under a socket that is already up
+  // has missed nothing, so it must not refetch, and none of the invalidation
+  // counts below have to account for one.
+  realtimeStatus = 'connected';
 });
 
 describe('useLotRealtime', () => {
@@ -437,5 +468,118 @@ describe('useLotRealtime — when a patch is not enough', () => {
     emit('reservation:cancelled', { date: DATE, parkingSpotId: 'spot-a', reservationId: 'res-1' });
 
     expect(invalidationsOfDay(invalidate)).toHaveLength(1);
+  });
+});
+
+/**
+ * The gap nothing used to close.
+ *
+ * The four handlers above patch the cache from broadcasts. A broadcast
+ * published while the socket is down is not queued anywhere and never
+ * arrives — and `libs/query` sets `refetchOnWindowFocus: false` and a 30 s
+ * `staleTime`, while TanStack's `refetchOnReconnect` keys off
+ * `navigator.onLine`, which says nothing about an API restart, a proxy idle
+ * timeout or a laptop resume. So the grid kept drawing spots as free that had
+ * been taken during the gap, silently, until the user changed the date.
+ *
+ * Every assertion here is about `invalidateQueries` because that *is* the
+ * behaviour: the hook does not fetch, it tells the cache the entry is stale
+ * and lets the screen's own query re-run. Counting them against the
+ * contract-derived key (`invalidationsOfDay`) is what makes an invalidation
+ * under some other key fail rather than pass.
+ */
+describe('useLotRealtime — reconciling after the socket comes back', () => {
+  function invalidationsOfDay(invalidate: jest.SpyInstance, date = DATE) {
+    return invalidate.mock.calls.filter(
+      (call) =>
+        JSON.stringify((call[0] as { queryKey?: unknown } | undefined)?.queryKey) ===
+        JSON.stringify(dayKey(date))
+    );
+  }
+
+  it('refetches the day when the connection is regained after a drop', () => {
+    const { invalidate, flipStatus } = setup();
+    expect(invalidationsOfDay(invalidate)).toHaveLength(0);
+
+    flipStatus('disconnected');
+    expect(invalidationsOfDay(invalidate)).toHaveLength(0);
+
+    flipStatus('connected');
+    expect(invalidationsOfDay(invalidate)).toHaveLength(1);
+  });
+
+  it('refetches after a refused handshake is recovered, not only after a transport drop', () => {
+    // `rejected` is a different thing to *tell the user* — it has a reconnect
+    // button — but the same thing for the cache: broadcasts were missed.
+    const { invalidate, flipStatus } = setup();
+
+    flipStatus('rejected');
+    flipStatus('connecting');
+    flipStatus('connected');
+
+    expect(invalidationsOfDay(invalidate)).toHaveLength(1);
+  });
+
+  it('refetches once per reconnect, not once per render while connected', () => {
+    const { invalidate, flipStatus } = setup();
+
+    flipStatus('disconnected');
+    flipStatus('connected');
+    flipStatus('connected');
+    flipStatus('connected');
+
+    expect(invalidationsOfDay(invalidate)).toHaveLength(1);
+  });
+
+  it('refetches again on a second drop', () => {
+    const { invalidate, flipStatus } = setup();
+
+    flipStatus('disconnected');
+    flipStatus('connected');
+    flipStatus('disconnected');
+    flipStatus('connected');
+
+    expect(invalidationsOfDay(invalidate)).toHaveLength(2);
+  });
+
+  it('closes the page-load gap: a cold mount refetches once the socket is up', () => {
+    // `RealtimeProvider` starts at `disconnected`, so this is what an ordinary
+    // page load looks like. The overview is fetched before the handshake
+    // finishes, and anything broadcast in between would otherwise be lost —
+    // the same hole as any later drop, just at the start.
+    const { invalidate, flipStatus } = setup({ status: 'disconnected' });
+    expect(invalidationsOfDay(invalidate)).toHaveLength(0);
+
+    flipStatus('connecting');
+    flipStatus('connected');
+
+    expect(invalidationsOfDay(invalidate)).toHaveLength(1);
+  });
+
+  it('does not refetch when it mounts under a socket that is already connected', () => {
+    // Navigating from `/nastaveni` back to `/`: the provider's socket never
+    // went anywhere, so nothing was missed and a refetch would be waste.
+    const { invalidate } = setup({ status: 'connected' });
+    expect(invalidationsOfDay(invalidate)).toHaveLength(0);
+  });
+
+  it('refetches the day now on screen, not the one that was on screen when the socket dropped', () => {
+    const { invalidate, flipStatus, client } = setup();
+    client.setQueryData(dayKey(OTHER_DATE), dayOverview({ date: OTHER_DATE }));
+
+    flipStatus('disconnected');
+    flipStatus('connected', OTHER_DATE);
+
+    expect(invalidationsOfDay(invalidate, OTHER_DATE)).toHaveLength(1);
+    expect(invalidationsOfDay(invalidate, DATE)).toHaveLength(0);
+  });
+
+  it('invalidates nothing while there is no day on screen', () => {
+    const { invalidate, flipStatus } = setup({ date: null, seed: null });
+
+    flipStatus('disconnected', null);
+    flipStatus('connected', null);
+
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

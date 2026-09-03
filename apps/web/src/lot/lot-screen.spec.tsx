@@ -57,13 +57,27 @@ function callUseCellLockMock(options: unknown) {
   return useCellLockMock(options);
 }
 
+/**
+ * The connection status the screen sees, and the `reconnect` it is handed.
+ * Module-level rather than a prop for the same reason as in
+ * `use-lot-realtime.spec.tsx`: the real `useRealtime()` reads a context the
+ * provider owns, so a status change is something that happens *to* this
+ * screen.
+ */
+type MockRealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'rejected';
+let realtimeStatusValue: MockRealtimeStatus = 'connected';
+const reconnectMock = jest.fn();
+function currentRealtime() {
+  return { status: realtimeStatusValue, reconnect: reconnectMock };
+}
+
 jest.mock('@lets-park/realtime-client', () => ({
   // Room-joining and raw events are `use-lot-realtime.spec.tsx` and
   // `use-cell-locks.spec.tsx`'s to cover; this suite only needs the calls to
   // exist and do nothing, so `jest.fn()` stands in rather than an
   // `@typescript-eslint/no-empty-function`-tripping empty arrow.
   useDayRoom: jest.fn(),
-  useRealtime: () => ({ status: 'connected', reconnect: jest.fn() }),
+  useRealtime: () => currentRealtime(),
   useRealtimeEvent: jest.fn(),
   useCellLock: (options: unknown) => callUseCellLockMock(options),
 }));
@@ -226,12 +240,17 @@ function setup(
     day?: DayOverviewOutput | null;
     seedDay?: boolean;
     dayImpl?: () => Promise<DayOverviewOutput>;
+    realtimeStatus?: MockRealtimeStatus;
   } = {}
 ) {
   Object.values(apiMocks).forEach((fn) => {
     fn.mockReset();
   });
   useCellLockMock.mockReset();
+  reconnectMock.mockReset();
+  // `connected` is the resting state; a screen that has never connected is a
+  // separate case, exercised by its own test below.
+  realtimeStatusValue = options.realtimeStatus ?? 'connected';
   apiMocks.reservationCreate.mockResolvedValue(undefined);
   apiMocks.reservationCancel.mockResolvedValue(undefined);
   apiMocks.waitlistJoin.mockResolvedValue(undefined);
@@ -285,11 +304,25 @@ function setup(
 }
 
 describe('LotScreen — the session gate on the day query', () => {
+  /**
+   * This used to also assert `screen.getByRole('status')` reads "Načítá se…"
+   * for an `unauthenticated` session — i.e. it pinned the spinner as the
+   * **resting** state for a session that had ended, which is the dead end the
+   * final review caught: no redirect, no `signIn()`, no message, forever.
+   *
+   * The gate itself is right and stays: firing before the session exists
+   * spends a request the API answers 401, and a 401 is not retried. What is
+   * wrong is treating the spinner as an outcome. Nothing on this screen
+   * recovers a lost session and nothing on it should — `AppTopBar`, which the
+   * `(app)` layout renders above every signed-in route, calls `useRequireAuth`
+   * and navigates away. That is asserted in `app/(app)/layout.spec.tsx`, where
+   * the guard actually lives; asserting the spinner here as well would pin the
+   * old behaviour back in from a second file.
+   */
   it('does not fetch the day before the session exists', () => {
     setup({ sessionStatus: 'unauthenticated', seedDay: false });
 
     expect(apiMocks.overviewDay).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
   });
 
   it('fires the day query once the session exists, without a remount', async () => {
@@ -319,7 +352,7 @@ describe('LotScreen — loading, error and empty', () => {
     await user.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Rezervovat místo E2.93' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u })).toBeInTheDocument()
     );
   });
 
@@ -427,7 +460,7 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
   it('reserving a free spot', async () => {
     const { user, invalidate } = setup();
 
-    await user.click(screen.getByRole('button', { name: 'Rezervovat místo E2.93' }));
+    await user.click(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
     await user.click(await screen.findByRole('button', { name: 'Rezervovat' }));
 
     await waitFor(() =>
@@ -443,7 +476,7 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
   it('joining the waitlist on a spot somebody else holds', async () => {
     const { user, invalidate } = setup();
 
-    await user.click(screen.getByRole('button', { name: 'Otevřít místo E2.92' }));
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.92,/u }));
     await user.click(await screen.findByRole('button', { name: 'Přidat se do fronty' }));
 
     await waitFor(() =>
@@ -467,7 +500,7 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
       }),
     });
 
-    await user.click(screen.getByRole('button', { name: 'Otevřít místo E2.92' }));
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.92,/u }));
     await user.click(await screen.findByRole('button', { name: 'Odejít z fronty' }));
 
     await waitFor(() =>
@@ -483,7 +516,7 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
     // this up first would just be discarded by `setup()`'s own reset.
     apiMocks.reservationCreate.mockRejectedValue(new Error('boom'));
 
-    await user.click(screen.getByRole('button', { name: 'Rezervovat místo E2.93' }));
+    await user.click(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
     await user.click(await screen.findByRole('button', { name: 'Rezervovat' }));
 
     await waitFor(() => expect(apiMocks.reservationCreate).toHaveBeenCalled());
@@ -505,7 +538,7 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
     );
 
     await user.click(screen.getByRole('button', { name: 'Následující den' }));
-    await user.click(await screen.findByRole('button', { name: 'Rezervovat místo E2.93' }));
+    await user.click(await screen.findByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
     await user.click(await screen.findByRole('button', { name: 'Rezervovat' }));
 
     await waitFor(() =>
@@ -530,7 +563,7 @@ describe('LotScreen — onCancelReservation looks the id up off day.spots', () =
   it('cancels the reservation on the spot whose dialog is open — an admin, on someone else’s', async () => {
     const { user } = setup({ profile: profile({ role: 'ADMIN' }) });
 
-    await user.click(screen.getByRole('button', { name: 'Otevřít místo E2.92' }));
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.92,/u }));
     await user.click(await screen.findByRole('button', { name: 'Zrušit rezervaci' }));
 
     await waitFor(() =>
@@ -541,7 +574,7 @@ describe('LotScreen — onCancelReservation looks the id up off day.spots', () =
   it('cancels the reservation on the spot whose dialog is open — a caller, on their own', async () => {
     const { user } = setup();
 
-    await user.click(screen.getByRole('button', { name: 'Otevřít místo E2.94' }));
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.94,/u }));
     await user.click(await screen.findByRole('button', { name: 'Zrušit rezervaci' }));
 
     await waitFor(() =>
@@ -578,7 +611,7 @@ describe('LotScreen — the cell lock is not held for a dialog that cannot write
   it('takes the hold when opening a free spot to reserve it', async () => {
     const { user } = setup();
 
-    await user.click(screen.getByRole('button', { name: 'Rezervovat místo E2.93' }));
+    await user.click(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
 
     expect(lastCellLockEnabled()).toBe(true);
   });
@@ -586,8 +619,89 @@ describe('LotScreen — the cell lock is not held for a dialog that cannot write
   it('does not take the hold for the read-only explanation on a window-locked spot', async () => {
     const { user } = setup({ day: dayOverview({ canReserve: false }) });
 
-    await user.click(screen.getByRole('button', { name: 'Otevřít místo E2.93' }));
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.93,/u }));
 
     expect(lastCellLockEnabled()).toBe(false);
+  });
+});
+
+/**
+ * What the user is told about the connection.
+ *
+ * The screen used to draw a notice for exactly one of the four statuses —
+ * `rejected` — so the far more common way to end up looking at a frozen board
+ * (`disconnected`, and `connecting` while the transport retries) was invisible.
+ * The rule itself is `toRealtimeNoticeView` and is unit-tested in
+ * `lot-view.spec.ts`; what these assert is that the screen actually *draws* it,
+ * and which affordance comes with which state.
+ *
+ * The notice is found by its Czech sentence rather than by `role="status"`:
+ * `WindowBanner` is also a `status` and is always present, so a role query
+ * would match the wrong node — the exact way this could pass while showing
+ * nothing.
+ */
+describe('LotScreen — telling the user the board has stopped updating', () => {
+  const NOTICE = 'Živé aktualizace jsou odpojené — přehled se nemusí sám obnovovat.';
+  const RECONNECT = 'Připojit znovu';
+
+  it('says nothing while the board is live', () => {
+    setup();
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  it('names a dropped connection, without a button that would do nothing', () => {
+    const { rerender } = setup();
+
+    realtimeStatusValue = 'disconnected';
+    rerender(<LotScreen />);
+
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: RECONNECT })).not.toBeInTheDocument();
+  });
+
+  it('keeps saying so while the transport is retrying', () => {
+    const { rerender } = setup();
+
+    realtimeStatusValue = 'connecting';
+    rerender(<LotScreen />);
+
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+  });
+
+  it('clears the notice when the connection comes back', () => {
+    const { rerender } = setup();
+
+    realtimeStatusValue = 'disconnected';
+    rerender(<LotScreen />);
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+
+    realtimeStatusValue = 'connected';
+    rerender(<LotScreen />);
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  it('does not flash the notice on a page load that has not connected yet', () => {
+    // `RealtimeProvider` starts at `disconnected`. A rule reading the status
+    // alone would warn on every load, about data that has not gone stale
+    // because it has not arrived.
+    setup({ realtimeStatus: 'disconnected' });
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  it('offers the reconnect button for a refused handshake, and wires it to the connection', async () => {
+    const { user } = setup({ realtimeStatus: 'rejected' });
+
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: RECONNECT }));
+
+    expect(reconnectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a refused handshake even before the board was ever live', () => {
+    // Terminal by construction (`doc/decision/0061-*`): no later state
+    // corrects it, so the "has it ever connected" guard must not swallow it.
+    setup({ realtimeStatus: 'rejected' });
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: RECONNECT })).toBeInTheDocument();
   });
 });

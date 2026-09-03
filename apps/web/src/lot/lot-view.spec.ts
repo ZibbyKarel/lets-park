@@ -7,6 +7,7 @@ import {
   toDayNoteView,
   toGroupViews,
   toLotCounts,
+  toRealtimeNoticeView,
   toSpotView,
   type CellLockView,
   type LotViewContext,
@@ -331,5 +332,35 @@ describe('toDayNoteView', () => {
   it('prefers the holiday label when a holiday falls on a weekend', () => {
     // 2026-12-26 (2. svátek vánoční) is a Saturday.
     expect(toDayNoteView('2026-12-26').key).toBe('holiday');
+  });
+});
+
+describe('toRealtimeNoticeView', () => {
+  it('says nothing while the board is live', () => {
+    expect(toRealtimeNoticeView('connected', true)).toBe('none');
+    expect(toRealtimeNoticeView('connected', false)).toBe('none');
+  });
+
+  it('names a dropped connection once the board has been live', () => {
+    // The state I1 produces: broadcasts are being missed and the grid is
+    // showing taken spots as free, with nothing on screen saying so.
+    expect(toRealtimeNoticeView('disconnected', true)).toBe('dropped');
+    expect(toRealtimeNoticeView('connecting', true)).toBe('dropped');
+  });
+
+  it('stays quiet before the first connection, so a page load does not flash a warning', () => {
+    // `RealtimeProvider` starts at `disconnected`, and `RealtimeBoundary`
+    // holds the socket closed until the session resolves. A rule that read
+    // the status alone would warn on every single load, about data that has
+    // not gone stale because it has not arrived.
+    expect(toRealtimeNoticeView('disconnected', false)).toBe('none');
+    expect(toRealtimeNoticeView('connecting', false)).toBe('none');
+  });
+
+  it('reports a refused handshake whether or not the board was ever live', () => {
+    // Terminal by construction, and a credential problem rather than a slow
+    // start — there is no later state that would correct it.
+    expect(toRealtimeNoticeView('rejected', false)).toBe('rejected');
+    expect(toRealtimeNoticeView('rejected', true)).toBe('rejected');
   });
 });

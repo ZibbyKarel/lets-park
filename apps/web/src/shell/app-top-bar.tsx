@@ -7,17 +7,42 @@
  * from, where the role comes from, and what the two menu actions do. Every
  * *rule* lives in `./top-bar.tsx`, which is why this one is three expressions
  * long and has no branches of its own.
+ *
+ * ## Why the session guard lives here
+ *
+ * `useRequireAuth` is what recovers from a session that ends **while the tab
+ * is open** — the user signing out in another tab, or the Okta refresh
+ * failing. `apps/web/src/app/(app)/layout.tsx` renders this component
+ * unconditionally for all three signed-in routes, so calling it here is the
+ * one place that covers every one of them, `/` included.
+ *
+ * It used to be called only by `shell/settings-page.tsx` and the four admin
+ * panels — never by `/`, the screen the product exists for and the one a tab
+ * is left open on. The consequence was not a missing redirect but a dead end:
+ * `lot-screen.tsx` and `use-current-user.ts` both gate their queries on
+ * `status === 'authenticated'`, a disabled TanStack query stays `pending`
+ * forever, and the screen therefore rendered "Načítá se…" with no redirect,
+ * no `signIn()` and no message. `/sprava` was no better — `AdminScreen`
+ * early-returns while the profile is pending, so the panels that *do* call
+ * `useRequireAuth` were never mounted in exactly the states that need it.
+ * See `doc/decision/0255-*`.
+ *
+ * The proxy (`src/proxy.ts`) still refuses the *navigation*; this is the other
+ * half, and the two do not overlap.
  */
 
 import { useRouter } from 'next/navigation';
-import { signOut, useSession } from '@lets-park/auth/client';
+import { signOut, useRequireAuth } from '@lets-park/auth/client';
 import { LOGIN_ROUTE } from '../routes';
 import { TopBar } from './top-bar';
 import { useCurrentUser } from './use-current-user';
 
 export function AppTopBar() {
   const router = useRouter();
-  const { data: session } = useSession();
+  // Both the read and the guard: `useRequireAuth` wraps `useSession` and
+  // returns the same session, so there is no second subscription and no way
+  // for a caller to take the read without the guard.
+  const { session } = useRequireAuth();
   const { data: profile } = useCurrentUser();
 
   // The profile is authoritative once it arrives; until then the session's own
