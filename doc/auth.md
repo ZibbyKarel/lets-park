@@ -356,6 +356,54 @@ Not a silent 401. Three things happen, in the three places they have to:
 
 ---
 
+## Signing out
+
+Sign-out does two things, and only the second one is load-bearing:
+
+1. Auth.js clears the session cookie, as it always has.
+2. **The server records a revocation cutoff for that subject**, and every later session read
+   refuses a token issued at or before it.
+
+The second exists because the first cannot be relied on. Under `strategy: 'jwt'` the session
+lives in the cookie, and Auth.js re-issues that cookie on **every** request that reads the
+session — a page render, an RSC prefetch, the proxy's own check. A navigation to `/` was
+measured setting three different session cookies in under two milliseconds. So the clearing
+`Set-Cookie` from `POST /api/auth/signout` is racing every render that was already in flight,
+and the browser keeps whichever arrives last. Under load, sometimes it is not the clear.
+
+The application cannot fix that by ordering — it does not decide when Next.js prefetches, and
+it cannot recall a response already sent — so it makes the surviving token useless instead.
+`doc/decision/0230-*` has the measurements and the alternatives that were rejected.
+
+### How the cutoff works
+
+`libs/auth/src/lib/revocation.ts`. On `events.signOut`, the subject's cutoff is set to the
+current Unix second; in the `jwt` callback, a token with `iat <= cutoff` makes the callback
+return `null`. Two things follow from that `null`, both from `@auth/core`:
+
+- `auth()` yields no session, so `callbacks.authorized` is `false` and the proxy redirects the
+  navigation to `/prihlaseni`;
+- the response **clears the session cookie** rather than re-issuing it — so a cookie that
+  survived the race deletes itself the first time it is used.
+
+Two details are not free choices. The key is the **subject**, not the token id, because
+`@auth/core` mints a new `jti` on every encode — the token a racing render re-installs has a
+different id from the one that signed out. And the comparison is `<=`, not `<`, because that
+racing token is encoded in the same whole second as the sign-out.
+
+A fresh sign-in drops the cutoff, so signing out and straight back in works.
+
+### What it does not cover
+
+- **The Okta access token is not revoked at the issuer.** Anyone holding a copy of it can keep
+  calling `apps/api` directly until it expires. Short-lived, not reachable through the browser,
+  and named as a deliberate boundary in `doc/decision/0230-*`.
+- **The cutoffs are in memory**, shared across Next.js's bundles via `globalThis`
+  (`doc/decision/0231-*` — and it is not optional; a module-level map silently does nothing).
+  A restart forgets them, and a second web instance would not see the first's sign-outs.
+
+---
+
 ## Diagnosing a 401
 
 Every rejection above reaches the caller as the same bare 401. That is deliberate — telling

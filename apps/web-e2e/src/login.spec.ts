@@ -15,6 +15,7 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { SESSION_COOKIE, recordAuthTraffic } from './support/auth-network-log';
 import { LOGIN_PATH, LOT_PATH, SIGN_IN_BUTTON, issuerOrigin } from './support/oidc-login';
 import { USER } from './support/personas';
 
@@ -93,6 +94,7 @@ test('a completed sign-in yields a session the API accepts', async ({ page }) =>
 test('signing out returns to the sign-in screen and the lot is protected again', async ({
   page,
 }) => {
+  recordAuthTraffic(page, 'signout');
   await page.goto(LOGIN_PATH);
   await page.getByRole('button', { name: SIGN_IN_BUTTON }).click();
   await page.waitForURL(`${issuerOrigin()}/**`);
@@ -107,4 +109,52 @@ test('signing out returns to the sign-in screen and the lot is protected again',
   await expect(page).toHaveURL(LOGIN_URL_PATTERN);
   await page.goto(LOT_PATH);
   await expect(page).toHaveURL(LOGIN_URL_PATTERN);
+});
+
+/**
+ * The property the test above can only catch by luck, asserted directly.
+ *
+ * The race in `0189` ends with a valid session cookie back in the jar after a
+ * completed sign-out. Whether it gets there by a render finishing late or by
+ * somebody copying the cookie out of a browser makes no difference to what
+ * follows: a session token that outlives its sign-out must not still work.
+ *
+ * So this reproduces the *outcome* rather than the timing — take the cookie
+ * while signed in, sign out for real through the menu, put it back — and asserts
+ * that the application refuses it. Deterministic, no load required, and it fails
+ * on cookie-deletion-only sign-out every single time.
+ *
+ * The cookie value is moved inside the browser context and is never written to
+ * a log, a trace or any other artifact.
+ */
+test('a session cookie kept from before sign-out is refused afterwards', async ({
+  page,
+  context,
+}) => {
+  await page.goto(LOGIN_PATH);
+  await page.getByRole('button', { name: SIGN_IN_BUTTON }).click();
+  await page.waitForURL(`${issuerOrigin()}/**`);
+  await page.locator('input[name="username"]').fill(USER.subject);
+  await page.locator('textarea[name="claims"]').fill(JSON.stringify(USER.claims));
+  await page.getByRole('button', { name: 'Sign-in' }).click();
+  await page.waitForURL(LOT_PATH);
+
+  const kept = (await context.cookies()).find((cookie) => cookie.name === SESSION_COOKIE);
+  // Asserted, not assumed: if the cookie were named something else this test
+  // would otherwise "pass" having restored nothing at all.
+  expect(kept, `no ${SESSION_COOKIE} cookie was set by a completed sign-in`).toBeDefined();
+
+  await page.getByRole('button', { name: 'Uživatelské menu' }).click();
+  await page.getByRole('menuitem', { name: 'Odhlásit se' }).click();
+  await expect(page).toHaveURL(LOGIN_URL_PATTERN);
+
+  // Exactly what the race achieves: the deleted cookie is back, unexpired and
+  // structurally valid. Nothing re-authenticated — there is no trip to the
+  // issuer here.
+  await context.addCookies([kept as NonNullable<typeof kept>]);
+
+  await page.goto(LOT_PATH);
+  await expect(page).toHaveURL(LOGIN_URL_PATTERN);
+  // And not merely redirected: none of the protected screen rendered.
+  await expect(page.getByRole('region', { name: 'Skupina IT' })).toHaveCount(0);
 });

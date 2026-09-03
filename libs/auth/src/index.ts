@@ -23,13 +23,18 @@ export { createAuth } from './lib/create-auth';
 export type { Auth } from './lib/create-auth';
 
 export {
+  applySessionLifecycle,
   createAuthConfig,
+  DEFAULT_SESSION_MAX_AGE_SECONDS,
   isAuthorized,
   OKTA_SCOPES,
   projectSession,
   rotateAccessToken,
 } from './lib/config';
 export type { AuthOptions } from './lib/config';
+
+export { createSignOutRegistry, sharedCutoffStore } from './lib/revocation';
+export type { RevocableToken, SignOutRegistry, SignOutRegistryOptions } from './lib/revocation';
 
 export { accessTokenOf, createAccessTokenProvider } from './lib/access-token';
 

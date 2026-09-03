@@ -15,6 +15,8 @@ import type { JWT } from 'next-auth/jwt';
 import { OKTA_PROVIDER_ID, REFRESH_TOKEN_ERROR } from './session';
 import { createTokenRefresher, shouldRefresh } from './refresh';
 import type { TokenRefresher } from './refresh';
+import { createSignOutRegistry, sharedCutoffStore } from './revocation';
+import type { SignOutRegistry } from './revocation';
 
 /**
  * OAuth2 scopes requested at sign-in.
@@ -176,6 +178,52 @@ export async function rotateAccessToken(
 }
 
 /**
+ * Auth.js's own default session lifetime, in seconds (30 days).
+ *
+ * Restated here because {@link AuthOptions.sessionMaxAgeSeconds} is optional
+ * and the sign-out registry has to know how long a cutoff could still matter.
+ * Keeping a cutoff for less time than a cookie can live would quietly reopen
+ * the hole it exists to close.
+ */
+export const DEFAULT_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * The whole of the `jwt` callback: sign-out revocation first, then rotation.
+ *
+ * Returning `null` is not an error path — `@auth/core`'s session action reads
+ * it as "this session is over" and answers by **clearing the session cookie**
+ * instead of re-issuing it (`lib/actions/session.js`). That is what makes a
+ * cookie which survived the sign-out race self-healing: the next request that
+ * carries it is both refused *and* has it deleted.
+ *
+ * The three branches, in the order they have to be checked:
+ *
+ * 1. **A completed sign-in** (`account` present) supersedes any earlier
+ *    sign-out for this subject, so the cutoff is dropped before anything else
+ *    looks at it. Without this, signing out and back in inside the same second
+ *    would reject the brand-new session.
+ * 2. **A revoked session** is over. Checked before rotation on purpose: there
+ *    is no reason to spend a refresh-token round trip renewing a session that
+ *    is about to be thrown away.
+ * 3. Otherwise the existing rotation rules apply, unchanged.
+ */
+export async function applySessionLifecycle(
+  token: JWT,
+  account: Account | null | undefined,
+  refresh: TokenRefresher,
+  registry: SignOutRegistry
+): Promise<JWT | null> {
+  if (account) {
+    registry.forget(token);
+    return rotateAccessToken(token, account, refresh);
+  }
+
+  if (registry.isRevoked(token)) return null;
+
+  return rotateAccessToken(token, null, refresh);
+}
+
+/**
  * The `session` callback: projects the JWT onto what a browser may see.
  *
  * The refresh token is **not** copied. It stays in the encrypted, httpOnly
@@ -220,6 +268,18 @@ export function createAuthConfig(options: AuthOptions): NextAuthConfig {
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 
+  // The registry object is per configuration; the cutoffs it reads are shared
+  // by the whole process, and have to be. Next.js builds the proxy, the
+  // `/api/auth/*` handlers and the server components as separate bundles, so
+  // this function runs three times in one `next start` — measured. A private
+  // map per call would mean the sign-out endpoint revoking into a registry that
+  // the proxy, which does the actual authorizing, never reads. See
+  // `sharedCutoffStore` and `doc/decision/0231-*`.
+  const registry = createSignOutRegistry({
+    retentionSeconds: options.sessionMaxAgeSeconds ?? DEFAULT_SESSION_MAX_AGE_SECONDS,
+    cutoffs: sharedCutoffStore(),
+  });
+
   return {
     secret: options.secret,
     // Stated, never inherited from the environment. See `AuthOptions.trustHost`
@@ -250,9 +310,28 @@ export function createAuthConfig(options: AuthOptions): NextAuthConfig {
       }),
     ],
     callbacks: {
-      jwt: ({ token, account }) => rotateAccessToken(token, account, refresh),
+      jwt: ({ token, account }) => applySessionLifecycle(token, account, refresh, registry),
       session: ({ session, token }) => projectSession(session, token),
       authorized: ({ auth }) => isAuthorized(auth),
+    },
+    events: {
+      /**
+       * Records the sign-out **before** Auth.js writes the cookie clear.
+       *
+       * `@auth/core`'s signout action awaits this event and only then pushes
+       * `sessionStore.clean()` (`lib/actions/signout.js`), so by the time the
+       * clearing response leaves the server the cutoff is already in place —
+       * and any render that was racing it is already answering with a token
+       * this registry will refuse.
+       *
+       * Under `strategy: 'jwt'` the message carries the decoded `token`; the
+       * `session` shape is the database-strategy branch, which this app does
+       * not use. Narrowing rather than asserting, because a wrong assumption
+       * here would fail silently as "sign-out stopped revoking".
+       */
+      signOut: (message) => {
+        if ('token' in message && message.token != null) registry.revoke(message.token);
+      },
     },
   };
 }
