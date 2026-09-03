@@ -8,7 +8,7 @@
  * that cache entry, holds the cell lock while the dialog is open, and hands
  * plain data to the presentational pieces beside it. Everything it decides is
  * a pure function in `./lot-view`; everything it draws is
- * `./lot-grid`, `./lot-header` and `./spot-dialog`.
+ * `./lot-grid`, `./lot-header`, `./date-nav-bar` and `./spot-dialog`.
  *
  * Nothing here names `@tanstack/react-query`, `socket.io-client`, `next-intl`,
  * `next-auth` or `@orpc/client` — the wrapper rule, enforced by
@@ -32,7 +32,8 @@ import { EmptyState } from '@lets-park/design-system/compounds';
 import { useApi } from '../shell/api-provider';
 import { useCurrentUser } from '../shell/use-current-user';
 import { ScreenError, ScreenLoading } from '../shell/screen-state';
-import { DayBar, LotHeader, RealtimeNotice, WindowBanner } from './lot-header';
+import { LotHeader, RealtimeNotice, WindowBanner } from './lot-header';
+import { DayBar } from './date-nav-bar';
 import { LotGrid } from './lot-grid';
 import { SpotDialog } from './spot-dialog';
 import { useCellLocks } from './use-cell-locks';

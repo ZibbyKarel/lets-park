@@ -60,16 +60,40 @@ jest.mock('@lets-park/auth/client', () => ({
 }));
 
 const handlers = new Map<string, (payload: unknown) => void>();
-const joinedRooms: (string | null)[] = [];
 
-jest.mock('@lets-park/realtime-client', () => ({
-  useDayRoom: (date: string | null) => {
-    joinedRooms.push(date);
-  },
-  useRealtimeEvent: (event: string, handler: (payload: unknown) => void) => {
-    handlers.set(event, handler);
-  },
-}));
+/**
+ * One join-or-leave, in the order it happened. A bare `jest.fn()` recording
+ * calls would not do here: Task 25's risk is that changing the day on screen
+ * leaves the *old* room subscribed, and a mock that only ever "joins" cannot
+ * fail that way no matter what `useLotRealtime` does with the date it is
+ * given. `roomEvent` is instead a faithful-enough stand-in for the real
+ * `useDayRoom` (`libs/realtime-client/src/lib/connection.tsx`, whose own
+ * `connection.spec.tsx` proves the socket-level unsubscribe): an effect keyed
+ * on `date` that joins on mount, joins again on every date it is handed, and
+ * — through the effect's own cleanup — leaves whatever date it is leaving
+ * behind. That makes the "leave the old room" defence a property of *this*
+ * hook actually forwarding the current date, not of React's effect machinery
+ * in isolation.
+ */
+type RoomEvent = { readonly type: 'join' | 'leave'; readonly date: string | null };
+const roomEvents: RoomEvent[] = [];
+
+jest.mock('@lets-park/realtime-client', () => {
+  const react = jest.requireActual('react');
+  return {
+    useDayRoom: (date: string | null) => {
+      react.useEffect(() => {
+        roomEvents.push({ type: 'join', date });
+        return () => {
+          roomEvents.push({ type: 'leave', date });
+        };
+      }, [date]);
+    },
+    useRealtimeEvent: (event: string, handler: (payload: unknown) => void) => {
+      handlers.set(event, handler);
+    },
+  };
+});
 
 const DATE = '2026-09-28';
 const OTHER_DATE = '2026-09-29';
@@ -163,9 +187,9 @@ function setup(
   // profile query still in flight — not an omitted option.
   const viewerUserId = options.viewerUserId === undefined ? VIEWER : options.viewerUserId;
 
-  render(<Harness date={date} viewerUserId={viewerUserId} />, { wrapper });
+  const utils = render(<Harness date={date} viewerUserId={viewerUserId} />, { wrapper });
 
-  return { client, invalidate, date };
+  return { ...utils, client, invalidate, date, viewerUserId };
 }
 
 function emit(event: ServerToClientEventName, payload: unknown) {
@@ -184,18 +208,18 @@ function readDay(client: QueryClient, date = DATE): DayOverviewOutput | undefine
 
 beforeEach(() => {
   handlers.clear();
-  joinedRooms.length = 0;
+  roomEvents.length = 0;
 });
 
 describe('useLotRealtime', () => {
   it('joins the room of the day it was given', () => {
     setup();
-    expect(joinedRooms).toContain(DATE);
+    expect(roomEvents).toEqual([{ type: 'join', date: DATE }]);
   });
 
   it('joins no room while there is no day', () => {
     setup({ date: null, seed: null });
-    expect(joinedRooms).toEqual([null]);
+    expect(roomEvents).toEqual([{ type: 'join', date: null }]);
   });
 
   it('subscribes to every event the screen depends on, and no fifth one', () => {
@@ -279,6 +303,47 @@ describe('useLotRealtime', () => {
 
     expect(readDay(client)).toBeUndefined();
     expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Task 25's named risk: changing the day on screen moves **both** the
+ * realtime room and the query-cache key, and a client that forgets the first
+ * half quietly keeps listening — and keeps a socket-side room membership —
+ * for a day nobody is looking at any more.
+ */
+describe('useLotRealtime — the room and the query key both follow the day', () => {
+  it('unsubscribes from the old room when the day changes', () => {
+    const { rerender, viewerUserId } = setup();
+
+    rerender(<Harness date={OTHER_DATE} viewerUserId={viewerUserId} />);
+
+    expect(roomEvents).toEqual([
+      { type: 'join', date: DATE },
+      { type: 'leave', date: DATE },
+      { type: 'join', date: OTHER_DATE },
+    ]);
+  });
+
+  it('patches the new day’s cache entry after the day changes, not the old one', () => {
+    const { client, rerender, viewerUserId } = setup();
+    client.setQueryData(
+      dayKey(OTHER_DATE),
+      dayOverview({ date: OTHER_DATE, spots: [row('spot-c')] })
+    );
+
+    rerender(<Harness date={OTHER_DATE} viewerUserId={viewerUserId} />);
+
+    emit('reservation:created', {
+      date: OTHER_DATE,
+      parkingSpotId: 'spot-c',
+      reservation: publicReservation('res-9', STRANGER),
+    });
+
+    // The event lands under the day now on screen…
+    expect(readDay(client, OTHER_DATE)?.spots[0]?.reservation?.id).toBe('res-9');
+    // …and the entry for the day the client left behind is untouched.
+    expect(readDay(client, DATE)?.spots[0]?.reservation).toBeNull();
   });
 });
 
