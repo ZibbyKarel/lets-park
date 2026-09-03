@@ -113,9 +113,11 @@ describe('publicReservationSchema', () => {
     ]);
   });
 
-  it('rejects a holder that is a full user rather than a summary', () => {
-    // Strictly: the extra keys are stripped, not rejected — assert the stripping
-    // so a widened `userSchema` can never smuggle `icsToken` into a broadcast.
+  it('strips a holder that is a full user down to the summary', () => {
+    // The title used to say "rejects", which is the one thing this does not do
+    // and the comment below already said so. Zod strips unknown keys on a
+    // `z.object`; assert the stripping, so a widened `userSchema` can never
+    // smuggle `icsToken` into a broadcast.
     const parsed = publicReservationSchema.parse({ ...publicReservation, user: validUser });
     expect('icsToken' in parsed.user).toBe(false);
     expect('email' in parsed.user).toBe(false);

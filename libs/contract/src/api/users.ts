@@ -13,15 +13,50 @@ import { idSchema } from '../schemas/primitives';
 import { authed, contractErrors } from './errors';
 
 /**
- * How a user appears to an admin: everything except `icsToken`.
+ * What an admin may see of another person: every field of `userSchema` except
+ * `icsToken`, listed rather than subtracted.
  *
- * The token is the only secret on the entity — it is what makes a personal ICS
- * feed URL unguessable — and an admin has no reason to hold another person's.
- * Omitting from `userSchema` rather than picking fields means a field added to
- * the entity shows up here by default, which is the safe direction for an
- * admin view.
+ * ### Why a `pick`, when this used to be an `omit`
+ *
+ * It used to read `userSchema.omit({ icsToken: true })`, defended as "a field
+ * added to the entity shows up here by default, which is the safe direction for
+ * an admin view" — the argument `entities.ts` uses forty lines away to defend
+ * `userSummarySchema` being a **pick**, for the opposite conclusion. Both
+ * cannot be the safe direction, and the final review was right to say so.
+ *
+ * `pick` wins, and the tie-breaker is what each one costs when it is wrong:
+ *
+ * - Get `pick` wrong and a field an admin should see is missing from the admin
+ *   screen. Visible on the first look at the page, fixed by adding a key here.
+ * - Get `omit` wrong and the **next secret added to `User`** — the entity
+ *   already carries one — is served to every admin, in a response nobody
+ *   re-reads, with no error and nothing in review to catch it. `icsToken` is on
+ *   this entity precisely because per-user secrets live here.
+ *
+ * "Admins see everything unless someone remembers to subtract it" is a default
+ * that fails open. The one direction that has to be deliberate is *widening*,
+ * so widening is what takes an edit here. That makes both projections of
+ * `userSchema` — this one and `userSummarySchema` — allowlists, which is the
+ * rule this file now states rather than a coincidence.
+ *
+ * The field set is **unchanged** by the switch: this is the same ten keys the
+ * `omit` produced, so no response shape moves. Recorded in
+ * `doc/decision/0247-*`.
  */
-export const adminUserSchema = userSchema.omit({ icsToken: true });
+export const ADMIN_USER_FIELDS = {
+  id: true,
+  email: true,
+  name: true,
+  licensePlate: true,
+  role: true,
+  oktaId: true,
+  active: true,
+  preferredParkingSpotId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+export const adminUserSchema = userSchema.pick(ADMIN_USER_FIELDS);
 export type AdminUser = z.infer<typeof adminUserSchema>;
 
 export const adminListUsersInputSchema = z.object({

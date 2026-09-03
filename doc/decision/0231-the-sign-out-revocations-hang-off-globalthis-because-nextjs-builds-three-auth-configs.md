@@ -67,10 +67,26 @@ visible at the call site instead of hidden in a module.
   inlined into an Edge bundle); this makes that constraint executable rather
   than merely argued.
 
-  Two tests hold the line: `revocation.spec.ts` › *refuses to boot on the Edge
-  runtime rather than silently not enforcing*, and `config.spec.ts` › *revokes
-  across configurations, not just the one that signed out*, which fails
-  specifically for a per-configuration map — verified by mutation.
+  `revocation.spec.ts` › *refuses to boot on the Edge runtime rather than
+  silently not enforcing* is the test for **this** bullet, and it does hold the
+  line.
+
+  This paragraph used to continue "Two tests hold the line", adding
+  `config.spec.ts` › *revokes across configurations, not just the one that
+  signed out*, and it overstated what that second test covers. It runs inside
+  **one** module registry, as does `revocation.spec.ts` ›
+  *hands out one map for the whole process*, so between them they falsify a
+  **closure-scoped** map — the shape probed above — and not a **module-level**
+  one. A module-level map is not a hypothetical: it is precisely the production
+  bug this record is about, because the three bundles have a module registry
+  each. The final review measured the gap by replacing the body of
+  `sharedRevokedStore()` with a module-level `const Map` and getting 100/100
+  tests green.
+
+  The test that actually pins the mechanism is `revocation.spec.ts` › *hands the
+  same map to two independent module registries*, added afterwards —
+  `doc/decision/0246-*` records why it takes that shape, and applies the same
+  test to the refresher's state (`doc/decision/0245-*`).
 - **Process-wide state is process-wide.** A second web instance would not see
   the first's sign-outs, which makes horizontal scaling of `apps/web` a change
   that must go through this file. `SignOutRegistry` is deliberately four methods

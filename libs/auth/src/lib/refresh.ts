@@ -56,6 +56,35 @@ export interface RefreshedTokens {
   readonly refreshToken: string;
 }
 
+/**
+ * The two things a refresher shares with its siblings: the discovery promise and
+ * the grant currently on the wire.
+ *
+ * A mutable bag rather than a closure, because coalescing is only worth anything
+ * if *every* refresher for one issuer and client sees the same slot — see
+ * {@link sharedRefreshState}.
+ */
+export interface TokenRefreshState {
+  /**
+   * The discovery document request, cached as a *promise* so concurrent
+   * renewals share one round trip. Reset to `undefined` on failure so a
+   * transient outage does not poison the issuer forever.
+   */
+  discovery?: Promise<TokenEndpoint> | undefined;
+  /**
+   * The renewal currently on the wire, if any, keyed by the refresh token that
+   * started it. Cleared as soon as it settles — this coalesces concurrent
+   * callers, it does not cache a result.
+   */
+  inFlight?: { refreshToken: string; result: Promise<RefreshedTokens> } | undefined;
+}
+
+/** What discovery is read for. */
+interface TokenEndpoint {
+  readonly tokenEndpoint: string;
+  readonly useBasicAuth: boolean;
+}
+
 export interface TokenRefresherOptions {
   /** OIDC issuer, e.g. `https://example.okta.com/oauth2/default`. */
   readonly issuer: string;
@@ -63,6 +92,17 @@ export interface TokenRefresherOptions {
   readonly clientSecret: string;
   /** Override the `fetch` used for discovery and the token request. */
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * Where the discovery promise and the in-flight grant live. Defaults to a
+   * private bag, which is what a test wants; the application passes
+   * {@link sharedRefreshState} — see there for why that is not optional in
+   * Next.js.
+   *
+   * The same shape, and the same reasoning, as
+   * `SignOutRegistryOptions.revoked`: the process-global state is named at the
+   * call site instead of being reached for from inside a module.
+   */
+  readonly state?: TokenRefreshState;
 }
 
 /** Renews an access token from a refresh token. */
@@ -109,27 +149,100 @@ async function readJsonOrUndefined(response: Response): Promise<unknown> {
 }
 
 /**
+ * The key under which the refresh state hangs off `globalThis`.
+ *
+ * `Symbol.for` rather than `Symbol`, for the same realm-wide reason as
+ * `REVOKED_KEY` in `revocation.ts`: two copies of this module — and Next.js
+ * builds three — must resolve the same key, or each gets a private slot and the
+ * coalescing below covers nothing.
+ */
+const REFRESH_STATE_KEY = Symbol.for('@lets-park/auth:token-refresh-state');
+
+interface GlobalWithRefreshState {
+  [REFRESH_STATE_KEY]?: Map<string, TokenRefreshState>;
+}
+
+/**
+ * The one refresh-state table for the whole Node process.
+ *
+ * Deliberately not re-exported from `libs/auth/src/index.ts`: it hands out a
+ * process-global mutable map that any importer could clear.
+ */
+export function sharedRefreshStates(): Map<string, TokenRefreshState> {
+  const container = globalThis as GlobalWithRefreshState;
+  container[REFRESH_STATE_KEY] ??= new Map<string, TokenRefreshState>();
+  return container[REFRESH_STATE_KEY];
+}
+
+/**
+ * The refresh state for one issuer and client, shared by every bundle in the
+ * process.
+ *
+ * **This indirection is not defensive style; without it the coalescing does not
+ * cover the case it exists for.** Next.js compiles the proxy, the
+ * `/api/auth/*` route handlers and the server components into *separate
+ * bundles*, each with its own module registry, so `createAuthConfig` runs three
+ * times in one `next start` — measured, and recorded in
+ * `doc/decision/0231-*`. A refresher whose in-flight slot lives in a closure
+ * therefore has two siblings that cannot see it, and the proxy and the root
+ * layout — which read the **same request cookie** — each send their own
+ * `refresh_token` grant. Measured before this fix: two grants where
+ * `doc/decision/0051-*` promised one.
+ *
+ * `globalThis` crosses the bundle boundary because all three run in the same V8
+ * realm, which is true here because the proxy runs on the Node.js runtime
+ * (`doc/decision/0100-*`).
+ *
+ * Keyed by issuer **and** client id, not by refresh token: the token is the key
+ * *inside* {@link TokenRefreshState.inFlight}, and one process could in
+ * principle serve more than one authorization server. Sharing a discovery
+ * document between two issuers would send a grant to the wrong token endpoint.
+ *
+ * ### Why this does not refuse a non-Node runtime the way `sharedRevokedStore` does
+ *
+ * `sharedRevokedStore` throws off the Node.js runtime because its failure mode
+ * is a **security control quietly not holding**. This one's failure mode is a
+ * redundant token grant — the exact behaviour that shipped before this fix. A
+ * boot failure would be the wrong trade for that on its own, and it is
+ * unreachable anyway: `createAuthConfig` calls `sharedRevokedStore()` on the
+ * same line, so a non-Node runtime has already refused to boot before any
+ * refresher is built.
+ */
+export function sharedRefreshState(issuer: string, clientId: string): TokenRefreshState {
+  const states = sharedRefreshStates();
+  // ` ` cannot occur in a URL or an Okta client id, so no pair of
+  // (issuer, clientId) can collide with another by concatenation.
+  const key = `${issuer} ${clientId}`;
+  let state = states.get(key);
+  if (state === undefined) {
+    state = {};
+    states.set(key, state);
+  }
+  return state;
+}
+
+/**
  * Builds a refresher bound to one issuer and client.
  *
- * The discovery document is fetched at most once per refresher — the *promise*
- * is cached, so concurrent renewals share a single request — and the cache is
- * per instance rather than module-global. That is deliberate: a module-global
- * cache would need a reset hook to be testable, and a reset hook that only
- * tests call is exactly the kind of production-code test seam this project
- * bans elsewhere.
+ * The discovery document is fetched at most once per {@link TokenRefreshState}
+ * — the *promise* is cached, so concurrent renewals share a single request.
  *
  * The token request is coalesced the same way: concurrent callers presenting
  * the same refresh token share one grant, which is what stops a rotating
  * authorization server from invalidating the token under its own siblings. See
  * the comment on the returned function and `doc/decision/0051-*`.
+ *
+ * Both live in `options.state`, which the application points at
+ * {@link sharedRefreshState} so that the three refreshers Next.js builds share
+ * one slot. A closure would give each of them a private one, which is what
+ * `doc/decision/0051-*` used to claim was enough and is not.
  */
 export function createTokenRefresher(options: TokenRefresherOptions): TokenRefresher {
   const { issuer, clientId, clientSecret } = options;
   const fetchImpl = options.fetch ?? globalThis.fetch;
+  const state: TokenRefreshState = options.state ?? {};
 
-  let discovery: Promise<{ tokenEndpoint: string; useBasicAuth: boolean }> | undefined;
-
-  async function discover(): Promise<{ tokenEndpoint: string; useBasicAuth: boolean }> {
+  async function discover(): Promise<TokenEndpoint> {
     const url = discoveryUrl(issuer);
     const response = await fetchImpl(url);
     if (!response.ok) {
@@ -160,14 +273,17 @@ export function createTokenRefresher(options: TokenRefresherOptions): TokenRefre
   }
 
   async function exchange(refreshToken: string): Promise<RefreshedTokens> {
-    discovery ??= discover();
-    let endpoint: { tokenEndpoint: string; useBasicAuth: boolean };
+    state.discovery ??= discover();
+    const started = state.discovery;
+    let endpoint: TokenEndpoint;
     try {
-      endpoint = await discovery;
+      endpoint = await started;
     } catch (error) {
       // A failed discovery must not poison the refresher forever — the next
-      // renewal (minutes later) gets a fresh attempt.
-      discovery = undefined;
+      // renewal (minutes later) gets a fresh attempt. Cleared only if this is
+      // still the current promise, so a slow failure cannot wipe a newer
+      // attempt's cache (the same rule the in-flight slot below follows).
+      if (state.discovery === started) state.discovery = undefined;
       throw error;
     }
 
@@ -221,34 +337,30 @@ export function createTokenRefresher(options: TokenRefresherOptions): TokenRefre
     };
   }
 
-  /**
-   * The renewal currently on the wire, if any, keyed by the refresh token that
-   * started it. Cleared as soon as it settles — this coalesces concurrent
-   * callers, it does not cache a result.
-   */
-  let inFlight: { refreshToken: string; result: Promise<RefreshedTokens> } | undefined;
-
   return function refresh(refreshToken: string): Promise<RefreshedTokens> {
     // Several requests can read the session inside the same renewal window — a
     // page whose layout, Server Component and Route Handler each `await auth()`
-    // is three. With refresh-token rotation enabled on the authorization
-    // server, the first grant invalidates the token and the rest come back
-    // `invalid_grant`, which fails the session closed and signs the user out
-    // mid-session. Sharing one in-flight request removes that for callers in
-    // this process, which is all of them on a single-instance deployment.
+    // is three, and they are not even served by the same bundle. With
+    // refresh-token rotation enabled on the authorization server, the first
+    // grant invalidates the token and the rest come back `invalid_grant`, which
+    // fails the session closed and signs the user out mid-session. Sharing one
+    // in-flight request removes that for every caller in this process —
+    // *including* the ones on Next.js's other two bundles, which is what
+    // `state` being process-global buys and a closure did not.
     // Residual races and the multi-process case: `doc/decision/0051-*`.
-    if (inFlight?.refreshToken === refreshToken) return inFlight.result;
+    const current = state.inFlight;
+    if (current?.refreshToken === refreshToken) return current.result;
 
     const result = exchange(refreshToken);
     const entry = { refreshToken, result };
-    inFlight = entry;
+    state.inFlight = entry;
 
     // Cleared only if this is still the current entry, so a slow failure cannot
     // wipe a newer renewal's slot. `.then(f, f)` handles the rejection on this
     // derived promise; the original is still returned to the caller, which is
     // what reports the error.
     const clear = () => {
-      if (inFlight === entry) inFlight = undefined;
+      if (state.inFlight === entry) state.inFlight = undefined;
     };
     result.then(clear, clear);
 

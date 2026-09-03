@@ -1,5 +1,8 @@
+import * as z from 'zod';
+import { userSchema } from '../schemas/entities';
 import { NOT_A_UUID, UUID_A, userFixture } from '../__fixtures__/fixtures';
 import {
+  ADMIN_USER_FIELDS,
   adminListUsersInputSchema,
   adminListUsersOutputSchema,
   adminUpdateUserInputSchema,
@@ -12,6 +15,25 @@ describe('adminUserSchema', () => {
     expect(parsed).not.toHaveProperty('icsToken');
     expect(parsed.email).toBe(userFixture.email);
     expect(parsed.preferredParkingSpotId).toBe(userFixture.preferredParkingSpotId);
+  });
+
+  it('is exactly the declared allowlist, so widening it takes an edit here', () => {
+    expect(Object.keys(adminUserSchema.shape).sort()).toEqual(
+      Object.keys(ADMIN_USER_FIELDS).sort()
+    );
+  });
+
+  it('does not grow when the user entity grows', () => {
+    // The whole reason this is a `pick` and not an `omit` (`doc/decision/0247-*`).
+    // Exercised rather than argued: widen `userSchema` the way the next task to
+    // add a per-user secret would, and check both directions against it.
+    const widened = userSchema.extend({ passwordResetToken: z.string().min(1) });
+
+    // The allowlist this file declares refuses it by construction.
+    expect(Object.keys(widened.pick(ADMIN_USER_FIELDS).shape)).not.toContain('passwordResetToken');
+    // Subtracting `icsToken` — what this schema used to do — serves it to every
+    // admin, with nothing red anywhere.
+    expect(Object.keys(widened.omit({ icsToken: true }).shape)).toContain('passwordResetToken');
   });
 
   it('rejects a user with an unknown role', () => {
