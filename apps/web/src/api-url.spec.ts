@@ -2,6 +2,7 @@ import {
   API_READINESS_PATH,
   API_RPC_SEGMENT,
   apiOriginOf,
+  apiOriginOrEmpty,
   apiReadinessUrl,
   apiRpcUrl,
 } from './api-url';
@@ -32,6 +33,20 @@ describe('apiOriginOf', () => {
     // throws belongs to whichever realm provides `URL`, and an `instanceof`
     // check across realms is a false negative waiting to happen.
     expect(() => apiOriginOf('/api')).toThrow(/Invalid URL/);
+  });
+});
+
+describe('apiOriginOrEmpty', () => {
+  it('behaves exactly like apiOriginOf on a valid URL', () => {
+    expect(apiOriginOrEmpty('http://localhost:3000/api')).toBe('http://localhost:3000');
+  });
+
+  it('returns an empty string instead of throwing on a value that is not an absolute URL', () => {
+    // `layout.tsx` and `nastaveni/page.tsx` both call this from a Server
+    // Component render; a throw there renders the error boundary for every
+    // route, login page included, rather than the honest "not configured"
+    // fallback each caller wants at build time.
+    expect(apiOriginOrEmpty('/api')).toBe('');
   });
 });
 

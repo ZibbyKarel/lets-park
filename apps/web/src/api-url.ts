@@ -51,6 +51,26 @@ export function apiOriginOf(apiUrl: string): string {
   return new URL(apiUrl).origin;
 }
 
+/**
+ * `apiOriginOf`, but never throws.
+ *
+ * `apiOriginOf` throws on a URL that is not absolute — impossible in a booted
+ * process, since `apps/web/src/env.ts` validates `NEXT_PUBLIC_API_URL` with
+ * `z.url()` first — except during a build-time render with no environment at
+ * all, where an empty string is the honest answer. `app/layout.tsx` needs it
+ * so the socket simply stays closed rather than throwing (which would render
+ * the error boundary for every route, login page included); `nastaveni/page.tsx`
+ * needs it so the ICS section falls back to its "unavailable" copy instead of
+ * a broken link. One helper rather than two hand-copied try/catch blocks.
+ */
+export function apiOriginOrEmpty(apiUrl: string): string {
+  try {
+    return apiOriginOf(apiUrl);
+  } catch {
+    return '';
+  }
+}
+
 /** Absolute URL of the API's readiness probe. See {@link API_READINESS_PATH}. */
 export function apiReadinessUrl(apiUrl: string): string {
   return new URL(API_READINESS_PATH, apiOriginOf(apiUrl)).toString();

@@ -189,6 +189,55 @@ navigates there directly.
 words, uppercased with `cs-CZ` rules, iterating code points so a name outside
 the BMP is not cut in half.
 
+## Settings (`/nastaveni`)
+
+`shell/settings-screen.tsx` is **presentational** — profile, spots, and the
+mutation state around them in as props, callbacks out — and
+`shell/settings-page.tsx` is the connected wrapper, following the same split
+as `TopBar`/`AppTopBar` and `AdminScreen`/`sprava/page.tsx`.
+
+The screen renders as the design system's `Modal` (`doc/decision/0150-*`)
+rather than a bespoke dialog, with its × hidden and `closeOnScrimClick={false}`
+(the design draws no ×, and this dialog holds unsaved input — fix-round note
+in `doc/decision/0150-*`): a licence-plate/preferred-spot form built with
+`useAppForm`/`FormField` (`@lets-park/form`), submitted through
+`me.updateSettings`'s three-valued input (absent = leave alone, `null` =
+clear, a value = set — `toUpdateInput` turns an empty string into `null` for
+both fields). The fields sit inside a real `<form id="settings-form">`; the
+Save button lives in `Modal`'s `footer` (outside that `<form>`'s own DOM
+subtree) and is linked to it with the standard `form="settings-form"`
+attribute, which is also what makes pressing Enter in a field submit natively.
+The ICS section is deliberately **outside** that `<form>`, so pressing Enter
+while focused on the read-only feed-URL input cannot trigger a save.
+
+The form is seeded from the profile exactly **once**, in an effect guarded by
+a `useRef`, so a background refetch (e.g. after the ICS token regenerates and
+invalidates `me.get`) never overwrites an edit in progress. A second effect
+reconciles the seeded preferred-spot id against `spot.list`'s actual result
+once it has resolved (`!spotsPending && !spotsError`): if the stored id is not
+among the active spots — the spot was retired after being chosen,
+`spot.deactivate` never clears anyone's `preferredParkingSpotId` — the form
+value is set to "no preference" to match what a real `<select>` already shows
+in that situation, rather than silently resubmitting an id nobody can see
+selected (Task 26 review, I1). `spotsPending`/`spotsError`, passed down from
+`SettingsPage`'s `spot.list` query, also drive a loading hint and an inline
+error under the picker, so a failed spot list is not silently indistinguishable
+from "no active spots" (review, M8).
+
+Below the form, a second section — `IcsSection` — shows the caller's ICS feed
+URL (`buildIcsFeedUrl(apiOrigin, icsToken)`), a copy-to-clipboard button, and
+a "Vygenerovat nový odkaz" button behind `ConfirmDialog`, since the old link
+stops resolving the moment a new token is issued. This section has no design
+to copy from; `doc/decision/0151-*` records why it lives in this modal rather
+than its own screen. `apiOrigin` comes from the route's server component
+(`app/(app)/nastaveni/page.tsx`, reading `NEXT_PUBLIC_API_URL` the same way
+`app/layout.tsx` does) — an empty string means it could not be derived, and
+the section renders its "unavailable" copy instead of a broken link.
+
+The ICS token is a bearer credential and is never logged from this screen: a
+failed clipboard write only flips a `copyState` flag, and neither mutation's
+variables or result are serialised anywhere in `SettingsPage`.
+
 ## Loading, empty and error
 
 `shell/screen-state.tsx` exports all three from one module, so a screen imports

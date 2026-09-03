@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { auth } from '../auth';
-import { apiOriginOf } from '../api-url';
+import { apiOriginOrEmpty } from '../api-url';
 import { Providers } from './providers';
 import './global.css';
 
@@ -39,25 +39,10 @@ export default async function RootLayout({ children }: { readonly children: Reac
   return (
     <html lang="cs">
       <body>
-        <Providers session={session} apiUrl={apiUrl} socketUrl={originOrEmpty(apiUrl)}>
+        <Providers session={session} apiUrl={apiUrl} socketUrl={apiOriginOrEmpty(apiUrl)}>
           {children}
         </Providers>
       </body>
     </html>
   );
-}
-
-/**
- * `apiOriginOf` throws on a URL that is not absolute, and a layout that throws
- * renders the error boundary for every route including the login page. The
- * schema makes that impossible in a booted process (`z.url()`), so the only way
- * here is a build-time render with no environment — where an empty string is
- * the honest answer and the socket simply stays closed.
- */
-function originOrEmpty(apiUrl: string): string {
-  try {
-    return apiOriginOf(apiUrl);
-  } catch {
-    return '';
-  }
 }
