@@ -7,7 +7,7 @@ import {
   subscribeToLayers,
   useDismissableLayer,
   type DismissableLayer,
-} from './dismissable-layer';
+} from './dismissable-layer/dismissable-layer';
 
 /**
  * Selector for the elements a browser will put in the tab order. Kept in one

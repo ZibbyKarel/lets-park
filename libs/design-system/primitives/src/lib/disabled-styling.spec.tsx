@@ -2,13 +2,13 @@ import { render, screen } from '@testing-library/react';
 
 import { COLOR_UTILITIES } from '@lets-park/design-system/tokens';
 
-import { Button } from './button';
-import { Checkbox } from './checkbox';
-import { Input } from './input';
-import { Radio } from './radio';
-import { Select } from './select';
-import { Stepper } from './stepper';
-import { Switch } from './switch';
+import { Button } from './button/button';
+import { Checkbox } from './checkbox/checkbox';
+import { Input } from './input/input';
+import { Radio } from './radio/radio';
+import { Select } from './select/select';
+import { Stepper } from './stepper/stepper';
+import { Switch } from './switch/switch';
 
 /**
  * Guards the one styling rule in this lib that unit tests can otherwise never

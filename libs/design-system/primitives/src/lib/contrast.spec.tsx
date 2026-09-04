@@ -2,13 +2,13 @@ import { render, screen } from '@testing-library/react';
 
 import { COLOR_UTILITIES } from '@lets-park/design-system/tokens';
 
-import { Avatar, type AvatarTone } from './avatar';
-import { Badge, type BadgeTone } from './badge';
-import { Button, type ButtonVariant } from './button';
-import { Input } from './input';
-import { Modal } from './modal';
-import { Stepper } from './stepper';
-import { Toast, type ToastTone } from './toast';
+import { Avatar, type AvatarTone } from './avatar/avatar';
+import { Badge, type BadgeTone } from './badge/badge';
+import { Button, type ButtonVariant } from './button/button';
+import { Input } from './input/input';
+import { Modal } from './modal/modal';
+import { Stepper } from './stepper/stepper';
+import { Toast, type ToastTone } from './toast/toast';
 
 /**
  * Colour-contrast guard for the pairings this lib chooses.
