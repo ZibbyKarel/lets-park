@@ -85,6 +85,7 @@ import { ReservationWindowService } from '../reservation-window/reservation-wind
 import type { DomainEvent, WaitlistPromotionNotice } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
+import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
 import { WaitlistPromotionService } from './waitlist-promotion.service';
 
 /**
@@ -98,17 +99,6 @@ import { WaitlistPromotionService } from './waitlist-promotion.service';
  * that holds them forever.
  */
 export const MAX_CANCEL_ATTEMPTS = 3;
-
-/**
- * Transaction options for the cancel path.
- *
- * `timeout` is raised above Prisma's 5 s default because this transaction can
- * legitimately *wait*: `FOR UPDATE` blocks against a concurrent `waitlist.leave`
- * on the same rows, and the insert blocks on the unique index against a
- * concurrent create for the same cell. `maxWait` is how long to wait for a
- * connection from the pool, which is a different and much shorter thing.
- */
-const CANCEL_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 15_000 } as const;
 
 /** What one cancel attempt produced, before anything is broadcast. */
 interface CancelOutcome {
@@ -228,7 +218,7 @@ export class ReservationsService {
       try {
         return await this.prisma.client.$transaction(
           (tx) => this.cancelOnce(tx, input, actor),
-          CANCEL_TRANSACTION_OPTIONS
+          RESERVATION_TRANSACTION_OPTIONS
         );
       } catch (error) {
         if (!this.isRetryableConflict(error)) {

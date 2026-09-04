@@ -119,13 +119,7 @@ import { allocateBulk } from './bulk-allocator';
 import type { DomainEvent } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
-
-/**
- * Same reasoning as the cancel path: this transaction can legitimately *wait* —
- * on another confirmation's uncommitted keys — and `maxWait` (how long to wait
- * for a connection from the pool) is a different and much shorter thing.
- */
-const BULK_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 15_000 } as const;
+import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
 
 /** The reservation fields a created row has to give back. */
 interface CreatedReservation {
@@ -231,7 +225,7 @@ export class BulkReservationService {
 
     const outcome = await this.prisma.client.$transaction(
       (tx) => this.confirmOnce(tx, input.dates, month, actor),
-      BULK_TRANSACTION_OPTIONS
+      RESERVATION_TRANSACTION_OPTIONS
     );
 
     // Past `await`, so past `COMMIT`. Nothing above this line may talk to Slack

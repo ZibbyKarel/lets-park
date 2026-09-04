@@ -52,9 +52,7 @@ import { ReservationWindowService } from '../reservation-window/reservation-wind
 import type { DomainEvent } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
-
-/** Same reasoning as the cancel path: this transaction can legitimately wait. */
-const WAITLIST_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 15_000 } as const;
+import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
 
 /** What one waitlist mutation produced, before anything is broadcast. */
 interface WaitlistOutcome<TResult> {
@@ -99,7 +97,7 @@ export class WaitlistService {
 
     const outcome = await this.prisma.client.$transaction(
       (tx) => this.joinOnce(tx, input, actor),
-      WAITLIST_TRANSACTION_OPTIONS
+      RESERVATION_TRANSACTION_OPTIONS
     );
 
     // Past `await`, so past `COMMIT`.
@@ -218,7 +216,7 @@ export class WaitlistService {
   async leave(input: LeaveWaitlistInput, actor: AuthenticatedUser): Promise<LeaveWaitlistOutput> {
     const outcome = await this.prisma.client.$transaction(
       (tx) => this.leaveOnce(tx, input, actor),
-      WAITLIST_TRANSACTION_OPTIONS
+      RESERVATION_TRANSACTION_OPTIONS
     );
 
     this.publisher.publish(outcome.events);
