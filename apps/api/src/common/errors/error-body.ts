@@ -129,21 +129,34 @@ export function contractErrorBody(code: ErrorCode, details?: ErrorDetails): Cont
  * check on all four keys. `contract-exception.filter.spec.ts` pins that.
  */
 export function isHealthCheckResult(body: unknown): boolean {
-  if (typeof body !== 'object' || body === null || body instanceof Error) {
+  // An `Error` reaches this arm too, and passes the narrowing below — it is a
+  // non-array object. It is rejected one line later instead, on `status`, which
+  // no `Error` carries.
+  const result = asRecord(body);
+  if (result === undefined) {
     return false;
   }
-  const result = body as Record<string, unknown>;
   const status = result['status'];
   return (
     (status === 'ok' || status === 'error' || status === 'shutting_down') &&
-    isPlainObject(result['info']) &&
-    isPlainObject(result['error']) &&
-    isPlainObject(result['details'])
+    asRecord(result['info']) !== undefined &&
+    asRecord(result['error']) !== undefined &&
+    asRecord(result['details']) !== undefined
   );
 }
 
-function isPlainObject(value: unknown): boolean {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+/**
+ * Narrows an unknown to a plain object without asserting its contents.
+ *
+ * One predicate rather than the three spellings this file used to hold: a
+ * boolean `isPlainObject`, and two inline `typeof … !== 'object' || … === null`
+ * guards that let arrays through and relied on the following property lookup to
+ * reject them.
+ */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 /**
@@ -164,10 +177,10 @@ function isPlainObject(value: unknown): boolean {
  * internal is not forwarded either.
  */
 export function asExposedClientError(exception: unknown): TransportErrorBody | undefined {
-  if (typeof exception !== 'object' || exception === null) {
+  const candidate = asRecord(exception);
+  if (candidate === undefined) {
     return undefined;
   }
-  const candidate = exception as Record<string, unknown>;
   const status = candidate['status'] ?? candidate['statusCode'];
   if (
     candidate['expose'] !== true ||

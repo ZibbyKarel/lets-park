@@ -105,7 +105,7 @@ import type {
 import type { Prisma } from '@lets-park/database';
 import { Prisma as PrismaNamespace } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
-import { compareDateOnly, todayInPrague } from '@lets-park/shared-types';
+import { compareDateOnly, todayInPrague, toYearMonth } from '@lets-park/shared-types';
 import type { AuditEntry } from '../audit/audit-log.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
@@ -452,7 +452,9 @@ export class BulkReservationService {
 
     for (const row of rows) {
       const key = cellKey(row.parkingSpotId, toDateOnly(row.date));
-      queues.set(key, [...(queues.get(key) ?? []), row]);
+      const queue = queues.get(key) ?? [];
+      queue.push(row);
+      queues.set(key, queue);
     }
     return queues;
   }
@@ -786,8 +788,8 @@ export class BulkReservationService {
         message: 'A bulk booking must name at least one day.',
       });
     }
-    const month = first.slice(0, 7);
-    if (dates.some((date) => date.slice(0, 7) !== month)) {
+    const month = toYearMonth(first);
+    if (dates.some((date) => toYearMonth(date) !== month)) {
       throw new DomainError('VALIDATION_FAILED', {
         message: 'A bulk booking must stay inside one calendar month.',
         details: { month },

@@ -9,7 +9,7 @@
  * result identical on a server running in UTC and on a laptop in Prague.
  */
 
-import { addDays, parseDateOnly, type DateOnly, type DateParts } from './date-only';
+import { addDays, formatDateOnly, parseDateOnly, type DateOnly, type DateParts } from './date-only';
 
 /** IANA identifier of the single time zone this application operates in. */
 export const PRAGUE_TIME_ZONE = 'Europe/Prague';
@@ -67,9 +67,10 @@ function pragueOffsetMs(instant: Date): number {
  * `2026-08-27T22:30:00Z` is already `2026-08-28` in Prague (CEST, UTC+2).
  */
 export function toDateOnlyInPrague(instant: Date): DateOnly {
-  const { year, month, day } = pragueParts(instant);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
+  // `ZonedParts extends DateParts`, so `formatDateOnly` serializes it directly.
+  // Its normalization of out-of-range parts is a no-op here: `Intl` only ever
+  // emits an in-range year, month and day.
+  return formatDateOnly(pragueParts(instant));
 }
 
 /**
