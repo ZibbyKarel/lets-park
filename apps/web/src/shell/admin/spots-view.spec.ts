@@ -113,7 +113,11 @@ describe('isDialogSaving', () => {
 describe('toCategoryCounts', () => {
   it('counts each category, listing every one the enum has', () => {
     expect(
-      toCategoryCounts([aSpot({ id: '1' }), aSpot({ id: '2', group: 'SHARED' }), aSpot({ id: '3' })])
+      toCategoryCounts([
+        aSpot({ id: '1' }),
+        aSpot({ id: '2', group: 'SHARED' }),
+        aSpot({ id: '3' }),
+      ])
     ).toEqual([
       { group: 'IT', count: 2 },
       { group: 'SHARED', count: 1 },
