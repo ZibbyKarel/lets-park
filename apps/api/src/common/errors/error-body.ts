@@ -33,7 +33,7 @@ import { RPC_PATH_PREFIX } from '../../orpc/rpc-route';
  * oRPC's on-the-wire error JSON. Declared structurally rather than imported:
  * `@orpc/client` is a frontend dependency and the backend has no other reason
  * to pull it in. Keep in sync with `ORPCErrorJSON` if oRPC ever changes it —
- * `contract-exception.filter.spec.ts` pins every field.
+ * `error-body.spec.ts` pins every field.
  */
 export interface ContractErrorBody {
   /** Always `false` here: the procedure did not declare this error. */

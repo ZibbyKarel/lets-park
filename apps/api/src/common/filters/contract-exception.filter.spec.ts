@@ -1,9 +1,16 @@
 /**
- * The filter is tested without a database on purpose: `P2002` is raised by
- * Postgres, but `PrismaClientKnownRequestError` is an ordinary class, so the
- * exact object Prisma would throw can be constructed here. That makes the most
- * important mapping in the API — the one that turns a lost double-booking race
- * into a clean 409 instead of a 500 — testable on a machine with no Postgres.
+ * What the filter does with a thrown value: which status and body each kind of
+ * arrival produces, what is logged, and what never reaches the client.
+ *
+ * It is tested without a database on purpose. `P2002` is raised by Postgres,
+ * but `PrismaClientKnownRequestError` is an ordinary class, so the exact object
+ * Prisma would throw can be constructed here — which makes the path that turns
+ * a lost double-booking race into a clean 409 instead of a 500 testable on a
+ * machine with no Postgres.
+ *
+ * The two modules the filter delegates to have their own specs beside them:
+ * `../errors/prisma-error-mapping.spec.ts` (what a database error means) and
+ * `../errors/error-body.spec.ts` (what an error body looks like on the wire).
  */
 
 import {
@@ -16,11 +23,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
-import { ERROR_DEFINITIONS, errorShapeSchema } from '@lets-park/contract';
+import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
 import { DomainError } from '../errors/domain-error';
-import { contractErrorBody } from '../errors/error-body';
-import { mapPrismaErrorCode, mapUniqueConstraintViolation } from '../errors/prisma-error-mapping';
 import { ContractExceptionFilter } from './contract-exception.filter';
 
 interface CapturedResponse {
@@ -79,161 +84,6 @@ function prismaError(code: string, meta?: Record<string, unknown>) {
 function serialized(captured: CapturedResponse): string {
   return JSON.stringify(captured.body);
 }
-
-describe('mapUniqueConstraintViolation', () => {
-  it.each([
-    // `meta.target` as a column list — what Prisma documents, and what the
-    // query-engine client emits. NOT what this project's driver adapter emits;
-    // an earlier version of this comment claimed it was, and that belief is why
-    // the mapping was green while every real violation degraded to CONFLICT.
-    // The shape that actually arrives is in the `driverAdapterError` block
-    // below, transcribed from a live PostgreSQL 17 and re-asserted on every
-    // `nx run api:test-db`.
-    [['parkingSpotId', 'date'], 'SPOT_ALREADY_RESERVED'],
-    [['userId', 'date'], 'RESERVATION_LIMIT_REACHED'],
-    [['parkingSpotId', 'userId', 'date'], 'ALREADY_IN_WAITLIST'],
-    [['email'], 'CONFLICT'],
-  ])('maps the column list %p to %s', (target, expected) => {
-    expect(mapUniqueConstraintViolation({ target })).toBe(expected);
-  });
-
-  it.each([
-    // …and as the constraint name in other configurations. Both must work, or
-    // the mapping silently degrades to CONFLICT in production.
-    ['Reservation_parkingSpotId_date_key', 'SPOT_ALREADY_RESERVED'],
-    ['Reservation_userId_date_key', 'RESERVATION_LIMIT_REACHED'],
-    ['WaitlistEntry_parkingSpotId_userId_date_key', 'ALREADY_IN_WAITLIST'],
-    ['User_email_key', 'CONFLICT'],
-    ['ParkingSpot_label_key', 'CONFLICT'],
-  ])('maps the constraint name %s to %s', (target, expected) => {
-    expect(mapUniqueConstraintViolation({ target })).toBe(expected);
-  });
-
-  /**
-   * The shape `@prisma/adapter-pg` really sends. There is no `target` key
-   * anywhere in it — `database-contract.db.spec.ts` asserts its absence against
-   * a live server, so these fixtures cannot drift into fiction unnoticed.
-   */
-  function driverAdapterMeta(index: string): Record<string, unknown> {
-    return {
-      modelName: index.split('_')[0],
-      driverAdapterError: {
-        cause: {
-          originalCode: '23505',
-          kind: 'UniqueConstraintViolation',
-          constraint: { index },
-          table: index.split('_')[0],
-        },
-      },
-    };
-  }
-
-  it.each([
-    ['Reservation_parkingSpotId_date_key', 'SPOT_ALREADY_RESERVED'],
-    ['Reservation_userId_date_key', 'RESERVATION_LIMIT_REACHED'],
-    ['WaitlistEntry_parkingSpotId_userId_date_key', 'ALREADY_IN_WAITLIST'],
-    ['User_email_key', 'CONFLICT'],
-    ['ParkingSpot_label_key', 'CONFLICT'],
-  ])('maps the driver adapter’s constraint index %s to %s', (index, expected) => {
-    expect(mapUniqueConstraintViolation(driverAdapterMeta(index))).toBe(expected);
-  });
-
-  it('reads the driver adapter’s `fields` form too, for adapters that report columns', () => {
-    // The `constraint` union's other arm. No driver in this project emits it
-    // today; it costs three lines and removes a whole class of "worked on
-    // Postgres, silent on MySQL".
-    const meta = {
-      driverAdapterError: {
-        cause: { kind: 'UniqueConstraintViolation', constraint: { fields: ['userId', 'date'] } },
-      },
-    };
-    expect(mapUniqueConstraintViolation(meta)).toBe('RESERVATION_LIMIT_REACHED');
-  });
-
-  it('degrades to CONFLICT when Prisma reports no target at all', () => {
-    expect(mapUniqueConstraintViolation(undefined)).toBe('CONFLICT');
-    expect(mapUniqueConstraintViolation({})).toBe('CONFLICT');
-    // A driver-adapter error that is not a unique violation, and a malformed
-    // one: neither may be read as a constraint match.
-    expect(mapUniqueConstraintViolation({ driverAdapterError: null })).toBe('CONFLICT');
-    expect(
-      mapUniqueConstraintViolation({ driverAdapterError: { cause: { constraint: {} } } })
-    ).toBe('CONFLICT');
-  });
-
-  // The matching is by exact column set. A previous version joined the columns
-  // and used `includes`, so each of these mapped to a reservation error.
-  it.each([
-    [['userId', 'dateFrom']],
-    [['userId', 'updatedDate']],
-    [['parkingSpotId', 'dateCreated']],
-  ])('does not match %p, whose column merely contains "date"', (target) => {
-    expect(mapUniqueConstraintViolation({ target })).toBe('CONFLICT');
-  });
-
-  it('does not treat a superset of a known constraint as that constraint', () => {
-    // A future `Reservation (parkingSpotId, date, tenantId)` is a different
-    // rule and must not silently claim SPOT_ALREADY_RESERVED.
-    expect(mapUniqueConstraintViolation({ target: ['parkingSpotId', 'date', 'tenantId'] })).toBe(
-      'CONFLICT'
-    );
-  });
-
-  it('does not confuse another table with the same column pair', () => {
-    expect(mapUniqueConstraintViolation({ target: 'Invoice_userId_date_key' })).toBe('CONFLICT');
-  });
-});
-
-describe('mapPrismaErrorCode', () => {
-  it('maps P2025 (record not found) to NOT_FOUND', () => {
-    expect(mapPrismaErrorCode(prismaError('P2025'))).toBe('NOT_FOUND');
-  });
-
-  it('maps P2003 (foreign key) to CONFLICT — every FK here is ON DELETE RESTRICT', () => {
-    expect(mapPrismaErrorCode(prismaError('P2003'))).toBe('CONFLICT');
-  });
-
-  it('returns undefined for a code it does not know, so it becomes a 500', () => {
-    expect(mapPrismaErrorCode(prismaError('P1001'))).toBeUndefined();
-  });
-});
-
-describe('contractErrorBody', () => {
-  it('carries the status and message the contract assigns, not a local guess', () => {
-    expect(contractErrorBody('RESERVATIONS_LOCKED')).toEqual({
-      defined: false,
-      code: 'RESERVATIONS_LOCKED',
-      status: 423,
-      message: 'The reservation window for that month is closed.',
-    });
-  });
-
-  it('keeps OUT_OF_HORIZON and RESERVATIONS_LOCKED distinct (ruling window-3)', () => {
-    const notYetOpen = contractErrorBody('OUT_OF_HORIZON');
-    const alreadyClosed = contractErrorBody('RESERVATIONS_LOCKED');
-
-    expect(notYetOpen.code).not.toBe(alreadyClosed.code);
-    expect(notYetOpen.status).toBe(422);
-    expect(alreadyClosed.status).toBe(423);
-  });
-
-  it('produces a body that satisfies the Task 3 error contract', () => {
-    const body = contractErrorBody('SPOT_ALREADY_RESERVED', { reservationId: 'abc' });
-
-    // `data` is `details` under oRPC's name for the same field (decision 0018).
-    expect(
-      errorShapeSchema.safeParse({
-        code: body.code,
-        message: body.message,
-        details: body.data,
-      }).success
-    ).toBe(true);
-  });
-
-  it('omits data entirely when there are no details', () => {
-    expect(contractErrorBody('NOT_FOUND')).not.toHaveProperty('data');
-  });
-});
 
 describe('ContractExceptionFilter', () => {
   let filter: ContractExceptionFilter;

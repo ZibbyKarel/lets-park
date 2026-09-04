@@ -169,8 +169,9 @@ describe('toContractError', () => {
    * `apps/api` **used to** write its error body at the top level
    * (`response.status(...).json(body)`, `doc/decision/0033-*`), which produced
    * exactly this failure against a real server. It no longer does:
-   * `contract-exception.filter.ts:399` wraps every contract-error body on an
-   * `/api/rpc` path in `{ json: … }` (`doc/decision/0058-*`), and the guard
+   * `rpcEnvelope` in `apps/api/src/common/errors/error-body.ts` wraps every
+   * contract-error body on an `/api/rpc` path in `{ json: … }`
+   * (`doc/decision/0058-*`), and the guard
    * that watches it lives in `apps/api/src/orpc/orpc-pipeline.spec.ts`, which
    * asserts the enveloped shape against a live server. That is where the guard
    * has to be: the coupling cannot be written from here, because the Nx
