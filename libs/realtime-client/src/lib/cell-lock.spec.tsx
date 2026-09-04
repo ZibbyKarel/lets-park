@@ -156,6 +156,16 @@ afterEach(() => {
 describe('CellLockState', () => {
   // Compile-time assertions: the `@ts-expect-error` is the check, and it fails
   // the build the moment the line it guards starts compiling again.
+  //
+  // The two are not equally strong, and it is worth knowing which is which.
+  // The first is unrepresentable: `held-by-other` *requires* `expiresAt` and
+  // `lockedBy`, so no value of any shape reaches that member with `null` in
+  // them. The second is only discouraged — it is the excess-property check
+  // that rejects `expiresAt` on `idle`, and that check fires on a fresh object
+  // literal alone, so a value widened through a variable can still carry a
+  // stale `expiresAt` into an `idle` state. Both stay: the weaker one still
+  // stops the mistake being *written* here, which is where it would be
+  // written.
 
   it('cannot describe a contended cell without the expiry that un-sticks it', () => {
     // Both mechanisms that end a `held-by-other` need this expiry — the

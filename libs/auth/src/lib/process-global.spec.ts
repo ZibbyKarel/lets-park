@@ -13,9 +13,17 @@ import { processGlobalMap } from './process-global';
 
 const NAME = 'process-global-spec';
 const KEY = Symbol.for(`@lets-park/auth:${NAME}`);
+// The second name one case needs, hoisted beside the first: the string and the
+// symbol are derived from one source here, so they cannot drift apart, and the
+// slot is cleared in `afterEach` rather than at the end of that case. An
+// assertion that throws would skip an inline `delete` and leak a populated
+// registry entry into every case after it.
+const OTHER_NAME = 'process-global-spec-other';
+const OTHER_KEY = Symbol.for(`@lets-park/auth:${OTHER_NAME}`);
 
 afterEach(() => {
   delete (globalThis as Record<symbol, unknown>)[KEY];
+  delete (globalThis as Record<symbol, unknown>)[OTHER_KEY];
 });
 
 describe('processGlobalMap', () => {
@@ -45,11 +53,9 @@ describe('processGlobalMap', () => {
   });
 
   it('does not share between different names', () => {
-    const other = Symbol.for('@lets-park/auth:process-global-spec-other');
     processGlobalMap<number>(NAME)().set('a', 1);
 
-    expect(processGlobalMap<number>('process-global-spec-other')().has('a')).toBe(false);
-    delete (globalThis as Record<symbol, unknown>)[other];
+    expect(processGlobalMap<number>(OTHER_NAME)().has('a')).toBe(false);
   });
 
   it('runs the guard before every access, not once at construction', () => {

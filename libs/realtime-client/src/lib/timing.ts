@@ -9,7 +9,7 @@
  * {@link delayUntil}, instead of twice in two functions that differ by a
  * multiplication.
  *
- * Its own module because it is pure: `timing.spec.tsx` drives it with no
+ * Its own module because it is pure: `timing.spec.ts` drives it with no
  * socket, no provider and no React. That used to be the reason these were
  * exported from `@lets-park/realtime-client` itself, where no consumer named
  * them — an internal seam pushed out to the external one to make it reachable.
@@ -73,7 +73,8 @@ export function renewDelayMs(expiresAt: string, now: number): number {
  *
  * The **whole** remaining time, not half of it: this is not a heartbeat on a
  * hold this client owns, it is a wait for somebody else's to lapse, and asking
- * before it has is the polling {@link useCellLock} deliberately does not do.
+ * before it has is the polling `useCellLock` (`./cell-lock.ts`) deliberately
+ * does not do.
  *
  * It is the *backstop*, not the mechanism — the gateway broadcasts
  * `cell:unlocked` on all four ways a hold ends (`doc/decision/0111-*`), and

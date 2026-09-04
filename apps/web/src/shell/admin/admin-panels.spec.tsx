@@ -476,9 +476,10 @@ describe('AdminSpotsPanel', () => {
     // `writeError` reads whichever of the three mutations still holds an error
     // (`deactivateSpot.error ?? updateSpot.error ?? createSpot.error`), so a
     // create that failed keeps poisoning every later write until it is cleared
-    // — and `writeErrorFrom` then attributes that stale error to whatever was
-    // asked for last. Clearing `lastWrite` cannot help here: the next write
-    // sets it again, and it is set to the operation that *succeeded*.
+    // — and the `writeFailure` built from it pairs that stale error with
+    // `lastWrite`, which by then names whatever was asked for last. Clearing
+    // `lastWrite` cannot help: the next write sets it again, and it is set to
+    // the operation that *succeeded*.
     //
     // So: a failed create, abandoned, followed by a retire that the API
     // accepts. Nothing failed, and nothing may be reported.

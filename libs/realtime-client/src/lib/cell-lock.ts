@@ -54,7 +54,7 @@ import { parseAck } from './validation';
 // `./timing`: they are pure arithmetic over an `expiresAt`, they share one
 // invariant (an unparseable or past expiry comes out as the floor, never
 // `NaN`), and holding that invariant in one place is why they are not inline
-// here. `timing.spec.tsx`'s cases are the ones that used to justify exporting
+// here. `timing.spec.ts`'s cases are the ones that used to justify exporting
 // them all the way out of the lib.
 import { contendedRetryDelayMs, renewDelayMs } from './timing';
 
