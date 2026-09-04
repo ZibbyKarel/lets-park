@@ -34,18 +34,17 @@
  */
 
 import type { PrismaClient, User as UserRow } from '@lets-park/database';
-import { Prisma } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
 import { isBusinessDay } from '@lets-park/shared-types';
-import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
-import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';
 import {
   TODAY,
   actorFor,
   buildHarness,
+  codeOf,
   connect,
+  detailsOf,
   holdTransaction,
   seedSpot,
   seedUser,
@@ -102,35 +101,6 @@ const BUSINESS_DAYS = [
 
 /** The March days, kept apart from {@link BUSINESS_DAYS}'s one-month guard. */
 const MARCH_DAYS = [...QUEUE_BUSY_DAYS, ALREADY_QUEUED_DAY];
-
-/** The `details` a rejected call carried. Only a `DomainError` has any. */
-async function detailsOf(work: Promise<unknown>): Promise<unknown> {
-  try {
-    await work;
-  } catch (error) {
-    if (error instanceof DomainError) {
-      return error.details;
-    }
-    throw error;
-  }
-  throw new Error('Expected this call to be rejected, but it succeeded.');
-}
-
-/** The code a rejected call carried, whether it came from us or from Postgres. */
-async function codeOf(work: Promise<unknown>): Promise<string> {
-  try {
-    await work;
-  } catch (error) {
-    if (error instanceof DomainError) {
-      return error.code;
-    }
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return mapPrismaErrorCode(error) ?? `unmapped ${error.code}`;
-    }
-    throw error;
-  }
-  throw new Error('Expected this call to be rejected, but it succeeded.');
-}
 
 describe('bulk booking against a real PostgreSQL', () => {
   let client: PrismaClient;

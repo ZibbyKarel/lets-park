@@ -18,7 +18,9 @@ import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../../auth/authenticated-user';
 import { AuditLogService } from '../../audit/audit-log.service';
 import type { PrismaClient, User as UserRow, ParkingSpot as SpotRow } from '@lets-park/database';
-import { createPrismaClient } from '@lets-park/database';
+import { Prisma, createPrismaClient } from '@lets-park/database';
+import { DomainError } from '../../common/errors/domain-error';
+import { mapPrismaErrorCode } from '../../common/errors/prisma-error-mapping';
 import type { DateOnly } from '@lets-park/shared-types';
 import type { PrismaService } from '../../database/prisma.service';
 import type { DomainEvent, WaitlistPromotionNotice } from '../../reservations/reservation-events';
@@ -207,6 +209,57 @@ export async function setLockMode(
   lockMode: 'AUTO' | 'FORCE_OPEN' | 'FORCE_LOCKED'
 ): Promise<void> {
   await client.reservationWindowSettings.update({ where: { id: 1 }, data: { lockMode } });
+}
+
+/**
+ * The contract code behind a rejection, whether it came from us or from
+ * Postgres.
+ *
+ * `mapPrismaErrorCode` is the *production* mapping these suites exist to
+ * exercise against the real driver's error rather than a fabricated one — which
+ * is why it is called here and not replaced by a table of expected codes. An
+ * unmapped Prisma code is reported as `unmapped <code>` so a failure names the
+ * code that has no mapping instead of just saying "not the expected string".
+ */
+export function contractCodeOf(error: unknown): string {
+  if (error instanceof DomainError) {
+    return error.code;
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return mapPrismaErrorCode(error) ?? `unmapped ${error.code}`;
+  }
+  throw error;
+}
+
+/** The code a rejected call carried. Fails loudly if the call succeeded. */
+export async function codeOf(work: Promise<unknown>): Promise<string> {
+  try {
+    await work;
+  } catch (error) {
+    return contractCodeOf(error);
+  }
+  throw new Error('Expected this call to be rejected, but it succeeded.');
+}
+
+/** The same, for one arm of a `Promise.allSettled` race. */
+export function codeOfRejection(outcome: PromiseSettledResult<unknown>): string {
+  if (outcome.status === 'fulfilled') {
+    throw new Error('Expected this call to have been rejected.');
+  }
+  return contractCodeOf(outcome.reason);
+}
+
+/** The `details` a rejected call carried. Only a `DomainError` has any. */
+export async function detailsOf(work: Promise<unknown>): Promise<unknown> {
+  try {
+    await work;
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return error.details;
+    }
+    throw error;
+  }
+  throw new Error('Expected this call to be rejected, but it succeeded.');
 }
 
 /**

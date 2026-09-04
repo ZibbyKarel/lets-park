@@ -28,9 +28,6 @@
  */
 
 import type { PrismaClient } from '@lets-park/database';
-import { Prisma } from '@lets-park/database';
-import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
-import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';
 import {
@@ -38,6 +35,7 @@ import {
   TODAY,
   actorFor,
   buildHarness,
+  codeOfRejection,
   connect,
   holdTransaction,
   seedSpot,
@@ -45,21 +43,6 @@ import {
   setLockMode,
   waitForBlockedBackend,
 } from '../testing/database/reservation-harness';
-
-/** The contract code behind a rejected settlement, whatever kind of error it is. */
-function codeOfRejection(outcome: PromiseSettledResult<unknown>): string {
-  if (outcome.status === 'fulfilled') {
-    throw new Error('Expected this call to have been rejected.');
-  }
-  const error: unknown = outcome.reason;
-  if (error instanceof DomainError) {
-    return error.code;
-  }
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return mapPrismaErrorCode(error) ?? `unmapped ${error.code}`;
-  }
-  throw error;
-}
 
 describe('two requests at once', () => {
   let client: PrismaClient;

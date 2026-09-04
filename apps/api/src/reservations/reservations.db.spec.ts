@@ -14,10 +14,7 @@
  */
 
 import type { PrismaClient } from '@lets-park/database';
-import { Prisma } from '@lets-park/database';
 import { isBusinessDay } from '@lets-park/shared-types';
-import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
-import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';
 import {
@@ -27,29 +24,12 @@ import {
   TODAY,
   actorFor,
   buildHarness,
+  codeOf,
   connect,
   seedSpot,
   seedUser,
   setLockMode,
 } from '../testing/database/reservation-harness';
-
-/** The code a rejected call carried, whether it came from us or from Postgres. */
-async function codeOf(work: Promise<unknown>): Promise<string> {
-  try {
-    await work;
-  } catch (error) {
-    if (error instanceof DomainError) {
-      return error.code;
-    }
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      // The mapping the whole flow depends on, exercised against the real
-      // driver's error rather than a fabricated one.
-      return mapPrismaErrorCode(error) ?? `unmapped ${error.code}`;
-    }
-    throw error;
-  }
-  throw new Error('Expected this call to be rejected, but it succeeded.');
-}
 
 describe('reservations against a real PostgreSQL', () => {
   let client: PrismaClient;

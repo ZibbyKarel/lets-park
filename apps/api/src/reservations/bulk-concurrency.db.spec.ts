@@ -31,12 +31,9 @@
  */
 
 import type { PrismaClient } from '@lets-park/database';
-import { Prisma } from '@lets-park/database';
 import type { ConfirmBulkOutput } from '@lets-park/contract';
 import type { DateOnly } from '@lets-park/shared-types';
 import { isBusinessDay } from '@lets-park/shared-types';
-import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
-import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';
 import {
@@ -44,6 +41,7 @@ import {
   actorFor,
   barrier,
   buildHarness,
+  codeOfRejection,
   connect,
   seedSpot,
   seedUser,
@@ -103,21 +101,6 @@ async function withProbeTrigger(work: () => Promise<void>, client: PrismaClient)
     );
     await client.$executeRawUnsafe('DROP FUNCTION IF EXISTS zz_bulk_write_order_probe()');
   }
-}
-
-/** The contract code behind a rejected settlement, whatever kind of error it is. */
-function codeOfRejection(outcome: PromiseSettledResult<unknown>): string {
-  if (outcome.status === 'fulfilled') {
-    throw new Error('Expected this call to have been rejected.');
-  }
-  const error: unknown = outcome.reason;
-  if (error instanceof DomainError) {
-    return error.code;
-  }
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return mapPrismaErrorCode(error) ?? `unmapped ${error.code}`;
-  }
-  throw error;
 }
 
 describe('two bulk bookings at once', () => {
