@@ -619,9 +619,13 @@ libs/design-system/compounds/
 - **Domain-free, in stories and specs too.** No parking spot, reservation or
   user appears in this lib, including in fixtures. The sample rows are generic
   items, even though the screens these were drawn for are exactly those tables.
-- **Czech UI copy arrives as a prop with a default**, never as a hardcoded
-  literal — `emptyTitle = 'Žádná data'`, `confirmLabel = 'Potvrdit'`,
-  `cancelLabel = 'Zrušit'`. Same rule as the primitives' `closeLabel`.
+- **Czech UI copy arrives as a required prop**, never as a hardcoded literal
+  and never as a default — `emptyTitle`, `confirmLabel`, `cancelLabel`. Same
+  rule as the primitives' `closeLabel`. These three used to default to
+  `'Žádná data'` / `'Potvrdit'` / `'Zrušit'`, which put user-visible Czech
+  outside `libs/i18n` at any call site that omitted them; nothing here may
+  call `useTranslations`, so requiring the prop is what keeps the copy in app
+  code, and the compiler asks for it.
 - **The swap-don't-layer rule from the primitives still applies.** A sorted vs.
   an unsorted column header supplies its *whole* color set in one branch of the
   ternary; two unconditional `text-*` utilities would resolve by Tailwind's emit
@@ -653,7 +657,7 @@ No TanStack type crosses its props.
 | `toolbar` | `ReactNode` | – (a band under the header, for filters) |
 | `minWidth` | `string` | – (below it the card scrolls sideways) |
 | `defaultSort` / `sort` / `onSortChange` | `DataTableSort` / `DataTableSort \| null` / `(s) => void` | uncontrolled |
-| `emptyTitle` | `string` | `'Žádná data'` ("No data") |
+| `emptyTitle` | `string` | – (required; the empty state's title, the caller's copy) |
 | `emptyDescription` / `emptyAction` | `ReactNode` | – |
 | `className` | `string` | – (merged onto the card's outer `<section>`) |
 
@@ -702,8 +706,8 @@ defect screen-reader users navigate straight into.
 | `title` | `ReactNode` | – (required; the dialog's accessible name) |
 | `description` | `ReactNode` | – (wired to `aria-describedby`) |
 | `onConfirm` / `onCancel` | `() => void` | – (both required) |
-| `confirmLabel` | `string` | `'Potvrdit'` ("Confirm") |
-| `cancelLabel` | `string` | `'Zrušit'` ("Cancel") |
+| `confirmLabel` | `string` | – (required; the caller's copy) |
+| `cancelLabel` | `string` | – (required; the caller's copy) |
 | `tone` | `'default' \| 'danger'` | `'default'` |
 | `loading` | `boolean` | `false` |
 
