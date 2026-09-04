@@ -11,11 +11,7 @@ export * from './lib/prague-time';
  * same names by `doc/decision/0003-*` — so a symbol published here is
  * published to the browser bundle too.
  */
-export {
-  czechPublicHolidayOn,
-  isBusinessDay,
-  isCzechPublicHoliday,
-} from './lib/czech-holidays';
+export { czechPublicHolidayOn, isBusinessDay, isCzechPublicHoliday } from './lib/czech-holidays';
 export type { CzechHoliday } from './lib/czech-holidays';
 export * from './lib/domain-constants';
 export * from './lib/reservation-window';
