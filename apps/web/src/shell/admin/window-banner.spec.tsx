@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import type { MonthWindowOverview } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
 import { WindowBanner } from './window-banner';
-import { STATE_GLYPH, STATE_TONE } from './window-view';
+import { BANNER_STATE_TONE, STATE_GLYPH } from './window-view';
 
 /**
  * One class per tone, read off `toast.tsx`'s own `TONE_CLASSES`.
@@ -107,7 +107,7 @@ describe('WindowBanner', () => {
     const DESIGN_GLYPH = { OPEN: '✓', LOCKED: '🔒', NOT_YET_OPEN: '…' } as const;
 
     it('maps each state to the colour the design gives it', () => {
-      expect(STATE_TONE).toEqual(DESIGN_TONE);
+      expect(BANNER_STATE_TONE).toEqual(DESIGN_TONE);
     });
 
     it('maps each state to its own glyph', () => {
@@ -119,7 +119,7 @@ describe('WindowBanner', () => {
       (state) => {
         renderBanner({ state });
 
-        // Not `STATE_TONE[state]`: reading the map the render used would pass
+        // Not `BANNER_STATE_TONE[state]`: reading the map the render used would pass
         // whatever the map said, which is the mutant this exists to catch.
         expect(screen.getByRole('status').className.split(/\s+/u)).toContain(
           TONE_CLASS[DESIGN_TONE[state]]

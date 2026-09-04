@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { MonthWindowOverview, ReservationLockMode } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
 import { failureWithCode } from '../../testing/contract-failure';
-import { AdminWindowScreen, STATE_TONE } from './admin-window-screen';
+import { AdminWindowScreen, BADGE_STATE_TONE } from './admin-window-screen';
 import type { AdminWindowScreenProps } from './admin-window-screen';
 
 /**
@@ -285,13 +285,13 @@ describe('AdminWindowScreen', () => {
     } as const;
 
     it('maps each state to the colour the design gives it', () => {
-      expect(STATE_TONE).toEqual(DESIGN_TONE);
+      expect(BADGE_STATE_TONE).toEqual(DESIGN_TONE);
     });
 
     it.each(['OPEN', 'LOCKED', 'NOT_YET_OPEN'] as const)('paints a %s month in it', (state) => {
       renderScreen({ months: [{ ...SEPTEMBER, state }] });
 
-      // The expectation is the design's colour, not `STATE_TONE[state]` —
+      // The expectation is the design's colour, not `BADGE_STATE_TONE[state]` —
       // reading back the map the render used would agree with any mutation of
       // it, which is exactly the survivor this replaces.
       expect(screen.getByText(LABEL[state]).className.split(/\s+/u)).toContain(

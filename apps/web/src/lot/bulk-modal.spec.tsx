@@ -9,7 +9,7 @@ import type {
   ParkingSpot,
   PreviewBulkOutput,
 } from '@lets-park/contract';
-import { profile as sharedProfile } from '../testing/fixtures';
+import { profile as sharedProfile, T0 } from '../testing/fixtures';
 import { createProviderWrapper } from '../testing/providers';
 import { BulkReservationModal } from './bulk-modal';
 
@@ -116,7 +116,6 @@ async function contractFailure(code: ErrorCode): Promise<unknown> {
   return outcome;
 }
 
-const T0 = '2026-01-01T00:00:00.000Z';
 const PREFERRED_SPOT_ID = 'spot-preferred';
 
 function spot(id: string, label: string): ParkingSpot {

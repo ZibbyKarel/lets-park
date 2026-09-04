@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
-import { profile } from '../testing/fixtures';
+import { profile, T0 } from '../testing/fixtures';
 import { createProviderWrapper } from '../testing/providers';
 import { LotScreen } from './lot-screen';
 
@@ -123,7 +123,6 @@ jest.mock('@lets-park/api-client', () => ({
 const DATE = FIXED_TODAY;
 const VIEWER = 'user-viewer';
 const OTHER_USER = 'user-other';
-const T0 = '2026-01-01T00:00:00.000Z';
 
 function dayKey(date: string) {
   return createApiQueryUtils(buildClient() as never).overview.day.queryOptions({

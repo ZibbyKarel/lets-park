@@ -54,8 +54,13 @@ import { LockModeChoice } from './lock-mode-choice';
  * Exported so a spec can pin it. The colour is not decoration on this screen —
  * it is the at-a-glance signal an admin reads before the words, so a locked
  * month rendered green is a lie that no amount of correct text undoes.
+ *
+ * `BANNER_STATE_TONE` in `./window-view.ts` is its counterpart for the
+ * overview banner: same three values, a different `Tone` type, a different
+ * design artifact, and a pin of its own. See that docblock for why they stay
+ * two maps.
  */
-export const STATE_TONE: Record<MonthLockState, BadgeTone> = {
+export const BADGE_STATE_TONE: Record<MonthLockState, BadgeTone> = {
   OPEN: 'success',
   LOCKED: 'warning',
   NOT_YET_OPEN: 'neutral',
@@ -182,7 +187,7 @@ function MonthRow({ month }: { readonly month: MonthWindowOverview }) {
             : t('windowMonthRangeForced', range)}
         </p>
       </div>
-      <Badge tone={STATE_TONE[month.state]}>{t(`windowState${month.state}`)}</Badge>
+      <Badge tone={BADGE_STATE_TONE[month.state]}>{t(`windowState${month.state}`)}</Badge>
     </li>
   );
 }

@@ -160,10 +160,15 @@ Without the first, a refused `Smazat` greeted the admin inside the next empty
 "Přidat místo" form; without the second, forgetting one discard would bring the
 same shape back. `doc/decision/0167-*`.
 
-**Colour is copy here.** The month badges and the window banner take their tone
-from `STATE_TONE`, exported from both renderers so a spec can pin the mapping
-against the design — `Otevřeno` green, `Uzamčeno` yellow, `Zatím neotevřeno`
-grey. A locked month drawn green is read as open before a word of it is.
+**Colour is copy here.** The month badges take their tone from
+`BADGE_STATE_TONE` (`shell/admin/admin-window-screen.tsx`) and the window banner
+from `BANNER_STATE_TONE` (`shell/admin/window-view.ts`), each exported so a spec
+can pin the mapping against the design — `Otevřeno` green, `Uzamčeno` yellow,
+`Zatím neotevřeno` grey. A locked month drawn green is read as open before a
+word of it is. The two maps agree today and are deliberately not one map: they
+answer to different design artifacts (`05-admin-window.png`'s pills,
+`06-admin-overview.png`'s band) and are pinned separately, so a redesign of one
+surface cannot silently repaint the other.
 
 ## Czech copy
 

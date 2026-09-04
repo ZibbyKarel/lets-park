@@ -1,5 +1,6 @@
 import { createApiClient } from '@lets-park/api-client';
 import type { BulkDayPlan, BulkDayResult, ParkingSpot } from '@lets-park/contract';
+import { T0 } from '../testing/fixtures';
 import {
   buildMonthGrid,
   diffBulkSchedule,
@@ -24,8 +25,6 @@ import {
  * assert this file's idea of the wire shape rather than the transport's, and
  * `apps/web` may not import `@orpc/client` at all.
  */
-
-const T0 = '2026-01-01T00:00:00.000Z';
 
 function cells(grid: BulkMonthGrid): BulkDayCell[] {
   return grid.weeks

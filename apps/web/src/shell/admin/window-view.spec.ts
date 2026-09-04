@@ -1,5 +1,5 @@
 import type { MonthWindowOverview } from '@lets-park/contract';
-import { STATE_GLYPH, STATE_TONE, toAdminWindowBannerView } from './window-view';
+import { BANNER_STATE_TONE, STATE_GLYPH, toAdminWindowBannerView } from './window-view';
 
 function aWindow(overrides: Partial<MonthWindowOverview> = {}): MonthWindowOverview {
   return {
@@ -76,7 +76,7 @@ describe('toAdminWindowBannerView', () => {
       for (const lockMode of ['AUTO', 'FORCE_OPEN', 'FORCE_LOCKED'] as const) {
         const view = toAdminWindowBannerView(aWindow({ state, lockMode }));
 
-        expect(view.tone).toBe(STATE_TONE[state]);
+        expect(view.tone).toBe(BANNER_STATE_TONE[state]);
         expect(view.glyph).toBe(STATE_GLYPH[state]);
       }
     }

@@ -22,11 +22,20 @@ import { formatDayAndMonth, formatMonthAndYear, startOfYearMonth } from '@lets-p
 import type { MonthLockState } from '@lets-park/i18n';
 
 /**
- * Colour per state, matching `06-admin-overview.png`'s green band for an open
- * month. Exported for the same reason as the badge tones in
- * `./admin-window-screen.tsx`: it is signal, not decoration.
+ * Colour per state for the **banner**, matching `06-admin-overview.png`'s green
+ * band for an open month. Exported for the same reason as
+ * `BADGE_STATE_TONE` in `./admin-window-screen.tsx`: it is signal, not
+ * decoration.
+ *
+ * The two maps hold the same three values today and are still two maps, named
+ * apart so a reader in this folder can tell which is which. They answer to
+ * different design artifacts — this one to the overview banner, that one to
+ * the month pills of `05-admin-window.png` — and each is pinned against its
+ * artifact's colours in its own spec. Merging them would collapse two
+ * assertions into one and make a redesign of either surface silently repaint
+ * the other.
  */
-export const STATE_TONE: Record<MonthLockState, AdminBannerTone> = {
+export const BANNER_STATE_TONE: Record<MonthLockState, AdminBannerTone> = {
   OPEN: 'success',
   LOCKED: 'warning',
   NOT_YET_OPEN: 'neutral',
@@ -105,7 +114,7 @@ export function toAdminWindowBannerView(window: MonthWindowOverview): AdminWindo
     until: isAuto ? formatDayAndMonth(window.windowTo) : '',
     from: isAuto ? formatDayAndMonth(window.windowFrom) : '',
   };
-  const paint = { tone: STATE_TONE[window.state], glyph: STATE_GLYPH[window.state] };
+  const paint = { tone: BANNER_STATE_TONE[window.state], glyph: STATE_GLYPH[window.state] };
 
   switch (window.state) {
     case 'OPEN':

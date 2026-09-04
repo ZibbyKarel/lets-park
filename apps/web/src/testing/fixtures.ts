@@ -15,7 +15,16 @@
 
 import type { MyProfile } from '@lets-park/contract';
 
-/** The instant every fixture in the web specs is stamped with. */
+/**
+ * The instant this module's fixtures are stamped with.
+ *
+ * Exported because three `lot/` specs stamp fixtures of their own with the
+ * same literal — `bulk-view.spec.ts`, `lot-screen.spec.tsx`,
+ * `bulk-modal.spec.tsx` — and a shared timestamp that is a shared constant
+ * cannot drift from the one `profile()` uses. It is *not* the instant every
+ * web spec uses: the `shell/` and `shell/admin/` specs pin their own dates,
+ * because what those assert is about the date, not merely beside it.
+ */
 export const T0 = '2026-01-01T00:00:00.000Z';
 
 /** The signed-in viewer. `preferredParkingSpotId` is the field specs vary. */
