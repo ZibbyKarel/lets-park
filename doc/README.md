@@ -33,7 +33,7 @@ This index is generated from the filesystem and accounts for every file under
 | [`database.md`](database.md) | The PostgreSQL schema, Prisma 7 setup, migrations, the development seed, and backups. |
 | [`design-system.md`](design-system.md) | The tokens and primitives layers: what a token is, how the CSS is generated, and what a primitive may and may not know. |
 | [`environment.md`](environment.md) | Every environment variable the two apps need, how the local Docker stack is started, and how dev, e2e and production differ (values only, never code). |
-| [`frontend.md`](frontend.md) | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow and the screen states. |
+| [`frontend.md`](frontend.md) | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow, the screen states and the `ScreenData<T>` union that selects one, and the `*-view.ts` split between what a screen decides and what it draws. |
 | [`i18n.md`](i18n.md) | `libs/i18n` — the only place allowed to import `next-intl` — and how Czech UI copy is organised. |
 | [`open-items.md`](open-items.md) | Everything the build deliberately left undone: deferred minors, parked findings, and the two gaps where an enforcement mechanism does not actually enforce. |
 | [`ics.md`](ics.md) | The personal calendar subscription: what the feed serves, how its URL is authenticated, and what has been verified about it. |

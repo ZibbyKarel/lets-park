@@ -3,7 +3,9 @@
 `apps/web` is the Next.js 16 App Router front end. This document describes the
 shell that Task 23 established: the route tree, the single client boundary and
 the order its providers nest in, the sign-in flow, the three screen states that
-feature screens compose, the health route, and how Tailwind is wired to the
+feature screens compose and the `ScreenData<T>` union that says which of them a
+screen is in, the `*-view.ts` split that keeps a screen's decisions out of the
+component drawing them, the health route, and how Tailwind is wired to the
 design system's tokens.
 
 Everything user-facing is Czech; everything else — identifiers, comments, this
