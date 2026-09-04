@@ -3,7 +3,10 @@
 import { cloneElement, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 
 import { cx } from '../cx';
-import { DismissableLayerProvider, useDismissableLayer } from '../dismissable-layer/dismissable-layer';
+import {
+  DismissableLayerProvider,
+  useDismissableLayer,
+} from '../dismissable-layer/dismissable-layer';
 
 export type TooltipPlacement = 'top' | 'bottom';
 
