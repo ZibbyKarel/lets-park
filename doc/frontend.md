@@ -8,9 +8,11 @@ screen is in, the `*-view.ts` split that keeps a screen's decisions out of the
 component drawing them, the health route, and how Tailwind is wired to the
 design system's tokens.
 
-Everything user-facing is Czech; everything else — identifiers, comments, this
-file — is English (`doc/decision/0029-*`). No UI string is written in a
-component: they all come from `libs/i18n`.
+User-visible copy is Czech; identifiers — including URLs — are English, along
+with everything else: comments, this file (`doc/decision/0029-*` for the
+copy/prose split, `doc/decision/0298-*` for why a URL falls on the identifier
+side of it). No UI string is written in a component: they all come from
+`libs/i18n`.
 
 ## What a screen may import
 

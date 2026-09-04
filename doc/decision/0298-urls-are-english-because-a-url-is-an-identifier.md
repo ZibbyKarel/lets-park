@@ -40,11 +40,36 @@ routing far more often than it is read off a screen by an employee, and each
 of those readers is working in English.
 
 The practical argument points the same way. `apps/web-e2e/src/support/*`
-addresses these paths by name; `libs/auth`'s `signInPath` must agree with the
-proxy matcher exactly or sign-in becomes a redirect loop; `proxy.ts`'s matcher
-is a regex over path segments. A mixed-language path table makes every one of
-those harder to read for no benefit to the person reserving a parking spot,
-who arrives by clicking a link.
+addresses these paths by name; `libs/auth`'s `signInPath` must name the exact
+segment the App Router serves it under (`apps/web/src/app/login/`), or
+Auth.js's configured sign-in page 404s; `proxy.ts`'s matcher is a regex over
+path segments. A mixed-language path table makes every one of those harder to
+read for no benefit to the person reserving a parking spot, who arrives by
+clicking a link.
 
 This does not reopen `0029`. Interface language is a product decision and it
 has not changed: the app renders in Czech.
+
+## How it is verified
+
+`npm run build`'s route table for `apps/web` lists `/`, `/admin`, `/login` and
+`/settings` — the four routes this application serves, spelled the way this
+record says they should be. `web-e2e:e2e` is 21 passed: the eight spec files
+and their support setup drive the browser against those exact paths (sign-in
+redirects to `/login`, the settings modal is reached at `/settings`, the admin
+tabs at `/admin`), so the page objects in `apps/web-e2e/src/support/*` and the
+routes they navigate to are the same thing, not two lists that happen to agree
+today.
+
+## Consequences and residuals
+
+- **No redirect exists from the old Czech paths.** A bookmark or a saved link
+  to `/prihlaseni`, `/nastaveni` or `/sprava` now 404s instead of resolving.
+  Accepted per "What", above: this is an internal application behind Okta,
+  with no external inbound links to preserve, and no evidence any employee
+  bookmarked a URL rather than the app's own nav.
+- **Any Okta-side configuration that names an old path by string would now be
+  wrong.** The callback URL itself is `/api/auth/callback/okta`, which did not
+  move, but if a redirect allow-list entry or a bookmarked admin link inside
+  Okta's own console names `/prihlaseni` specifically, it needs updating by
+  hand — this record does not reach outside the repository.
