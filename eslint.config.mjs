@@ -511,6 +511,21 @@ export default [
   },
   {
     files: LINTED_EXTENSIONS.map((ext) => `**/*.${ext}`),
+    /**
+     * `eslint.config.mjs` and `jest-environment-*.cjs` are tooling configs,
+     * not application dependency structure: what they import is dictated by
+     * the plugin/environment API (`@nx/eslint-plugin`, `jest-environment-jsdom`,
+     * …), never ships to production, and has no analogue a consumer could
+     * import instead. `DEP_CONSTRAINTS`'s `allowedExternalImports` is written
+     * per `type:` tag to police *source* dependencies — widening it to admit
+     * these packages would weaken it for exactly the application code it
+     * exists to constrain, which is the opposite of why this block's `files`
+     * was widened to cover them in the first place. Every other extension
+     * under `apps/` and `libs/` — `jest.config.cts`, `playwright.config.mts`,
+     * plain source — stays fully covered; this excludes only the two
+     * tooling-config shapes that have no source-dependency reading.
+     */
+    ignores: ['**/eslint.config.{mjs,cjs}', '**/jest-environment-*.{cjs,mjs}'],
     rules: {
       '@nx/enforce-module-boundaries': [
         'error',
@@ -615,7 +630,7 @@ export default [
   // See doc/decision/0003-date-helpers-in-shared-types.md.
   {
     basePath: workspaceRoot,
-    files: ['libs/shared-types/**/*.ts'],
+    files: under('libs/shared-types'),
     rules: {
       'no-restricted-imports': [
         'error',
