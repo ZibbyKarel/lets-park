@@ -119,7 +119,7 @@ would — never to enforce the rule.
 | the queue is served in order, once | `SELECT … FOR UPDATE` on the queue | blocks, then sees the truth |
 
 The mapping from a violated index to a contract code lives in
-`mapUniqueConstraintViolation` (`contract-exception.filter.ts`) and reads the
+`mapUniqueConstraintViolation` (`apps/api/src/common/errors/prisma-error-mapping.ts`) and reads the
 constraint out of `meta.driverAdapterError.cause.constraint.index`, because
 `@prisma/adapter-pg` does not populate Prisma's documented `meta.target` at all.
 
