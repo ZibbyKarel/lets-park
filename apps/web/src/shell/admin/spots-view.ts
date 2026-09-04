@@ -119,7 +119,8 @@ export function isDialogSaving(
   return pendingSpotId === (dialog.kind === 'create' ? null : dialog.spot.id);
 }
 
-export interface CategoryCount {
+/** Module-private for the same reason as the banner view: nothing writes it. */
+interface CategoryCount {
   readonly group: ParkingGroup;
   readonly count: number;
 }

@@ -49,10 +49,16 @@ export const STATE_GLYPH: Record<MonthLockState, string> = {
  * meaning. The three values are `ToastTone`'s, and the banner's `tone` prop is
  * what type-checks that they still are.
  */
-export type AdminBannerTone = 'success' | 'warning' | 'neutral';
+type AdminBannerTone = 'success' | 'warning' | 'neutral';
 
-/** Which `admin` message the banner renders. */
-export type AdminBannerMessageKey =
+/**
+ * Which `admin` message the banner renders.
+ *
+ * Module-private, with the tone and the view record: the banner infers the
+ * whole thing from the call and writes none of them down. `lot-view.ts`
+ * exports its `BannerView` because `lot-header.tsx` takes one as a prop.
+ */
+type AdminBannerMessageKey =
   | 'bannerOpenAuto'
   | 'bannerOpenForced'
   | 'bannerLockedAuto'
@@ -60,7 +66,7 @@ export type AdminBannerMessageKey =
   | 'bannerNotYetOpenAuto'
   | 'bannerNotYetOpenForced';
 
-export interface AdminWindowBannerView {
+interface AdminWindowBannerView {
   readonly tone: AdminBannerTone;
   readonly glyph: string;
   readonly messageKey: AdminBannerMessageKey;
