@@ -33,10 +33,12 @@ import {
 import { ConfirmDialog } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
 import { ScreenError, ScreenLoading } from './screen-state';
-import { toIcsFeedView, type IcsFeedView } from './settings-view';
-
-/** The select's empty option — clearing the preferred spot is allowed. */
-const NO_PREFERRED_SPOT = '';
+import {
+  NO_PREFERRED_SPOT,
+  shouldClearPreferredSpot,
+  toIcsFeedView,
+  type IcsFeedView,
+} from './settings-view';
 
 /**
  * Links the Save button in `Modal`'s `footer` (outside the `<form>`, by
@@ -191,30 +193,16 @@ export function SettingsScreen({
     }
   }, [profile, form]);
 
-  // Reconciles the seeded preferred-spot id against the *actual* set of
-  // selectable options, the moment that set is actually known — not on every
-  // render, and not before `spot.list` has resolved. A `<select>` whose value
-  // has no matching `<option>` (e.g. the stored id belonged to a spot an
-  // admin has since retired — `spot.deactivate` never clears anyone's
-  // `preferredParkingSpotId`) falls back, in the DOM, to displaying its first
-  // option — "Bez preference" here — while leaving the *form's* value
-  // untouched. Save would then silently resubmit the retired id nobody can
-  // see selected, and `MeService.requireSelectableSpot` rejects the whole
-  // request, taking the licence-plate edit down with it (Task 26 review, I1).
-  // Setting the form value to match what is now displayed is what keeps
-  // "what's shown" and "what's submitted" from ever disagreeing — treating a
-  // retired preference exactly like "no preference", which is the only
-  // description of it a user who cannot see it selected could possibly act on.
+  // Reconciles the seeded preferred-spot id against the actual set of
+  // selectable options, whenever that set changes. The rule — including why a
+  // pending or failed `spot.list` must not clear anything — is
+  // {@link shouldClearPreferredSpot}; the effect is only what has to happen in
+  // an effect, because writing a sibling hook's state during render is not
+  // allowed. Not marked dirty: this is a correction of what the DOM already
+  // shows, not an edit the user made.
   useEffect(() => {
-    if (spotsPending || spotsError) {
-      return;
-    }
     const current = form.getValues('preferredParkingSpotId');
-    if (current === NO_PREFERRED_SPOT) {
-      return;
-    }
-    const stillSelectable = spots.some((spot) => spot.id === current);
-    if (!stillSelectable) {
+    if (shouldClearPreferredSpot(current, spots, spotsPending, spotsError)) {
       form.setValue('preferredParkingSpotId', NO_PREFERRED_SPOT, { shouldDirty: false });
     }
   }, [spots, spotsPending, spotsError, form]);
