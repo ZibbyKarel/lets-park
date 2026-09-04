@@ -12,6 +12,19 @@ import nx from '@nx/eslint-plugin';
 const workspaceRoot = import.meta.dirname;
 
 /**
+ * Every extension ESLint actually lints in this workspace. Kept as one list so
+ * the boundary rule, the wrapper ban and the per-wrapper-lib overrides below
+ * cannot drift apart the way they did before — `.cts`/`.mts`/`.cjs`/`.mjs`
+ * files (eighteen of them, under `apps/` and `libs/`) were linted but with
+ * those rules silently absent, because each `files` array was hand-copied and
+ * only ever listed `.ts`/`.tsx`/`.js`/`.jsx`.
+ */
+const LINTED_EXTENSIONS = ['ts', 'tsx', 'cts', 'mts', 'js', 'jsx', 'cjs', 'mjs'];
+
+/** `files` globs matching every linted extension, rooted under `root`. */
+const under = (root) => LINTED_EXTENSIONS.map((ext) => `${root}/**/*.${ext}`);
+
+/**
  * Third-party libraries that application and library code must never import
  * directly. Each one is owned by exactly one wrapper lib, which is the single
  * place in the workspace allowed to import it (see `plan.md`, wrapper table).
@@ -286,7 +299,7 @@ const NPM_ALLOWLIST = {
 /** Source files of every wrapper lib get their own package unbanned. */
 const wrapperLibOverrides = Object.entries(WRAPPED_LIBRARIES).map(([pkg, { owner }]) => ({
   basePath: workspaceRoot,
-  files: [`${owner}/**/*.ts`, `${owner}/**/*.tsx`, `${owner}/**/*.js`, `${owner}/**/*.jsx`],
+  files: under(owner),
   rules: {
     'no-restricted-imports': ['error', restrictWrappedLibraries([pkg])],
     'no-restricted-syntax': ['error', ...restrictWrappedLibrariesDynamically([pkg])],
@@ -497,7 +510,7 @@ export default [
     ],
   },
   {
-    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    files: LINTED_EXTENSIONS.map((ext) => `**/*.${ext}`),
     rules: {
       '@nx/enforce-module-boundaries': [
         'error',
@@ -510,16 +523,7 @@ export default [
     },
   },
   {
-    files: [
-      '**/*.ts',
-      '**/*.tsx',
-      '**/*.cts',
-      '**/*.mts',
-      '**/*.js',
-      '**/*.jsx',
-      '**/*.cjs',
-      '**/*.mjs',
-    ],
+    files: LINTED_EXTENSIONS.map((ext) => `**/*.${ext}`),
     rules: {
       /**
        * Severity stays at Nx's `warn`; the lint target runs with
@@ -554,16 +558,7 @@ export default [
   // Wrapper layers are mandatory in application and library code.
   {
     basePath: workspaceRoot,
-    files: [
-      'apps/**/*.ts',
-      'apps/**/*.tsx',
-      'apps/**/*.js',
-      'apps/**/*.jsx',
-      'libs/**/*.ts',
-      'libs/**/*.tsx',
-      'libs/**/*.js',
-      'libs/**/*.jsx',
-    ],
+    files: under('apps').concat(under('libs')),
     rules: {
       'no-restricted-imports': ['error', restrictWrappedLibraries()],
       // The same ban for `require()` and `import()`, which
