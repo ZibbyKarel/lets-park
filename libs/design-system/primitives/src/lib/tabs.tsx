@@ -1,3 +1,5 @@
+'use client';
+
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { FOCUS_RING, INSET_FOCUS_RING } from './control-size';

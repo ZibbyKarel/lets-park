@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, type ReactNode, type SelectHTMLAttributes } from 'react';
 
 import {

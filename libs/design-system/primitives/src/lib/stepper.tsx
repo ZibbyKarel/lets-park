@@ -1,3 +1,5 @@
+'use client';
+
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import {

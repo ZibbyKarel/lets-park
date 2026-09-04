@@ -1,3 +1,5 @@
+'use client';
+
 import { useId, useState, type ReactNode } from 'react';
 
 import { CONTROL_TRANSITION, FOCUS_RING, PRESS_FEEDBACK } from './control-size';

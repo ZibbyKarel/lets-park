@@ -1,3 +1,5 @@
+'use client';
+
 import { cloneElement, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 
 import { cx } from './cx';

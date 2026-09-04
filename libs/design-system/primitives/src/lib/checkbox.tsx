@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
 import { CONTROL_TRANSITION, FOCUS_RING } from './control-size';
