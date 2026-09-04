@@ -162,11 +162,7 @@ describe('the ICS feed through the assembled application', () => {
   });
 
   beforeEach(() => {
-    double.spots.length = 0;
-    double.users.length = 0;
-    double.reservations.length = 0;
-    double.waitlist.length = 0;
-    double.auditLogs.length = 0;
+    double.reset();
   });
 
   /** Seeds the holder plus one reservation on a fixed future day. */

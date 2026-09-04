@@ -138,11 +138,7 @@ describe('the oRPC transport through the assembled application', () => {
   });
 
   beforeEach(() => {
-    double.spots.length = 0;
-    double.users.length = 0;
-    double.reservations.length = 0;
-    double.waitlist.length = 0;
-    double.auditLogs.length = 0;
+    double.reset();
     double.seedWindowSettings({ openDaysBefore: 7, lockMode: 'AUTO' });
     double.seedUser({ oktaId: 'okta-admin', email: 'admin@example.test', role: 'ADMIN' });
     double.seedUser({ oktaId: 'okta-user', email: 'user@example.test' });

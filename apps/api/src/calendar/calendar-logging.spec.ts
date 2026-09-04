@@ -192,11 +192,7 @@ describe('the ICS feed and the log', () => {
   });
 
   beforeEach(() => {
-    double.spots.length = 0;
-    double.users.length = 0;
-    double.reservations.length = 0;
-    double.waitlist.length = 0;
-    double.auditLogs.length = 0;
+    double.reset();
     emitted = [];
     waiters = [];
   });
