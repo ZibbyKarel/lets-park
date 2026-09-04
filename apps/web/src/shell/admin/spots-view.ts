@@ -16,7 +16,7 @@ import type { AdminWrite } from './admin-errors';
 export type SpotDialogKind = 'create' | 'edit' | 'delete';
 
 /** A surface that can *start* a write: the table, or one of the three dialogs. */
-export type FailureHome = 'table' | SpotDialogKind;
+type FailureHome = 'table' | SpotDialogKind;
 
 /**
  * A surface that can *show* a failure. There are two, not four: a dialog is a
