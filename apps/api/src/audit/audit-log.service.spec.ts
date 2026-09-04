@@ -16,7 +16,7 @@ describe('AuditLogService', () => {
       action: 'SPOT_UPDATED',
       entityType: 'ParkingSpot',
       entityId: 'spot-1',
-      payload: { change: 'created', label: 'E2.92' },
+      payload: { change: 'created', label: 'E2.92', group: 'IT' },
     });
 
     expect(double.auditLogs).toHaveLength(1);
@@ -25,7 +25,7 @@ describe('AuditLogService', () => {
       action: 'SPOT_UPDATED',
       entityType: 'ParkingSpot',
       entityId: 'spot-1',
-      payload: { change: 'created', label: 'E2.92' },
+      payload: { change: 'created', label: 'E2.92', group: 'IT' },
     });
   });
 
@@ -35,17 +35,20 @@ describe('AuditLogService', () => {
       action: 'USER_UPDATED',
       entityType: 'User',
       entityId: 'user-1',
-      payload: { step: 1 },
+      payload: { change: 'ics-token-regenerated', attempt: 1 },
     });
     await audit.record({
       actorUserId: 'actor-1',
       action: 'USER_UPDATED',
       entityType: 'User',
       entityId: 'user-1',
-      payload: { step: 2 },
+      payload: { change: 'ics-token-regenerated', attempt: 2 },
     });
 
-    expect(double.auditLogs.map((row) => row.payload)).toEqual([{ step: 1 }, { step: 2 }]);
+    expect(double.auditLogs.map((row) => row.payload)).toEqual([
+      { change: 'ics-token-regenerated', attempt: 1 },
+      { change: 'ics-token-regenerated', attempt: 2 },
+    ]);
   });
 
   it('writes through the client it is handed, so a caller in a transaction stays in it', async () => {
@@ -60,7 +63,7 @@ describe('AuditLogService', () => {
         action: 'RESERVATION_CANCELLED',
         entityType: 'Reservation',
         entityId: 'reservation-1',
-        payload: {},
+        payload: { parkingSpotId: 'spot-1', date: '2026-03-02', holderUserId: 'user-1' },
       },
       transaction.asPrismaService().client
     );
@@ -82,14 +85,14 @@ describe('AuditLogService', () => {
           action: 'RESERVATION_CREATED',
           entityType: 'Reservation',
           entityId: 'reservation-1',
-          payload: { date: '2026-03-02' },
+          payload: { parkingSpotId: 'spot-1', date: '2026-03-02' },
         },
         {
           actorUserId: 'actor-1',
           action: 'WAITLIST_JOINED',
           entityType: 'WaitlistEntry',
           entityId: 'queue-1',
-          payload: { date: '2026-03-03' },
+          payload: { parkingSpotId: 'spot-1', date: '2026-03-03' },
         },
       ]);
 
@@ -99,14 +102,14 @@ describe('AuditLogService', () => {
           action: 'RESERVATION_CREATED',
           entityType: 'Reservation',
           entityId: 'reservation-1',
-          payload: { date: '2026-03-02' },
+          payload: { parkingSpotId: 'spot-1', date: '2026-03-02' },
         }),
         expect.objectContaining({
           actorUserId: 'actor-1',
           action: 'WAITLIST_JOINED',
           entityType: 'WaitlistEntry',
           entityId: 'queue-1',
-          payload: { date: '2026-03-03' },
+          payload: { parkingSpotId: 'spot-1', date: '2026-03-03' },
         }),
       ]);
     });
@@ -118,7 +121,7 @@ describe('AuditLogService', () => {
           action: 'RESERVATION_CREATED' as const,
           entityType: 'Reservation' as const,
           entityId: `reservation-${index}`,
-          payload: {},
+          payload: { parkingSpotId: 'spot-1', date: '2026-03-02' },
         }))
       );
 
@@ -146,7 +149,7 @@ describe('AuditLogService', () => {
             action: 'RESERVATION_CREATED',
             entityType: 'Reservation',
             entityId: 'reservation-1',
-            payload: {},
+            payload: { parkingSpotId: 'spot-1', date: '2026-03-02' },
           },
         ],
         transaction.asPrismaService().client
@@ -154,6 +157,70 @@ describe('AuditLogService', () => {
 
       expect(transaction.auditLogs).toHaveLength(1);
       expect(double.auditLogs).toHaveLength(0);
+    });
+  });
+
+  describe('the entry type', () => {
+    // The invariant these pin is a compile-time one, so the assertion is the
+    // `@ts-expect-error` itself: it fails the build when the line it guards
+    // starts compiling. Each `record` call is awaited so a legal one is also
+    // shown to still run — a union that forbids everything would pass a
+    // negative-only test.
+
+    it('refuses a payload from another action', async () => {
+      await audit.record({
+        actorUserId: 'actor-1',
+        action: 'WAITLIST_JOINED',
+        entityType: 'WaitlistEntry',
+        entityId: 'queue-1',
+        payload: { parkingSpotId: 'spot-1', date: '2026-03-02' },
+      });
+
+      await audit.record({
+        actorUserId: 'actor-1',
+        action: 'WAITLIST_JOINED',
+        entityType: 'WaitlistEntry',
+        entityId: 'queue-1',
+        // @ts-expect-error a `SPOT_UPDATED` payload cannot describe a queue entry
+        payload: { change: 'deactivated', label: 'E2.92' },
+      });
+
+      expect(double.auditLogs).toHaveLength(2);
+    });
+
+    it('refuses an entity kind the action does not name', async () => {
+      // @ts-expect-error `WAITLIST_PROMOTED` names the reservation it produced,
+      // so `entityType: 'WaitlistEntry'` is unrepresentable. TypeScript reports
+      // a rejected member on the argument rather than on the offending key.
+      await audit.record({
+        actorUserId: 'actor-1',
+        action: 'WAITLIST_PROMOTED',
+        entityType: 'WaitlistEntry',
+        entityId: 'reservation-1',
+        payload: {
+          parkingSpotId: 'spot-1',
+          date: '2026-03-02',
+          promotedUserId: 'user-2',
+          fromWaitlistEntryId: 'queue-1',
+          queueLength: 3,
+        },
+      });
+
+      expect(double.auditLogs).toHaveLength(1);
+    });
+
+    it('refuses a payload that is missing a key the action promises', async () => {
+      // @ts-expect-error `holderUserId` is what makes a cancellation
+      // accountable, and it is not optional.
+      await audit.record({
+        actorUserId: 'actor-1',
+        action: 'RESERVATION_CANCELLED',
+        entityType: 'Reservation',
+        entityId: 'reservation-1',
+        payload: { parkingSpotId: 'spot-1', date: '2026-03-02' },
+      });
+
+      expect(double.auditLogs).toHaveLength(1);
     });
   });
 
