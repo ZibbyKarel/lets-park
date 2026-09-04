@@ -9,13 +9,11 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import { ERROR_CODES, ERROR_DEFINITIONS } from '@lets-park/contract';
-import {
-  createQueryClient,
-  DEFAULT_GC_TIME_MS,
-  DEFAULT_STALE_TIME_MS,
-  MAX_QUERY_RETRIES,
-  createApiQueryUtils,
-} from '../index';
+import { createApiQueryUtils, createQueryClient } from '../index';
+// The policy constants are the client's implementation and are not published
+// from the barrel; this is their own module.
+import { DEFAULT_GC_TIME_MS, DEFAULT_STALE_TIME_MS } from './query-client';
+import { MAX_QUERY_RETRIES } from './retry';
 import {
   contractErrorResponse,
   rpcPayload,
