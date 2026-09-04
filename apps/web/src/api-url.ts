@@ -59,7 +59,7 @@ export function apiOriginOf(apiUrl: string): string {
  * `z.url()` first — except during a build-time render with no environment at
  * all, where an empty string is the honest answer. `app/layout.tsx` needs it
  * so the socket simply stays closed rather than throwing (which would render
- * the error boundary for every route, login page included); `nastaveni/page.tsx`
+ * the error boundary for every route, login page included); `settings/page.tsx`
  * needs it so the ICS section falls back to its "unavailable" copy instead of
  * a broken link. One helper rather than two hand-copied try/catch blocks.
  */

@@ -557,7 +557,7 @@ describe('useLotRealtime — reconciling after the socket comes back', () => {
   });
 
   it('does not refetch when it mounts under a socket that is already connected', () => {
-    // Navigating from `/nastaveni` back to `/`: the provider's socket never
+    // Navigating from `/settings` back to `/`: the provider's socket never
     // went anywhere, so nothing was missed and a refetch would be waste.
     const { invalidate } = setup({ status: 'connected' });
     expect(invalidationsOfDay(invalidate)).toHaveLength(0);

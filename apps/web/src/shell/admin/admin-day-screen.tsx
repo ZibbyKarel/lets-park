@@ -14,7 +14,7 @@
  * `doc/decision/0161-the-admin-day-tab-summarises-the-lot-it-does-not-redraw-it.md`.
  *
  * What is here instead is the part of that screen an admin actually needs while
- * they are in `/sprava`, drawn out of pieces that already exist: the date, the
+ * they are in `/admin`, drawn out of pieces that already exist: the date, the
  * free/taken counts, the window banner, and one `DataTable` row per spot saying
  * who holds it and how many people are queued. The link at the top opens the lot
  * screen for the grid itself.

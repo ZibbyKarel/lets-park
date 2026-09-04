@@ -22,7 +22,7 @@
  * `lot-screen.tsx` and `use-current-user.ts` both gate their queries on
  * `status === 'authenticated'`, a disabled TanStack query stays `pending`
  * forever, and the screen therefore rendered "Načítá se…" with no redirect,
- * no `signIn()` and no message. `/sprava` was no better — `AdminScreen`
+ * no `signIn()` and no message. `/admin` was no better — `AdminScreen`
  * early-returns while the profile is pending, so the panels that *do* call
  * `useRequireAuth` were never mounted in exactly the states that need it.
  * See `doc/decision/0255-*`.

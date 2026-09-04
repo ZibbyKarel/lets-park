@@ -9,7 +9,7 @@ import './global.css';
  * The document, and nothing else.
  *
  * Everything with an opinion about layout lives one level down: `(app)/layout`
- * draws the top bar for signed-in screens, and `prihlaseni/page` draws its own
+ * draws the top bar for signed-in screens, and `login/page` draws its own
  * full-height canvas. This file only establishes the language, the stylesheet
  * (which is what wires in the design tokens and the fonts — see
  * `./global.css`) and the client provider boundary.

@@ -2,7 +2,7 @@ import { apiOriginOrEmpty } from '../../../api-url';
 import { SettingsPage } from '../../../shell/settings-page';
 
 /**
- * `/nastaveni` — personal settings: licence plate, preferred parking spot, and
+ * `/settings` — personal settings: licence plate, preferred parking spot, and
  * the ICS feed URL with its regenerate button (Task 26).
  *
  * A Server Component only so it can read `NEXT_PUBLIC_API_URL` the same way

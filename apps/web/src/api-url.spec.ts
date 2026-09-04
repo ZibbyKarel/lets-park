@@ -42,7 +42,7 @@ describe('apiOriginOrEmpty', () => {
   });
 
   it('returns an empty string instead of throwing on a value that is not an absolute URL', () => {
-    // `layout.tsx` and `nastaveni/page.tsx` both call this from a Server
+    // `layout.tsx` and `settings/page.tsx` both call this from a Server
     // Component render; a throw there renders the error boundary for every
     // route, login page included, rather than the honest "not configured"
     // fallback each caller wants at build time.

@@ -108,14 +108,14 @@ export interface CzechNavMessages {
 export interface CzechSectionMessages {
   /** `/` — the parking overview. */
   readonly lot: string;
-  /** `/nastaveni` — the caller's own settings. */
+  /** `/settings` — the caller's own settings. */
   readonly settings: string;
-  /** `/sprava` — administration. */
+  /** `/admin` — administration. */
   readonly administration: string;
 }
 
 /**
- * The `/nastaveni` screen: licence plate, preferred spot, and the ICS feed
+ * The `/settings` screen: licence plate, preferred spot, and the ICS feed
  * section (Task 26, `doc/design/screens/11-settings.png`).
  *
  * The ICS strings have no design to copy from — `doc/decision/0151-*` records
@@ -305,7 +305,7 @@ export interface CzechLotMessages {
 }
 
 /**
- * The `/sprava` section: its four tabs and everything inside them (Task 27,
+ * The `/admin` section: its four tabs and everything inside them (Task 27,
  * `doc/design/screens/03-admin-users.png`, `04-admin-spots.png`,
  * `05-admin-window.png`, `06-admin-overview.png`).
  *

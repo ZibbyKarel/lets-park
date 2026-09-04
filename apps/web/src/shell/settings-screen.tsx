@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * What `/nastaveni` renders, given a profile, the active spots, and the
+ * What `/settings` renders, given a profile, the active spots, and the
  * mutation state around them — and nothing about how any of that is fetched.
  *
  * Split from `./settings-page.tsx` for the same reason `TopBar`/`AdminScreen`
@@ -78,7 +78,7 @@ function toUpdateInput(values: SettingsFormValues): UpdateMySettingsInput {
 export interface SettingsIcs {
   /**
    * Origin of the API (`apiOriginOf(NEXT_PUBLIC_API_URL)`, no path). Empty
-   * means it could not be derived — see `app/(app)/nastaveni/page.tsx` — in
+   * means it could not be derived — see `app/(app)/settings/page.tsx` — in
    * which case the ICS section shows its unavailable state rather than a
    * broken link, since `buildIcsFeedUrl` has nothing to build from — see
    * {@link toIcsFeedView}.

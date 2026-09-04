@@ -23,7 +23,7 @@
 # you check.
 #
 # `NEXT_PUBLIC_API_URL` is deliberately *not* a build argument either. Every
-# read of it (`app/layout.tsx`, `nastaveni/page.tsx`, `app/api/health/route.ts`)
+# read of it (`app/layout.tsx`, `settings/page.tsx`, `app/api/health/route.ts`)
 # happens in server code at request time and is handed to the client as a prop,
 # so the value stays a runtime setting and one image serves every environment.
 

@@ -156,7 +156,7 @@ export function useLotRealtime({ date, viewerUserId }: LotRealtimeOptions): void
  *
  * The ref starts **disarmed**, and that is the whole difference between one
  * refetch and two on a page load. A hook mounting under an already-connected
- * socket (navigating between `/` and `/nastaveni`, say) has missed nothing and
+ * socket (navigating between `/` and `/settings`, say) has missed nothing and
  * refetches nothing. A hook mounting on a cold page starts at `disconnected` —
  * `RealtimeProvider`'s initial status — which arms it, so the first `connected`
  * does fire: the window between the overview being fetched and the socket

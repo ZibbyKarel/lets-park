@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * What `/sprava` renders, given a profile — and nothing about how the profile
+ * What `/admin` renders, given a profile — and nothing about how the profile
  * is obtained.
  *
- * Split out of `app/(app)/sprava/page.tsx` for the same reason `TopBar` is
+ * Split out of `app/(app)/admin/page.tsx` for the same reason `TopBar` is
  * split from `AppTopBar`: the *rules* (which of the four states is shown, and
  * on what) belong somewhere a test can reach without a session, a query client
  * and a live API. The page keeps the wiring and has no branches of its own.
