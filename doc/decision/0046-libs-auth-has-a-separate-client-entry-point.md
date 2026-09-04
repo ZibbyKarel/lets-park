@@ -12,6 +12,13 @@ One lib, one owner of `next-auth`, two import paths:
 | `@lets-park/auth` | `libs/auth/src/index.ts` | `createAuth`, `createAuthConfig` and its callbacks, `createTokenRefresher`, `createAccessTokenProvider` |
 | `@lets-park/auth/client` | `libs/auth/src/client/index.ts` | `AuthProvider`, `useRequireAuth`, `useAccessTokenProvider`, plus `useSession`/`signIn`/`signOut` |
 
+> **2026-09-04:** the server row's inventory has narrowed. `@lets-park/auth` now exports
+> `createAuth` and `OKTA_PROVIDER_ID` plus the types `Auth` and `AuthOptions`;
+> `createAuthConfig`, `createTokenRefresher` and `createAccessTokenProvider` became
+> module-scoped implementation of `createAuth`. **The decision this record makes — two entry
+> points, server and client — is unchanged**, and so is everything below. The live inventory
+> is `libs/auth/src/index.ts` and `doc/wrappers.md`.
+
 Both aliases are in `tsconfig.base.json`. There is one `project.json`, one tag pair
 (`type:util`, `scope:web`), one Jest project, and one `WRAPPED_LIBRARIES` entry.
 
