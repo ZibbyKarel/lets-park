@@ -236,9 +236,7 @@ export function AdminUsersScreen({
             title={t('usersSelfRoleConfirmTitle')}
             description={t('usersSelfRoleConfirmDescription')}
             confirmLabel={t('usersSelfRoleConfirmAction')}
-            // `spotsCancel` is this namespace's only "Zrušit"; the catalogue
-            // has no generic `admin.cancel` to name it better.
-            cancelLabel={t('spotsCancel')}
+            cancelLabel={t('cancel')}
             onCancel={() => {
               setConfirmingSelfDemotion(false);
             }}

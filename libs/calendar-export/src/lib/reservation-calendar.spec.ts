@@ -12,6 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import ICAL from 'ical.js';
 import type { IcsCalendarEntry } from '@lets-park/contract';
 import { icsCalendarEntrySchema } from '@lets-park/contract';
@@ -100,16 +101,25 @@ function renderInTimeZone(timeZone: string): RenderedInTimeZone {
     }));
   `;
 
-  const result = execFileSync(process.execPath, ['-r', 'ts-node/register', '-e', script], {
-    cwd: __dirname,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      TZ: timeZone,
-      TS_NODE_TRANSPILE_ONLY: 'true',
-      TS_NODE_COMPILER_OPTIONS: JSON.stringify({ module: 'commonjs', target: 'es2022' }),
-    },
-  });
+  const result = execFileSync(
+    process.execPath,
+    ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register', '-e', script],
+    {
+      cwd: __dirname,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TZ: timeZone,
+        TS_NODE_TRANSPILE_ONLY: 'true',
+        TS_NODE_COMPILER_OPTIONS: JSON.stringify({ module: 'commonjs', target: 'es2022' }),
+        // `tsconfig-paths` needs the file that actually carries `paths` — the
+        // workspace root's, not the nearest one to `cwd`. Without it the child
+        // cannot resolve `@lets-park/shared-types` and dies with
+        // MODULE_NOT_FOUND before rendering a single line of ICS.
+        TS_NODE_PROJECT: resolve(__dirname, '../../../../tsconfig.base.json'),
+      },
+    }
+  );
 
   return JSON.parse(result) as RenderedInTimeZone;
 }
@@ -283,9 +293,11 @@ describe('buildReservationCalendar', () => {
      * sanity check comparing those two hours, and the sanity check is what
      * failed.
      *
-     * `ts-node/register` in transpile-only mode is enough to load the module
-     * under test, because its only non-type import is `ical-generator` — the
-     * `@lets-park/contract` import is `import type` and is erased.
+     * `ts-node/register` in transpile-only mode loads the module under test,
+     * with `tsconfig-paths/register` beside it because the module has a real
+     * runtime import of `@lets-park/shared-types` (`toUtcMidnight`, `addDays`)
+     * that Node cannot resolve on its own. The `@lets-park/contract` import is
+     * `import type` and is erased, so it needs nothing.
      */
     it('produces byte-identical output whatever time zone the server runs in', () => {
       const outputs = TIME_ZONES.map((timeZone) => renderInTimeZone(timeZone));

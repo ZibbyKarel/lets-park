@@ -77,8 +77,6 @@ export interface CzechShellMessages {
   readonly notFoundDescription: string;
   /** Link back to the parking overview, from the 404 page. */
   readonly backToLot: string;
-  /** Placeholder body for a route whose screen is not built yet. */
-  readonly comingSoon: string;
 }
 
 export interface CzechLoginMessages {
@@ -122,7 +120,7 @@ export interface CzechSectionMessages {
  *
  * The ICS strings have no design to copy from — `doc/decision/0151-*` records
  * why the section exists at all — so they are original copy, written in the
- * same register as the rest of the shell (`errorUnknown`, `comingSoon`): short,
+ * same register as the rest of the shell (`errorUnknown`, `errorTitle`): short,
  * plain sentences aimed at the person reading them, not at a developer.
  */
 export interface CzechSettingsMessages {
@@ -322,6 +320,15 @@ export interface CzechAdminMessages {
   readonly tabUsers: string;
   readonly tabSpots: string;
   readonly tabWindow: string;
+  /**
+   * "Zrušit" — the dismiss button of every confirmation dialog in this
+   * namespace, wherever the dialog is not about a spot.
+   *
+   * `spotsCancel` is the same word, but it belongs to the spots editor and
+   * reads as such at its call site; a users dialog borrowing it made the
+   * catalogue lie about which screen the string serves.
+   */
+  readonly cancel: string;
 
   /** Day overview (`06-admin-overview.png`). */
   readonly dayEyebrow: string;
@@ -579,7 +586,6 @@ export const csMessages: CzechMessages = {
     notFoundTitle: 'Stránka nenalezena',
     notFoundDescription: 'Odkaz, který jste otevřeli, nikam nevede.',
     backToLot: 'Zpět na parkoviště',
-    comingSoon: 'Tato část se právě připravuje.',
   },
   login: {
     tagline: 'Rezervace firemních parkovacích míst.',
@@ -708,6 +714,7 @@ export const csMessages: CzechMessages = {
     tabUsers: 'Uživatelé',
     tabSpots: 'Parkovací místa',
     tabWindow: 'Rezervační okno',
+    cancel: 'Zrušit',
 
     dayEyebrow: 'Přehled parkoviště',
     dayFree: '{count} volných',

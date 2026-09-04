@@ -34,6 +34,7 @@
 
 import icalGenerator, { ICalCalendarMethod } from 'ical-generator';
 import type { IcsCalendarEntry, IcsFeed } from '@lets-park/contract';
+import { addDays, toUtcMidnight } from '@lets-park/shared-types';
 
 /**
  * `X-WR-CALNAME` / `NAME` — what a calendar client labels the subscription.
@@ -73,13 +74,6 @@ export const ICS_REFRESH_INTERVAL_SECONDS = 3600;
  * every event in every subscriber's calendar.
  */
 export const ICS_UID_DOMAIN = 'lets-park';
-
-const MS_PER_DAY = 86_400_000;
-
-/** `YYYY-MM-DD` → the UTC-midnight `Date` `ical-generator` renders as `VALUE=DATE`. */
-function utcMidnight(date: string): Date {
-  return new Date(`${date}T00:00:00.000Z`);
-}
 
 /**
  * The event's `SUMMARY`, i.e. the line the employee sees in their calendar.
@@ -136,11 +130,16 @@ export function buildReservationCalendar(feed: IcsFeed): string {
 }
 
 function addEvent(calendar: ReturnType<typeof icalGenerator>, entry: IcsCalendarEntry): void {
-  const start = utcMidnight(entry.date);
+  // `toUtcMidnight` is `libs/shared-types`' one construction of the
+  // UTC-midnight `Date` that stands in for a calendar day — the value
+  // `ical-generator` renders as `VALUE=DATE`. `DTEND` is the *next* calendar
+  // day, taken through `addDays` rather than by adding 86 400 000 ms, so the
+  // exclusive end is civil-calendar arithmetic like every other date in the
+  // workspace instead of a second, local rule.
   calendar.createEvent({
     id: icsEventUid(entry.reservationId),
-    start,
-    end: new Date(start.getTime() + MS_PER_DAY),
+    start: toUtcMidnight(entry.date),
+    end: toUtcMidnight(addDays(entry.date, 1)),
     allDay: true,
     summary: icsEventSummary(entry.spotLabel),
     description: icsEventDescription(entry.spotLabel),
