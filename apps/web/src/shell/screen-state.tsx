@@ -16,6 +16,7 @@
  * here rather than extended there.
  */
 
+import type { ReactNode } from 'react';
 import { Button } from '@lets-park/design-system/primitives';
 import { EmptyState } from '@lets-park/design-system/compounds';
 import type { EmptyStateHeadingLevel } from '@lets-park/design-system/compounds';
@@ -92,6 +93,109 @@ export function ScreenError({ error, onRetry, headingLevel }: ScreenErrorProps) 
           })}
     />
   );
+}
+
+/**
+ * The state a screen's data is in, as one value rather than four props.
+ *
+ * Six screens used to take `data | undefined`, `isPending`, `isError` and
+ * `error` side by side, and five of the six prop interfaces then spelled the
+ * correlation out in prose — "`undefined` exactly when `isPending || isError`".
+ * A fact an interface has to state in a comment is a fact its types are
+ * failing to carry: nothing stopped a caller from handing a screen
+ * `isPending: false, isError: false, data: undefined`, and a screen that
+ * reached its ready branch with no data would draw an empty table asserting
+ * "there are no parking spots" — a claim, where the truth was an absence.
+ *
+ * As a discriminated union the combination cannot be written down. `data`
+ * exists only on the branch that has it, so the ready branch cannot be reached
+ * without it, and the comment is replaced by a compile error. This is the same
+ * shape `lot/bulk-view.ts` uses for `PreferredSpotView` and `BulkBadgeView`.
+ *
+ * `onRetry` stays a sibling prop: retrying is the caller's capability, not a
+ * property of the data, and it is the same function in all three states.
+ */
+export type ScreenData<T> =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'error'; readonly error: unknown }
+  | { readonly kind: 'ready'; readonly data: T };
+
+/**
+ * The shape {@link screenDataOf} reads — structurally what a TanStack query
+ * result already is.
+ *
+ * Written out here rather than imported as `UseQueryResult` so that the seam
+ * does not name the transport at all: a screen fed from `useQueries`, from a
+ * Storybook story or from a parent's own state can be adapted with the same
+ * function, and `@lets-park/query` stays the thin wrapper it is meant to be.
+ */
+export interface ScreenQueryLike<T> {
+  readonly isPending: boolean;
+  readonly isError: boolean;
+  readonly error: unknown;
+  readonly data: T | undefined;
+}
+
+/**
+ * A query result, narrowed to the three states a screen can draw.
+ *
+ * The precedence is the one the hand-written guards had, so the mapping is
+ * behaviour-preserving: pending wins over error, and a result that is neither
+ * pending nor failed yet carries no data is treated as a failure — the branch
+ * a screen must never render as "empty".
+ */
+export function screenDataOf<T>(query: ScreenQueryLike<T>): ScreenData<T> {
+  if (query.isPending) {
+    return { kind: 'loading' };
+  }
+  if (query.isError || query.data === undefined) {
+    return { kind: 'error', error: query.error };
+  }
+  return { kind: 'ready', data: query.data };
+}
+
+export interface ScreenDataGuardProps<T> {
+  readonly state: ScreenData<T>;
+  /** Rendered as a "Zkusit znovu" button on the error state. */
+  readonly onRetry?: () => void;
+  /** See `EmptyStateProps.headingLevel`: only the page knows its own outline. */
+  readonly headingLevel?: EmptyStateHeadingLevel;
+  /** Overrides the loading state's default "Načítá se…". */
+  readonly loadingLabel?: string;
+  /** Drawn only once there is data to draw it from. */
+  readonly children: (data: T) => ReactNode;
+}
+
+/**
+ * The two-branch guard every screen had copied into it, written once.
+ *
+ * A render prop rather than an early return on purpose: a screen whose states
+ * belong *inside* something it has already opened — a modal that keeps its
+ * header and footer while its body is loading — cannot use an early return
+ * without losing the frame. Both call shapes are the same expression here.
+ */
+export function ScreenDataGuard<T>({
+  state,
+  onRetry,
+  headingLevel,
+  loadingLabel,
+  children,
+}: ScreenDataGuardProps<T>) {
+  if (state.kind === 'loading') {
+    return <ScreenLoading {...(loadingLabel === undefined ? {} : { label: loadingLabel })} />;
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <ScreenError
+        error={state.error}
+        {...(onRetry === undefined ? {} : { onRetry })}
+        {...(headingLevel === undefined ? {} : { headingLevel })}
+      />
+    );
+  }
+
+  return <>{children(state.data)}</>;
 }
 
 /**

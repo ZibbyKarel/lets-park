@@ -2,10 +2,24 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
-import type { ErrorCode, MonthWindowOverview } from '@lets-park/contract';
+import type { ErrorCode, MonthWindowOverview, ReservationLockMode } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
 import { AdminWindowScreen, STATE_TONE } from './admin-window-screen';
 import type { AdminWindowScreenProps } from './admin-window-screen';
+
+/**
+ * The screen now takes the whole `admin.window.months` payload as one
+ * {@link ScreenData}, so the helper below keeps offering the three pieces the
+ * tests actually vary — the two settings and the month rows — and assembles
+ * the ready state from them. A test that needs the loading or the error state
+ * passes `reservationWindow` itself.
+ */
+type WindowOverrides = Partial<Omit<AdminWindowScreenProps, 'reservationWindow'>> & {
+  readonly reservationWindow?: AdminWindowScreenProps['reservationWindow'];
+  readonly openDaysBefore?: number;
+  readonly lockMode?: ReservationLockMode;
+  readonly months?: MonthWindowOverview[];
+};
 
 /** See `admin-errors.spec.tsx` — a real `RPCLink` failure, only `fetch` stubbed. */
 async function failureWithCode(code: ErrorCode): Promise<unknown> {
@@ -68,18 +82,22 @@ const MONTHS: MonthWindowOverview[] = [
   },
 ];
 
-function renderScreen(overrides: Partial<AdminWindowScreenProps> = {}) {
+function renderScreen({
+  openDaysBefore = 7,
+  lockMode = 'AUTO',
+  months = MONTHS,
+  reservationWindow,
+  ...overrides
+}: WindowOverrides = {}) {
   const onRetry = jest.fn();
   const onChange = jest.fn();
 
   const props: AdminWindowScreenProps = {
-    isPending: false,
-    isError: false,
-    error: null,
+    reservationWindow: reservationWindow ?? {
+      kind: 'ready',
+      data: { settings: { openDaysBefore, lockMode }, months },
+    },
     onRetry,
-    openDaysBefore: 7,
-    lockMode: 'AUTO',
-    months: MONTHS,
     today: '2026-08-28',
     onChange,
     isSaving: false,
@@ -266,7 +284,7 @@ describe('AdminWindowScreen', () => {
   });
 
   it('waits while the settings are in flight', () => {
-    renderScreen({ isPending: true, openDaysBefore: undefined, lockMode: undefined, months: [] });
+    renderScreen({ reservationWindow: { kind: 'loading' } });
 
     expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
@@ -311,11 +329,7 @@ describe('AdminWindowScreen', () => {
 
   it('offers a retry when the settings could not be loaded', async () => {
     const { onRetry, user } = renderScreen({
-      isError: true,
-      openDaysBefore: undefined,
-      lockMode: undefined,
-      months: [],
-      error: new Error('connection refused'),
+      reservationWindow: { kind: 'error', error: new Error('connection refused') },
     });
 
     expect(screen.queryByText(/connection refused/u)).not.toBeInTheDocument();

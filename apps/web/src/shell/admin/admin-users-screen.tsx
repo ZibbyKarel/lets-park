@@ -41,13 +41,14 @@
  */
 
 import { useMemo, useState } from 'react';
-import type { AdminUser } from '@lets-park/contract';
+import type { AdminListUsersOutput, AdminUser } from '@lets-park/contract';
 import { Avatar, Input, Switch, Toast } from '@lets-park/design-system/primitives';
 import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
 import { initialsOf } from '../initials';
-import { ScreenError, ScreenLoading } from '../screen-state';
+import { ScreenDataGuard } from '../screen-state';
+import type { ScreenData } from '../screen-state';
 import { useAdminWriteError } from './admin-errors';
 
 /** One field of one row is being written. `null` when nothing is in flight. */
@@ -57,12 +58,9 @@ export interface PendingUserChange {
 }
 
 export interface AdminUsersScreenProps {
-  readonly isPending: boolean;
-  readonly isError: boolean;
-  readonly error: unknown;
+  /** The account list as `admin.user.list` returned it, or why it is not here. */
+  readonly users: ScreenData<AdminListUsersOutput>;
   readonly onRetry: () => void;
-  /** `undefined` exactly when `isPending || isError`. */
-  readonly users: readonly AdminUser[] | undefined;
   /** Id of the signed-in admin, so their own row can protect itself. */
   readonly viewerId: string | undefined;
   readonly onRoleChange: (id: string, isAdmin: boolean) => void;
@@ -94,11 +92,8 @@ export function matchesUserSearch(user: AdminUser, term: string): boolean {
 }
 
 export function AdminUsersScreen({
-  isPending,
-  isError,
-  error,
-  onRetry,
   users,
+  onRetry,
   viewerId,
   onRoleChange,
   onActiveChange,
@@ -113,7 +108,11 @@ export function AdminUsersScreen({
   // ever be about.
   const [confirmingSelfDemotion, setConfirmingSelfDemotion] = useState(false);
 
-  const all = users ?? [];
+  // The rows outside the ready state, so the search box's `useMemo` keeps a
+  // stable dependency. Nothing draws them: `ScreenDataGuard` below renders the
+  // loading or error state instead, which is the whole point of the union —
+  // an empty table here would assert "there are no accounts".
+  const all = users.kind === 'ready' ? users.data.users : NO_USERS;
   const visible = useMemo(
     () => all.filter((user) => matchesUserSearch(user, search)),
     [all, search]
@@ -194,66 +193,65 @@ export function AdminUsersScreen({
     },
   ];
 
-  if (isPending) {
-    return <ScreenLoading />;
-  }
-
-  if (isError || users === undefined) {
-    return <ScreenError error={error} onRetry={onRetry} headingLevel={3} />;
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      {updateErrorMessage ? <Toast tone="danger">{updateErrorMessage}</Toast> : null}
+    <ScreenDataGuard state={users} onRetry={onRetry} headingLevel={3}>
+      {() => (
+        <div className="flex flex-col gap-4">
+          {updateErrorMessage ? <Toast tone="danger">{updateErrorMessage}</Toast> : null}
 
-      <DataTable
-        columns={columns}
-        data={visible}
-        getRowId={(user) => user.id}
-        title={t('usersTitle')}
-        description={t('usersDescription', { count: all.length })}
-        actions={
-          <Input
-            type="search"
-            // `aria-label`, not `label`: the design draws a bare field with a
-            // placeholder and no visible caption, and a placeholder is not an
-            // accessible name — it disappears the moment anything is typed.
-            aria-label={t('usersSearchLabel')}
-            placeholder={t('usersSearchPlaceholder')}
-            value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-            wrapperClassName="w-full sm:w-80"
+          <DataTable
+            columns={columns}
+            data={visible}
+            getRowId={(user) => user.id}
+            title={t('usersTitle')}
+            description={t('usersDescription', { count: all.length })}
+            actions={
+              <Input
+                type="search"
+                // `aria-label`, not `label`: the design draws a bare field with a
+                // placeholder and no visible caption, and a placeholder is not an
+                // accessible name — it disappears the moment anything is typed.
+                aria-label={t('usersSearchLabel')}
+                placeholder={t('usersSearchPlaceholder')}
+                value={search}
+                onChange={(event) => setSearch(event.currentTarget.value)}
+                wrapperClassName="w-full sm:w-80"
+              />
+            }
+            defaultSort={{ columnId: 'name', direction: 'asc' }}
+            minWidth="720px"
+            emptyTitle={search.trim() === '' ? t('usersEmpty') : t('usersEmptySearch')}
+            emptyDescription={search.trim() === '' ? undefined : t('usersEmptySearchDescription')}
           />
-        }
-        defaultSort={{ columnId: 'name', direction: 'asc' }}
-        minWidth="720px"
-        emptyTitle={search.trim() === '' ? t('usersEmpty') : t('usersEmptySearch')}
-        emptyDescription={search.trim() === '' ? undefined : t('usersEmptySearchDescription')}
-      />
 
-      {/*
-        Rendered unconditionally and closed by its own `open` prop, the way
-        `ConfirmDialog` is built to be used: it renders nothing at all when
-        closed, and mounting it conditionally would take the dialog out of the
-        tree in the same commit the confirm button is pressed.
-      */}
-      <ConfirmDialog
-        open={confirmingSelfDemotion}
-        tone="danger"
-        title={t('usersSelfRoleConfirmTitle')}
-        description={t('usersSelfRoleConfirmDescription')}
-        confirmLabel={t('usersSelfRoleConfirmAction')}
-        onCancel={() => {
-          setConfirmingSelfDemotion(false);
-        }}
-        onConfirm={() => {
-          setConfirmingSelfDemotion(false);
-          if (viewerId !== undefined) onRoleChange(viewerId, false);
-        }}
-      />
-    </div>
+          {/*
+            Rendered unconditionally and closed by its own `open` prop, the way
+            `ConfirmDialog` is built to be used: it renders nothing at all when
+            closed, and mounting it conditionally would take the dialog out of
+            the tree in the same commit the confirm button is pressed.
+          */}
+          <ConfirmDialog
+            open={confirmingSelfDemotion}
+            tone="danger"
+            title={t('usersSelfRoleConfirmTitle')}
+            description={t('usersSelfRoleConfirmDescription')}
+            confirmLabel={t('usersSelfRoleConfirmAction')}
+            onCancel={() => {
+              setConfirmingSelfDemotion(false);
+            }}
+            onConfirm={() => {
+              setConfirmingSelfDemotion(false);
+              if (viewerId !== undefined) onRoleChange(viewerId, false);
+            }}
+          />
+        </div>
+      )}
+    </ScreenDataGuard>
   );
 }
+
+/** No rows at all — a shared empty array, so `useMemo` above is not defeated. */
+const NO_USERS: readonly AdminUser[] = [];
 
 /**
  * Whether a row's switches are blocked because one of them is mid-flight.

@@ -30,21 +30,16 @@ import { DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { formatFullDate, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
-import { ScreenError, ScreenLoading } from '../screen-state';
+import { ScreenDataGuard } from '../screen-state';
+import type { ScreenData } from '../screen-state';
 import { WindowBanner } from './window-banner';
 
 export interface AdminDayScreenProps {
   /** The day being shown, `YYYY-MM-DD` in Europe/Prague. */
   readonly date: DateOnly;
-  /** The day has not arrived yet. */
-  readonly isPending: boolean;
-  /** The day could not be loaded. */
-  readonly isError: boolean;
-  /** Whatever the failing call threw. See `ScreenErrorProps.error`. */
-  readonly error: unknown;
+  /** The day itself, or the reason it is not on screen yet. */
+  readonly day: ScreenData<DayOverviewOutput>;
   readonly onRetry: () => void;
-  /** `undefined` exactly when `isPending || isError`. */
-  readonly overview: DayOverviewOutput | undefined;
   /**
    * Navigates to the lot screen, where the painted grid lives. A callback
    * rather than an `href` because this component stays free of the router —
@@ -53,27 +48,8 @@ export interface AdminDayScreenProps {
   readonly onOpenLot: () => void;
 }
 
-export function AdminDayScreen({
-  date,
-  isPending,
-  isError,
-  error,
-  onRetry,
-  overview,
-  onOpenLot,
-}: AdminDayScreenProps) {
+export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreenProps) {
   const t = useTranslations('admin');
-
-  if (isPending) {
-    return <ScreenLoading />;
-  }
-
-  if (isError || overview === undefined) {
-    return <ScreenError error={error} onRetry={onRetry} headingLevel={3} />;
-  }
-
-  const free = overview.spots.filter((row) => row.reservation === null).length;
-  const taken = overview.spots.length - free;
 
   const columns: DataTableColumn<DaySpotOverview>[] = [
     {
@@ -119,35 +95,48 @@ export function AdminDayScreen({
   ];
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-caps text-fg-3">{t('dayEyebrow')}</p>
-          <h3 className="mt-1 text-2xl font-bold tracking-tight text-fg">{formatFullDate(date)}</h3>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <CountPill dotClassName="bg-brand-green" label={t('dayFree', { count: free })} />
-          <CountPill dotClassName="bg-brand-blue" label={t('dayTaken', { count: taken })} />
-          <Button variant="primary" onClick={onOpenLot}>
-            {t('dayOpenLot')}
-          </Button>
-        </div>
-      </div>
+    <ScreenDataGuard state={day} onRetry={onRetry} headingLevel={3}>
+      {(overview) => {
+        const free = overview.spots.filter((row) => row.reservation === null).length;
+        const taken = overview.spots.length - free;
 
-      <WindowBanner window={overview.window} />
+        return (
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-caps text-fg-3">
+                  {t('dayEyebrow')}
+                </p>
+                <h3 className="mt-1 text-2xl font-bold tracking-tight text-fg">
+                  {formatFullDate(date)}
+                </h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <CountPill dotClassName="bg-brand-green" label={t('dayFree', { count: free })} />
+                <CountPill dotClassName="bg-brand-blue" label={t('dayTaken', { count: taken })} />
+                <Button variant="primary" onClick={onOpenLot}>
+                  {t('dayOpenLot')}
+                </Button>
+              </div>
+            </div>
 
-      <DataTable
-        columns={columns}
-        data={overview.spots}
-        getRowId={(row) => row.spot.id}
-        title={t('dayTableTitle')}
-        description={t('dayTableDescription')}
-        defaultSort={{ columnId: 'label', direction: 'asc' }}
-        minWidth="640px"
-        emptyTitle={t('dayEmpty')}
-        emptyDescription={t('dayEmptyDescription')}
-      />
-    </div>
+            <WindowBanner window={overview.window} />
+
+            <DataTable
+              columns={columns}
+              data={overview.spots}
+              getRowId={(row) => row.spot.id}
+              title={t('dayTableTitle')}
+              description={t('dayTableDescription')}
+              defaultSort={{ columnId: 'label', direction: 'asc' }}
+              minWidth="640px"
+              emptyTitle={t('dayEmpty')}
+              emptyDescription={t('dayEmptyDescription')}
+            />
+          </div>
+        );
+      }}
+    </ScreenDataGuard>
   );
 }
 

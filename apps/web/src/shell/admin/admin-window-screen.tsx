@@ -24,7 +24,11 @@
  * Presentational: `./admin-window-panel.tsx` is the connected half.
  */
 
-import type { MonthWindowOverview, ReservationLockMode } from '@lets-park/contract';
+import type {
+  ListMonthWindowsOutput,
+  MonthWindowOverview,
+  ReservationLockMode,
+} from '@lets-park/contract';
 import { Badge, Stepper, Toast } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
 import {
@@ -38,7 +42,8 @@ import {
   useTranslations,
 } from '@lets-park/i18n';
 import type { DateOnly, MonthLockState } from '@lets-park/i18n';
-import { ScreenError, ScreenLoading } from '../screen-state';
+import { ScreenDataGuard } from '../screen-state';
+import type { ScreenData } from '../screen-state';
 import { useAdminWriteError } from './admin-errors';
 import { LockModeChoice } from './lock-mode-choice';
 
@@ -57,16 +62,14 @@ export const STATE_TONE: Record<MonthLockState, BadgeTone> = {
 };
 
 export interface AdminWindowScreenProps {
-  readonly isPending: boolean;
-  readonly isError: boolean;
-  readonly error: unknown;
+  /**
+   * The settings and the months they were derived under, exactly as
+   * `admin.window.months` returned them — one value, because they came from one
+   * response and a form that disagreed with the list beside it would be lying
+   * about the same moment.
+   */
+  readonly reservationWindow: ScreenData<ListMonthWindowsOutput>;
   readonly onRetry: () => void;
-  /** `undefined` exactly when `isPending || isError`. */
-  readonly openDaysBefore: number | undefined;
-  /** `undefined` exactly when `isPending || isError`. */
-  readonly lockMode: ReservationLockMode | undefined;
-  /** The months to list, ascending, as `admin.window.months` returned them. */
-  readonly months: readonly MonthWindowOverview[];
   /** Today in Europe/Prague — the date the states were derived against. */
   readonly today: DateOnly;
   /** A full replacement of both fields; the contract has no patch. */
@@ -79,13 +82,8 @@ export interface AdminWindowScreenProps {
 }
 
 export function AdminWindowScreen({
-  isPending,
-  isError,
-  error,
+  reservationWindow,
   onRetry,
-  openDaysBefore,
-  lockMode,
-  months,
   today,
   onChange,
   isSaving,
@@ -95,78 +93,74 @@ export function AdminWindowScreen({
   const t = useTranslations('admin');
   const describeWriteError = useAdminWriteError();
 
-  if (isPending) {
-    return <ScreenLoading />;
-  }
-
-  if (isError || openDaysBefore === undefined || lockMode === undefined) {
-    return <ScreenError error={error} onRetry={onRetry} headingLevel={3} />;
-  }
-
   const saveErrorMessage = describeWriteError('windowUpdate', saveError);
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <section
-        aria-label={t('windowOpenTitle')}
-        className="flex flex-col gap-5 rounded-lg border border-border bg-bg p-6"
-      >
-        <div>
-          <h3 className="text-lg font-bold text-fg">{t('windowOpenTitle')}</h3>
-          <p className="mt-2 text-sm leading-relaxed text-fg-3">{t('windowOpenDescription')}</p>
+    <ScreenDataGuard state={reservationWindow} onRetry={onRetry} headingLevel={3}>
+      {({ settings: { openDaysBefore, lockMode }, months }) => (
+        <div className="grid gap-6 md:grid-cols-2">
+          <section
+            aria-label={t('windowOpenTitle')}
+            className="flex flex-col gap-5 rounded-lg border border-border bg-bg p-6"
+          >
+            <div>
+              <h3 className="text-lg font-bold text-fg">{t('windowOpenTitle')}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-fg-3">{t('windowOpenDescription')}</p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold uppercase tracking-caps text-fg-3">
+                {t('windowDaysLabel')}
+              </span>
+              <Stepper
+                label={t('windowDaysLabel')}
+                value={openDaysBefore}
+                min={MIN_OPEN_DAYS_BEFORE}
+                max={MAX_OPEN_DAYS_BEFORE}
+                disabled={isSaving}
+                decrementLabel={t('windowDaysDecrement')}
+                incrementLabel={t('windowDaysIncrement')}
+                formatValue={(count) => t('windowDaysValue', { count })}
+                onValueChange={(next) => onChange({ openDaysBefore: next, lockMode })}
+              />
+            </div>
+
+            <LockModeChoice
+              label={t('windowLockLabel')}
+              value={lockMode}
+              disabled={isSaving}
+              options={RESERVATION_LOCK_MODES.map((mode) => ({
+                value: mode,
+                label: t(`windowLock${mode}`),
+              }))}
+              onValueChange={(next) => onChange({ openDaysBefore, lockMode: next })}
+            />
+
+            {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
+            {saveErrorMessage === null && isSaved ? (
+              <Toast tone="success">{t('windowSaved')}</Toast>
+            ) : null}
+          </section>
+
+          <section
+            aria-label={t('windowMonthsTitle')}
+            className="flex flex-col rounded-lg border border-border bg-bg"
+          >
+            <div className="border-b border-divider px-6 py-5">
+              <h3 className="text-lg font-bold text-fg">{t('windowMonthsTitle')}</h3>
+              <p className="mt-1 text-sm text-fg-3">
+                {t('windowMonthsDescription', { today: formatDayMonthAndYear(today) })}
+              </p>
+            </div>
+            <ul className="flex flex-col">
+              {months.map((month) => (
+                <MonthRow key={month.month} month={month} />
+              ))}
+            </ul>
+          </section>
         </div>
-
-        <div className="flex flex-col gap-3">
-          <span className="text-xs font-bold uppercase tracking-caps text-fg-3">
-            {t('windowDaysLabel')}
-          </span>
-          <Stepper
-            label={t('windowDaysLabel')}
-            value={openDaysBefore}
-            min={MIN_OPEN_DAYS_BEFORE}
-            max={MAX_OPEN_DAYS_BEFORE}
-            disabled={isSaving}
-            decrementLabel={t('windowDaysDecrement')}
-            incrementLabel={t('windowDaysIncrement')}
-            formatValue={(count) => t('windowDaysValue', { count })}
-            onValueChange={(next) => onChange({ openDaysBefore: next, lockMode })}
-          />
-        </div>
-
-        <LockModeChoice
-          label={t('windowLockLabel')}
-          value={lockMode}
-          disabled={isSaving}
-          options={RESERVATION_LOCK_MODES.map((mode) => ({
-            value: mode,
-            label: t(`windowLock${mode}`),
-          }))}
-          onValueChange={(next) => onChange({ openDaysBefore, lockMode: next })}
-        />
-
-        {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
-        {saveErrorMessage === null && isSaved ? (
-          <Toast tone="success">{t('windowSaved')}</Toast>
-        ) : null}
-      </section>
-
-      <section
-        aria-label={t('windowMonthsTitle')}
-        className="flex flex-col rounded-lg border border-border bg-bg"
-      >
-        <div className="border-b border-divider px-6 py-5">
-          <h3 className="text-lg font-bold text-fg">{t('windowMonthsTitle')}</h3>
-          <p className="mt-1 text-sm text-fg-3">
-            {t('windowMonthsDescription', { today: formatDayMonthAndYear(today) })}
-          </p>
-        </div>
-        <ul className="flex flex-col">
-          {months.map((month) => (
-            <MonthRow key={month.month} month={month} />
-          ))}
-        </ul>
-      </section>
-    </div>
+      )}
+    </ScreenDataGuard>
   );
 }
 

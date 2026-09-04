@@ -16,6 +16,7 @@ import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { addMonths, startOfMonth, todayInPrague, toYearMonth } from '@lets-park/i18n';
 import { useApi } from '../api-provider';
+import { screenDataOf } from '../screen-state';
 import { AdminWindowScreen } from './admin-window-screen';
 
 /**
@@ -63,13 +64,8 @@ export function AdminWindowPanel() {
 
   return (
     <AdminWindowScreen
-      isPending={monthsQuery.isPending}
-      isError={monthsQuery.isError}
-      error={monthsQuery.error}
+      reservationWindow={screenDataOf(monthsQuery)}
       onRetry={() => void monthsQuery.refetch()}
-      openDaysBefore={monthsQuery.data?.settings.openDaysBefore}
-      lockMode={monthsQuery.data?.settings.lockMode}
-      months={monthsQuery.data?.months ?? []}
       today={today}
       onChange={(next: { openDaysBefore: number; lockMode: ReservationLockMode }) => {
         setIsSaved(false);

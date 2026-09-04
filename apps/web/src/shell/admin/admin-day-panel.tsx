@@ -18,6 +18,7 @@ import { useQuery } from '@lets-park/query';
 import { todayInPrague } from '@lets-park/i18n';
 import { LOT_ROUTE } from '../../routes';
 import { useApi } from '../api-provider';
+import { screenDataOf } from '../screen-state';
 import { AdminDayScreen } from './admin-day-screen';
 
 export function AdminDayPanel() {
@@ -38,11 +39,8 @@ export function AdminDayPanel() {
   return (
     <AdminDayScreen
       date={date}
-      isPending={dayQuery.isPending}
-      isError={dayQuery.isError}
-      error={dayQuery.error}
+      day={screenDataOf(dayQuery)}
       onRetry={() => void dayQuery.refetch()}
-      overview={dayQuery.data}
       onOpenLot={() => router.push(LOT_ROUTE)}
     />
   );

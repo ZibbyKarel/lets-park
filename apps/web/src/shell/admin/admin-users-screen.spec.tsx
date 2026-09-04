@@ -79,11 +79,8 @@ function renderScreen(overrides: Partial<AdminUsersScreenProps> = {}) {
   const onActiveChange = jest.fn();
 
   const props: AdminUsersScreenProps = {
-    isPending: false,
-    isError: false,
-    error: null,
+    users: { kind: 'ready', data: { users: [ADELA, KAREL, PETR] } },
     onRetry,
-    users: [ADELA, KAREL, PETR],
     viewerId: KAREL.id,
     onRoleChange,
     onActiveChange,
@@ -130,7 +127,7 @@ describe('matchesUserSearch', () => {
 
 describe('AdminUsersScreen', () => {
   it('waits rather than showing an empty table while the list is in flight', () => {
-    renderScreen({ isPending: true, users: undefined });
+    renderScreen({ users: { kind: 'loading' } });
 
     expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -138,9 +135,7 @@ describe('AdminUsersScreen', () => {
 
   it('offers a retry when the list could not be loaded', async () => {
     const { onRetry, user } = renderScreen({
-      isError: true,
-      users: undefined,
-      error: new Error('connection refused'),
+      users: { kind: 'error', error: new Error('connection refused') },
     });
 
     expect(screen.queryByText(/connection refused/u)).not.toBeInTheDocument();
@@ -165,7 +160,7 @@ describe('AdminUsersScreen', () => {
   });
 
   it('declines the count for one and for many', () => {
-    renderScreen({ users: [KAREL] });
+    renderScreen({ users: { kind: 'ready', data: { users: [KAREL] } } });
     expect(screen.getByText(/^1 účet ze SSO/u)).toBeInTheDocument();
   });
 
@@ -422,7 +417,7 @@ describe('AdminUsersScreen', () => {
     });
 
     it('says there are no accounts when the list itself is empty', () => {
-      renderScreen({ users: [] });
+      renderScreen({ users: { kind: 'ready', data: { users: [] } } });
 
       expect(screen.getByText('Žádní uživatelé')).toBeInTheDocument();
     });

@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { useApi } from '../api-provider';
+import { screenDataOf } from '../screen-state';
 import { useCurrentUser } from '../use-current-user';
 import { AdminUsersScreen, type PendingUserChange } from './admin-users-screen';
 
@@ -45,11 +46,8 @@ export function AdminUsersPanel() {
 
   return (
     <AdminUsersScreen
-      isPending={usersQuery.isPending}
-      isError={usersQuery.isError}
-      error={usersQuery.error}
+      users={screenDataOf(usersQuery)}
       onRetry={() => void usersQuery.refetch()}
-      users={usersQuery.data?.users}
       viewerId={viewer.data?.id}
       onRoleChange={(id, isAdmin) => {
         // `reset()` before every attempt: a mutation keeps its `error` until it

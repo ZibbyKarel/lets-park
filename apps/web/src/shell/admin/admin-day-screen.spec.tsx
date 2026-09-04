@@ -77,11 +77,8 @@ function renderScreen(overrides: Partial<AdminDayScreenProps> = {}) {
 
   const props: AdminDayScreenProps = {
     date: '2026-09-28',
-    isPending: false,
-    isError: false,
-    error: null,
+    day: { kind: 'ready', data: anOverview() },
     onRetry,
-    overview: anOverview(),
     onOpenLot,
     ...overrides,
   };
@@ -119,7 +116,7 @@ describe('AdminDayScreen', () => {
   });
 
   it('counts a lot with nothing booked as entirely free', () => {
-    renderScreen({ overview: anOverview({ spots: [FREE] }) });
+    renderScreen({ day: { kind: 'ready', data: anOverview({ spots: [FREE] }) } });
 
     expect(screen.getByText('1 volných')).toBeInTheDocument();
     expect(screen.getByText('0 obsazených')).toBeInTheDocument();
@@ -162,13 +159,13 @@ describe('AdminDayScreen', () => {
   });
 
   it('says the lot is empty rather than drawing a table of nothing', () => {
-    renderScreen({ overview: anOverview({ spots: [] }) });
+    renderScreen({ day: { kind: 'ready', data: anOverview({ spots: [] }) } });
 
     expect(screen.getByText('Na parkovišti nejsou žádná aktivní místa')).toBeInTheDocument();
   });
 
   it('waits while the day is in flight', () => {
-    renderScreen({ isPending: true, overview: undefined });
+    renderScreen({ day: { kind: 'loading' } });
 
     expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -176,9 +173,7 @@ describe('AdminDayScreen', () => {
 
   it('offers a retry when the day could not be loaded', async () => {
     const { onRetry, user } = renderScreen({
-      isError: true,
-      overview: undefined,
-      error: new Error('connection refused'),
+      day: { kind: 'error', error: new Error('connection refused') },
     });
 
     expect(screen.queryByText(/connection refused/u)).not.toBeInTheDocument();
