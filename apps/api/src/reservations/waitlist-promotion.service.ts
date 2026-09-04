@@ -144,6 +144,7 @@ export class WaitlistPromotionService {
 
     const user = await this.holder(tx, candidate.userId);
 
+    // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
     await this.audit.record(
       {
         actorUserId,

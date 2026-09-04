@@ -285,6 +285,7 @@ export class BulkReservationService {
     const queued = await this.createWaitlistEntries(tx, targets, actor.id);
     const queues = await this.readQueues(tx, targets);
 
+    // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
     await this.audit.recordMany(
       [...this.reservationAudit(created, actor.id), ...this.queueAudit(queued, actor.id)],
       tx

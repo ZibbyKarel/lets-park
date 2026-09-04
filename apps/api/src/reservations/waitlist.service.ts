@@ -159,7 +159,8 @@ export class WaitlistService {
     // In the transaction, for the same reason the reservation's entry is: a
     // queue entry nobody can account for is what the audit log exists to
     // prevent, and `reservation.confirmBulk` writes the same action for the
-    // rows it creates (`doc/decision/0091-*`).
+    // rows it creates (`doc/decision/0091-*`). The `payload` shape is fixed per
+    // action by `../audit/audit-payloads.ts`.
     await this.audit.record(
       {
         actorUserId: actor.id,

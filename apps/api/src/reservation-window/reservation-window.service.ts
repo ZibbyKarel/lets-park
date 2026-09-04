@@ -87,6 +87,7 @@ export class ReservationWindowService {
     });
     const after = toContractWindowSettings(row);
 
+    // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
     await this.audit.record({
       actorUserId,
       action: 'RESERVATION_WINDOW_UPDATED',

@@ -158,6 +158,7 @@ export class ReservationsService {
         },
         include: { user: { select: { id: true, name: true, licensePlate: true } } },
       });
+      // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
       await this.audit.record(
         {
           actorUserId: actor.id,

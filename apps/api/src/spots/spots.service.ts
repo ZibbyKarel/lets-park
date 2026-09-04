@@ -78,6 +78,7 @@ export class SpotsService {
       data: { label: input.label, group: input.group },
     });
 
+    // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
     await this.audit.record({
       actorUserId,
       action: 'SPOT_UPDATED',

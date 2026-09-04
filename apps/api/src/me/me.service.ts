@@ -70,6 +70,7 @@ export class MeService {
 
     const row = await this.prisma.client.user.update({ where: { id: userId }, data });
 
+    // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
     await this.audit.record({
       actorUserId: userId,
       action: 'USER_UPDATED',
