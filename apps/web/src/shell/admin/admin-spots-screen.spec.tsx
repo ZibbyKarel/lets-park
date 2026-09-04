@@ -63,8 +63,7 @@ function makeProps({ spots, spotsState, ...overrides }: Overrides = {}) {
     todayBySpotId: TODAY,
     pendingSpotId: null,
     isSaving: false,
-    writeError: null,
-    writeErrorFrom: null,
+    writeFailure: null,
     ...spies,
     ...overrides,
   };
@@ -110,8 +109,7 @@ function renderFailingWrites(failure: unknown) {
         onCreate={fails('spotCreate')}
         onSave={fails('spotRename')}
         onDeactivate={fails('spotRetire')}
-        writeError={live === null ? null : live.error}
-        writeErrorFrom={live === null ? null : live.from}
+        writeFailure={live}
         onDiscardFailure={() => setLive(null)}
       />
     );
@@ -309,8 +307,7 @@ describe('AdminSpotsScreen', () => {
       const conflict = await failureWithCode('CONFLICT');
       const { user } = renderScreen({
         onCreate: jest.fn<Promise<void>, [unknown]>().mockRejectedValue(conflict),
-        writeError: conflict,
-        writeErrorFrom: 'spotCreate',
+        writeFailure: { error: conflict, from: 'spotCreate' },
       });
 
       await user.click(screen.getByRole('button', { name: 'Přidat místo' }));
@@ -399,8 +396,7 @@ describe('AdminSpotsScreen', () => {
       const conflict = await failureWithCode('CONFLICT');
       const { user } = renderScreen({
         onDeactivate: jest.fn<Promise<void>, [string]>().mockRejectedValue(conflict),
-        writeError: conflict,
-        writeErrorFrom: 'spotRetire',
+        writeFailure: { error: conflict, from: 'spotRetire' },
       });
 
       await user.click(within(rowOf(TAKEN)).getByRole('button', { name: 'Smazat' }));
@@ -419,8 +415,7 @@ describe('AdminSpotsScreen', () => {
       const conflict = await failureWithCode('CONFLICT');
       const { user } = renderScreen({
         onDeactivate: jest.fn<Promise<void>, [string]>().mockRejectedValue(conflict),
-        writeError: conflict,
-        writeErrorFrom: 'spotRetire',
+        writeFailure: { error: conflict, from: 'spotRetire' },
       });
 
       await user.click(within(rowOf(TAKEN)).getByRole('button', { name: 'Smazat' }));
@@ -433,8 +428,7 @@ describe('AdminSpotsScreen', () => {
   describe('a failure with no dialog open', () => {
     it('reads a failed inline switch as the live-reservation rule', async () => {
       renderScreen({
-        writeError: await failureWithCode('CONFLICT'),
-        writeErrorFrom: 'spotRetire',
+        writeFailure: { error: await failureWithCode('CONFLICT'), from: 'spotRetire' },
       });
 
       expect(
@@ -447,8 +441,7 @@ describe('AdminSpotsScreen', () => {
 
     it('refuses to invent a cause when switching a spot back on fails', async () => {
       renderScreen({
-        writeError: await failureWithCode('CONFLICT'),
-        writeErrorFrom: 'spotRevive',
+        writeFailure: { error: await failureWithCode('CONFLICT'), from: 'spotRevive' },
       });
 
       expect(
@@ -458,7 +451,7 @@ describe('AdminSpotsScreen', () => {
     });
 
     it('shows nothing when the last write succeeded', () => {
-      renderScreen({ writeError: null, writeErrorFrom: null });
+      renderScreen({ writeFailure: null });
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
@@ -522,8 +515,7 @@ describe('AdminSpotsScreen', () => {
       // props never change, so the discard does nothing and only `WRITE_ORIGINS`
       // stands between a refused retire and the empty "Přidat místo" form.
       const { user } = renderScreen({
-        writeError: await failureWithCode('CONFLICT'),
-        writeErrorFrom: 'spotRetire',
+        writeFailure: { error: await failureWithCode('CONFLICT'), from: 'spotRetire' },
       });
 
       expect(await screen.findByText(RETIRE_REFUSED)).toBeInTheDocument();
@@ -536,8 +528,7 @@ describe('AdminSpotsScreen', () => {
 
     it('never appears in the delete confirmation when it came from the create form', async () => {
       const { user } = renderScreen({
-        writeError: await failureWithCode('CONFLICT'),
-        writeErrorFrom: 'spotCreate',
+        writeFailure: { error: await failureWithCode('CONFLICT'), from: 'spotCreate' },
       });
 
       // A create failure has no business above the table either: nothing

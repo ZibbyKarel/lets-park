@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { todayInPrague } from '@lets-park/i18n';
 import { useApi } from '../api-provider';
 import { screenDataOf } from '../screen-state';
-import type { AdminWrite } from './admin-errors';
+import type { AdminWrite, AdminWriteFailure } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 
 export function AdminSpotsPanel() {
@@ -85,10 +85,13 @@ export function AdminSpotsPanel() {
     return map;
   }, [dayQuery.data]);
 
-  // The last failure of whichever write ran most recently. Only one write is
-  // ever in flight (the row and the dialogs are disabled while one is), so
-  // "most recent" is unambiguous.
+  // The last failure of whichever write ran most recently, paired with the
+  // intent it came from. Only one write is ever in flight (the row and the
+  // dialogs are disabled while one is), so "most recent" is unambiguous, and
+  // `lastWrite` is always set by `startWrite` before any of the three can fail.
   const writeError = deactivateSpot.error ?? updateSpot.error ?? createSpot.error;
+  const writeFailure: AdminWriteFailure | null =
+    writeError == null || lastWrite === null ? null : { error: writeError, from: lastWrite };
 
   /**
    * Clears the previous failure and records what is being attempted now.
@@ -125,8 +128,7 @@ export function AdminSpotsPanel() {
    * report a later, successful write with an earlier one's error".
    *
    * `lastWrite` is deliberately **not** cleared. It reads as tidy and it is
-   * not: `writeErrorFrom` is `writeError == null ? null : lastWrite`, so the
-   * value is only ever read while a mutation holds an error — and after this
+   * not: it is only ever read while a mutation holds an error — and after this
    * function none does. A `setLastWrite(null)` here survived the whole web
    * suite, and worse, it let a test pass on the intent going missing instead of
    * on the error being cleared.
@@ -160,8 +162,7 @@ export function AdminSpotsPanel() {
       }}
       pendingSpotId={pendingSpotId}
       isSaving={createSpot.isPending || updateSpot.isPending || deactivateSpot.isPending}
-      writeError={writeError}
-      writeErrorFrom={writeError == null ? null : lastWrite}
+      writeFailure={writeFailure}
       onDiscardFailure={discardFailure}
     />
   );

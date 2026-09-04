@@ -57,6 +57,28 @@ export type AdminWrite =
   | 'spotRevive'
   | 'windowUpdate';
 
+/**
+ * A write that failed, and which write it was.
+ *
+ * One value, not two props, because the two halves are one fact: a `where`
+ * without an `error` describes nothing, and an `error` without a `where` has no
+ * sentence to be printed as — {@link useAdminWriteError} needs both, and a
+ * screen holding them apart has to re-check on every read that they agree.
+ * `null` is "no failure", and it is the only way to say that.
+ */
+export interface AdminWriteFailure {
+  /** Whatever the failing create/update/deactivate threw. */
+  readonly error: unknown;
+  /**
+   * Which write it came from.
+   *
+   * Required, not derived: `admin.spot.update` backs three different intents
+   * and its `CONFLICT` means something different in each, and the response
+   * cannot say which one was asked for.
+   */
+  readonly from: AdminWrite;
+}
+
 /** Message key in the `admin` namespace, or `undefined` to use the fallback. */
 type MessageKey = string;
 

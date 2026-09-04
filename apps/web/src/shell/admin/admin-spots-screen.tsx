@@ -50,7 +50,7 @@ import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { PARKING_GROUPS, useTranslations } from '@lets-park/i18n';
 import { ScreenDataGuard, type ScreenData } from '../screen-state';
-import { useAdminWriteError, type AdminWrite } from './admin-errors';
+import { useAdminWriteError, type AdminWriteFailure } from './admin-errors';
 import {
   isDialogSaving,
   shouldShowFailureIn,
@@ -90,18 +90,13 @@ export interface AdminSpotsScreenProps {
   readonly pendingSpotId: string | null;
   /** Any write is in flight — including a create, which has no id yet. */
   readonly isSaving: boolean;
-  /** Whatever a failing create/update/deactivate threw. */
-  readonly writeError: unknown;
   /**
-   * Which write `writeError` came from, or `null` when there is none.
-   *
-   * Required, not derived: `admin.spot.update` backs three different intents
-   * and its `CONFLICT` means something different in each, and the response
-   * cannot say which one was asked for. See `./admin-errors.ts`.
+   * The failed write, or `null` when there is none. See
+   * {@link AdminWriteFailure} for why the error and its origin are one value.
    */
-  readonly writeErrorFrom: AdminWrite | null;
+  readonly writeFailure: AdminWriteFailure | null;
   /**
-   * Throws away whatever `writeError` holds.
+   * Throws away whatever `writeFailure` holds.
    *
    * Called on every dialog change — opened, swapped, cancelled or closed after
    * a success. A failure describes one attempt at one spot; the moment the
@@ -129,8 +124,7 @@ export function AdminSpotsScreen({
   onDeactivate,
   pendingSpotId,
   isSaving,
-  writeError,
-  writeErrorFrom,
+  writeFailure,
   onDiscardFailure,
 }: AdminSpotsScreenProps) {
   const t = useTranslations('admin');
@@ -156,11 +150,11 @@ export function AdminSpotsScreen({
    * it. Each call site therefore renders at most one `Toast`.
    */
   function failureShownIn(where: FailureSurface): string | null {
-    if (writeError == null || writeErrorFrom === null) {
+    if (writeFailure === null) {
       return null;
     }
-    return shouldShowFailureIn(writeErrorFrom, dialog?.kind ?? null, where)
-      ? describeWriteError(writeErrorFrom, writeError)
+    return shouldShowFailureIn(writeFailure.from, dialog?.kind ?? null, where)
+      ? describeWriteError(writeFailure.from, writeFailure.error)
       : null;
   }
 
@@ -193,7 +187,7 @@ export function AdminSpotsScreen({
               label: spot.label,
               group: event.currentTarget.value as ParkingGroup,
             }).catch(() => {
-              // The row's failure is rendered by `writeError` above the table;
+              // The row's failure is rendered by `writeFailure` above the table;
               // an unhandled rejection here would only add noise to the console.
             })
           }
