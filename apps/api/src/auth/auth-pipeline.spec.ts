@@ -24,12 +24,9 @@
  * at the same two endpoints. Nothing in `src/auth` knows either of them exists.
  */
 
-import type { INestApplication } from '@nestjs/common';
 import { Controller, Get } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import type { AddressInfo } from 'node:net';
-import { configureApp } from '../configure-app';
-import { PrismaService } from '../database/prisma.service';
+import type { ApiTestApp } from '../testing/nest-test-app';
+import { AUDIENCE, startApiTestApp } from '../testing/nest-test-app';
 import type { AuthenticatedUser } from './authenticated-user';
 import { CurrentUser } from './current-user.decorator';
 import { Public } from './public.decorator';
@@ -38,9 +35,6 @@ import { InMemoryUserStore } from './testing/in-memory-user-store';
 import type { OidcTestIssuer, TestSigningKey } from './testing/oidc-test-issuer';
 import { createSigningKey, startOidcTestIssuer } from './testing/oidc-test-issuer';
 import { forgeUnsignedToken, signTestToken } from './testing/sign-test-token';
-
-const AUDIENCE = 'api://default';
-const ALLOWED_ORIGIN = 'http://localhost:4200';
 
 /** A route with no decorator at all: protected purely by the global default. */
 @Controller('protected')
@@ -70,11 +64,10 @@ class OpenController {
 }
 
 describe('authentication through the assembled application', () => {
-  let app: INestApplication;
+  let harness: ApiTestApp;
   let issuer: OidcTestIssuer;
   let signingKey: TestSigningKey;
   let store: InMemoryUserStore;
-  let baseUrl: string;
   const originalEnv = { ...process.env };
 
   /** A token this API should accept, unless an option is deliberately wrong. */
@@ -90,7 +83,7 @@ describe('authentication through the assembled application', () => {
   }
 
   function get(path: string, token?: string): Promise<Response> {
-    return fetch(`${baseUrl}${path}`, {
+    return fetch(`${harness.baseUrl}${path}`, {
       headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
     });
   }
@@ -110,47 +103,20 @@ describe('authentication through the assembled application', () => {
       },
     ]);
 
-    // Same mechanism as `app.module.spec.ts`: `ConfigModule.forRoot({ validate })`
-    // runs at import time, so the environment has to be in place before
-    // `AppModule` is loaded. The only value that differs from production here is
-    // the issuer URL — which is the entire point of the "no test branch in auth"
-    // rule.
-    Object.assign(process.env, {
-      NODE_ENV: 'test',
-      PORT: '3000',
-      DATABASE_URL: 'postgresql://lets_park:lets_park@localhost:5432/lets_park',
-      AUTH_OKTA_ISSUER: issuer.issuer,
-      AUTH_OKTA_AUDIENCE: AUDIENCE,
-      CORS_ALLOWED_ORIGINS: ALLOWED_ORIGIN,
-      LOG_LEVEL: 'fatal',
-      // High enough that rate limiting never interferes with these assertions;
-      // the throttler is still in the chain, ahead of the auth guard.
-      THROTTLE_LIMIT: '100000',
-    });
-    const { AppModule } = await import('../app/app.module');
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
+    // The three probe routes are compiled alongside the real `AppModule`, so the
+    // global guards apply to them exactly as configured. The environment — and
+    // in particular the fact that `AUTH_OKTA_ISSUER` is the only value that
+    // differs from production, which is the entire point of the "no test branch
+    // in auth" rule — is `testing/nest-test-app.ts`.
+    harness = await startApiTestApp({
+      issuer,
+      store,
       controllers: [ProtectedController, AdminController, OpenController],
-    })
-      .overrideProvider(PrismaService)
-      .useValue({
-        ...store.asPrismaService(),
-        ping: jest.fn(),
-        onModuleInit: jest.fn(),
-        onModuleDestroy: jest.fn(),
-      })
-      .compile();
-
-    app = moduleRef.createNestApplication({ bodyParser: false });
-    configureApp(app, { BODY_LIMIT: '100kb', CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN] });
-    await app.init();
-    await app.listen(0);
-    baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
+    });
   });
 
   afterAll(async () => {
-    await app?.close();
+    await harness?.close();
     await issuer?.close();
     process.env = originalEnv;
   });

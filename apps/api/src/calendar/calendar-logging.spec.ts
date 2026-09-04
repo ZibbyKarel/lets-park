@@ -27,24 +27,13 @@
  * name of the site that broke rather than one opaque "token found".
  */
 
-import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import type { AddressInfo } from 'node:net';
-import { Writable } from 'node:stream';
-import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
-import type { Params } from 'nestjs-pino';
-import type { Options } from 'pino-http';
 import { ICS_FEED_BASE_PATH, buildIcsFeedPath } from '@lets-park/contract';
-import { configureApp } from '../configure-app';
-import { PrismaService } from '../database/prisma.service';
 import type { OidcTestIssuer, TestSigningKey } from '../auth/testing/oidc-test-issuer';
 import { createSigningKey, startOidcTestIssuer } from '../auth/testing/oidc-test-issuer';
 import { PrismaDouble } from '../testing/prisma-double';
-import { buildLoggerOptions } from '../logging/logger.options';
+import type { ApiTestApp } from '../testing/nest-test-app';
+import { startApiTestApp } from '../testing/nest-test-app';
 import { REDACTED_ICS_TOKEN } from '../logging/redact-ics-token';
-
-const AUDIENCE = 'api://default';
-const ALLOWED_ORIGIN = 'http://localhost:4200';
 
 /** Shaped like the real thing: 32 bytes of `randomBytes`, base64url. */
 const VALID_TOKEN = 'aG93ZXZlci1sb25nLXRoaXMtaXMtaXQtaXMtb3BhcXVl';
@@ -106,11 +95,10 @@ const WAIT_BUDGET_MS = 10_000;
 jest.setTimeout(TEST_TIMEOUT_MS);
 
 describe('the ICS feed and the log', () => {
-  let app: INestApplication;
+  let harness: ApiTestApp;
   let issuer: OidcTestIssuer;
   let signingKey: TestSigningKey;
   let double: PrismaDouble;
-  let baseUrl: string;
   let emitted: string[] = [];
   /** Waiters registered by {@link waitForEmitted}, resolved from the stream. */
   let waiters: { matches: (all: string) => boolean; resolve: () => void }[] = [];
@@ -129,24 +117,18 @@ describe('the ICS feed and the log', () => {
     issuer = await startOidcTestIssuer([signingKey]);
     double = new PrismaDouble();
 
-    Object.assign(process.env, {
-      NODE_ENV: 'test',
-      PORT: '3000',
-      DATABASE_URL: 'postgresql://lets_park:lets_park@localhost:5432/lets_park',
-      AUTH_OKTA_ISSUER: issuer.issuer,
-      AUTH_OKTA_AUDIENCE: AUDIENCE,
-      CORS_ALLOWED_ORIGINS: ALLOWED_ORIGIN,
+    harness = await startApiTestApp({
+      issuer,
+      store: double,
       // The point of the spec. Every other spec pins `fatal`, which is exactly
       // why the leak survived: at `fatal` the request line is never emitted.
-      LOG_LEVEL: 'info',
-      THROTTLE_LIMIT: '100000',
-      THROTTLE_STRICT_LIMIT: '100000',
-    });
-    const { AppModule } = await import('../app/app.module');
-
-    const capture = new Writable({
-      write(chunk: Buffer | string, _encoding, callback) {
-        emitted.push(String(chunk));
+      // The harness builds the *real* `buildLoggerOptions` at this level and
+      // attaches the destination below — nothing about the redaction is
+      // configured here, because if it were, this spec would be testing its own
+      // setup.
+      logLevel: 'info',
+      onLogLine: (line) => {
+        emitted.push(line);
         // Push, rather than let a poller pull: this is what makes the wait
         // independent of how busy the machine is.
         const all = emitted.join('');
@@ -156,37 +138,12 @@ describe('the ICS feed and the log', () => {
             waiter.resolve();
           }
         }
-        callback();
       },
     });
-
-    // The real options the running server uses, with a destination attached.
-    // Nothing about the redaction is configured here — if it were, this spec
-    // would be testing its own setup.
-    const options = buildLoggerOptions({ LOG_LEVEL: 'info', NODE_ENV: 'test' });
-    const params: Params = { ...options, pinoHttp: [options.pinoHttp as Options, capture] };
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue({
-        ...double.asPrismaService(),
-        ping: jest.fn(),
-        onModuleInit: jest.fn(),
-        onModuleDestroy: jest.fn(),
-      })
-      .overrideProvider(PARAMS_PROVIDER_TOKEN)
-      .useValue(params)
-      .compile();
-
-    app = moduleRef.createNestApplication({ bodyParser: false });
-    configureApp(app, { BODY_LIMIT: '100kb', CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN] });
-    await app.init();
-    await app.listen(0);
-    baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   });
 
   afterAll(async () => {
-    await app?.close();
+    await harness?.close();
     await issuer?.close();
     process.env = originalEnv;
   });
@@ -241,7 +198,7 @@ describe('the ICS feed and the log', () => {
    * rather than sleeping for a guessed interval.
    */
   async function getAndCollectLogs(path: string): Promise<{ status: number; lines: LogLine[] }> {
-    const response = await fetch(`${baseUrl}${path}`);
+    const response = await fetch(`${harness.baseUrl}${path}`);
     await response.text();
 
     await waitForEmitted(

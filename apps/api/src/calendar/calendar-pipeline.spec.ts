@@ -25,8 +25,6 @@
  * composition, not the storage.
  */
 
-import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import type { AddressInfo } from 'node:net';
 import type { IncomingHttpHeaders } from 'node:http';
 import { request as httpRequest } from 'node:http';
@@ -37,19 +35,16 @@ import {
   buildReservationCalendar,
   icsEventUid,
 } from '@lets-park/calendar-export';
-import { configureApp } from '../configure-app';
-import { PrismaService } from '../database/prisma.service';
 import type { OidcTestIssuer, TestSigningKey } from '../auth/testing/oidc-test-issuer';
 import { createSigningKey, startOidcTestIssuer } from '../auth/testing/oidc-test-issuer';
 import { PrismaDouble } from '../testing/prisma-double';
+import type { ApiTestApp } from '../testing/nest-test-app';
+import { startApiTestApp } from '../testing/nest-test-app';
 import {
   CALENDAR_CACHE_CONTROL,
   CALENDAR_CONTENT_TYPE,
   CALENDAR_FILENAME,
 } from './calendar.controller';
-
-const AUDIENCE = 'api://default';
-const ALLOWED_ORIGIN = 'http://localhost:4200';
 
 /** Shaped like the real thing: 32 bytes of `randomBytes`, base64url. */
 const VALID_TOKEN = 'aG93ZXZlci1sb25nLXRoaXMtaXMtaXQtaXMtb3BhcXVl';
@@ -63,15 +58,14 @@ interface FeedResponse {
 }
 
 describe('the ICS feed through the assembled application', () => {
-  let app: INestApplication;
+  let harness: ApiTestApp;
   let issuer: OidcTestIssuer;
   let signingKey: TestSigningKey;
   let double: PrismaDouble;
-  let baseUrl: string;
   const originalEnv = { ...process.env };
 
   async function get(path: string, headers: Record<string, string> = {}): Promise<FeedResponse> {
-    const response = await fetch(`${baseUrl}${path}`, { headers });
+    const response = await fetch(`${harness.baseUrl}${path}`, { headers });
     return { status: response.status, headers: response.headers, body: await response.text() };
   }
 
@@ -100,7 +94,7 @@ describe('the ICS feed through the assembled application', () => {
     path: string,
     etag: string
   ): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
-    const { port } = app.getHttpServer().address() as AddressInfo;
+    const { port } = harness.app.getHttpServer().address() as AddressInfo;
     return new Promise((resolve, reject) => {
       const request = httpRequest(
         { host: '127.0.0.1', port, path, method: 'GET', headers: { 'if-none-match': etag } },
@@ -125,38 +119,11 @@ describe('the ICS feed through the assembled application', () => {
     issuer = await startOidcTestIssuer([signingKey]);
     double = new PrismaDouble();
 
-    Object.assign(process.env, {
-      NODE_ENV: 'test',
-      PORT: '3000',
-      DATABASE_URL: 'postgresql://lets_park:lets_park@localhost:5432/lets_park',
-      AUTH_OKTA_ISSUER: issuer.issuer,
-      AUTH_OKTA_AUDIENCE: AUDIENCE,
-      CORS_ALLOWED_ORIGINS: ALLOWED_ORIGIN,
-      LOG_LEVEL: 'fatal',
-      THROTTLE_LIMIT: '100000',
-      THROTTLE_STRICT_LIMIT: '100000',
-    });
-    const { AppModule } = await import('../app/app.module');
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue({
-        ...double.asPrismaService(),
-        ping: jest.fn(),
-        onModuleInit: jest.fn(),
-        onModuleDestroy: jest.fn(),
-      })
-      .compile();
-
-    app = moduleRef.createNestApplication({ bodyParser: false });
-    configureApp(app, { BODY_LIMIT: '100kb', CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN] });
-    await app.init();
-    await app.listen(0);
-    baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
+    harness = await startApiTestApp({ issuer, store: double });
   });
 
   afterAll(async () => {
-    await app?.close();
+    await harness?.close();
     await issuer?.close();
     process.env = originalEnv;
   });
@@ -234,7 +201,7 @@ describe('the ICS feed through the assembled application', () => {
       // Read as bytes and decoded explicitly — a mislabelled charset would show
       // up here as mojibake even though the string comparison above passed on a
       // correctly-decoded body.
-      const bytes = await fetch(`${baseUrl}${buildIcsFeedPath(VALID_TOKEN)}`).then((r) =>
+      const bytes = await fetch(`${harness.baseUrl}${buildIcsFeedPath(VALID_TOKEN)}`).then((r) =>
         r.arrayBuffer()
       );
       expect(new TextDecoder('utf-8', { fatal: true }).decode(bytes)).toBe(response.body);
@@ -466,34 +433,24 @@ describe('the ICS feed through the assembled application', () => {
      * request** (`common/throttling/throttle-tiers.ts`). That this works is
      * itself part of what the first test below shows.
      */
-    let strictApp: INestApplication;
-    let strictBaseUrl: string;
+    let strictHarness: ApiTestApp;
     let strictDouble: PrismaDouble;
 
     beforeAll(async () => {
       strictDouble = new PrismaDouble();
-      Object.assign(process.env, { THROTTLE_STRICT_LIMIT: '2' });
+      // The outer issuer is reused rather than a second one started: this app
+      // exists for the throttler's counters, and the feed route is `@Public()`,
+      // so no token is minted against it at all.
+      //
       // No `jest.resetModules()`: re-importing `@nestjs/core` gives Nest two
       // copies of `Reflector` and every module fails to resolve `ThrottlerGuard`.
       // A fresh testing module is enough — `ConfigModule.forRoot` re-validates
       // `process.env` and the throttler factory re-reads it.
-      const { AppModule } = await import('../app/app.module');
-
-      const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-        .overrideProvider(PrismaService)
-        .useValue({
-          ...strictDouble.asPrismaService(),
-          ping: jest.fn(),
-          onModuleInit: jest.fn(),
-          onModuleDestroy: jest.fn(),
-        })
-        .compile();
-
-      strictApp = moduleRef.createNestApplication({ bodyParser: false });
-      configureApp(strictApp, { BODY_LIMIT: '100kb', CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN] });
-      await strictApp.init();
-      await strictApp.listen(0);
-      strictBaseUrl = `http://127.0.0.1:${(strictApp.getHttpServer().address() as AddressInfo).port}`;
+      strictHarness = await startApiTestApp({
+        issuer,
+        store: strictDouble,
+        env: { THROTTLE_STRICT_LIMIT: '2' },
+      });
 
       const spot = strictDouble.seedSpot({ label: 'E2.92' });
       const user = strictDouble.seedUser({ oktaId: 'okta-holder', icsToken: VALID_TOKEN });
@@ -505,13 +462,13 @@ describe('the ICS feed through the assembled application', () => {
     });
 
     afterAll(async () => {
-      await strictApp?.close();
+      await strictHarness?.close();
       Object.assign(process.env, { THROTTLE_STRICT_LIMIT: '100000' });
     });
 
     /** One sequential GET of the feed against the freshly-counted app. */
     async function hitFeed(): Promise<{ status: number; limit: string | null }> {
-      const response = await fetch(`${strictBaseUrl}${buildIcsFeedPath(VALID_TOKEN)}`);
+      const response = await fetch(`${strictHarness.baseUrl}${buildIcsFeedPath(VALID_TOKEN)}`);
       await response.text();
       return { status: response.status, limit: response.headers.get('x-ratelimit-limit') };
     }
@@ -534,7 +491,9 @@ describe('the ICS feed through the assembled application', () => {
       // so the strict tier had to be an override of the single registered one
       // rather than a second registration (`doc/decision/0034-*`). This is what
       // that means in practice.
-      const rpcResponse = await fetch(`${strictBaseUrl}/api/rpc/spot/list`, { method: 'POST' });
+      const rpcResponse = await fetch(`${strictHarness.baseUrl}/api/rpc/spot/list`, {
+        method: 'POST',
+      });
       await rpcResponse.text();
 
       expect(rpcResponse.headers.get('x-ratelimit-limit')).toBe('100000');

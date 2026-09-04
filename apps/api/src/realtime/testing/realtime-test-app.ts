@@ -2,43 +2,29 @@
  * The assembled application, listening, with a real issuer and a real socket
  * server — the harness the realtime specs drive.
  *
- * Same shape as `auth/auth-pipeline.spec.ts`'s setup and for the same reason:
- * the claims worth making about the gateway are properties of a composition
- * (engine.io → socket.io → Nest's `IoAdapter` → this gateway →
- * `JwksVerifierService` → `jsonwebtoken` → `AuthUserService`), and no unit test
- * that calls `handleConnection` directly can see any of them.
+ * The boot itself is `testing/nest-test-app.ts`, which this file was the
+ * general version of before four other suites were folded into it. What is left
+ * here is what is genuinely realtime-specific: the OIDC issuer and its signing
+ * key, the token minters the specs drive the handshake with, the `PrismaDouble`,
+ * and the short `REALTIME_LOCK_TTL_MS` that lets a suite watch a hold lapse
+ * without waiting 30 s.
  *
- * **Nothing here is a test backdoor.** The module under test is the real
- * `AppModule` and the socket server is the one `configureApp` builds. Three
- * environment *values* differ from production and no code path does:
- *
- * - `AUTH_OKTA_ISSUER` points at an in-process OIDC server instead of Okta —
- *   exactly as dev and e2e point it at `mock-oauth2-server`;
- * - `REALTIME_LOCK_TTL_MS` is short, so a suite can watch a hold lapse without
- *   waiting 30 s;
- * - `DATABASE_URL` is present but unused, because `PrismaService` is replaced
- *   by `PrismaDouble` (Docker is not available to `api:test`).
+ * **Nothing here is a test backdoor** — see the header of `nest-test-app.ts` for
+ * the three environment values that differ from production, and why none of
+ * them is a code path.
  *
  * Spec-only support code, excluded from `tsconfig.app.json`.
  */
 
 import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import type { TestingModuleBuilder } from '@nestjs/testing';
-import type { AddressInfo } from 'node:net';
-import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
-import type { Params } from 'nestjs-pino';
-import type { Options } from 'pino-http';
 import type { OidcTestIssuer } from '../../auth/testing/oidc-test-issuer';
 import { createSigningKey, startOidcTestIssuer } from '../../auth/testing/oidc-test-issuer';
-import { configureApp } from '../../configure-app';
-import { PrismaService } from '../../database/prisma.service';
-import { buildLoggerOptions } from '../../logging/logger.options';
 import { PrismaDouble } from '../../testing/prisma-double';
+import { ALLOWED_ORIGIN, AUDIENCE, startApiTestApp } from '../../testing/nest-test-app';
 import { signTestToken } from '../../auth/testing/sign-test-token';
 
-export const AUDIENCE = 'api://default';
-export const ALLOWED_ORIGIN = 'http://localhost:4200';
+export { ALLOWED_ORIGIN, AUDIENCE };
 
 export interface RealtimeTestAppOptions {
   /** `REALTIME_LOCK_TTL_MS`. Short by default so a suite can watch a hold lapse. */
@@ -78,13 +64,7 @@ export interface RealtimeTestApp {
   close(): Promise<void>;
 }
 
-/**
- * Boots the app.
- *
- * `process.env` is written before `AppModule` is imported, because
- * `ConfigModule.forRoot({ validate })` runs at import time — the same mechanism
- * `auth-pipeline.spec.ts` documents.
- */
+/** Boots the app, plus the issuer and the double it is wired to. */
 export async function startRealtimeTestApp(
   options: RealtimeTestAppOptions = {}
 ): Promise<RealtimeTestApp> {
@@ -92,62 +72,16 @@ export async function startRealtimeTestApp(
   const issuer = await startOidcTestIssuer([signingKey]);
   const double = new PrismaDouble();
 
-  Object.assign(process.env, {
-    NODE_ENV: 'test',
-    PORT: '3000',
-    DATABASE_URL: 'postgresql://lets_park:lets_park@localhost:5432/lets_park',
-    AUTH_OKTA_ISSUER: issuer.issuer,
-    AUTH_OKTA_AUDIENCE: AUDIENCE,
-    CORS_ALLOWED_ORIGINS: ALLOWED_ORIGIN,
-    LOG_LEVEL: options.logLevel ?? 'fatal',
-    THROTTLE_LIMIT: '100000',
-    THROTTLE_STRICT_LIMIT: '100000',
-    REALTIME_LOCK_TTL_MS: String(options.lockTtlMs ?? 1_000),
+  const { app, baseUrl, close } = await startApiTestApp({
+    issuer,
+    store: double,
+    // Spread rather than assigned: `exactOptionalPropertyTypes` refuses an
+    // explicit `undefined` for an optional property.
+    ...(options.logLevel === undefined ? {} : { logLevel: options.logLevel }),
+    ...(options.onLogLine === undefined ? {} : { onLogLine: options.onLogLine }),
+    ...(options.overrides === undefined ? {} : { overrides: options.overrides }),
+    env: { REALTIME_LOCK_TTL_MS: String(options.lockTtlMs ?? 1_000) },
   });
-  const { AppModule } = await import('../../app/app.module');
-
-  let builder: TestingModuleBuilder = Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(PrismaService)
-    .useValue({
-      ...double.asPrismaService(),
-      ping: jest.fn(),
-      onModuleInit: jest.fn(),
-      onModuleDestroy: jest.fn(),
-    });
-
-  if (options.onLogLine !== undefined) {
-    // The real options the running server uses, with a destination attached —
-    // the `calendar-logging.spec.ts` pattern. Nothing about redaction is
-    // configured here; a spec that configured it would be testing its own setup.
-    const emit = options.onLogLine;
-    const loggerOptions = buildLoggerOptions({
-      LOG_LEVEL: (options.logLevel ?? 'debug') as never,
-      NODE_ENV: 'test',
-    });
-    const params: Params = {
-      ...loggerOptions,
-      pinoHttp: [
-        loggerOptions.pinoHttp as Options,
-        {
-          write(chunk: string) {
-            emit(String(chunk));
-          },
-        },
-      ],
-    };
-    builder = builder.overrideProvider(PARAMS_PROVIDER_TOKEN).useValue(params);
-  }
-
-  if (options.overrides !== undefined) {
-    builder = options.overrides(builder);
-  }
-
-  const moduleRef = await builder.compile();
-  const app = moduleRef.createNestApplication({ bodyParser: false });
-  configureApp(app, { BODY_LIMIT: '100kb', CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN] });
-  await app.init();
-  await app.listen(0);
-  const baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
 
   return {
     app,
@@ -171,7 +105,7 @@ export async function startRealtimeTestApp(
         subject,
       }),
     close: async () => {
-      await app.close();
+      await close();
       await issuer.close();
     },
   };

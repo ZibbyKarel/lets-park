@@ -32,20 +32,15 @@
  * runs under a separate target. Nothing in `src` knows either exists.
  */
 
-import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import type { AddressInfo } from 'node:net';
 import { isContractProcedure } from '@orpc/contract';
 import { contract } from '@lets-park/contract';
 import { PrismaService } from '../database/prisma.service';
-import { configureApp } from '../configure-app';
 import type { OidcTestIssuer, TestSigningKey } from '../auth/testing/oidc-test-issuer';
 import { createSigningKey, startOidcTestIssuer } from '../auth/testing/oidc-test-issuer';
 import { signTestToken } from '../auth/testing/sign-test-token';
 import { PrismaDouble } from '../testing/prisma-double';
-
-const AUDIENCE = 'api://default';
-const ALLOWED_ORIGIN = 'http://localhost:4200';
+import type { ApiTestApp } from '../testing/nest-test-app';
+import { AUDIENCE, startApiTestApp } from '../testing/nest-test-app';
 
 interface RpcResponse {
   status: number;
@@ -72,11 +67,10 @@ function adminProcedureNames(node: unknown, prefix: string[] = []): string[] {
 }
 
 describe('the oRPC transport through the assembled application', () => {
-  let app: INestApplication;
+  let harness: ApiTestApp;
   let issuer: OidcTestIssuer;
   let signingKey: TestSigningKey;
   let double: PrismaDouble;
-  let baseUrl: string;
   const originalEnv = { ...process.env };
 
   function tokenFor(subject: string): string {
@@ -85,7 +79,7 @@ describe('the oRPC transport through the assembled application', () => {
 
   /** Posts exactly what `RPCLink` posts: `{ json, meta }` to `/api/rpc/<path>`. */
   async function call(procedure: string, input: unknown, token?: string): Promise<RpcResponse> {
-    const response = await fetch(`${baseUrl}/api/rpc/${procedure.split('.').join('/')}`, {
+    const response = await fetch(`${harness.baseUrl}/api/rpc/${procedure.split('.').join('/')}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -102,37 +96,11 @@ describe('the oRPC transport through the assembled application', () => {
 
     double = new PrismaDouble();
 
-    Object.assign(process.env, {
-      NODE_ENV: 'test',
-      PORT: '3000',
-      DATABASE_URL: 'postgresql://lets_park:lets_park@localhost:5432/lets_park',
-      AUTH_OKTA_ISSUER: issuer.issuer,
-      AUTH_OKTA_AUDIENCE: AUDIENCE,
-      CORS_ALLOWED_ORIGINS: ALLOWED_ORIGIN,
-      LOG_LEVEL: 'fatal',
-      THROTTLE_LIMIT: '100000',
-    });
-    const { AppModule } = await import('../app/app.module');
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue({
-        ...double.asPrismaService(),
-        ping: jest.fn(),
-        onModuleInit: jest.fn(),
-        onModuleDestroy: jest.fn(),
-      })
-      .compile();
-
-    app = moduleRef.createNestApplication({ bodyParser: false });
-    configureApp(app, { BODY_LIMIT: '100kb', CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN] });
-    await app.init();
-    await app.listen(0);
-    baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
+    harness = await startApiTestApp({ issuer, store: double });
   });
 
   afterAll(async () => {
-    await app?.close();
+    await harness?.close();
     await issuer?.close();
     process.env = originalEnv;
   });
@@ -337,8 +305,9 @@ describe('the oRPC transport through the assembled application', () => {
 
     /** Replaces one delegate method with a thrower, and restores it after. */
     async function whileFailing<T>(run: () => Promise<T>): Promise<T> {
-      const client = (app.get(PrismaService) as unknown as { client: Record<string, never> })
-        .client as unknown as { parkingSpot: { findMany: unknown } };
+      const client = (
+        harness.app.get(PrismaService) as unknown as { client: Record<string, never> }
+      ).client as unknown as { parkingSpot: { findMany: unknown } };
       const original = client.parkingSpot.findMany;
       client.parkingSpot.findMany = () => {
         throw new TypeError(SECRET);
