@@ -11,7 +11,11 @@
  */
 
 import { Prisma } from '@lets-park/database';
-import { mapPrismaErrorCode, mapUniqueConstraintViolation } from './prisma-error-mapping';
+import {
+  isUniqueConstraintViolation,
+  mapPrismaErrorCode,
+  mapUniqueConstraintViolation,
+} from './prisma-error-mapping';
 
 function prismaError(code: string, meta?: Record<string, unknown>) {
   return new Prisma.PrismaClientKnownRequestError('Prisma failed', {
@@ -138,5 +142,25 @@ describe('mapPrismaErrorCode', () => {
 
   it('returns undefined for a code it does not know, so it becomes a 500', () => {
     expect(mapPrismaErrorCode(prismaError('P1001'))).toBeUndefined();
+  });
+});
+
+describe('isUniqueConstraintViolation', () => {
+  it('is true only for P2002', () => {
+    expect(isUniqueConstraintViolation(prismaError('P2002'))).toBe(true);
+    expect(isUniqueConstraintViolation(prismaError('P2025'))).toBe(false);
+    expect(isUniqueConstraintViolation(new Error('not a Prisma error'))).toBe(false);
+    expect(isUniqueConstraintViolation(undefined)).toBe(false);
+  });
+
+  it('narrows the error, so a caller can read `meta` without a second instanceof', () => {
+    // The assertion that matters here is the one `tsc` makes: this block only
+    // compiles while the function returns a type predicate. Reverting it to
+    // `boolean` fails `api:typecheck`, not this expectation.
+    const error: unknown = prismaError('P2002', { target: ['userId', 'date'] });
+    if (!isUniqueConstraintViolation(error)) {
+      throw new Error('Expected a unique-constraint violation.');
+    }
+    expect(mapUniqueConstraintViolation(error.meta)).toBe('RESERVATION_LIMIT_REACHED');
   });
 });

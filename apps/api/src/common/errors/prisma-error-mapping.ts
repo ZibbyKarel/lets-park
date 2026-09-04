@@ -177,9 +177,15 @@ export function isWriteConflict(error: Prisma.PrismaClientKnownRequestError): bo
  *
  * Takes `unknown` rather than a narrowed error on purpose: every call site is a
  * `catch` block, so narrowing is part of the question being asked, not a
- * precondition the caller should have to satisfy first.
+ * precondition the caller should have to satisfy first. It answers with a type
+ * predicate for the same reason — the body already proves the error is a
+ * `PrismaClientKnownRequestError`, and a bare `boolean` would throw that proof
+ * away at the `return`, leaving the caller to re-establish it with a second
+ * `instanceof` before it can read `.meta` or `.code`.
  */
-export function isUniqueConstraintViolation(error: unknown): boolean {
+export function isUniqueConstraintViolation(
+  error: unknown
+): error is Prisma.PrismaClientKnownRequestError {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === PRISMA_UNIQUE_CONSTRAINT
   );
