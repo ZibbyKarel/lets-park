@@ -5,7 +5,9 @@ import {
   diffBulkSchedule,
   sameOutcome,
   toBadge,
+  toBadgeMessage,
   toBulkErrorMessageKey,
+  toPreferredSpotMessage,
   toPreferredSpotView,
   toScheduleRows,
   weekendColumns,
@@ -220,6 +222,88 @@ describe('toPreferredSpotView — the label and its four ways of not existing', 
     // one of them is stale or partial — the label must not be asserted from it.
     expect(toPreferredSpotView('spot-1', spots, true)).toEqual({ kind: 'unknown' });
     expect(toPreferredSpotView(null, spots, true)).toEqual({ kind: 'unknown' });
+  });
+});
+
+describe('toPreferredSpotMessage — which of the five sentences, and its one value', () => {
+  it('names the spot for the only case that has a label to interpolate', () => {
+    expect(toPreferredSpotMessage({ kind: 'named', label: 'E2.92' })).toEqual({
+      messageKey: 'preferredSpot',
+      values: { label: 'E2.92' },
+    });
+  });
+
+  it('gives each of the other four its own key', () => {
+    expect(toPreferredSpotMessage({ kind: 'loading' }).messageKey).toBe('preferredSpotLoading');
+    expect(toPreferredSpotMessage({ kind: 'unknown' }).messageKey).toBe('preferredSpotUnknown');
+    expect(toPreferredSpotMessage({ kind: 'none' }).messageKey).toBe('preferredSpotNone');
+    expect(toPreferredSpotMessage({ kind: 'unavailable' }).messageKey).toBe(
+      'preferredSpotUnavailable'
+    );
+  });
+
+  it('populates `values` in every case, so the caller never varies with the key', () => {
+    // The same contract `lot-view.ts`'s `toBannerView` keeps: one `t` call
+    // covers all five sentences because the values are always there.
+    for (const view of [
+      { kind: 'loading' },
+      { kind: 'unknown' },
+      { kind: 'none' },
+      { kind: 'unavailable' },
+    ] as const) {
+      expect(toPreferredSpotMessage(view).values).toEqual({ label: '' });
+    }
+  });
+
+  it('never answers the failed read with a key that promises a resolution', () => {
+    // The pair that matters: `unknown` must not share a key with `loading`.
+    expect(toPreferredSpotMessage({ kind: 'unknown' }).messageKey).not.toBe(
+      toPreferredSpotMessage({ kind: 'loading' }).messageKey
+    );
+  });
+});
+
+describe('toBadgeMessage — which of the six sentences, and its one value', () => {
+  it('gives the two assigned kinds different keys', () => {
+    expect(toBadgeMessage({ kind: 'ASSIGNED_PREFERRED' }).messageKey).toBe(
+      'badgeAssignedPreferred'
+    );
+    expect(toBadgeMessage({ kind: 'ASSIGNED' }).messageKey).toBe('badgeAssigned');
+  });
+
+  it('carries the queue position through to the sentence that interpolates it', () => {
+    expect(toBadgeMessage({ kind: 'QUEUED', position: 3 })).toEqual({
+      messageKey: 'badgeQueued',
+      values: { position: 3 },
+    });
+  });
+
+  it('gives each unavailable reason its own key rather than one generic sentence', () => {
+    const keys = (
+      ['ALREADY_HAS_RESERVATION', 'NOT_A_BUSINESS_DAY', 'NO_SPOTS_AVAILABLE'] as const
+    ).map((reason) => toBadgeMessage({ kind: 'UNAVAILABLE', reason }).messageKey);
+
+    expect(keys).toEqual(['badgeAlreadyReserved', 'badgeNotBusinessDay', 'badgeNoSpots']);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('populates `values` in every case, so the caller never varies with the key', () => {
+    for (const badge of [
+      { kind: 'ASSIGNED_PREFERRED' },
+      { kind: 'ASSIGNED' },
+      { kind: 'UNAVAILABLE', reason: 'NO_SPOTS_AVAILABLE' },
+    ] as const) {
+      expect(toBadgeMessage(badge).values).toEqual({ position: 0 });
+    }
+  });
+
+  it('reads its key off the badge the module itself produced', () => {
+    // The whole point of the move: one enumeration of the union, at the place
+    // that produces it. `toBadge` -> `toBadgeMessage` has to compose.
+    expect(toBadgeMessage(toBadge(queued('2026-09-01', { waitlistPosition: 2 })))).toEqual({
+      messageKey: 'badgeQueued',
+      values: { position: 2 },
+    });
   });
 });
 

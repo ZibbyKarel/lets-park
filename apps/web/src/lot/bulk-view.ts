@@ -9,6 +9,14 @@
  *
  * Nothing here formats a date or reads a message: formatting is `libs/i18n`'s
  * and copy is the component's, so these functions can assert structure.
+ *
+ * A message **key** is structure, though, and lives here — which case are we
+ * in — while the sentence it names stays copy and stays in the component. Each
+ * union this module produces is therefore enumerated once, in the module that
+ * produced it: `toBulkErrorMessageKey`, {@link toBadgeMessage} and
+ * {@link toPreferredSpotMessage}. Re-switching on one of them in the component
+ * would enumerate its variants twice, and adding a variant would then fail to
+ * compile in the wrong file.
  */
 
 import {
@@ -224,6 +232,45 @@ export function toPreferredSpotView(
   return match === undefined ? { kind: 'unavailable' } : { kind: 'named', label: match.label };
 }
 
+/**
+ * Which sentence the line under the grid is, and what to fill into it.
+ *
+ * The same shape `lot-view.ts`'s `toBannerView` uses, for the same reason:
+ * `values` is always populated, so the key may vary without the call site
+ * varying. `label` is blank for every case that does not name a spot, and
+ * those keys do not interpolate it.
+ *
+ * The **key** is structure — which of {@link PreferredSpotView}'s five cases
+ * are we in — while the sentence stays copy and stays in the component. That
+ * is the line this module's own `toBulkErrorMessageKey` already draws.
+ */
+type PreferredSpotMessageKey =
+  | 'preferredSpotLoading'
+  | 'preferredSpotUnknown'
+  | 'preferredSpotNone'
+  | 'preferredSpotUnavailable'
+  | 'preferredSpot';
+
+export function toPreferredSpotMessage(view: PreferredSpotView): {
+  readonly messageKey: PreferredSpotMessageKey;
+  readonly values: { readonly label: string };
+} {
+  const values = { label: view.kind === 'named' ? view.label : '' };
+
+  switch (view.kind) {
+    case 'loading':
+      return { messageKey: 'preferredSpotLoading', values };
+    case 'unknown':
+      return { messageKey: 'preferredSpotUnknown', values };
+    case 'none':
+      return { messageKey: 'preferredSpotNone', values };
+    case 'unavailable':
+      return { messageKey: 'preferredSpotUnavailable', values };
+    case 'named':
+      return { messageKey: 'preferredSpot', values };
+  }
+}
+
 /** The badge one schedule row carries. Tone is the component's business. */
 export type BulkBadgeView =
   | { readonly kind: 'ASSIGNED_PREFERRED' }
@@ -249,6 +296,52 @@ export function toBadge(day: BulkDayOutcomeView): BulkBadgeView {
       return { kind: 'QUEUED', position: day.waitlistPosition };
     case 'UNAVAILABLE':
       return { kind: 'UNAVAILABLE', reason: day.reason };
+  }
+}
+
+/**
+ * Which sentence a badge is, and what to fill into it.
+ *
+ * The counterpart of {@link toPreferredSpotMessage} for {@link BulkBadgeView},
+ * and the reason both exist here: the union is produced in this module, so the
+ * one place that enumerates its variants should also be the one place that
+ * names them. Enumerating them again in the component means a new variant
+ * fails to compile in the wrong file.
+ *
+ * `position` is always populated — 0 for the three cases that have no queue
+ * position, none of which interpolate it — so the component makes one `t` call
+ * for all six sentences instead of six.
+ */
+type BulkBadgeMessageKey =
+  | 'badgeAssignedPreferred'
+  | 'badgeAssigned'
+  | 'badgeQueued'
+  | 'badgeAlreadyReserved'
+  | 'badgeNotBusinessDay'
+  | 'badgeNoSpots';
+
+export function toBadgeMessage(badge: BulkBadgeView): {
+  readonly messageKey: BulkBadgeMessageKey;
+  readonly values: { readonly position: number };
+} {
+  const values = { position: badge.kind === 'QUEUED' ? badge.position : 0 };
+
+  switch (badge.kind) {
+    case 'ASSIGNED_PREFERRED':
+      return { messageKey: 'badgeAssignedPreferred', values };
+    case 'ASSIGNED':
+      return { messageKey: 'badgeAssigned', values };
+    case 'QUEUED':
+      return { messageKey: 'badgeQueued', values };
+    case 'UNAVAILABLE':
+      switch (badge.reason) {
+        case 'ALREADY_HAS_RESERVATION':
+          return { messageKey: 'badgeAlreadyReserved', values };
+        case 'NOT_A_BUSINESS_DAY':
+          return { messageKey: 'badgeNotBusinessDay', values };
+        case 'NO_SPOTS_AVAILABLE':
+          return { messageKey: 'badgeNoSpots', values };
+      }
   }
 }
 

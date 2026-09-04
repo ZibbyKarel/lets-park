@@ -42,7 +42,9 @@ import {
   buildMonthGrid,
   diffBulkSchedule,
   toBadge,
+  toBadgeMessage,
   toBulkErrorMessageKey,
+  toPreferredSpotMessage,
   toPreferredSpotView,
   toScheduleRows,
   weekendColumns,
@@ -212,23 +214,8 @@ function BulkReservationModalContent({
   };
 
   function badgeLabel(badge: BulkBadgeView): string {
-    switch (badge.kind) {
-      case 'ASSIGNED_PREFERRED':
-        return t('badgeAssignedPreferred');
-      case 'ASSIGNED':
-        return t('badgeAssigned');
-      case 'QUEUED':
-        return t('badgeQueued', { position: badge.position });
-      case 'UNAVAILABLE':
-        switch (badge.reason) {
-          case 'ALREADY_HAS_RESERVATION':
-            return t('badgeAlreadyReserved');
-          case 'NOT_A_BUSINESS_DAY':
-            return t('badgeNotBusinessDay');
-          case 'NO_SPOTS_AVAILABLE':
-            return t('badgeNoSpots');
-        }
-    }
+    const message = toBadgeMessage(badge);
+    return t(message.messageKey, message.values);
   }
 
   /** One side of a difference, as one readable phrase. */
@@ -241,18 +228,8 @@ function BulkReservationModalContent({
   }
 
   function preferredSpotNote(): string {
-    switch (preferredSpot.kind) {
-      case 'loading':
-        return t('preferredSpotLoading');
-      case 'unknown':
-        return t('preferredSpotUnknown');
-      case 'none':
-        return t('preferredSpotNone');
-      case 'unavailable':
-        return t('preferredSpotUnavailable');
-      case 'named':
-        return t('preferredSpot', { label: preferredSpot.label });
-    }
+    const message = toPreferredSpotMessage(preferredSpot);
+    return t(message.messageKey, message.values);
   }
 
   // No empty-list branch: both procedures answer one entry per requested day
