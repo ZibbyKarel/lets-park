@@ -13,6 +13,13 @@
 /doc
 /plan.md
 /.claude
+# Vendored agent skill definitions (160 tracked files, third-party markdown).
+# Same category as /.claude above: tool config, not workspace source. They
+# arrive formatted by whoever wrote them, and `nx format:check --all` — which
+# CI runs — failed on ~150 of them, so CI was red for a reason no source change
+# could fix. Reformatting them instead would rewrite vendored text and make the
+# next upstream sync a conflict.
+/.agents
 **/package-lock.json
 
 # Generated 1:1 from TS design tokens (libs/design-system/tokens/src/lib/*.ts) to
