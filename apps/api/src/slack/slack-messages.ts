@@ -39,22 +39,10 @@
  */
 
 import type { DateOnly } from '@lets-park/shared-types';
-import { parseDateOnly } from '@lets-park/shared-types';
+import { toUtcMidnight } from '@lets-park/shared-types';
 
 /** Locale for every string below. */
 const CZECH_LOCALE = 'cs';
-
-/**
- * A `DateOnly` is a calendar day, not an instant. Formatting it as a
- * UTC-midnight `Date` with an explicit `timeZone: 'UTC'` is what guarantees the
- * rendered day is the day asked for on every host, in every offset, on both
- * sides of a DST change — the same construction, and the same reason, as
- * `libs/i18n/src/lib/dates.ts`.
- */
-function toUtcMidnight(date: DateOnly): Date {
-  const { year, month, day } = parseDateOnly(date);
-  return new Date(Date.UTC(year, month - 1, day));
-}
 
 const fullDateFormat = new Intl.DateTimeFormat(CZECH_LOCALE, {
   timeZone: 'UTC',

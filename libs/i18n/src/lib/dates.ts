@@ -27,7 +27,7 @@
  */
 
 import { createFormatter } from 'next-intl';
-import { parseDateOnly, type DateOnly } from '@lets-park/shared-types';
+import { toUtcMidnight, type DateOnly } from '@lets-park/shared-types';
 
 const CZECH_LOCALE = 'cs';
 
@@ -39,12 +39,6 @@ const CZECH_LOCALE = 'cs';
  * UTC-midnight stand-ins for calendar days (see module docs above).
  */
 const formatter = createFormatter({ locale: CZECH_LOCALE, timeZone: 'UTC' });
-
-/** UTC-midnight `Date` standing in for a `DateOnly`'s calendar day. */
-function toUtcMidnight(date: DateOnly): Date {
-  const { year, month, day } = parseDateOnly(date);
-  return new Date(Date.UTC(year, month - 1, day));
-}
 
 /** `pondělí 28. září 2026` — the long form used as the page's date heading. */
 export function formatFullDate(date: DateOnly): string {

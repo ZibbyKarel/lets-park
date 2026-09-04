@@ -128,6 +128,40 @@ export function formatDateOnly(parts: DateParts): DateOnly {
   return `${pad4(date.getUTCFullYear())}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
 }
 
+/**
+ * The UTC-midnight `Date` standing in for a calendar day.
+ *
+ * A `DateOnly` is a calendar day, not an instant, but every path that formats
+ * one for a human or writes one into a `@db.Date` column has to hand a `Date`
+ * to something. UTC midnight is the stand-in this workspace uses everywhere,
+ * always read back or rendered with an explicit UTC, because that is what
+ * guarantees the day that comes out is the day asked for on every host, in
+ * every offset, on both sides of a daylight-saving change.
+ *
+ * Unlike the module-private `utcMidnight` this takes a `DateOnly`, so
+ * `parseDateOnly` has already rejected anything that is not a real calendar
+ * day — a caller cannot silently have out-of-range parts normalized into a
+ * different day here.
+ */
+export function toUtcMidnight(value: DateOnly): Date {
+  return utcMidnight(parseDateOnly(value));
+}
+
+/**
+ * The calendar day a UTC-midnight `Date` stands for. Inverse of
+ * {@link toUtcMidnight}.
+ *
+ * The parts are read with UTC getters, never local ones: local getters would
+ * move the day by one for any process running west of Greenwich.
+ */
+export function fromUtcMidnight(value: Date): DateOnly {
+  return formatDateOnly({
+    year: value.getUTCFullYear(),
+    month: value.getUTCMonth() + 1,
+    day: value.getUTCDate(),
+  });
+}
+
 /** Days since 1970-01-01, computed in UTC so it is exact and DST-immune. */
 function epochDay(value: DateOnly): number {
   return Math.round(utcMidnight(parseDateOnly(value)).getTime() / MS_PER_DAY);

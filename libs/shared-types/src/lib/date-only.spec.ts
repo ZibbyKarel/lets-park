@@ -8,6 +8,7 @@ import {
   differenceInDays,
   endOfMonth,
   formatDateOnly,
+  fromUtcMidnight,
   isAfter,
   isBefore,
   isDateOnly,
@@ -17,6 +18,7 @@ import {
   parseDateOnly,
   startOfMonth,
   startOfYearMonth,
+  toUtcMidnight,
   toYearMonth,
 } from './date-only';
 
@@ -79,6 +81,39 @@ describe('formatDateOnly', () => {
     // leap year would wrongly return 2026-02-29 here.
     expect(formatDateOnly({ year: 2026, month: 3, day: 0 })).toBe('2026-02-28');
     expect(formatDateOnly({ year: 2024, month: 3, day: 0 })).toBe('2024-02-29');
+  });
+});
+
+describe('toUtcMidnight / fromUtcMidnight', () => {
+  it('maps a calendar day onto UTC midnight', () => {
+    expect(toUtcMidnight('2026-08-28').toISOString()).toBe('2026-08-28T00:00:00.000Z');
+  });
+
+  it('reads a UTC-midnight Date back as the same calendar day', () => {
+    expect(fromUtcMidnight(new Date('2026-08-28T00:00:00.000Z'))).toBe('2026-08-28');
+  });
+
+  it('round-trips every day across a Europe/Prague DST transition', () => {
+    // The host may be running in any zone; UTC has no transitions, so these
+    // hold everywhere. 2026-03-29 is the spring-forward Sunday.
+    for (const day of ['2026-03-28', '2026-03-29', '2026-03-30', '2026-10-25']) {
+      expect(fromUtcMidnight(toUtcMidnight(day))).toBe(day);
+    }
+  });
+
+  it('keeps a year below 100 as itself, not as a 1900s year', () => {
+    // `Date.UTC(26, 0, 1)` would be 1926. `utcMidnight`'s `setUTCFullYear` is
+    // why this module does not use it — see the note on `utcMidnight`.
+    expect(toUtcMidnight('0026-01-01').getUTCFullYear()).toBe(26);
+    expect(fromUtcMidnight(toUtcMidnight('0026-01-01'))).toBe('0026-01-01');
+  });
+
+  it('rejects a value that is not a real calendar day', () => {
+    expect(() => toUtcMidnight('2026-02-30')).toThrow(TypeError);
+  });
+
+  it('truncates a Date that is not midnight to its UTC calendar day', () => {
+    expect(fromUtcMidnight(new Date('2026-08-28T23:59:59.999Z'))).toBe('2026-08-28');
   });
 });
 

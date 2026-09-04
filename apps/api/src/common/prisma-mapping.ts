@@ -56,7 +56,7 @@ import type {
   ReservationWindowSettings as ReservationWindowSettingsRow,
 } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
-import { assertDateOnly } from '@lets-park/shared-types';
+import { fromUtcMidnight, toUtcMidnight } from '@lets-park/shared-types';
 import type { ReservationWindowSettings } from '@lets-park/contract';
 
 /** A `@db.Timestamptz` column as the contract's ISO 8601 string. */
@@ -66,10 +66,7 @@ export function toTimestamp(value: Date): string {
 
 /** A `@db.Date` column as the contract's `YYYY-MM-DD`. See the note above. */
 export function toDateOnly(value: Date): DateOnly {
-  const year = String(value.getUTCFullYear()).padStart(4, '0');
-  const month = String(value.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(value.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return fromUtcMidnight(value);
 }
 
 /**
@@ -77,8 +74,9 @@ export function toDateOnly(value: Date): DateOnly {
  * column: UTC midnight, the same convention {@link toDateOnly} reads.
  */
 export function toDateColumn(value: DateOnly): Date {
-  assertDateOnly(value);
-  return new Date(`${value}T00:00:00.000Z`);
+  // `toUtcMidnight` parses, so an invalid `YYYY-MM-DD` still throws here rather
+  // than reaching the driver as a silently wrong day.
+  return toUtcMidnight(value);
 }
 
 export function toContractSpot(row: ParkingSpotRow): ParkingSpot {
