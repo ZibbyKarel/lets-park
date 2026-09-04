@@ -53,7 +53,8 @@ export interface RealtimeTestAppOptions {
    * Used by `realtime-ack-leak.spec.ts` to hand the gateway a `LockService`
    * whose grant carries a *fat* holder — the shape a Prisma `select` that is
    * not honoured produces. There is no other seam that can produce it, because
-   * the real `loadUserSummary` narrows to three fields on the way in, and a
+   * the real `loadUserSummary` (`realtime-handshake.ts`) narrows to three fields
+   * on the way in, and a
    * defence that only the code path it guards can reach is a defence no test
    * can falsify. It stands in for a dependency's **behaviour**, never for the
    * shape of an error or for the protocol.

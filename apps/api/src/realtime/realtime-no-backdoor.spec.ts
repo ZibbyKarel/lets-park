@@ -143,6 +143,7 @@ describe('the realtime module', () => {
         .sort()
     ).toEqual([
       'realtime/lock.service.ts',
+      'realtime/realtime-handshake.ts',
       'realtime/realtime-io.adapter.ts',
       'realtime/realtime.gateway.ts',
       'realtime/realtime.module.ts',
@@ -170,7 +171,9 @@ describe('the realtime module', () => {
       expect(`${file.name}: ${file.source}`).not.toContain('jwks-rsa');
       expect(`${file.name}: ${file.source}`).not.toContain('JwksClient');
     }
-    const gateway = realtimeSources().find((file) => file.name === 'realtime/realtime.gateway.ts');
-    expect(gateway?.source).toContain('this.verifier.verifyToken(');
+    const handshake = realtimeSources().find(
+      (file) => file.name === 'realtime/realtime-handshake.ts'
+    );
+    expect(handshake?.source).toContain('this.verifier.verifyToken(');
   });
 });

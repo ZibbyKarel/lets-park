@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { InMemoryLockService, LockService } from './lock.service';
+import { RealtimeHandshakeAuthenticator } from './realtime-handshake';
 import { RealtimeGateway } from './realtime.gateway';
 import { RealtimeDomainEventPublisher } from './realtime.publisher';
 
@@ -28,8 +29,8 @@ import { RealtimeDomainEventPublisher } from './realtime.publisher';
  * the `DomainEvent` type, a file that imports nothing from `realtime/`.
  *
  * `AuthModule` is imported for `JwksVerifierService` and `AuthUserService`,
- * which it exports for exactly this reason (`doc/decision/0042-*`): the
- * handshake must reuse the process's single JWKS client rather than open a
+ * which {@link RealtimeHandshakeAuthenticator} injects and which it exports for
+ * exactly this reason (`doc/decision/0042-*`): the handshake must reuse the process's single JWKS client rather than open a
  * second one with its own cache, rate limiter and rotation moment.
  * `PrismaService` and `GracefulShutdownService` arrive from global modules.
  */
@@ -40,6 +41,9 @@ import { RealtimeDomainEventPublisher } from './realtime.publisher';
     // implementation, if this ever stops being a single instance — cannot
     // silently have the wrong shape.
     { provide: LockService, useClass: InMemoryLockService },
+    // Not exported: who may connect is this module's own business, and the
+    // gateway is the only thing that installs it.
+    RealtimeHandshakeAuthenticator,
     RealtimeGateway,
     RealtimeDomainEventPublisher,
   ],

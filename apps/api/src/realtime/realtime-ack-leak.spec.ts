@@ -5,7 +5,8 @@
  * ## Why this file exists at all
  *
  * `realtime.gateway.spec.ts` asserts that no acknowledgement carries an
- * `icsToken`, and it passes — but it passes because `loadUserSummary` builds
+ * `icsToken`, and it passes — but it passes because `realtime-handshake.ts`'s
+ * `loadUserSummary` builds
  * its three fields explicitly, *not* because {@link RealtimeGateway.acknowledge}
  * validates. Mutation testing proved it: deleting the ack's `safeParse`
  * entirely failed **zero** tests. A defence that only the code path it guards
@@ -45,7 +46,8 @@ const SECRETS = ['icsToken', 'email', 'oktaId', 'role', 'active', 'preferredPark
  * with a holder nobody narrowed.
  *
  * `as unknown as UserSummary` is the point of the class: TypeScript refuses
- * this shape, and the shipped `loadUserSummary` cannot produce it — but a
+ * this shape, and the shipped `realtime-handshake.ts` `loadUserSummary` cannot
+ * produce it — but a
  * Prisma `select` that is silently dropped can, and did.
  *
  * Nothing expires here: expiry has its own tests against the real service in
