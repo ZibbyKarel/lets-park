@@ -46,6 +46,7 @@ import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { PARKING_GROUPS, useTranslations } from '@lets-park/i18n';
 import { ScreenError, ScreenLoading } from '../screen-state';
 import { useAdminWriteError, type AdminWrite } from './admin-errors';
+import { shouldShowFailureIn, type FailureSurface } from './spots-view';
 
 /** How a spot stands today, as the day overview reports it. */
 export interface SpotToday {
@@ -116,32 +117,6 @@ type SpotDialog =
   | { readonly kind: 'edit'; readonly spot: ParkingSpot }
   | { readonly kind: 'delete'; readonly spot: ParkingSpot };
 
-/** A surface that can show a failure: the table, or one of the three dialogs. */
-type FailureHome = 'table' | SpotDialog['kind'];
-
-/**
- * Which surfaces could have started each write.
- *
- * A second, independent guard behind `onDiscardFailure`. Discarding is what
- * *should* keep a stale sentence off the next dialog; this is what makes the
- * bad case unrepresentable even if a discard is ever missed — a `spotRetire`
- * failure has no route to the "Nové parkovací místo" form, because nothing in
- * that form can retire a spot.
- *
- * A write with no entry (`userUpdate`, `windowUpdate` — neither reaches this
- * screen) shows nowhere. Silence is the right failure direction for a sentence
- * whose origin this screen cannot account for.
- */
-const WRITE_ORIGINS: Partial<Record<AdminWrite, readonly FailureHome[]>> = {
-  spotCreate: ['create'],
-  // Both the edit modal's "Uložit" and the row's inline category picker.
-  spotRename: ['edit', 'table'],
-  // Both the "Smazat" confirmation and the row's switch being turned off.
-  spotRetire: ['delete', 'table'],
-  // Only the row's switch: no dialog turns a spot back on.
-  spotRevive: ['table'],
-};
-
 export function AdminSpotsScreen({
   isPending,
   isError,
@@ -176,29 +151,18 @@ export function AdminSpotsScreen({
   const all = spots ?? [];
 
   /**
-   * Where a failure is shown: inside whichever dialog is open, otherwise above
-   * the table.
+   * The sentence to print on `where`, or `null` when nothing belongs there.
    *
-   * A dialog is a modal — it covers the table — so a message printed behind one
-   * is a message nobody reads. And every write here has *two* possible origins:
-   * `spotRename` is both the edit modal's Save and the row's inline category
-   * picker, `spotRetire` is both the confirmation dialog and the row's switch
-   * being turned off. Keying on which dialog is open, rather than on the write,
-   * is what puts the sentence where the user is actually looking.
-   *
-   * Returns `null` for a `where` that is not the current home, so each call
-   * site renders at most one `Toast`, and `null` for a failure the current
-   * surface could not have produced (`WRITE_ORIGINS`).
+   * {@link shouldShowFailureIn} holds the rule — which surface a failure is
+   * shown on, and which surfaces could have produced it at all; this adds the
+   * two things only the screen has, the failure itself and the translation of
+   * it. Each call site therefore renders at most one `Toast`.
    */
-  function failureShownIn(where: 'table' | 'dialog'): string | null {
+  function failureShownIn(where: FailureSurface): string | null {
     if (writeError == null || writeErrorFrom === null) {
       return null;
     }
-    const home: FailureHome = dialog?.kind ?? 'table';
-    if (!(WRITE_ORIGINS[writeErrorFrom] ?? []).includes(home)) {
-      return null;
-    }
-    return (home === 'table' ? 'table' : 'dialog') === where
+    return shouldShowFailureIn(writeErrorFrom, dialog?.kind ?? null, where)
       ? describeWriteError(writeErrorFrom, writeError)
       : null;
   }
