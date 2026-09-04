@@ -21,7 +21,7 @@ import { expect, type Page } from '@playwright/test';
 import type { Persona } from './personas';
 
 /** The signed-out screen. Mirrors `LOGIN_ROUTE` in `apps/web/src/routes.ts`. */
-export const LOGIN_PATH = '/prihlaseni';
+export const LOGIN_PATH = '/login';
 
 /** The parking overview. Mirrors `LOT_ROUTE`. */
 export const LOT_PATH = '/';

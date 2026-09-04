@@ -208,7 +208,7 @@ const URL_DIRECTIONS = new Set(['OPEN', 'CLOSE', 'LOAD', 'DOC']);
  * names and prints `(other)` for anything else. Nothing a URL contains can
  * escape through a value this file already knew before the run started.
  */
-const APP_ROUTES = new Set(['/', '/prihlaseni', '/nastaveni', '/sprava']);
+const APP_ROUTES = new Set(['/', '/login', '/settings', '/admin']);
 
 /** The route name for a page URL, or `(other)`. Never any part of the URL itself. */
 function appRouteOf(url: string): string {

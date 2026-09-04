@@ -155,7 +155,7 @@ export async function expectFree(page: Page, label: string): Promise<void> {
  * The suite starts the **built** app (`web:start`), which compiles nothing on
  * demand — but `reuseExistingServer` is on outside CI, so a run may still meet
  * a `next dev` somebody already had up, and that one does. Measured, not
- * guessed: the dev server logged `GET /nastaveni 200 in 4.9s (compile: 1573ms,
+ * guessed: the dev server logged `GET /settings 200 in 4.9s (compile: 1573ms,
  * proxy.ts: 1177ms, render: 2.2s)` on a machine that was also running three
  * browsers and a webpack watch — over Playwright's 5 s default, which is what
  * made the settings step flaky before this existed. See `doc/decision/0183-*`
@@ -173,14 +173,14 @@ export const FIRST_ROUTE_VISIT_TIMEOUT_MS = 30_000;
  * Opens Nastavení from the user menu and returns the modal.
  *
  * Settings is a route rendered as a modal over whatever is underneath
- * (`doc/decision/0150-*`), so this waits for the URL first: a `/nastaveni` that
+ * (`doc/decision/0150-*`), so this waits for the URL first: a `/settings` that
  * never arrives and a modal that never renders are different failures, and the
  * report should say which one happened.
  */
 export async function openSettings(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Uživatelské menu' }).click();
   await page.getByRole('menuitem', { name: 'Nastavení (SPZ auta)' }).click();
-  await page.waitForURL('**/nastaveni', { timeout: FIRST_ROUTE_VISIT_TIMEOUT_MS });
+  await page.waitForURL('**/settings', { timeout: FIRST_ROUTE_VISIT_TIMEOUT_MS });
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible({ timeout: FIRST_ROUTE_VISIT_TIMEOUT_MS });
