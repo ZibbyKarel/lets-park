@@ -18,7 +18,6 @@ import type {
   UpdateSpotInput,
 } from '@lets-park/contract';
 import type { ParkingSpot as ParkingSpotRow, Prisma } from '@lets-park/database';
-import type { DateOnly } from '@lets-park/shared-types';
 import { todayInPrague } from '@lets-park/shared-types';
 import { AuditLogService } from '../audit/audit-log.service';
 import { DomainError } from '../common/errors/domain-error';
@@ -191,13 +190,15 @@ export class SpotsService {
    * the *row* survives a retirement; it says nothing about why the *queue*
    * should. See `doc/decision/0235-*`.
    */
-  private async requireNoFutureCommitments(spotId: string, today?: DateOnly): Promise<void> {
-    const from = toDateColumn(today ?? todayInPrague());
+  private async requireNoFutureCommitments(spotId: string): Promise<void> {
+    const from = toDateColumn(todayInPrague());
     const where = { parkingSpotId: spotId, date: { gte: from } };
-    const [reservations, waitlistEntries] = [
-      await this.prisma.client.reservation.count({ where }),
-      await this.prisma.client.waitlistEntry.count({ where }),
-    ];
+    // Two statements rather than one destructured array literal: the counts run
+    // one after the other, and the array shape read like `Promise.all` without
+    // being it. They are deliberately not parallelised — that would change how
+    // many pool connections a deactivation holds, for no gain at this size.
+    const reservations = await this.prisma.client.reservation.count({ where });
+    const waitlistEntries = await this.prisma.client.waitlistEntry.count({ where });
 
     if (reservations + waitlistEntries > 0) {
       throw new DomainError('CONFLICT', {
