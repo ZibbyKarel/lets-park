@@ -95,7 +95,11 @@ export class ScheduledJobRunner implements OnApplicationShutdown {
       this.logger.info({ job: name }, 'Scheduled job skipped: shutting down');
       return 'skipped-shutting-down';
     }
-    if (this.claim(name)) {
+    if (!this.claim(name)) {
+      // Returned before the `try`, deliberately: the `finally` releases the
+      // claim, and a skipped run must never release the claim held by the run
+      // it just lost to.
+      //
       // Not an error: the previous run being slow is information, not a fault.
       // A job that reports this every tick is a job whose schedule is wrong.
       this.logger.warn({ job: name }, 'Scheduled job skipped: previous run still in flight');
@@ -111,6 +115,9 @@ export class ScheduledJobRunner implements OnApplicationShutdown {
       // job cannot afford: an unhandled rejection out of a timer takes the
       // process down.
       const running = body();
+      // Replaces the placeholder `claim` reserved a moment ago with the promise
+      // `drain` actually has to wait for. Nothing can observe the placeholder:
+      // the only code between the two is `body`'s synchronous prefix.
       this.runningJobs.set(name, running.then(noop, noop));
       await running;
       this.logger.info({ job: name, durationMs: Date.now() - startedAt }, 'Scheduled job finished');
@@ -135,13 +142,23 @@ export class ScheduledJobRunner implements OnApplicationShutdown {
   }
 
   /**
-   * Returns `true` when the job is already running, i.e. the claim failed.
+   * Acquires the claim on `name`, or fails.
    *
-   * Step 1 of the upgrade path above replaces this method (and {@link release})
-   * with a PostgreSQL advisory lock; every other line of this class stays.
+   * Acquire-or-fail, and a real acquisition: `true` means this call now holds
+   * the claim and the caller must {@link release} it. That is the same shape a
+   * distributed lock has, which is what makes step 1 of the upgrade path above
+   * a replacement of this method (and {@link release}) and nothing else.
+   *
+   * The promise stored here is a placeholder — already resolved, so a
+   * {@link drain} that somehow saw it would not hang — and {@link run}
+   * overwrites it with the body's own promise on the next line.
    */
   private claim(name: string): boolean {
-    return this.runningJobs.has(name);
+    if (this.runningJobs.has(name)) {
+      return false;
+    }
+    this.runningJobs.set(name, Promise.resolve());
+    return true;
   }
 
   private release(name: string): void {

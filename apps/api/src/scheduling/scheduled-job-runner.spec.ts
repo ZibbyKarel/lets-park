@@ -118,6 +118,22 @@ describe('ScheduledJobRunner', () => {
       await running;
     });
 
+    it('holds the claim before the body starts, not after it returns', async () => {
+      // `claim` acquires; it does not merely test. The window this pins is the
+      // body's own synchronous prefix — the one place the entry used not to
+      // exist yet, and the one a distributed lock would have to cover.
+      let namesDuringSynchronousPrefix: string[] = [];
+      const body = (): Promise<void> => {
+        namesDuringSynchronousPrefix = runner.runningJobNames();
+        return Promise.resolve();
+      };
+
+      await expect(runner.run('nightly', body)).resolves.toBe('ran');
+
+      expect(namesDuringSynchronousPrefix).toEqual(['nightly']);
+      expect(runner.runningJobNames()).toEqual([]);
+    });
+
     it('lets the job run again once the previous one has finished', async () => {
       await runner.run('nightly', () => Promise.resolve());
 
