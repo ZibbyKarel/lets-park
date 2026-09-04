@@ -40,7 +40,9 @@ function DemoForm({ onValid }: { readonly onValid: (values: DemoValues) => void 
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={form.handleSubmit(onValid)}>
+      {/* `handleSubmit` returns a promise; React ignores a handler's return
+          value, so `void` says the detachment is deliberate. */}
+      <form onSubmit={(event) => void form.handleSubmit(onValid)(event)}>
         <FormField
           name="name"
           render={({ field, error }) => <Input label="Name" error={error} {...field} />}

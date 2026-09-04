@@ -21,7 +21,9 @@ function EmailForm({ onValid }: { readonly onValid: (values: EmailValues) => voi
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={form.handleSubmit(onValid)}>
+      {/* `handleSubmit` returns a promise; React ignores a handler's return
+          value, so `void` says the detachment is deliberate. */}
+      <form onSubmit={(event) => void form.handleSubmit(onValid)(event)}>
         <FormField
           name="email"
           render={({ field, error }) => (
@@ -106,27 +108,31 @@ function ProfileForm({ onValid }: { readonly onValid: (values: ProfileOut) => vo
 
   return (
     <FormProvider {...form}>
+      {/* `handleSubmit` returns a promise; React ignores a handler's return
+          value, so `void` says the detachment is deliberate. */}
       <form
-        onSubmit={form.handleSubmit((values) => {
-          // `TIn`: what the field holds, before the transform. A `string` —
-          // this line is a compile error the moment `TIn` widens to
-          // `FieldValues`, which is exactly what the abandoned
-          // `schema: TSchema` signature did (`doc/decision/0031-*`).
-          const draftAge: string = form.getValues('age');
-          void draftAge;
+        onSubmit={(event) =>
+          void form.handleSubmit((values) => {
+            // `TIn`: what the field holds, before the transform. A `string` —
+            // this line is a compile error the moment `TIn` widens to
+            // `FieldValues`, which is exactly what the abandoned
+            // `schema: TSchema` signature did (`doc/decision/0031-*`).
+            const draftAge: string = form.getValues('age');
+            void draftAge;
 
-          // `TOut`: after the transform. A `number`, so arithmetic compiles.
-          const parsedAge: number = values.age;
+            // `TOut`: after the transform. A `number`, so arithmetic compiles.
+            const parsedAge: number = values.age;
 
-          // @ts-expect-error `values` is TOut, where `age` is a number. This
-          // directive is the guard: if TOut ever collapses back to TIn, `age`
-          // becomes a string, the assignment becomes legal, and `tsc` fails on
-          // the now-unused `@ts-expect-error`.
-          const collapsed: string = values.age;
-          void collapsed;
+            // @ts-expect-error `values` is TOut, where `age` is a number. This
+            // directive is the guard: if TOut ever collapses back to TIn, `age`
+            // becomes a string, the assignment becomes legal, and `tsc` fails on
+            // the now-unused `@ts-expect-error`.
+            const collapsed: string = values.age;
+            void collapsed;
 
-          onValid({ ...values, age: parsedAge });
-        })}
+            onValid({ ...values, age: parsedAge });
+          })(event)
+        }
       >
         <label htmlFor="name-field">Name</label>
         <input id="name-field" {...form.register('name')} />

@@ -656,7 +656,8 @@ export default [
     },
   },
   /**
-   * Type-aware linting for the backend and the libs: `no-floating-promises`.
+   * Type-aware linting for the backend and the libs: `no-floating-promises`
+   * and `no-misused-promises`.
    *
    * `projectService: true` is what makes a *typed* rule possible at all — it
    * asks typescript-eslint to build a real program per file rather than parse
@@ -666,13 +667,50 @@ export default [
    * about 1.6x. `nx.json`'s lint `inputs` carry `^default` for the same reason
    * this block exists; see the note there.
    *
-   * Why this rule and no other: the codebase names the failure it catches, in
-   * `apps/api/src/reservations/composite-domain-event.publisher.ts` — an
-   * escaping rejection is worse than an escaping throw, because `apps/api`
+   * Why these two rules and no others: the codebase names the failure they
+   * guard, in `apps/api/src/reservations/composite-domain-event.publisher.ts`
+   * — an escaping rejection is worse than an escaping throw, because `apps/api`
    * installs no `unhandledRejection` handler, so Node's default terminates the
-   * process **after COMMIT**, on a user's cancellation path. Every `void`ed
-   * promise in the tree today is correct; what was missing was the enforcement,
-   * which rested entirely on convention and review.
+   * process **after COMMIT**, on a user's cancellation path.
+   *
+   * They cover different halves of that, and the split is worth stating
+   * because the first commit here blurred it:
+   *
+   * - `no-floating-promises` catches a promise **created and dropped** — an
+   *   `await` forgotten at a call site. Every `void`ed promise in the tree
+   *   today is correct; what was missing was the enforcement, which rested
+   *   entirely on convention and review. It found zero errors, and it is the
+   *   regression guard, not a bug hunt.
+   * - `no-misused-promises` catches the construct that actually produces the
+   *   composite publisher's failure: an `async` method **declared** where the
+   *   supertype says `void`. TypeScript's void-return assignability rule lets
+   *   `Promise<void>` satisfy an abstract `publish(...): void`, so neither
+   *   `tsc` nor the abstract-class DI token stops it, and neither does
+   *   `no-floating-promises` — nothing floats at the call site; the composite
+   *   calls a method it was told returns nothing.
+   *   (`checksVoidReturn.inheritedMethods` is on by default, which is the
+   *   sub-check that sees it.)
+   *
+   * So the composite's runtime try/catch is the dynamic half of that defense
+   * and stays; this rule is the static half, and it stops the bad override
+   * being written anywhere in `apps/api` or `libs` in the first place. A
+   * delegate injected from outside the linted tree is still the guard's job.
+   * The only waiver is the two disables on `AsyncRejectingPublisher` in
+   * `composite-domain-event.publisher.spec.ts`, which *is* the guard's test —
+   * each carries a comment saying so.
+   *
+   * Cost of adding `no-misused-promises`: five errors, all in spec files, none
+   * in production code. Two are that fixture; three were
+   * `onSubmit={form.handleSubmit(...)}` in the `libs/form` specs, fixed rather
+   * than silenced — `(event) => void form.handleSubmit(...)(event)`.
+   *
+   * Its wall-clock cost is small, because the expensive part — building the
+   * program — is already paid for by the rule above. Measured back to back,
+   * median of three cold-cache runs each of
+   * `npx nx run-many -t lint --skip-nx-cache` (the authoritative invocation;
+   * Nx run duration): **23.4s without this rule, 25.7s with it**, about +10%.
+   * Do not compare those to the `npm run lint` figures a few lines up — a
+   * different command on a differently loaded machine. Only the deltas travel.
    *
    * `ignoreVoid` keeps its default (`true`): `void promise` stays the
    * documented way to say "detached on purpose", which is the convention the
@@ -685,6 +723,13 @@ export default [
    * half-considered sweep of them would bury the backend result this block is
    * for. `.tsx` is listed for `libs/**` only, for the same reason: the design
    * system and the wrapper libs are in, the app's React tree is not.
+   *
+   * One visible consequence, so nobody "fixes" it by halves: the `libs/form`
+   * specs now wrap `handleSubmit` in `void`, while the two production callers
+   * — `apps/web/src/shell/settings-screen.tsx` and
+   * `apps/web/src/shell/admin/admin-spots-screen.tsx` — still pass it bare,
+   * purely because `apps/web/**` is outside this block. That is the same
+   * finding waiting for the web pass, not an inconsistency to paper over.
    *
    * Scoped to `.ts`/`.tsx` rather than `LINTED_EXTENSIONS`: a file the
    * TypeScript project service does not own parses as a hard error rather than
@@ -702,6 +747,7 @@ export default [
     },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
     },
   },
   // Standalone scripts and tooling are allowed to print to the console.

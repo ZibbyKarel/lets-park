@@ -60,15 +60,25 @@ class RecordingPublisher extends DomainEventPublisher {
  * abstract `publish(...): void`, so the abstract-class token — chosen precisely
  * so a replacement "cannot silently have the wrong shape" — does not stop it.
  * The class exists to pin what the composite does about that at runtime.
+ *
+ * `@typescript-eslint/no-misused-promises` is what now stops the same
+ * declaration everywhere else in `apps/api` and `libs` — see the block in
+ * `eslint.config.mjs` that enables it. The two disables below are the single
+ * deliberate waiver: this class is not a delegate anyone ships, it is the
+ * fixture that proves the composite's runtime guard still holds when a
+ * delegate arrives through DI from outside the linter's reach. Silence the
+ * static half here, or there is nothing left to test the dynamic half with.
  */
 class AsyncRejectingPublisher extends DomainEventPublisher {
   calls = 0;
 
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- deliberate: an `async` override of the `void` seam is the thing under test.
   async publish(): Promise<void> {
     this.calls += 1;
     throw new Error('async transport rejected');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- deliberate: an `async` override of the `void` seam is the thing under test.
   async notifyPromotions(): Promise<void> {
     this.calls += 1;
     throw new Error('async transport rejected');
