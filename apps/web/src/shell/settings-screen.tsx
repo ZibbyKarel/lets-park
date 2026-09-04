@@ -19,7 +19,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as z from 'zod';
-import { buildIcsFeedUrl } from '@lets-park/contract';
 import type { MyProfile, ParkingSpot, UpdateMySettingsInput } from '@lets-park/contract';
 import { toContractError } from '@lets-park/api-client';
 import { FormField, FormProvider, useAppForm } from '@lets-park/form';
@@ -34,6 +33,7 @@ import {
 import { ConfirmDialog } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
 import { ScreenError, ScreenLoading } from './screen-state';
+import { toIcsFeedView, type IcsFeedView } from './settings-view';
 
 /** The select's empty option — clearing the preferred spot is allowed. */
 const NO_PREFERRED_SPOT = '';
@@ -71,6 +71,29 @@ function toUpdateInput(values: SettingsFormValues): UpdateMySettingsInput {
   };
 }
 
+/** The ICS half of the screen: the feed's inputs and its one write. */
+export interface SettingsIcs {
+  /**
+   * Origin of the API (`apiOriginOf(NEXT_PUBLIC_API_URL)`, no path). Empty
+   * means it could not be derived — see `app/(app)/nastaveni/page.tsx` — in
+   * which case the ICS section shows its unavailable state rather than a
+   * broken link, since `buildIcsFeedUrl` has nothing to build from — see
+   * {@link toIcsFeedView}.
+   */
+  readonly apiOrigin: string;
+  /** The caller's current ICS token, or `undefined` before the profile loads. */
+  readonly token: string | undefined;
+  /**
+   * Requests a new token. Resolves once the new one has replaced the old —
+   * that is the signal this component uses to close the confirmation dialog;
+   * a rejection leaves it open so the user can retry.
+   */
+  readonly onRegenerate: () => Promise<void>;
+  readonly isRegenerating: boolean;
+  /** Whatever the failing `me.regenerateIcsToken` call threw. */
+  readonly regenerateError: unknown;
+}
+
 export interface SettingsScreenProps {
   /** The profile has not arrived yet. */
   readonly isPending: boolean;
@@ -98,23 +121,15 @@ export interface SettingsScreenProps {
   /** Whatever the failing `me.updateSettings` call threw. */
   readonly saveError: unknown;
   /**
-   * Origin of the API (`apiOriginOf(NEXT_PUBLIC_API_URL)`, no path). Empty
-   * means it could not be derived — see `app/(app)/nastaveni/page.tsx` — in
-   * which case the ICS section shows its unavailable state rather than a
-   * broken link, since {@link buildIcsFeedUrl} has nothing to build from.
+   * Everything {@link IcsSection} runs on, as one value.
+   *
+   * Grouped rather than spread across the screen's own interface because none
+   * of it is the screen's business: the five members are read by that one
+   * subtree and by the confirmation dialog it opens, and listing them here
+   * side by side made every caller and every spec of this screen state ICS
+   * internals it has no other reason to know about.
    */
-  readonly apiOrigin: string;
-  /** The caller's current ICS token, or `undefined` before the profile loads. */
-  readonly icsToken: string | undefined;
-  /**
-   * Requests a new token. Resolves once the new one has replaced the old —
-   * that is the signal this component uses to close the confirmation dialog;
-   * a rejection leaves it open so the user can retry.
-   */
-  readonly onRegenerateToken: () => Promise<void>;
-  readonly isRegenerating: boolean;
-  /** Whatever the failing `me.regenerateIcsToken` call threw. */
-  readonly regenerateError: unknown;
+  readonly ics: SettingsIcs;
   /**
    * Called for every way out: Cancel, Escape, and a saved form. There is
    * deliberately no × (the design draws none — `doc/decision/0150-*`) and the
@@ -136,11 +151,7 @@ export function SettingsScreen({
   onSave,
   isSaving,
   saveError,
-  apiOrigin,
-  icsToken,
-  onRegenerateToken,
-  isRegenerating,
-  regenerateError,
+  ics,
   onClose,
 }: SettingsScreenProps) {
   const t = useTranslations('settings');
@@ -148,6 +159,12 @@ export function SettingsScreen({
   const errorsT = useTranslations('errors');
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Kept here rather than inside `IcsSection`, which is otherwise its only
+  // reader, because a successful regeneration clears it: "Odkaz zkopírován"
+  // must not stay on screen next to a link that has just been replaced, and
+  // the regeneration is confirmed one level up (`doc/decision/0151-*` keeps
+  // that `ConfirmDialog` above the whole modal). Pushing the state down would
+  // either lose that reset or replace it with a guess derived from the URL.
   const [copyState, setCopyState] = useState<CopyState>('idle');
 
   const form = useAppForm<SettingsFormValues>({
@@ -204,8 +221,7 @@ export function SettingsScreen({
 
   const ready = !isPending && !isError && profile !== undefined;
 
-  const icsFeedUrl =
-    apiOrigin !== '' && icsToken !== undefined ? buildIcsFeedUrl(apiOrigin, icsToken) : undefined;
+  const icsFeed = toIcsFeedView(ics.apiOrigin, ics.token);
 
   function describeError(failure: unknown): string | null {
     if (failure == null) {
@@ -233,14 +249,14 @@ export function SettingsScreen({
   }
 
   const saveErrorMessage = describeError(saveError);
-  const regenerateErrorMessage = describeError(regenerateError);
+  const regenerateErrorMessage = describeError(ics.regenerateError);
 
   async function handleCopy() {
-    if (icsFeedUrl === undefined) {
+    if (icsFeed.kind === 'unavailable') {
       return;
     }
     try {
-      await navigator.clipboard.writeText(icsFeedUrl);
+      await navigator.clipboard.writeText(icsFeed.url);
       setCopyState('copied');
     } catch {
       setCopyState('failed');
@@ -249,7 +265,7 @@ export function SettingsScreen({
 
   async function handleConfirmRegenerate() {
     try {
-      await onRegenerateToken();
+      await ics.onRegenerate();
       setConfirmOpen(false);
       setCopyState('idle');
     } catch {
@@ -344,11 +360,11 @@ export function SettingsScreen({
                   cannot trigger a licence-plate/preferred-spot save. */}
               <IcsSection
                 headingId="ics-heading"
-                icsFeedUrl={icsFeedUrl}
+                feed={icsFeed}
                 copyState={copyState}
                 onCopy={() => void handleCopy()}
                 onRequestRegenerate={() => setConfirmOpen(true)}
-                isRegenerating={isRegenerating}
+                isRegenerating={ics.isRegenerating}
               />
             </div>
           </FormProvider>
@@ -361,7 +377,7 @@ export function SettingsScreen({
         description={t('icsRegenerateConfirmDescription')}
         confirmLabel={t('icsRegenerateConfirmButton')}
         tone="danger"
-        loading={isRegenerating}
+        loading={ics.isRegenerating}
         onConfirm={() => void handleConfirmRegenerate()}
         onCancel={() => setConfirmOpen(false)}
       >
@@ -373,7 +389,7 @@ export function SettingsScreen({
 
 interface IcsSectionProps {
   readonly headingId: string;
-  readonly icsFeedUrl: string | undefined;
+  readonly feed: IcsFeedView;
   readonly copyState: CopyState;
   readonly onCopy: () => void;
   readonly onRequestRegenerate: () => void;
@@ -392,7 +408,7 @@ const COPY_FEEDBACK_TONE: Record<'copied' | 'failed', ToastTone> = {
  */
 function IcsSection({
   headingId,
-  icsFeedUrl,
+  feed,
   copyState,
   onCopy,
   onRequestRegenerate,
@@ -412,13 +428,13 @@ function IcsSection({
         <p className="mt-1 text-sm text-fg-3">{t('icsDescription')}</p>
       </div>
 
-      {icsFeedUrl === undefined ? (
+      {feed.kind === 'unavailable' ? (
         <p className="text-sm text-fg-3">{t('icsUnavailable')}</p>
       ) : (
         <>
           <Input
             label={t('icsUrlLabel')}
-            value={icsFeedUrl}
+            value={feed.url}
             readOnly
             onFocus={(event) => event.currentTarget.select()}
           />

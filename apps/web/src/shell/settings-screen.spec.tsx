@@ -78,43 +78,74 @@ const PROFILE_WITH_RETIRED_PREFERENCE: MyProfile = {
   preferredParkingSpotId: 'spot-retired',
 };
 
-function renderScreen(overrides: Partial<SettingsScreenProps> = {}) {
+/**
+ * The screen's own props, plus the five ICS ones written flat.
+ *
+ * `SettingsScreenProps.ics` groups those five into one value; a test that
+ * varies exactly one of them should not have to restate the other four, so
+ * this helper assembles the group and every call site below stays as it was.
+ */
+type ScreenOverrides = Partial<Omit<SettingsScreenProps, 'ics'>> & {
+  readonly apiOrigin?: string;
+  readonly icsToken?: string | undefined;
+  readonly onRegenerateToken?: () => Promise<void>;
+  readonly isRegenerating?: boolean;
+  readonly regenerateError?: unknown;
+};
+
+function renderScreen(overrides: ScreenOverrides = {}) {
   const onRetry = jest.fn();
   const onSave = jest.fn();
   const onRegenerateToken = jest.fn().mockResolvedValue(undefined);
   const onClose = jest.fn();
 
-  const props: SettingsScreenProps = {
-    isPending: false,
-    isError: false,
-    error: null,
-    onRetry,
-    profile: PROFILE,
-    spots: [SPOT_A, SPOT_B],
-    spotsPending: false,
-    spotsError: false,
-    onSave,
-    isSaving: false,
-    saveError: null,
-    apiOrigin: API_ORIGIN,
-    icsToken: PROFILE.icsToken,
-    onRegenerateToken,
-    isRegenerating: false,
-    regenerateError: null,
-    onClose,
-    ...overrides,
-  };
+  function propsFrom(next: ScreenOverrides): SettingsScreenProps {
+    const merged = { ...overrides, ...next };
+    const {
+      apiOrigin,
+      icsToken,
+      onRegenerateToken: onRegenerate,
+      isRegenerating,
+      regenerateError,
+      ...screenOverrides
+    } = merged;
+
+    return {
+      isPending: false,
+      isError: false,
+      error: null,
+      onRetry,
+      profile: PROFILE,
+      spots: [SPOT_A, SPOT_B],
+      spotsPending: false,
+      spotsError: false,
+      onSave,
+      isSaving: false,
+      saveError: null,
+      ics: {
+        apiOrigin: apiOrigin ?? API_ORIGIN,
+        // `icsToken: undefined` is itself a case under test ("no token yet"),
+        // so the default applies only when the key is absent.
+        token: 'icsToken' in merged ? icsToken : PROFILE.icsToken,
+        onRegenerate: onRegenerate ?? onRegenerateToken,
+        isRegenerating: isRegenerating ?? false,
+        regenerateError: regenerateError ?? null,
+      },
+      onClose,
+      ...screenOverrides,
+    };
+  }
 
   const view = render(
     <IntlProvider>
-      <SettingsScreen {...props} />
+      <SettingsScreen {...propsFrom({})} />
     </IntlProvider>
   );
 
-  function rerenderWith(next: Partial<SettingsScreenProps>) {
+  function rerenderWith(next: ScreenOverrides) {
     view.rerender(
       <IntlProvider>
-        <SettingsScreen {...{ ...props, ...next }} />
+        <SettingsScreen {...propsFrom(next)} />
       </IntlProvider>
     );
   }

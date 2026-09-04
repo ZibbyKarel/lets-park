@@ -76,13 +76,15 @@ export function SettingsPage({ apiOrigin }: SettingsPageProps) {
       onSave={(input: UpdateMySettingsInput) => updateSettings.mutate(input)}
       isSaving={updateSettings.isPending}
       saveError={updateSettings.error}
-      apiOrigin={apiOrigin}
-      icsToken={icsToken}
-      onRegenerateToken={async () => {
-        await regenerateToken.mutateAsync();
+      ics={{
+        apiOrigin,
+        token: icsToken,
+        onRegenerate: async () => {
+          await regenerateToken.mutateAsync();
+        },
+        isRegenerating: regenerateToken.isPending,
+        regenerateError: regenerateToken.error,
       }}
-      isRegenerating={regenerateToken.isPending}
-      regenerateError={regenerateToken.error}
       onClose={() => router.push(LOT_ROUTE)}
     />
   );
