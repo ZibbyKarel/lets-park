@@ -1,15 +1,15 @@
 # TODO
 
-- [ ] `apps/web`: all routes and URLs should be in English. Note that the URLs
+- [x] `apps/web`: all routes and URLs should be in English. Note that the URLs (7c5920c)
       are Czech today because the interface is (`doc/decision/0029-*`), and the
       e2e page objects address them by name, so this is a product decision plus
       a migration rather than a rename.
 
 - [ ] zbavit se dlouhých souborů - komponent hlavně. spiousta komponent v apps/web je dlouhých přitom můžeme jednoduše vyndat nějakou logiku do custom hooků nebo vyndat nějaký opakující se element do jiného souboru jako vlastní komponentu. Příklad třeba bulk-modal kde celá table může jít ven jako separátní CalendarTable komponenta
 
-- [ ] u komponentových souborů, které patří k sobě jako komponenta+stories+testy+subkomponenty by měly jít do vlastní složky
+- [ ] u komponentových souborů v apps/web a libs/design-system, které patří k sobě jako komponenta+stories+testy+subkomponenty by měly jít do vlastní složky
 
-- [ ] jsem přihlášen jako dev-admin ale nevidím odkaz na stránku /sprava v menu pod user avatarem
+- [ ] jsem přihlášen jako dev-admin ale nevidím odkaz na stránku /admin v menu pod user avatarem
 
 - [ ] `libs/design-system` should be one package rather than three nested ones.
 
@@ -22,7 +22,7 @@
 
 - [ ] pokud má uživatel již auto registrované na vybraný den, rezervace ani přidání se do fronty na parkovací místo nesmí být povolena dokud nezruší současnou rezervaci
 
-- [ ] chybí možnost přidání kategorie parkovacích míst pro adminy v přehledu parkovacích míst na stránce /sprava
+- [ ] chybí možnost přidání kategorie parkovacích míst pro adminy v přehledu parkovacích míst na stránce /admin
 
 - [ ] vybraný den se musí ukládat do URL a extrahovat z URL při page loadu jako defaultní hodnota
 
