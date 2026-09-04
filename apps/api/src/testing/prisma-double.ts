@@ -110,6 +110,32 @@ function sortedByDateThenId<T extends { date: Date; id: string }>(
   return [...rows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
 }
 
+/**
+ * Orders spots the way the requested `orderBy` says, and refuses an ordering
+ * it was not taught.
+ *
+ * The double used to sort by group-then-label unconditionally, whatever the
+ * caller asked for. That is the same silent answer {@link sortedByDateThenId}
+ * exists to prevent: `SlackNotificationService` asks for `{ label: 'asc' }`,
+ * and a double that answered it in group order would let a test assert an
+ * order production does not produce.
+ */
+function sortedSpots(rows: ParkingSpotRow[], orderBy: unknown): ParkingSpotRow[] {
+  const requested = JSON.stringify(orderBy);
+  if (requested === JSON.stringify([{ group: 'asc' }, { label: 'asc' }])) {
+    return [...rows].sort(
+      (a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label)
+    );
+  }
+  if (requested === JSON.stringify({ label: 'asc' })) {
+    return [...rows].sort((a, b) => a.label.localeCompare(b.label));
+  }
+  if (orderBy === undefined) {
+    return rows;
+  }
+  return unsupported('this parking spot ordering', orderBy);
+}
+
 /** Anything this double was not taught is a bug in the test, not an empty result. */
 function unsupported(what: string, args: unknown): never {
   throw new Error(`PrismaDouble does not model ${what}: ${JSON.stringify(args)}`);
@@ -166,6 +192,14 @@ export interface WaitlistSeed {
 
 const EPOCH = new Date('2026-01-01T00:00:00.000Z');
 
+/**
+ * The only id `ReservationWindowSettings` ever has — the table is a singleton,
+ * and `RESERVATION_WINDOW_SETTINGS_ID` in the service is this same 1. Spelled
+ * out here rather than imported so the double keeps depending on nothing it
+ * stands in for.
+ */
+const WINDOW_SETTINGS_ID = 1;
+
 export class PrismaDouble {
   readonly spots: ParkingSpotRow[] = [];
   readonly users: UserRow[] = [];
@@ -194,6 +228,27 @@ export class PrismaDouble {
    * loop is written against.
    */
   icsTokenCollisions = 0;
+
+  /**
+   * Empties every collection and counter the double owns, so one spec's rows
+   * cannot reach the next test.
+   *
+   * It exists so a caller does not have to know the complete list of tables
+   * modelled here — the three specs that used to clear five arrays by hand
+   * would each have silently kept a sixth. `RecordingPublisher.reset()` in
+   * `testing/database/reservation-harness.ts` is the same idiom. Seeding stays
+   * the caller's job: reset says what is *not* there, never what is.
+   */
+  reset(): void {
+    this.spots.length = 0;
+    this.users.length = 0;
+    this.reservations.length = 0;
+    this.waitlist.length = 0;
+    this.auditLogs.length = 0;
+    this.auditLogCreateManyCalls = 0;
+    this.windowSettings = null;
+    this.icsTokenCollisions = 0;
+  }
 
   // --- seeding ------------------------------------------------------------
 
@@ -255,7 +310,7 @@ export class PrismaDouble {
 
   seedWindowSettings(settings: Partial<Omit<WindowSettingsRow, 'id'>> = {}): WindowSettingsRow {
     this.windowSettings = {
-      id: 1,
+      id: WINDOW_SETTINGS_ID,
       openDaysBefore: settings.openDaysBefore ?? 7,
       lockMode: settings.lockMode ?? 'AUTO',
       updatedAt: EPOCH,
@@ -287,14 +342,25 @@ export class PrismaDouble {
         args: {
           where?: { active?: boolean; group?: ParkingSpotRow['group'] };
           orderBy?: unknown;
+          /**
+           * Accepted and deliberately ignored: the double returns whole rows
+           * where Prisma would return the projection. A superset is safe for
+           * every current caller (they read a subset of the columns they
+           * asked for), and refusing `select` would refuse two queries the
+           * services genuinely issue — `bulk-reservation.service.ts` and
+           * `slack-notification.service.ts` both project here.
+           */
+          select?: unknown;
         } = {}
       ) => {
-        const where = args.where ?? {};
-        return this.spots
-          .filter((row) => where.active === undefined || row.active === where.active)
-          .filter((row) => where.group === undefined || row.group === where.group)
-          .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))
-          .map(copy);
+        const { active, group, ...rest } = args.where ?? {};
+        if (Object.keys(rest).length > 0) {
+          return unsupported('this parking spot filter', args.where);
+        }
+        const rows = this.spots
+          .filter((row) => active === undefined || row.active === active)
+          .filter((row) => group === undefined || row.group === group);
+        return sortedSpots(rows, args.orderBy).map(copy);
       },
       findUnique: async (args: { where: { id?: string; label?: string } }) => {
         const { id, label } = args.where;
@@ -505,7 +571,20 @@ export class PrismaDouble {
 
   private windowSettingsDelegate() {
     return {
-      findUnique: async () => (this.windowSettings === null ? null : copy(this.windowSettings)),
+      findUnique: async (args: { where: { id?: number } }) => {
+        const { id, ...rest } = args.where ?? {};
+        if (Object.keys(rest).length > 0) {
+          return unsupported('this window settings lookup', args.where);
+        }
+        // The table is a singleton keyed on id 1. Answering a lookup for any
+        // other id with the singleton's row is the same silent lie a missing
+        // filter is: the caller asked for a row that does not exist and would
+        // be handed one that does.
+        if (id !== WINDOW_SETTINGS_ID) {
+          return unsupported('a window settings row other than the singleton', args.where);
+        }
+        return this.windowSettings === null ? null : copy(this.windowSettings);
+      },
       upsert: async (args: {
         create: { id: number; openDaysBefore: number; lockMode: WindowSettingsRow['lockMode'] };
         update: { openDaysBefore: number; lockMode: WindowSettingsRow['lockMode'] };

@@ -1,0 +1,117 @@
+/**
+ * The double's own guardrails.
+ *
+ * `prisma-double.ts` promises in its header that it "fails loudly on anything
+ * else rather than quietly returning `[]`". That promise is only worth what it
+ * is tested to be: a guard that is silently dropped in a later edit looks
+ * exactly like a guard that is there, right up to the day a test passes on a
+ * row set the service never asked for. These are the cases that pin it.
+ */
+import { PrismaDouble } from './prisma-double';
+
+describe('PrismaDouble', () => {
+  let double: PrismaDouble;
+
+  beforeEach(() => {
+    double = new PrismaDouble();
+  });
+
+  describe('parkingSpot.findMany', () => {
+    it('answers the filters and ordering it models', async () => {
+      double.seedSpot({ label: 'B1', group: 'IT' });
+      double.seedSpot({ label: 'A1', group: 'SHARED' });
+      double.seedSpot({ label: 'A2', group: 'SHARED', active: false });
+
+      const rows = await double.asPrismaService().client.parkingSpot.findMany({
+        where: { active: true },
+        orderBy: [{ group: 'asc' }, { label: 'asc' }],
+      });
+
+      expect(rows.map((row) => row.label)).toEqual(['B1', 'A1']);
+    });
+
+    it('honours a label-only ordering rather than imposing its own', async () => {
+      double.seedSpot({ label: 'B1', group: 'IT' });
+      double.seedSpot({ label: 'A1', group: 'SHARED' });
+
+      const rows = await double.asPrismaService().client.parkingSpot.findMany({
+        orderBy: { label: 'asc' },
+      });
+
+      expect(rows.map((row) => row.label)).toEqual(['A1', 'B1']);
+    });
+
+    it('refuses a filter key it does not model instead of ignoring it', async () => {
+      double.seedSpot({ label: 'A1' });
+
+      await expect(
+        double.asPrismaService().client.parkingSpot.findMany({
+          where: { active: true, retiredAt: null },
+        } as never)
+      ).rejects.toThrow('PrismaDouble does not model this parking spot filter');
+    });
+
+    it('refuses an ordering it does not model', async () => {
+      await expect(
+        double
+          .asPrismaService()
+          .client.parkingSpot.findMany({ orderBy: { createdAt: 'desc' } } as never)
+      ).rejects.toThrow('PrismaDouble does not model this parking spot ordering');
+    });
+  });
+
+  describe('reservationWindowSettings.findUnique', () => {
+    it('answers the singleton', async () => {
+      double.seedWindowSettings({ openDaysBefore: 14 });
+
+      const row = await double
+        .asPrismaService()
+        .client.reservationWindowSettings.findUnique({ where: { id: 1 } });
+
+      expect(row?.openDaysBefore).toBe(14);
+    });
+
+    it('refuses a lookup for any other row rather than handing back the singleton', async () => {
+      double.seedWindowSettings();
+
+      await expect(
+        double.asPrismaService().client.reservationWindowSettings.findUnique({ where: { id: 2 } })
+      ).rejects.toThrow(
+        'PrismaDouble does not model a window settings row other than the singleton'
+      );
+    });
+  });
+
+  describe('reset', () => {
+    it('empties every collection and counter the double owns', async () => {
+      const spot = double.seedSpot({ label: 'A1' });
+      const user = double.seedUser({});
+      double.seedReservation({ parkingSpotId: spot.id, userId: user.id, date: '2026-03-02' });
+      double.seedWaitlistEntry({ parkingSpotId: spot.id, userId: user.id, date: '2026-03-03' });
+      double.seedWindowSettings();
+      double.icsTokenCollisions = 1;
+      await double.asPrismaService().client.auditLog.createMany({
+        data: [
+          {
+            actorUserId: user.id,
+            action: 'SPOT_UPDATED',
+            entityType: 'ParkingSpot',
+            entityId: spot.id,
+            payload: {},
+          },
+        ],
+      });
+
+      double.reset();
+
+      expect(double.spots).toHaveLength(0);
+      expect(double.users).toHaveLength(0);
+      expect(double.reservations).toHaveLength(0);
+      expect(double.waitlist).toHaveLength(0);
+      expect(double.auditLogs).toHaveLength(0);
+      expect(double.auditLogCreateManyCalls).toBe(0);
+      expect(double.windowSettings).toBeNull();
+      expect(double.icsTokenCollisions).toBe(0);
+    });
+  });
+});
