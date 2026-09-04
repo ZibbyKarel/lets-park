@@ -101,8 +101,21 @@ export interface ApiTestAppOptions {
    * an env write rather than an {@link overrides} call because
    * `ConfigModule.forRoot({ validate })` runs at *import* time.
    */
-  readonly env?: Record<string, string>;
+  readonly env?: Partial<Record<TestAppEnvKey, string>>;
 }
+
+/**
+ * The env keys a caller may override.
+ *
+ * Deliberately a closed set rather than `string`. The whole point of this
+ * module is that five suites stopped writing their own boot env and drifted
+ * apart while nobody was looking — three set `THROTTLE_STRICT_LIMIT`, two set
+ * only `THROTTLE_LIMIT`. An open `Record<string, string>` is the same door left
+ * open: a suite could re-diverge on any key with no reviewer signal. Widen this
+ * union when a suite genuinely needs another key, and the widening is the
+ * signal.
+ */
+export type TestAppEnvKey = 'REALTIME_LOCK_TTL_MS' | 'THROTTLE_STRICT_LIMIT';
 
 export interface ApiTestApp {
   readonly app: INestApplication;

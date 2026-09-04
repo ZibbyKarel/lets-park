@@ -31,7 +31,7 @@
 import { Prisma } from '@lets-park/database';
 import type { PrismaClient } from '@lets-park/database';
 import { createPrismaClient } from '@lets-park/database';
-import { requireDatabaseUrl } from '../testing/database/test-database';
+import { requireDatabaseUrl, unique } from '../testing/database/test-database';
 import {
   isWriteConflict,
   mapPrismaErrorCode,
@@ -65,13 +65,6 @@ async function rejectedBy(
     return error;
   }
   throw new Error('The transaction resolved without rolling back.');
-}
-
-/** A unique suffix per call, so a fixture can never collide with real data. */
-let counter = 0;
-function unique(prefix: string): string {
-  counter += 1;
-  return `${prefix}-db-spec-${process.pid}-${counter}`;
 }
 
 /** A promise with its resolver, for steering two transactions into each other. */

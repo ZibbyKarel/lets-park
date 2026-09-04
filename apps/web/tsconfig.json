@@ -34,6 +34,15 @@
   ],
   "exclude": [
     "node_modules",
+    // A test helper that typechecks as shipped code is a test helper that can
+    // be imported by shipped code — `apps/api/tsconfig.app.json` excludes its
+    // own `src/**/testing/**` for exactly this reason, and this program had no
+    // matching guard, so `src/testing/{fixtures,providers,contract-failure}`
+    // sat in the app program and nothing stopped a screen importing
+    // `profile()`. The spec program (`tsconfig.spec.json`) still typechecks
+    // them: its `exclude` is `[]` and it reaches them through the specs'
+    // imports.
+    "src/**/testing/**",
     "jest.config.ts",
     "jest.config.cts",
     "**/*.spec.ts",
