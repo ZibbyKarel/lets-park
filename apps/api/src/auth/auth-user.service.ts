@@ -38,8 +38,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import type { User } from '@lets-park/database';
-import { Prisma } from '@lets-park/database';
 import { DomainError } from '../common/errors/domain-error';
+import { isUniqueConstraintViolation } from '../common/errors/prisma-error-mapping';
 import { PrismaService } from '../database/prisma.service';
 import type { AuthenticatedUser } from './authenticated-user';
 import type { AuthTokenClaims } from './token-claims';
@@ -62,14 +62,6 @@ export const ICS_TOKEN_BYTES = 32;
  * error, not as a hang.
  */
 export const MAX_PROVISIONING_ATTEMPTS = 3;
-
-const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
-
-function isUniqueConstraintViolation(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError && error.code === PRISMA_UNIQUE_CONSTRAINT
-  );
-}
 
 /**
  * A URL-safe random secret for the personal ICS feed.

@@ -70,9 +70,10 @@ import { AuditLogService } from '../audit/audit-log.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { DomainError } from '../common/errors/domain-error';
 import {
+  isUniqueConstraintViolation,
   isWriteConflict,
   mapUniqueConstraintViolation,
-} from '../common/filters/contract-exception.filter';
+} from '../common/errors/prisma-error-mapping';
 import {
   toContractReservation,
   toDateColumn,
@@ -431,7 +432,7 @@ export class ReservationsService {
       return true;
     }
     return (
-      error.code === 'P2002' &&
+      isUniqueConstraintViolation(error) &&
       mapUniqueConstraintViolation(error.meta) === 'RESERVATION_LIMIT_REACHED'
     );
   }

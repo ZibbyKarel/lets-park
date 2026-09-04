@@ -35,7 +35,7 @@ import {
   isWriteConflict,
   mapPrismaErrorCode,
   mapUniqueConstraintViolation,
-} from '../common/filters/contract-exception.filter';
+} from '../common/errors/prisma-error-mapping';
 
 const DATE = new Date('2099-01-05T00:00:00.000Z');
 

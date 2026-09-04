@@ -37,7 +37,7 @@ import type { PrismaClient, User as UserRow } from '@lets-park/database';
 import { Prisma } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
 import { isBusinessDay } from '@lets-park/shared-types';
-import { mapPrismaErrorCode } from '../common/filters/contract-exception.filter';
+import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
 import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';

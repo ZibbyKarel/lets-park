@@ -27,7 +27,7 @@
 import { Prisma } from '@lets-park/database';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { DomainError } from '../common/errors/domain-error';
-import { mapUniqueConstraintViolation } from '../common/filters/contract-exception.filter';
+import { mapUniqueConstraintViolation } from '../common/errors/prisma-error-mapping';
 import type { PrismaService } from '../database/prisma.service';
 import { MAX_CANCEL_ATTEMPTS, ReservationsService } from './reservations.service';
 

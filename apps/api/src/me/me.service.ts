@@ -10,14 +10,12 @@
 import { Injectable } from '@nestjs/common';
 import type { MyProfile, UpdateMySettingsInput } from '@lets-park/contract';
 import type { Prisma, User as UserRow } from '@lets-park/database';
-import { Prisma as PrismaNamespace } from '@lets-park/database';
 import { AuditLogService } from '../audit/audit-log.service';
 import { generateIcsToken } from '../auth/auth-user.service';
 import { DomainError } from '../common/errors/domain-error';
+import { isUniqueConstraintViolation } from '../common/errors/prisma-error-mapping';
 import { toContractUser } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
-
-const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 
 /**
  * How many times a fresh `icsToken` is retried after a unique-constraint
@@ -121,10 +119,7 @@ export class MeService {
 
         return row.icsToken;
       } catch (error) {
-        if (
-          !(error instanceof PrismaNamespace.PrismaClientKnownRequestError) ||
-          error.code !== PRISMA_UNIQUE_CONSTRAINT
-        ) {
+        if (!isUniqueConstraintViolation(error)) {
           throw error;
         }
         lastConflict = error;

@@ -29,7 +29,7 @@
 
 import type { PrismaClient } from '@lets-park/database';
 import { Prisma } from '@lets-park/database';
-import { mapPrismaErrorCode } from '../common/filters/contract-exception.filter';
+import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
 import { DomainError } from '../common/errors/domain-error';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';

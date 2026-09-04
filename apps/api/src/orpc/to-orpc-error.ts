@@ -25,7 +25,7 @@ import type { ErrorCode } from '@lets-park/contract';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
 import { DomainError } from '../common/errors/domain-error';
-import { mapPrismaErrorCode } from '../common/filters/contract-exception.filter';
+import { mapPrismaErrorCode } from '../common/errors/prisma-error-mapping';
 
 /** Builds the oRPC error for a contract code, with the status the contract assigns it. */
 export function orpcErrorFor(

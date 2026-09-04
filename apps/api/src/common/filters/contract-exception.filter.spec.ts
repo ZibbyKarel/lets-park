@@ -19,12 +19,8 @@ import { ThrottlerException } from '@nestjs/throttler';
 import { ERROR_DEFINITIONS, errorShapeSchema } from '@lets-park/contract';
 import { Prisma } from '@lets-park/database';
 import { DomainError } from '../errors/domain-error';
-import {
-  ContractExceptionFilter,
-  contractErrorBody,
-  mapPrismaErrorCode,
-  mapUniqueConstraintViolation,
-} from './contract-exception.filter';
+import { mapPrismaErrorCode, mapUniqueConstraintViolation } from '../errors/prisma-error-mapping';
+import { ContractExceptionFilter, contractErrorBody } from './contract-exception.filter';
 
 interface CapturedResponse {
   status: number;
