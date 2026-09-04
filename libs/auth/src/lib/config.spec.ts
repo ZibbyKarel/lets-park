@@ -339,9 +339,7 @@ describe('createAuthConfig', () => {
 
   it('points at the application sign-in page only when one is given', () => {
     expect(createAuthConfig(OPTIONS).pages).toBeUndefined();
-    expect(createAuthConfig({ ...OPTIONS, signInPath: '/prihlaseni' }).pages?.signIn).toBe(
-      '/prihlaseni'
-    );
+    expect(createAuthConfig({ ...OPTIONS, signInPath: '/login' }).pages?.signIn).toBe('/login');
   });
 
   it('renews an expiring token through a real discovery and token request', async () => {

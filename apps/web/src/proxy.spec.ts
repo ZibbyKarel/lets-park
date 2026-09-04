@@ -30,8 +30,8 @@ describe('proxy matcher', () => {
 
   it.each([
     ['the parking overview', '/'],
-    ['the settings screen', '/nastaveni'],
-    ['the administration screen', '/sprava'],
+    ['the settings screen', '/settings'],
+    ['the administration screen', '/admin'],
     ['an unknown path', '/whatever'],
   ])('protects %s (%s)', (_label, pathname) => {
     expect(matches(pathname)).toBe(true);

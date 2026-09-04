@@ -12,21 +12,22 @@
  *   with Okta (`/api/auth/callback/okta`, see `doc/auth.md`). The proxy must
  *   not intercept it, or signing in would require being signed in.
  *
- * Paths are Czech because they are user-visible, the same reason UI copy is
- * (`doc/decision/0029-*`). Identifiers around them stay English.
+ * Paths are English, because a URL is a code-related identifier rather than
+ * UI copy (`doc/decision/0298-*`). The interface itself stays Czech — that is
+ * `doc/decision/0029-*` and this does not disturb it.
  */
 
 /** The parking overview — the application's home screen (Task 24). */
 export const LOT_ROUTE = '/';
 
 /** The signed-out screen with the single Okta button. */
-export const LOGIN_ROUTE = '/prihlaseni';
+export const LOGIN_ROUTE = '/login';
 
 /** Personal settings: licence plate, preferred spot, ICS feed (Task 26). */
-export const SETTINGS_ROUTE = '/nastaveni';
+export const SETTINGS_ROUTE = '/settings';
 
 /** Administration: users, spots, reservation window (Task 27). Admins only. */
-export const ADMIN_ROUTE = '/sprava';
+export const ADMIN_ROUTE = '/admin';
 
 /** Auth.js's own endpoints. Never proxied, never protected. */
 export const AUTH_API_ROUTE_PREFIX = '/api/auth';
