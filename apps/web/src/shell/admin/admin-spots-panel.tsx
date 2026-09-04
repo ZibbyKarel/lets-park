@@ -18,7 +18,7 @@ import { todayInPrague } from '@lets-park/i18n';
 import { useApi } from '../api-provider/api-provider';
 import { screenDataOf } from '../screen-state/screen-state';
 import type { AdminWrite, AdminWriteFailure } from './admin-errors';
-import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
+import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen/admin-spots-screen';
 
 export function AdminSpotsPanel() {
   const api = useApi();

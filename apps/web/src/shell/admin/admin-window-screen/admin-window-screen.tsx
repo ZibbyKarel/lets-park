@@ -42,10 +42,10 @@ import {
   useTranslations,
 } from '@lets-park/i18n';
 import type { DateOnly, MonthLockState } from '@lets-park/i18n';
-import { ScreenDataGuard } from '../screen-state/screen-state';
-import type { ScreenData } from '../screen-state/screen-state';
-import { useAdminWriteError } from './admin-errors';
-import { LockModeChoice } from './lock-mode-choice';
+import { ScreenDataGuard } from '../../screen-state/screen-state';
+import type { ScreenData } from '../../screen-state/screen-state';
+import { useAdminWriteError } from '../admin-errors';
+import { LockModeChoice } from '../lock-mode-choice/lock-mode-choice';
 
 /**
  * Badge colour per state, straight off `05-admin-window.png`: `Otevřeno` is a

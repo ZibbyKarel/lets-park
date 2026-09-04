@@ -30,9 +30,9 @@ import { DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { formatFullDate, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
-import { ScreenDataGuard } from '../screen-state/screen-state';
-import type { ScreenData } from '../screen-state/screen-state';
-import { WindowBanner } from './window-banner';
+import { ScreenDataGuard } from '../../screen-state/screen-state';
+import type { ScreenData } from '../../screen-state/screen-state';
+import { WindowBanner } from '../window-banner/window-banner';
 
 export interface AdminDayScreenProps {
   /** The day being shown, `YYYY-MM-DD` in Europe/Prague. */

@@ -13,7 +13,7 @@
 
 import type { ParkingGroup, ParkingSpot } from '@lets-park/contract';
 import { PARKING_GROUPS } from '@lets-park/i18n';
-import type { AdminWrite } from './admin-errors';
+import type { AdminWrite } from '../admin-errors';
 
 /**
  * Which dialog the screen has open, and on what. `null` means none.

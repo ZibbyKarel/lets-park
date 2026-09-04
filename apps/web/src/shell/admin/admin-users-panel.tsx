@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { useApi } from '../api-provider/api-provider';
 import { screenDataOf } from '../screen-state/screen-state';
 import { useCurrentUser } from '../use-current-user';
-import { AdminUsersScreen, type PendingUserChange } from './admin-users-screen';
+import { AdminUsersScreen, type PendingUserChange } from './admin-users-screen/admin-users-screen';
 
 export function AdminUsersPanel() {
   const api = useApi();

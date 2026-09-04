@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AdminUser } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
-import { failureWithCode } from '../../testing/contract-failure';
+import { failureWithCode } from '../../../testing/contract-failure';
 import { AdminUsersScreen, matchesUserSearch } from './admin-users-screen';
 import type { AdminUsersScreenProps } from './admin-users-screen';
 

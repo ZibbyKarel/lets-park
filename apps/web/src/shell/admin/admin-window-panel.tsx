@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { addMonths, startOfMonth, todayInPrague, toYearMonth } from '@lets-park/i18n';
 import { useApi } from '../api-provider/api-provider';
 import { screenDataOf } from '../screen-state/screen-state';
-import { AdminWindowScreen } from './admin-window-screen';
+import { AdminWindowScreen } from './admin-window-screen/admin-window-screen';
 
 /**
  * How many months the list shows, counting the current one.
