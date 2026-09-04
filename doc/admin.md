@@ -1,4 +1,4 @@
-# The administration section (`/sprava`)
+# The administration section (`/admin`)
 
 Task 27. The tabbed "Správa" screen: the lot for a day, the users, the parking
 spots and the reservation window.
@@ -38,7 +38,7 @@ and refuses removing the last active admin whatever the browser sends.
 
 ```
 apps/web/src/
-  app/(app)/sprava/page.tsx      wiring: profile + the four connected panels
+  app/(app)/admin/page.tsx       wiring: profile + the four connected panels
   shell/admin-screen.tsx         role gate, page chrome, the tab strip
   shell/admin/
     admin-errors.ts              (operation, code) -> Czech sentence

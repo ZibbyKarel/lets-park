@@ -58,7 +58,7 @@ footer, rather than as its own route or its own dialog.
   inside the confirm dialog, and Escape closes only the confirm dialog, leaving
   the settings modal open underneath it.
 - The section degrades independently of the form: if `apiOrigin` cannot be
-  derived (`app/(app)/nastaveni/page.tsx`'s fallback to `''`) or the profile
+  derived (`app/(app)/settings/page.tsx`'s fallback to `''`) or the profile
   has not delivered an `icsToken` yet, `IcsSection` shows `icsUnavailable`
   copy instead of a broken link — it does not block the licence-plate/spot
   form above it from working.

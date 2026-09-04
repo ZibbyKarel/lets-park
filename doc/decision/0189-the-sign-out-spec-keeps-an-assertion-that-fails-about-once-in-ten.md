@@ -72,7 +72,7 @@ the cookie headers that matter:
 
 ```
 POST /api/auth/signout   → 200   Set-Cookie: authjs.session-token=; Max-Age=0
-GET  /prihlaseni         → 200   (login screen renders; no bounce to /)
+GET  /login         → 200   (login screen renders; no bounce to /)
 GET  /                   → 200   Set-Cookie: authjs.session-token=<a fresh JWT>
 POST /api/rpc/me/get     → 200
 POST /api/rpc/overview/day → 200
@@ -81,7 +81,7 @@ POST /api/rpc/overview/day → 200
 Read that middle pair twice, because it is the whole finding:
 
 1. The sign-out **worked**. The response cleared the session cookie.
-2. `GET /prihlaseni` came back **200 with the login screen**. `LoginPage` calls
+2. `GET /login` came back **200 with the login screen**. `LoginPage` calls
    `auth()` and redirects a signed-in visitor to `/`; it did not. So at that
    moment there was no session. This is also why the spec's first assertion
    (line 90) passes.

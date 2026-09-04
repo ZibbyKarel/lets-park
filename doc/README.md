@@ -23,7 +23,7 @@ This index is generated from the filesystem and accounts for every file under
 
 | Document | What it is for |
 | --- | --- |
-| [`admin.md`](admin.md) | The `/sprava` section: the four admin tabs — day lot, users, spots, reservation window — and what each one may change. |
+| [`admin.md`](admin.md) | The `/admin` section: the four admin tabs — day lot, users, spots, reservation window — and what each one may change. |
 | [`api-modules.md`](api-modules.md) | How `apps/api` serves the contract: the oRPC transport, the domain modules behind it, and the rule each module owns. |
 | [`api-operations.md`](api-operations.md) | The API's operational baseline: startup, structured logging, the `/health/*` probes, graceful shutdown, throttling and input limits. |
 | [`auth.md`](auth.md) | How a person becomes an identified caller — Okta sign-in in `apps/web`, JWKS validation in `apps/api`, JIT provisioning, refresh, and what is public. |
@@ -168,7 +168,7 @@ for why, and take the next number from the end of this list.
 - [`0135-the-after-commit-seam-is-a-composite-not-a-choice`](decision/0135-the-after-commit-seam-is-a-composite-not-a-choice.md) — The after-commit seam is a composite, not a choice between Socket.io and Slack
 - [`0140-the-day-bar-is-its-own-file`](decision/0140-the-day-bar-is-its-own-file.md) — The day bar is its own file
 - [`0141-the-old-room-unsubscribe-is-proven-at-the-hook-that-derives-both`](decision/0141-the-old-room-unsubscribe-is-proven-at-the-hook-that-derives-both.md) — The old-room unsubscribe is proven at the hook that derives both
-- [`0150-settings-renders-as-a-modal-not-a-page`](decision/0150-settings-renders-as-a-modal-not-a-page.md) — `/nastaveni` renders as a `Modal`, not a bespoke dialog shell
+- [`0150-settings-renders-as-a-modal-not-a-page`](decision/0150-settings-renders-as-a-modal-not-a-page.md) — `/settings` renders as a `Modal`, not a bespoke dialog shell
 - [`0151-ics-subscription-lives-in-the-settings-modal`](decision/0151-ics-subscription-lives-in-the-settings-modal.md) — The ICS subscription section lives inside the settings modal
 - [`0160-the-users-table-gets-an-active-switch-the-design-does-not-draw`](decision/0160-the-users-table-gets-an-active-switch-the-design-does-not-draw.md) — The users table gets an "Aktivní" switch the design does not draw
 - [`0161-the-admin-day-tab-summarises-the-lot-it-does-not-redraw-it`](decision/0161-the-admin-day-tab-summarises-the-lot-it-does-not-redraw-it.md) — The admin day tab summarises the lot; it does not redraw it
@@ -250,3 +250,4 @@ for why, and take the next number from the end of this list.
 - [`0295-held-by-other-recovers-by-broadcast-and-by-its-own-timer`](decision/0295-held-by-other-recovers-by-broadcast-and-by-its-own-timer.md) — 0295 – `held-by-other` recovers, by the broadcast **and** by its own timer
 - [`0296-an-established-socket-is-not-re-authenticated`](decision/0296-an-established-socket-is-not-re-authenticated.md) — 0296 – An established socket is not re-authenticated mid-connection
 - [`0297-the-esm-jest-transform-block-lives-in-jest-preset-js`](decision/0297-the-esm-jest-transform-block-lives-in-jest-preset-js.md) — 0297 – The ESM `transformIgnorePatterns` block lives in `jest.preset.js`
+- [`0298-urls-are-english-because-a-url-is-an-identifier`](decision/0298-urls-are-english-because-a-url-is-an-identifier.md) — route segments are English because a URL is an identifier, not UI copy

@@ -2,7 +2,7 @@
 
 ## What
 
-The first tab of `/sprava`, "Přehled parkoviště"
+The first tab of `/admin`, "Přehled parkoviště"
 (`apps/web/src/shell/admin/admin-day-screen.tsx`), renders the day's **date**,
 the free/taken **counts**, the reservation-window **banner**, a `DataTable` with
 one row per spot (label, category, who holds it, how many are queued), and a
@@ -22,7 +22,7 @@ It does **not** render the painted car grid that
 - **The grid belongs to Task 24 and only there.** It is the product's most
   stateful surface: per-cell realtime locks, waitlist badges, car colours from
   `libs/design-system/tokens/car-palette`, and the reservation actions. A second
-  implementation of it inside `/sprava` would be two renderings of one canvas,
+  implementation of it inside `/admin` would be two renderings of one canvas,
   free to disagree about the same day — the exact failure the day overview's
   single-request payload (`overview.day`) exists to prevent.
 - **A tab that only says "go somewhere else" would be under-delivering.** The
@@ -71,7 +71,7 @@ Asked to look again with fresh eyes, I reopened `06-admin-overview.png` and
 - `06` carries **no tab strip and no "Správa" heading**. Its eyebrow is
   `PŘEHLED PARKOVIŠTĚ`, not `ADMINISTRACE`. It is the lot screen as an admin
   sees it, filed under an admin-sounding name — not a panel that belongs inside
-  `/sprava`.
+  `/admin`.
 - The tab does reproduce everything of `06` above the grid: the eyebrow, the
   long Czech date, the two count pills, the green banner. The divergence is the
   grid itself, and one button — `Hromadná rezervace` becomes

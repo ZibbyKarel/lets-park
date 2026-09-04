@@ -34,7 +34,7 @@ transition **into** `connected`. The transition is derived locally with a ref;
   derive the edge with a ref, so the ref is what this does.
 - **The ref starts disarmed, and that is the difference between one refetch and
   two on a page load.** A hook mounting under an already-connected socket
-  (navigating from `/nastaveni` back to `/`) has missed nothing and refetches
+  (navigating from `/settings` back to `/`) has missed nothing and refetches
   nothing. A hook mounting on a cold page starts at `disconnected` —
   `RealtimeProvider`'s initial status — so the first `connected` does fire. That
   is deliberate: the window between the overview being fetched and the handshake

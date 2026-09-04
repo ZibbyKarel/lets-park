@@ -1,4 +1,4 @@
-# 0150 – `/nastaveni` renders as a `Modal`, not a bespoke dialog shell
+# 0150 – `/settings` renders as a `Modal`, not a bespoke dialog shell
 
 ## What
 
@@ -6,7 +6,7 @@
 licence plate, preferred spot, and the ICS section (`doc/decision/0151-*`) —
 inside the design system's `Modal` primitive
 (`libs/design-system/primitives/src/lib/modal.tsx`), reached at the
-`/nastaveni` route. Closing it (Cancel, Escape, or a successful save) pushes
+`/settings` route. Closing it (Cancel, Escape, or a successful save) pushes
 back to `LOT_ROUTE` (`/`), so the "page" is really an overlay on top of the
 parking overview. There is deliberately no × and no scrim-click-to-close — see
 the fix-round note at the end of "How".
@@ -24,7 +24,7 @@ the fix-round note at the end of "How".
   no requirement that would justify reimplementing any of that. (It opts out
   of two of `Modal`'s *defaults* — the × button and scrim-click-to-close — see
   the fix-round note under "How".)
-- **The route still exists on purpose.** `/nastaveni` is a real, linkable,
+- **The route still exists on purpose.** `/settings` is a real, linkable,
   reloadable URL — the avatar menu's "Nastavení" item and a direct paste of
   the link both work — even though what it renders is an overlay. This mirrors
   how the design presents it: something you open from the top bar, on top of
@@ -34,14 +34,14 @@ the fix-round note at the end of "How".
   design-system-first rule): `Modal` knows nothing about the profile, the
   form, or oRPC. All of that domain wiring lives in `SettingsScreen` (tested
   with plain props) and `SettingsPage` (untested wiring), which is exactly the
-  split `AdminScreen`/`sprava/page.tsx` and `TopBar`/`AppTopBar` already use
+  split `AdminScreen`/`admin/page.tsx` and `TopBar`/`AppTopBar` already use
   elsewhere in this codebase.
 
 ## How
 
 - `SettingsScreen` always renders `<Modal open onClose={onClose} ...>` —
   there is no "closed" state to model, because the only way to be looking at
-  this component at all is via the `/nastaveni` route.
+  this component at all is via the `/settings` route.
 - The footer is `undefined` while the profile is still loading or failed to
   load (`ready = !isPending && !isError && profile !== undefined`), so the
   Cancel/Save buttons cannot appear over a form that has not been seeded yet —
@@ -77,6 +77,6 @@ the fix-round note at the end of "How".
   does not add. Not needed today: the screen is short enough to see both
   sections without scrolling on the design's target viewport.
 - **Closing on save is not undoable.** If `updateSettings` succeeds but the
-  user meant to keep editing, they must reopen `/nastaveni` and start again.
+  user meant to keep editing, they must reopen `/settings` and start again.
   This matches the "Uložit" button's implied contract (save closes) and the
   design has no separate "save and keep open" affordance to preserve instead.

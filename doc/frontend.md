@@ -43,15 +43,15 @@ src/app/
   providers.tsx                 the one 'use client' boundary
   error.tsx                     React error boundary  -> <ScreenError onRetry={reset}>
   not-found.tsx                 404
-  prihlaseni/page.tsx           login (server component + Server Action)
+  login/page.tsx                login (server component + Server Action)
   api/auth/[...nextauth]/route.ts   Auth.js handlers
   api/health/route.ts           readiness probe
   (app)/
     layout.tsx                  <AppTopBar> + centred <main>
     loading.tsx                 route-level <ScreenLoading>
     page.tsx                    /          parking overview
-    nastaveni/page.tsx          /nastaveni settings
-    sprava/page.tsx             /sprava    administration (admin only)
+    settings/page.tsx           /settings  settings
+    admin/page.tsx              /admin     administration (admin only)
 ```
 
 `shell/admin/` holds the administration section's own components — one
@@ -59,7 +59,7 @@ screen/panel pair per tab, plus the shared failure-copy table, the window
 banner and the lock-mode control. See `doc/admin.md`.
 
 
-Paths are Czech and every one of them is declared once, in
+Every route is declared once, in
 `src/routes.ts` — `LOT_ROUTE`, `LOGIN_ROUTE`, `SETTINGS_ROUTE`, `ADMIN_ROUTE`,
 `AUTH_API_ROUTE_PREFIX`, `HEALTH_ROUTE`. `auth.ts` and `proxy.ts` both read
 `LOGIN_ROUTE` from there, which is what makes a redirect loop unconstructible:
@@ -130,9 +130,9 @@ the same code and differ only in environment values.
 
 1. An unauthenticated request to any protected path hits `src/proxy.ts`, which
    re-exports Auth.js's `auth` as Next 16's request interceptor. It redirects
-   to `/prihlaseni?callbackUrl=…`. See `doc/decision/0100-*` for the matcher
+   to `/login?callbackUrl=…`. See `doc/decision/0100-*` for the matcher
    and why the file is `proxy.ts` rather than `middleware.ts`.
-2. `prihlaseni/page.tsx` is a **server** component. If a session already
+2. `login/page.tsx` is a **server** component. If a session already
    exists it redirects to `/`; otherwise it renders `LoginScreen` with a
    Server Action:
 
@@ -189,19 +189,19 @@ consequence is that while the profile is loading or has failed, `role` is
 `undefined` and `isAdmin` is `role === 'ADMIN'`, which is **false**. The badge
 and the `Správa` entry are absent rather than present-and-broken. This is a
 convenience, not a control: the API's `RolesGuard` is what actually enforces
-the role, and `/sprava` renders a `FORBIDDEN` empty state for a non-admin who
+the role, and `/admin` renders a `FORBIDDEN` empty state for a non-admin who
 navigates there directly.
 
 `initialsOf()` (`shell/initials.ts`) takes the first letter of the first two
 words, uppercased with `cs-CZ` rules, iterating code points so a name outside
 the BMP is not cut in half.
 
-## Settings (`/nastaveni`)
+## Settings (`/settings`)
 
 `shell/settings-screen.tsx` is **presentational** — profile, spots, and the
 mutation state around them in as props, callbacks out — and
 `shell/settings-page.tsx` is the connected wrapper, following the same split
-as `TopBar`/`AppTopBar` and `AdminScreen`/`sprava/page.tsx`.
+as `TopBar`/`AppTopBar` and `AdminScreen`/`admin/page.tsx`.
 
 The screen renders as the design system's `Modal` (`doc/decision/0150-*`)
 rather than a bespoke dialog, with its × hidden and `closeOnScrimClick={false}`
@@ -231,7 +231,7 @@ selected (Task 26 review, I1). `spotsPending`/`spotsError`, passed down from
 error under the picker, so a failed spot list is not silently indistinguishable
 from "no active spots" (review, M8).
 
-See `doc/admin.md` for the administration section (`/sprava`), which follows
+See `doc/admin.md` for the administration section (`/admin`), which follows
 the same screen/panel split, one pair per tab.
 
 Below the form, a second section — `IcsSection` — shows the caller's ICS feed
@@ -240,7 +240,7 @@ a "Vygenerovat nový odkaz" button behind `ConfirmDialog`, since the old link
 stops resolving the moment a new token is issued. This section has no design
 to copy from; `doc/decision/0151-*` records why it lives in this modal rather
 than its own screen. `apiOrigin` comes from the route's server component
-(`app/(app)/nastaveni/page.tsx`, reading `NEXT_PUBLIC_API_URL` the same way
+(`app/(app)/settings/page.tsx`, reading `NEXT_PUBLIC_API_URL` the same way
 `app/layout.tsx` does) — an empty string means it could not be derived, and
 the section renders its "unavailable" copy instead of a broken link.
 

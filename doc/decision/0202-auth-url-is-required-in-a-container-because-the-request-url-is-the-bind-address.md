@@ -21,7 +21,7 @@ invisible. In a container they are not, and the symptom is spectacularly
 misleading — measured, in this order:
 
 ```
-1. bounce to /prihlaseni?callbackUrl=http%3A%2F%2F0.0.0.0%3A3000%2F
+1. bounce to /login?callbackUrl=http%3A%2F%2F0.0.0.0%3A3000%2F
 2. authorize:  redirect_uri=http://lets-park-web:4200/api/auth/callback/okta   ← correct
 3. issuer 302: → http://lets-park-web:4200/api/auth/callback/okta?code=…       ← correct
 4. callback 302: → http://0.0.0.0:3000                                        ← wrong

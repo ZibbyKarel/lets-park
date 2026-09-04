@@ -206,7 +206,7 @@ handshake carries the access token and matches neither name.
 
 | Spec | What it proves |
 | --- | --- |
-| `login.spec.ts` | An unauthenticated visitor is bounced to `/prihlaseni`; the button starts a real authorization-code flow (PKCE, `state`, `scope=…email…`) at the issuer; the session that comes back is one the **API** accepts; signing out re-protects the lot. |
+| `login.spec.ts` | An unauthenticated visitor is bounced to `/login`; the button starts a real authorization-code flow (PKCE, `state`, `scope=…email…`) at the issuer; the session that comes back is one the **API** accepts; signing out re-protects the lot. |
 | `identity.spec.ts` | Each persona is the seeded person — name, email, and role. The role is a database column; nothing in the token grants it. |
 | `reservation.spec.ts` | A user reserves a free bay and sees their name and their profile's plate on it; the reservation survives a reload; the holder cancels it and the bay is free again. |
 | `waitlist-promotion.spec.ts` | Two users: one books, the other queues and is told their position, the first cancels — and the bay is handed to the queue with nobody clicking anything. |
@@ -365,7 +365,7 @@ request and response cookie **names** and a one-way digest of each value, in
 order, and never a token (`doc/decision/0232-*`).
 
 **A spec times out on the first visit to a route.** Same cause as above, seen
-from a different angle: `next dev` compiles a route on demand — `/nastaveni` has
+from a different angle: `next dev` compiles a route on demand — `/settings` has
 been measured at 4.9 s, past Playwright's 5 s default. `openSettings()` in
 `src/support/lot-page.ts` carries a 30 s allowance for exactly this
 (`doc/decision/0183-*`); a new spec visiting a new route against a reused dev

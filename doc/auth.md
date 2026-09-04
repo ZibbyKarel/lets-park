@@ -382,7 +382,7 @@ set; in the `jwt` callback, a token whose `sub` is in that set makes the callbac
 `null`. Two things follow from that `null`, both from `@auth/core`:
 
 - `auth()` yields no session, so `callbacks.authorized` is `false` and the proxy redirects the
-  navigation to `/prihlaseni`;
+  navigation to `/login`;
 - the response **clears the session cookie** rather than re-issuing it — so a cookie that
   survived the race deletes itself the first time it is used.
 

@@ -46,7 +46,7 @@ would make every write scenario pass regardless of the window, which is the
 "passes on a defence other than the one it names" failure in its purest form.
 The ordinary personas do the ordinary work; the admin only does admin work.
 
-**Why a database fixture rather than the admin UI.** Driving `/sprava` →
+**Why a database fixture rather than the admin UI.** Driving `/admin` →
 *Rezervační okno* before every run would put a second, slower, flakier
 dependency in front of every other scenario, and the admin window screen has its
 own unit coverage. Writing the row directly is data setup, not an application

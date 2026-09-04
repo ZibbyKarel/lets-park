@@ -35,7 +35,7 @@ the `dev` profile, and the API discovers JWKS lazily from whatever
   issuers**. Sign-in succeeds and then every API call 401s on a mismatched
   `iss` — a failure that looks like a broken token, not like a DNS choice.
 - **The same applies to `NEXT_PUBLIC_API_URL`**, for a less obvious reason: it
-  is read by server code (`app/layout.tsx`, `nastaveni/page.tsx`) *and* fetched
+  is read by server code (`app/layout.tsx`, `settings/page.tsx`) *and* fetched
   server-side by `app/api/health/route.ts`, and then handed to the browser as a
   prop. One variable, both sides, so one name.
 - **`localhost` cannot be that name.** Docker writes `127.0.0.1 localhost` into
@@ -62,7 +62,7 @@ the `dev` profile, and the API discovers JWKS lazily from whatever
 
 The whole flow was then driven by a real Chromium with
 `--host-resolver-rules=MAP lets-park-oidc:8080 …` standing in for the hosts
-entry: bounce to `/prihlaseni`, a real `/authorize` with PKCE and `state`, the
+entry: bounce to `/login`, a real `/authorize` with PKCE and `state`, the
 issuer's form, the callback, and `200 POST /api/rpc/me/get` and
 `/api/rpc/overview/day` against the API container.
 

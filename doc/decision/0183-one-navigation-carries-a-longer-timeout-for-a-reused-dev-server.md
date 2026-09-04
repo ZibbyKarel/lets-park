@@ -3,7 +3,7 @@
 ## What
 
 `openSettings()` in `apps/web-e2e/src/support/lot-page.ts` waits up to
-`FIRST_ROUTE_VISIT_TIMEOUT_MS` (30 s) for `/nastaveni` and for its modal.
+`FIRST_ROUTE_VISIT_TIMEOUT_MS` (30 s) for `/settings` and for its modal.
 Everything else in the suite uses Playwright's 5 s default. The global `expect`
 timeout is **not** raised, and no `waitForTimeout` is used anywhere.
 
@@ -14,8 +14,8 @@ That is measured, not assumed — from the dev server's own log during a failing
 run:
 
 ```
-GET /nastaveni 200 in 2.1s (compile: 1883ms, proxy.ts: 77ms, render: 135ms)
-GET /nastaveni 200 in 4.9s (compile: 1573ms, proxy.ts: 1177ms, render: 2.2s)
+GET /settings 200 in 2.1s (compile: 1883ms, proxy.ts: 77ms, render: 135ms)
+GET /settings 200 in 4.9s (compile: 1573ms, proxy.ts: 1177ms, render: 2.2s)
 ```
 
 4.9 s is past the 5 s default before the modal has even started rendering, and
@@ -51,7 +51,7 @@ meet the 5 s default with a 4.9 s route. The constant costs nothing on the
 default path and is the difference between a green run and a confusing red one
 on the other.
 
-The wait is also split in two on purpose: `waitForURL('**/nastaveni')` first,
+The wait is also split in two on purpose: `waitForURL('**/settings')` first,
 then the modal. "The menu item did not navigate" and "the modal did not render"
 are different bugs, and the failure report should say which one happened.
 
@@ -68,8 +68,8 @@ are different bugs, and the failure report should say which one happened.
 - **30 s is a guess about the worst case, not a measurement of it.** A cold
   machine compiling for the first time under heavier load could still exceed it.
   The symptom would be an honest, specific failure ("waiting for
-  `**/nastaveni`"), not a silent pass.
+  `**/settings`"), not a silent pass.
 - **It only covers the route the suite happens to visit second.** A future spec
-  that navigates to `/sprava` against a reused dev server will meet the same
+  that navigates to `/admin` against a reused dev server will meet the same
   first-compile cost and should use the same constant rather than inventing
   another number.

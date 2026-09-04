@@ -4,8 +4,8 @@
 
 `AppTopBar` (`apps/web/src/shell/app-top-bar.tsx`) calls `useRequireAuth()`
 instead of `useSession()`. `apps/web/src/app/(app)/layout.tsx` renders it
-unconditionally for all three signed-in routes, so `/`, `/nastaveni` and
-`/sprava` all carry the guard. The layout's header comment, which claimed this
+unconditionally for all three signed-in routes, so `/`, `/settings` and
+`/admin` all carry the guard. The layout's header comment, which claimed this
 was already true, now says where it is true and points at the test.
 
 ## Why
@@ -27,7 +27,7 @@ was already true, now says where it is true and points at the test.
   got a generic error with a retry button that could never succeed, and
   `signOut()` — which exists precisely to clear the dead cookie before anything
   else is attempted with it — was never called.
-- **`/sprava` was only nominally covered.** `AdminScreen` early-returns
+- **`/admin` was only nominally covered.** `AdminScreen` early-returns
   `<ScreenLoading />` while `useCurrentUser()` is pending
   (`shell/admin-screen.tsx`), so the panels that *did* call `useRequireAuth`
   were never mounted in exactly the states where it was needed. Putting the

@@ -52,8 +52,8 @@ There is no `middleware.ts`, and no `runtime` export.
   `/api/authorised-users`, `/api/healthcheck` and `/_next-door` staying
   protected.
 - The live behaviour was measured against a running server rather than
-  inferred from the pattern: `GET /` and `/nastaveni` answered 307 to
-  `/prihlaseni`, `/api/health` answered 200, `/api/auth/session` answered 200,
+  inferred from the pattern: `GET /` and `/settings` answered 307 to
+  `/login`, `/api/health` answered 200, `/api/auth/session` answered 200,
   and `/api/healthcheck` answered 307. See the Task 23 report.
 
 ## Risk
