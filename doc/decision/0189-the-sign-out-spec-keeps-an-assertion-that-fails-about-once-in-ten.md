@@ -72,7 +72,7 @@ the cookie headers that matter:
 
 ```
 POST /api/auth/signout   → 200   Set-Cookie: authjs.session-token=; Max-Age=0
-GET  /login         → 200   (login screen renders; no bounce to /)
+GET  /login              → 200   (login screen renders; no bounce to /)
 GET  /                   → 200   Set-Cookie: authjs.session-token=<a fresh JWT>
 POST /api/rpc/me/get     → 200
 POST /api/rpc/overview/day → 200

@@ -70,8 +70,8 @@ test('the app under test is the build this workspace just produced', async ({ re
 
   // `/` redirects an anonymous visitor to the sign-in page; the request
   // context follows it. Asking for the root rather than a named route keeps
-  // this check out of the way of the application's Czech URLs, which are
-  // product copy and may be renamed (`TODO.md` carries a proposal to).
+  // this check independent of any particular route's path, so it does not
+  // need updating if one moves.
   const response = await request.get('/');
   expect(response.ok(), `GET / answered ${response.status()}`).toBe(true);
 

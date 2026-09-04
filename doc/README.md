@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 22 topic documents, 183 decision records, and `doc/design/`.
+`doc/`: 22 topic documents, 184 decision records, and `doc/design/`.
 
 ---
 
@@ -250,4 +250,4 @@ for why, and take the next number from the end of this list.
 - [`0295-held-by-other-recovers-by-broadcast-and-by-its-own-timer`](decision/0295-held-by-other-recovers-by-broadcast-and-by-its-own-timer.md) — 0295 – `held-by-other` recovers, by the broadcast **and** by its own timer
 - [`0296-an-established-socket-is-not-re-authenticated`](decision/0296-an-established-socket-is-not-re-authenticated.md) — 0296 – An established socket is not re-authenticated mid-connection
 - [`0297-the-esm-jest-transform-block-lives-in-jest-preset-js`](decision/0297-the-esm-jest-transform-block-lives-in-jest-preset-js.md) — 0297 – The ESM `transformIgnorePatterns` block lives in `jest.preset.js`
-- [`0298-urls-are-english-because-a-url-is-an-identifier`](decision/0298-urls-are-english-because-a-url-is-an-identifier.md) — route segments are English because a URL is an identifier, not UI copy
+- [`0298-urls-are-english-because-a-url-is-an-identifier`](decision/0298-urls-are-english-because-a-url-is-an-identifier.md) — 0298 – URLs are English, because a URL is an identifier

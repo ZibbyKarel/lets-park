@@ -392,7 +392,7 @@ export const { handlers, auth, signIn, signOut, getAccessToken } = createAuth({
   clientId: env.AUTH_OKTA_CLIENT_ID,
   clientSecret: env.AUTH_OKTA_CLIENT_SECRET,
   secret: env.AUTH_SECRET,
-  signInPath: '/login',            // optional
+  signInPath: '/login', // optional
 });
 
 // apps/web/src/app/api/auth/[...nextauth]/route.ts
