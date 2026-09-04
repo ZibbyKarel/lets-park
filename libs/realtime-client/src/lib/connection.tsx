@@ -76,8 +76,6 @@ export type RealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'reje
 export const REJECTED_RETRY_DELAYS_MS: readonly number[] = [1_000, 5_000, 30_000];
 
 export interface RealtimeConnection {
-  /** `null` until the connection effect has run, and while disabled. */
-  readonly socket: RealtimeSocket | null;
   readonly status: RealtimeStatus;
   /**
    * Throws away the current socket and builds a fresh one, re-running the
@@ -97,6 +95,23 @@ export interface RealtimeConnection {
    * required.
    */
   readonly reportInvalidPayload: InvalidPayloadHandler;
+}
+
+/**
+ * {@link RealtimeConnection} plus the socket.io socket underneath it.
+ *
+ * **Not exported from `src/index.ts`, deliberately.** `socket.io-client`'s
+ * `Socket` is the object this whole wrapper exists so that application code
+ * never touches, and the ESLint ban (`WRAPPED_LIBRARIES`) is on the *import* —
+ * it cannot see a `Socket` handed out through a re-exported type. Every
+ * consumer of `useRealtime()` in `apps/web` destructures `status` and
+ * `reconnect` and nothing else; its specs already stub the hook as exactly
+ * that. The three hooks below, and `useCellLock`, are the code that genuinely
+ * needs the socket, and they are all inside this lib.
+ */
+export interface RealtimeInternals extends RealtimeConnection {
+  /** `null` until the connection effect has run, and while disabled. */
+  readonly socket: RealtimeSocket | null;
 }
 
 export interface RealtimeConnectionOptions {
@@ -151,7 +166,7 @@ export interface RealtimeConnectionOptions {
  * `generation` counter, which is how a refused handshake is recovered from
  * (see {@link RealtimeStatus} and {@link REJECTED_RETRY_DELAYS_MS}).
  */
-export function useRealtimeConnection(options: RealtimeConnectionOptions): RealtimeConnection {
+export function useRealtimeConnection(options: RealtimeConnectionOptions): RealtimeInternals {
   const {
     url,
     path = DEFAULT_SOCKET_PATH,
@@ -268,7 +283,7 @@ export function useRealtimeConnection(options: RealtimeConnectionOptions): Realt
   );
 }
 
-const RealtimeContext = createContext<RealtimeConnection | null>(null);
+const RealtimeContext = createContext<RealtimeInternals | null>(null);
 
 export interface RealtimeProviderProps extends RealtimeConnectionOptions {
   readonly children: ReactNode;
@@ -288,6 +303,14 @@ export function RealtimeProvider({ children, ...options }: RealtimeProviderProps
  * shows up as "realtime updates stopped working" in production.
  */
 export function useRealtime(): RealtimeConnection {
+  return useRealtimeInternals();
+}
+
+/**
+ * The same connection, with the socket. For this lib's own hooks only — see
+ * {@link RealtimeInternals} for why the socket does not leave here.
+ */
+export function useRealtimeInternals(): RealtimeInternals {
   const connection = useContext(RealtimeContext);
   if (connection === null) {
     throw new Error('useRealtime must be used inside a <RealtimeProvider>.');
@@ -308,7 +331,7 @@ export function useRealtimeEvent<K extends ServerToClientEventName>(
   event: K,
   handler: (payload: ServerEventPayload<K>) => void
 ): void {
-  const { socket, reportInvalidPayload } = useRealtime();
+  const { socket, reportInvalidPayload } = useRealtimeInternals();
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
@@ -347,7 +370,7 @@ export function useRealtimeEvent<K extends ServerToClientEventName>(
  * one to show.
  */
 export function useDayRoom(date: DayRoomCommand['date'] | null): void {
-  const { socket, status } = useRealtime();
+  const { socket, status } = useRealtimeInternals();
 
   useEffect(() => {
     if (socket === null || date === null || status !== 'connected') return;

@@ -5,8 +5,8 @@
  * (`eslint.config.mjs` → `WRAPPED_LIBRARIES`, `doc/wrappers.md`); everything a
  * feature needs to watch a day, hold a cell or read a broadcast is here:
  *
- * - `RealtimeProvider` / `useRealtimeConnection` — the one connection, its
- *   handshake token and its reconnect behaviour;
+ * - `RealtimeProvider` / `useRealtime` — the one connection, its handshake
+ *   token, its status and its reconnect affordance;
  * - `useRealtimeEvent` / `useDayRoom` — subscribing to a day and to the events
  *   broadcast into it, each payload parsed against its contract schema first;
  * - `useCellLock` — the editing hold, renewed while a form is open and
@@ -16,22 +16,17 @@
  * There is no way to emit or listen for something the contract does not
  * declare, and no payload shape is written down twice.
  *
- * `createRealtimeSocket` is exported for the app's own composition (and for
- * tests that need to drive a socket without React); components should reach
- * for the provider instead.
+ * **What is deliberately not here.** `createRealtimeSocket`, `toHandshakeAuth`,
+ * `parseAck`, `parseServerEvent`, `useRealtimeConnection`, the cell-lock
+ * timing constants and the two delay functions are how the four hooks above
+ * are built. None is named outside this lib, and the socket type they traffic
+ * in is the one object the wrapper ban exists to keep out of `apps/web` —
+ * a ban ESLint enforces on the *import*, which a re-exported type walks
+ * straight past. The lib's own specs reach them through `./lib/socket`,
+ * `./lib/connection`, `./lib/validation` and `./lib/timing`.
  */
 
-export { DEFAULT_SOCKET_PATH, createRealtimeSocket, toHandshakeAuth } from './lib/socket';
-export type { RealtimeHandshakeAuth, RealtimeSocket, RealtimeSocketOptions } from './lib/socket';
-
-export {
-  REJECTED_RETRY_DELAYS_MS,
-  RealtimeProvider,
-  useDayRoom,
-  useRealtime,
-  useRealtimeConnection,
-  useRealtimeEvent,
-} from './lib/connection';
+export { RealtimeProvider, useDayRoom, useRealtime, useRealtimeEvent } from './lib/connection';
 export type {
   RealtimeConnection,
   RealtimeConnectionOptions,
@@ -39,15 +34,7 @@ export type {
   RealtimeStatus,
 } from './lib/connection';
 
-export {
-  CELL_LOCK_ACK_ATTEMPTS,
-  CELL_LOCK_ACK_TIMEOUT_MS,
-  CELL_LOCK_RENEW_FRACTION,
-  MIN_CELL_LOCK_RENEW_DELAY_MS,
-  contendedRetryDelayMs,
-  renewDelayMs,
-  useCellLock,
-} from './lib/cell-lock';
+export { useCellLock } from './lib/cell-lock';
 export type {
   CellLockHolder,
   CellLockState,
@@ -55,14 +42,12 @@ export type {
   UseCellLockOptions,
 } from './lib/cell-lock';
 
-export { parseAck, parseServerEvent } from './lib/validation';
-export type {
-  AckPayload,
-  InvalidPayloadHandler,
-  InvalidRealtimePayload,
-  ParseResult,
-  ServerEventPayload,
-} from './lib/validation';
+/**
+ * The types `RealtimeProviderProps` is written in terms of: a consumer
+ * supplying `onInvalidPayload` has to be able to name its argument.
+ */
+export type { InvalidPayloadHandler, InvalidRealtimePayload } from './lib/validation';
+export type { ServerEventPayload } from './lib/validation';
 
 /**
  * The token seam, re-exported from `@lets-park/api-client` rather than

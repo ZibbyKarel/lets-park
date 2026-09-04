@@ -48,21 +48,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { CellLockAck, CellLockCommand } from '@lets-park/contract/realtime';
-import { useRealtime, useRealtimeEvent } from './connection';
+import { useRealtimeInternals, useRealtimeEvent } from './connection';
 import { parseAck } from './validation';
-
-/**
- * Fraction of the remaining TTL after which the hold is renewed.
- *
- * Half, so a renewal that is lost in flight still leaves a second attempt
- * inside the same TTL — {@link CELL_LOCK_ACK_TIMEOUT_MS} and
- * {@link CELL_LOCK_ACK_ATTEMPTS} are what make that second attempt exist.
- * Derived from the server's `expiresAt` rather than from a TTL constant copied
- * onto the client: the client is then correct for whatever TTL the gateway is
- * configured with, and there is no second number to keep in sync across two
- * tasks.
- */
-export const CELL_LOCK_RENEW_FRACTION = 0.5;
+// The two delay functions and the two constants they are built from live in
+// `./timing`: they are pure arithmetic over an `expiresAt`, they share one
+// invariant (an unparseable or past expiry comes out as the floor, never
+// `NaN`), and holding that invariant in one place is why they are not inline
+// here. `timing.spec.tsx`'s cases are the ones that used to justify exporting
+// them all the way out of the lib.
+import { contendedRetryDelayMs, renewDelayMs } from './timing';
 
 /**
  * How long to wait for a `cell:lock` acknowledgement before treating it as
@@ -97,16 +91,6 @@ export const CELL_LOCK_ACK_TIMEOUT_MS = 5_000;
  * prevent.
  */
 export const CELL_LOCK_ACK_ATTEMPTS = 2;
-
-/**
- * Floor on the renewal delay.
- *
- * Without it, an `expiresAt` that is already in the past — a clock skew, a
- * slow round trip — schedules a zero-delay timer that re-requests the lock as
- * fast as the event loop allows. A one-second floor turns the worst case into
- * one request per second instead of a busy loop against the gateway.
- */
-export const MIN_CELL_LOCK_RENEW_DELAY_MS = 1_000;
 
 /** Who is holding a cell somebody else asked for, derived from the ack. */
 export type CellLockHolder = Extract<CellLockAck, { result: 'HELD_BY_OTHER' }>['lockedBy'];
@@ -157,49 +141,6 @@ export interface UseCellLockOptions extends CellLockCommand {
 }
 
 /**
- * How long to wait before renewing a hold that expires at `expiresAt`.
- *
- * Pure and exported so it can be tested on its own: the interesting cases are
- * an expiry already in the past and an unparseable one, both of which have to
- * come out as the floor rather than as `NaN` — `setTimeout(NaN)` fires
- * immediately, which is the busy loop {@link MIN_CELL_LOCK_RENEW_DELAY_MS}
- * exists to prevent.
- */
-export function renewDelayMs(expiresAt: string, now: number): number {
-  const remaining = Date.parse(expiresAt) - now;
-  if (!Number.isFinite(remaining)) return MIN_CELL_LOCK_RENEW_DELAY_MS;
-  return Math.max(remaining * CELL_LOCK_RENEW_FRACTION, MIN_CELL_LOCK_RENEW_DELAY_MS);
-}
-
-/**
- * How long to wait before asking again for a cell somebody else holds until
- * `expiresAt`.
- *
- * The **whole** remaining time, not half of it: this is not a heartbeat on a
- * hold this client owns, it is a wait for somebody else's to lapse, and asking
- * before it has is the polling {@link useCellLock} deliberately does not do.
- *
- * It is the *backstop*, not the mechanism — the gateway broadcasts
- * `cell:unlocked` on all four ways a hold ends (`doc/decision/0111-*`), and
- * that arrives first in every ordinary case. This timer is what makes the two
- * independent, so a broadcast that is never sent or never arrives cannot leave
- * a form asserting "právě upravuje …" forever.
- *
- * Floored at {@link MIN_CELL_LOCK_RENEW_DELAY_MS} for the same reason the
- * renewal is, and the reason is sharper here: an `expiresAt` already in the
- * past would schedule a zero-delay timer whose request is answered
- * `HELD_BY_OTHER` with the same stale `expiresAt`, which schedules another —
- * a busy loop against the gateway that no other path in this hook can produce.
- * `Date.parse('soon')` is `NaN`, and every comparison with `NaN` is false, so
- * the unparseable case has to be caught explicitly rather than by `Math.max`.
- */
-export function contendedRetryDelayMs(expiresAt: string, now: number): number {
-  const remaining = Date.parse(expiresAt) - now;
-  if (!Number.isFinite(remaining)) return MIN_CELL_LOCK_RENEW_DELAY_MS;
-  return Math.max(remaining, MIN_CELL_LOCK_RENEW_DELAY_MS);
-}
-
-/**
  * Takes, renews and releases the editing hold on one cell.
  *
  * The whole lifecycle lives in a single effect, which is what makes the four
@@ -210,7 +151,7 @@ export function contendedRetryDelayMs(expiresAt: string, now: number): number {
  */
 export function useCellLock(options: UseCellLockOptions): CellLockState {
   const { date, parkingSpotId, enabled = true } = options;
-  const { socket, status: connectionStatus, reportInvalidPayload } = useRealtime();
+  const { socket, status: connectionStatus, reportInvalidPayload } = useRealtimeInternals();
   const [state, setState] = useState<CellLockState>(IDLE);
 
   // The current state, readable from inside the effect without making the
