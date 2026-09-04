@@ -274,8 +274,9 @@ sentence saying nothing was created (`doc/decision/0176-*`).
 
 ## Loading, empty and error
 
-`shell/screen-state.tsx` exports all three from one module, so a screen imports
-its states from a single place:
+`shell/screen-state.tsx` holds the three states themselves *and* the type that
+says which of them a screen is in, so a screen imports both from a single
+place. The three renderers first:
 
 - **`ScreenLoading`** — `role="status"` with the default polite live region, so
   a screen reader announces the wait; label defaults to `Načítá se…`.
@@ -297,6 +298,85 @@ These live in app code rather than in the design system on purpose. Composing
 primitives and compounds into domain UI is app work; `EmptyState` is the
 design-system piece, and `ScreenError` is this application's opinion about how
 a contract error becomes a sentence.
+
+### `ScreenData<T>`: the state as one value, not four props
+
+The same module exports `ScreenData<T>`, `ScreenQueryLike<T>`, `screenDataOf`
+and `ScreenDataGuard`, and the four admin screens
+(`admin-day-screen.tsx`, `admin-spots-screen.tsx`, `admin-users-screen.tsx`,
+`admin-window-screen.tsx`) take a `ScreenData<T>` as a prop rather than the
+four that used to stand for it.
+
+Six screens used to take `data | undefined`, `isPending`, `isError` and `error`
+side by side, and five of the six prop interfaces then spelled the correlation
+out in prose: "`undefined` exactly when `isPending || isError`". A fact an
+interface has to state in a comment is a fact its types are failing to carry.
+Nothing stopped a caller from writing `{ isPending: false, isError: false,
+data: undefined }`, and a screen that reached its ready branch with no data
+drew an empty table asserting *there are no parking spots* — a claim, where the
+truth was an absence.
+
+```ts
+export type ScreenData<T> =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'error'; readonly error: unknown }
+  | { readonly kind: 'ready'; readonly data: T };
+```
+
+As a discriminated union that combination cannot be written down: `data` exists
+only on the branch that has it, so the ready branch is unreachable without it,
+and the prose correlation is replaced by a compile error. "Loading with data"
+and "error with no data" stop being states anyone has to remember not to
+produce. `onRetry` stays a sibling prop, because retrying is the caller's
+capability rather than a property of the data, and it is the same function in
+all three states.
+
+Three details are worth knowing before using it:
+
+- **`screenDataOf(query)`** does the narrowing, and its precedence is the one
+  the hand-written guards had, so the move was behaviour-preserving: pending
+  wins over error, and a result that is neither pending nor failed yet carries
+  no data is treated as a **failure** — that is the branch a screen must never
+  render as "empty".
+- **`ScreenQueryLike<T>`** — `{ isPending, isError, error, data }` — is written
+  out here rather than imported as TanStack's `UseQueryResult`, so the seam
+  names no transport. A screen fed from `useQueries`, from a Storybook story or
+  from a parent's own state is adapted by the same function, and
+  `@lets-park/query` stays the thin wrapper it is meant to be.
+- **`ScreenDataGuard`** is the two-branch guard every screen had copied into
+  it, written once, and it takes a render prop rather than returning early: a
+  screen whose states belong *inside* something it has already opened — a modal
+  that keeps its header and footer while its body loads — cannot use an early
+  return without losing the frame.
+
+## `*-view.ts`: what a screen decides, beside what it draws
+
+Five screens split their decisions out of the component that renders them, into
+a sibling module with no React, no hooks and no network in it:
+`lot/lot-view.ts`, `lot/bulk-view.ts`, `shell/settings-view.ts`,
+`shell/admin/spots-view.ts` and `shell/admin/window-view.ts`. Each has a
+`*-view.spec.ts` beside it.
+
+The reason is the same in all five, and `lot/lot-view.ts` states it first:
+conditional rendering is the part of a UI that is cheapest to get wrong and
+most expensive to test through the DOM. A decision spread over a lookup table,
+a type and a nested conditional inside a component body can only be exercised
+by rendering the component and reading what came out; the same decision as a
+named function has a name, a type and a spec that states it directly. The
+components take the result and draw it.
+
+Two conventions hold across the five:
+
+- **A union, not a nullable pair.** These modules are where the app's small
+  discriminated unions live — `IcsFeedView`, `SpotDialog`, `PreferredSpotView`,
+  `BulkBadgeView` — for the same reason `ScreenData<T>` above is one: the
+  combinations that mean nothing should not be writable.
+- **Keys are structure, sentences are copy.** A view function returns a message
+  *key* — which case are we in — and never a formatted string: formatting
+  belongs to `@lets-park/i18n` and the sentence to the component. That also
+  keeps each union enumerated once, in the module that produced it; re-switching
+  on one in the component would enumerate its variants twice, and adding a
+  variant would then fail to compile in the wrong file.
 
 ## The bottom date-navigation bar
 

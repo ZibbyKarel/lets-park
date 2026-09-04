@@ -1,11 +1,12 @@
 /**
- * Named, not a star. `errors.ts` also holds the tools a procedure is *defined*
- * with — `authed`, `contractErrors`, `noInputSchema`, `NoInput`,
- * `errorDataSchema` — and publishing those from `@lets-park/contract` makes
- * "define a procedure outside `libs/contract`" a supported move, which is the
- * one thing the contract-first rule exists to make impossible. They stay
- * inside the lib, where the ten procedure modules and `errors.spec.ts` reach
- * them through `./errors`.
+ * Named, not a star. The tools a procedure is *defined* with — `authed`,
+ * `contractErrors`, `noInputSchema`, `NoInput` in `./builder`, and
+ * `errorDataSchema` in `./errors` — are deliberately not among them:
+ * publishing them from `@lets-park/contract` makes "define a procedure outside
+ * `libs/contract`" a supported move, which is the one thing the contract-first
+ * rule exists to make impossible. They stay inside the lib, where every module
+ * that defines a procedure reaches the builders through `./builder`, as do
+ * `builder.spec.ts` and `router.spec.ts`.
  *
  * `ERROR_DEFINITIONS` is different in kind: it is the code→status→message
  * table a consumer legitimately reads, and both apps do
