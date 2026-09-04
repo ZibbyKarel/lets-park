@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
-import { ScreenError, ScreenLoading } from './screen-state';
+import { ScreenDataGuard, ScreenError, ScreenLoading, screenDataOf } from './screen-state';
 
 /**
  * Every error under test here is produced by a **real** `RPCLink`: a client
@@ -168,5 +168,133 @@ describe('ScreenError', () => {
 
     renderWithIntl(<ScreenError error={new Error('boom')} headingLevel={2} />);
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Něco se nepovedlo');
+  });
+});
+
+describe('screenDataOf', () => {
+  it('is loading while the query is pending', () => {
+    expect(screenDataOf({ isPending: true, isError: false, error: null, data: undefined })).toEqual(
+      {
+        kind: 'loading',
+      }
+    );
+  });
+
+  it('is loading even when the pending query already carries stale data', () => {
+    // Pending wins: a screen that draws its ready branch here would be showing
+    // the previous answer as if it were the current one.
+    expect(screenDataOf({ isPending: true, isError: false, error: null, data: 'stale' })).toEqual({
+      kind: 'loading',
+    });
+  });
+
+  it('is loading even when the pending query also reports an error', () => {
+    // The precedence the six hand-written guards had, kept verbatim: they read
+    // `isPending` first, so this mapping changes no screen's output.
+    const boom = new Error('boom');
+    expect(screenDataOf({ isPending: true, isError: true, error: boom, data: undefined })).toEqual({
+      kind: 'loading',
+    });
+  });
+
+  it('carries the failure through on an error', () => {
+    const boom = new Error('boom');
+    expect(screenDataOf({ isPending: false, isError: true, error: boom, data: undefined })).toEqual(
+      {
+        kind: 'error',
+        error: boom,
+      }
+    );
+  });
+
+  it('is an error when nothing failed but there is no data either', () => {
+    // The combination five prop interfaces used to rule out in prose. It is
+    // not "ready with nothing": a screen reaching its ready branch with no
+    // data would draw an empty table asserting there are no parking spots,
+    // where the truth is an absence. Mapping it to `error` is what the
+    // `if (isError || data === undefined)` guards already did.
+    expect(
+      screenDataOf({ isPending: false, isError: false, error: null, data: undefined })
+    ).toEqual({ kind: 'error', error: null });
+  });
+
+  it('is ready with the data once there is some', () => {
+    const payload = { spots: ['E2.92'] };
+    expect(screenDataOf({ isPending: false, isError: false, error: null, data: payload })).toEqual({
+      kind: 'ready',
+      data: payload,
+    });
+  });
+
+  it('treats a falsy-but-present payload as data, not as absence', () => {
+    // `data === undefined` is the test, never truthiness: an empty list and a
+    // zero are real answers.
+    expect(screenDataOf({ isPending: false, isError: false, error: null, data: 0 })).toEqual({
+      kind: 'ready',
+      data: 0,
+    });
+    expect(screenDataOf({ isPending: false, isError: false, error: null, data: null })).toEqual({
+      kind: 'ready',
+      data: null,
+    });
+  });
+});
+
+describe('ScreenDataGuard', () => {
+  it('draws the loading state and never the children', () => {
+    const children = jest.fn(() => <p>drawn</p>);
+    renderWithIntl(<ScreenDataGuard state={{ kind: 'loading' }}>{children}</ScreenDataGuard>);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
+    expect(children).not.toHaveBeenCalled();
+  });
+
+  it('draws the error state, with the retry the caller supplied', async () => {
+    const onRetry = jest.fn();
+    const user = userEvent.setup();
+    const children = jest.fn(() => <p>drawn</p>);
+
+    renderWithIntl(
+      <ScreenDataGuard state={{ kind: 'error', error: new Error('boom') }} onRetry={onRetry}>
+        {children}
+      </ScreenDataGuard>
+    );
+    await user.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+
+    expect(screen.getByText('Něco se nepovedlo')).toBeInTheDocument();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(children).not.toHaveBeenCalled();
+  });
+
+  it('forwards the heading level, because only the page knows its own outline', () => {
+    renderWithIntl(
+      <ScreenDataGuard state={{ kind: 'error', error: new Error('boom') }} headingLevel={3}>
+        {() => <p>drawn</p>}
+      </ScreenDataGuard>
+    );
+
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Něco se nepovedlo');
+  });
+
+  it('offers no retry control when the caller passed none', () => {
+    renderWithIntl(
+      <ScreenDataGuard state={{ kind: 'error', error: new Error('boom') }}>
+        {() => <p>drawn</p>}
+      </ScreenDataGuard>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Zkusit znovu' })).not.toBeInTheDocument();
+  });
+
+  it('hands the data to the children once it is ready, and draws neither state', () => {
+    renderWithIntl(
+      <ScreenDataGuard state={{ kind: 'ready', data: 'E2.92' }}>
+        {(label) => <p>{label}</p>}
+      </ScreenDataGuard>
+    );
+
+    expect(screen.getByText('E2.92')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Něco se nepovedlo')).not.toBeInTheDocument();
   });
 });
