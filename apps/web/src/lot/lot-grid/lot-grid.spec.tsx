@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
 import { LotGrid } from './lot-grid';
-import type { SpotGroupView, SpotView } from './lot-view';
+import type { SpotGroupView, SpotView } from '../lot-view';
 
 /**
  * The real `IntlProvider` and the real primitives, not doubles: what is under

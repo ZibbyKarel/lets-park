@@ -1,6 +1,6 @@
 import { createApiClient } from '@lets-park/api-client';
 import type { BulkDayPlan, BulkDayResult, ParkingSpot } from '@lets-park/contract';
-import { T0 } from '../testing/fixtures';
+import { T0 } from '../../testing/fixtures';
 import {
   buildMonthGrid,
   diffBulkSchedule,

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider, formatFullDate } from '@lets-park/i18n';
 import { LotHeader } from './lot-header';
-import type { DayNoteView } from './lot-view';
+import type { DayNoteView } from '../lot-view';
 
 /**
  * `LotHeader` is pure presentation, same as every other piece `./lot-header.tsx`

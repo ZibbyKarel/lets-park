@@ -9,8 +9,8 @@ import type {
   ParkingSpot,
   PreviewBulkOutput,
 } from '@lets-park/contract';
-import { profile as sharedProfile, T0 } from '../testing/fixtures';
-import { createProviderWrapper } from '../testing/providers';
+import { profile as sharedProfile, T0 } from '../../testing/fixtures';
+import { createProviderWrapper } from '../../testing/providers';
 import { BulkReservationModal } from './bulk-modal';
 
 /**

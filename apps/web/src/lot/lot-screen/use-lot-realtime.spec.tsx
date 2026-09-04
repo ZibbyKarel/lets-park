@@ -5,7 +5,7 @@ import { QueryProvider, createApiQueryUtils, createQueryClient } from '@lets-par
 import type { QueryClient } from '@lets-park/query';
 import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
 import type { ServerToClientEventName } from '@lets-park/contract/realtime';
-import { ApiProvider } from '../shell/api-provider';
+import { ApiProvider } from '../../shell/api-provider';
 import { useLotRealtime } from './use-lot-realtime';
 
 /**

@@ -19,7 +19,7 @@ import { useDayRoom, useRealtime, useRealtimeEvent } from '@lets-park/realtime-c
 import { useQueryClient } from '@lets-park/query';
 import type { DayOverviewOutput } from '@lets-park/contract';
 import type { DateOnly } from '@lets-park/i18n';
-import { useApi } from '../shell/api-provider';
+import { useApi } from '../../shell/api-provider';
 import {
   applyReservationCancelled,
   applyReservationCreated,

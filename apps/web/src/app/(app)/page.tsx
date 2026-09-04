@@ -1,4 +1,4 @@
-import { LotScreen } from '../../lot/lot-screen';
+import { LotScreen } from '../../lot/lot-screen/lot-screen';
 
 /**
  * The parking overview — the application's home screen (Task 24).

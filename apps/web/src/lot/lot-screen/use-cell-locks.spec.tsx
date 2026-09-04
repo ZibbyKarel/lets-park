@@ -1,6 +1,6 @@
 import { render, act } from '@testing-library/react';
 import { nextLockExpiryAt, pruneExpiredLocks, useCellLocks } from './use-cell-locks';
-import type { CellLockView } from './lot-view';
+import type { CellLockView } from '../lot-view';
 
 /**
  * `@lets-park/realtime-client` is doubled at the wrapper boundary so this

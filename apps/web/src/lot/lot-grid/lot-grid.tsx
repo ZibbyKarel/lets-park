@@ -21,7 +21,7 @@
 
 import { Badge, Box, Stack, cx } from '@lets-park/design-system/primitives';
 import { useTranslations } from '@lets-park/i18n';
-import type { SpotGroupView, SpotView } from './lot-view';
+import type { SpotGroupView, SpotView } from '../lot-view';
 
 /**
  * The car, seen from above.

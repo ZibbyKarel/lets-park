@@ -28,14 +28,14 @@ import { useSession } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { useCellLock, useRealtime } from '@lets-park/realtime-client';
 import { EmptyState } from '@lets-park/design-system/compounds';
-import { useApi } from '../shell/api-provider';
-import { useCurrentUser } from '../shell/use-current-user';
-import { ScreenError, ScreenLoading } from '../shell/screen-state';
-import { LotHeader, RealtimeNotice, WindowBanner } from './lot-header';
-import { DatePickerDialog } from './date-picker-dialog';
-import { LotGrid } from './lot-grid';
-import { BulkReservationModal } from './bulk-modal';
-import { SpotDialog } from './spot-dialog';
+import { useApi } from '../../shell/api-provider';
+import { useCurrentUser } from '../../shell/use-current-user';
+import { ScreenError, ScreenLoading } from '../../shell/screen-state';
+import { LotHeader, RealtimeNotice, WindowBanner } from '../lot-header/lot-header';
+import { DatePickerDialog } from '../date-picker-dialog/date-picker-dialog';
+import { LotGrid } from '../lot-grid/lot-grid';
+import { BulkReservationModal } from '../bulk-modal/bulk-modal';
+import { SpotDialog } from '../spot-dialog/spot-dialog';
 import { useCellLocks } from './use-cell-locks';
 import { useLotRealtime } from './use-lot-realtime';
 import {
@@ -44,7 +44,7 @@ import {
   toGroupViews,
   toLotCounts,
   toRealtimeNoticeView,
-} from './lot-view';
+} from '../lot-view';
 
 /** How far the date-picker's year selector reaches either side of the day on screen. */
 const YEAR_PICKER_RADIUS = 1;

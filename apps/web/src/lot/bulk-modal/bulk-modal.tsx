@@ -36,8 +36,8 @@ import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { Badge, Box, Button, Modal, cx } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
-import { useApi } from '../shell/api-provider';
-import { useCurrentUser } from '../shell/use-current-user';
+import { useApi } from '../../shell/api-provider';
+import { useCurrentUser } from '../../shell/use-current-user';
 import {
   buildMonthGrid,
   diffBulkSchedule,

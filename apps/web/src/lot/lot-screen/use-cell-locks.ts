@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRealtime, useRealtimeEvent } from '@lets-park/realtime-client';
 import type { DateOnly } from '@lets-park/i18n';
-import type { CellLockView } from './lot-view';
+import type { CellLockView } from '../lot-view';
 
 export type CellLockMap = ReadonlyMap<string, CellLockView>;
 

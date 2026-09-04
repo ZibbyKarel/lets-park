@@ -32,7 +32,7 @@ import {
   type CalendarGrid,
   type CalendarSlot,
   type CalendarWeek,
-} from './calendar-grid';
+} from '../calendar-grid';
 import type {
   BulkDayPlan,
   BulkDayResult,

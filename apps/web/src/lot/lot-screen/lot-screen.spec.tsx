@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import { formatFullDate } from '@lets-park/i18n';
 import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
-import { profile, T0 } from '../testing/fixtures';
-import { createProviderWrapper } from '../testing/providers';
+import { profile, T0 } from '../../testing/fixtures';
+import { createProviderWrapper } from '../../testing/providers';
 import { LotScreen } from './lot-screen';
 
 /**

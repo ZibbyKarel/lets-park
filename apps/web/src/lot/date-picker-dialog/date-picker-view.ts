@@ -11,7 +11,7 @@
  */
 
 import { compareDateOnly, parseDateOnly, type DateOnly } from '@lets-park/i18n';
-import { buildCalendarGrid, type CalendarGrid } from './calendar-grid';
+import { buildCalendarGrid, type CalendarGrid } from '../calendar-grid';
 
 export interface DatePickerDayCell {
   readonly date: DateOnly;

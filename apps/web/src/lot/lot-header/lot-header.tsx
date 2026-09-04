@@ -16,7 +16,7 @@
 import { Button, Stack, cx } from '@lets-park/design-system/primitives';
 import { formatFullDate, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
-import type { BannerView, DayNoteView, LotCounts } from './lot-view';
+import type { BannerView, DayNoteView, LotCounts } from '../lot-view';
 
 export interface LotHeaderProps {
   readonly date: DateOnly;
