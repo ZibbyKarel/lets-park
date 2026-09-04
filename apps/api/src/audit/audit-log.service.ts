@@ -45,6 +45,10 @@ export type AuditLogWriter = Pick<PrismaClient, 'auditLog'>;
  * Entity kinds that can be audited. Narrower than the contract's
  * `entityType: z.string().min(1)` on purpose: a typo in a free string would
  * silently split one entity's history into two, and nothing would fail.
+ *
+ * Which action gets which kind is no longer decided here — that is
+ * {@link AuditEntityTypeFor}, and this list is now the bound it is checked
+ * against, so a kind named there has to be a kind that exists.
  */
 export const AUDIT_ENTITY_TYPES = [
   'Reservation',
