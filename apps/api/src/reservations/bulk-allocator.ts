@@ -54,9 +54,10 @@
  *   the row order of the reservation `INSERT` — `createReservations` maps
  *   straight off `plans` — so nothing between here and the write can reorder
  *   it. `BulkReservationService.assertRequestable` sorts too, but only locally,
- *   to name the earliest offending day in a rejection; the dates it returns are
- *   in request order on purpose. It used to return them sorted, and while it
- *   did, either sort could be deleted with every test still green.
+ *   to name the earliest offending day in a rejection; it returns nothing, and
+ *   the list it was handed reaches the allocator in request order on purpose. It
+ *   used to return a sorted copy, and while it did, either sort could be deleted
+ *   with every test still green.
  *
  * The plan therefore comes back in ascending date order. Putting it back into
  * the order the client asked for is the service's job, because the contract

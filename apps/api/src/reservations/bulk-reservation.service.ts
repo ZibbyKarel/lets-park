@@ -49,11 +49,11 @@
  * `[...request.dates].sort(compareDateOnly)`, whose output order *is* the row
  * order of the `INSERT` (`createReservations` maps straight off `plans`). The
  * service does not sort for it: `assertRequestable` sorts only locally, to name
- * the earliest offending day in a rejection, and hands the dates back in request
- * order. Until this fix round there was a second sort there whose returned list
- * fed the allocator, which meant *either* sort could be deleted with every test
- * still green — measured, not assumed. See `doc/decision/0092-*` §"One
- * authority".
+ * the earliest offending day in a rejection, and does not reorder the list the
+ * allocator sees — that stays `input.dates`, in request order. There was once a
+ * second sort there whose returned list fed the allocator, which meant *either*
+ * sort could be deleted with every test still green — measured, not assumed. See
+ * `doc/decision/0092-*` §"One authority".
  *
  * The remaining sort is pinned twice: by `bulk-allocator.spec.ts` ("comes back
  * in ascending date order, whatever order it was asked in"), and end to end by
@@ -205,11 +205,11 @@ export class BulkReservationService {
     today: DateOnly = todayInPrague()
   ): Promise<PreviewBulkOutput> {
     const settings = await this.window.getSettings();
-    const dates = this.assertRequestable(input.dates, actor, settings, today);
-    const month = this.monthOf(dates);
+    this.assertRequestable(input.dates, actor, settings, today);
+    const month = this.monthOf(input.dates);
 
-    const world = await this.readWorld(this.prisma.client, dates, actor.id);
-    const days = this.inRequestOrder(input.dates, this.allocate(dates, world, actor.id));
+    const world = await this.readWorld(this.prisma.client, input.dates, actor.id);
+    const days = this.inRequestOrder(input.dates, this.allocate(input.dates, world, actor.id));
 
     return {
       month,
@@ -226,11 +226,11 @@ export class BulkReservationService {
     today: DateOnly = todayInPrague()
   ): Promise<ConfirmBulkOutput> {
     const settings = await this.window.getSettings();
-    const dates = this.assertRequestable(input.dates, actor, settings, today);
-    const month = this.monthOf(dates);
+    this.assertRequestable(input.dates, actor, settings, today);
+    const month = this.monthOf(input.dates);
 
     const outcome = await this.prisma.client.$transaction(
-      (tx) => this.confirmOnce(tx, input.dates, dates, month, actor),
+      (tx) => this.confirmOnce(tx, input.dates, month, actor),
       BULK_TRANSACTION_OPTIONS
     );
 
@@ -251,7 +251,6 @@ export class BulkReservationService {
    */
   private async confirmOnce(
     tx: Prisma.TransactionClient,
-    requested: readonly DateOnly[],
     dates: readonly DateOnly[],
     month: string,
     actor: AuthenticatedUser
@@ -298,7 +297,7 @@ export class BulkReservationService {
     );
 
     const days = this.inRequestOrder(
-      requested,
+      dates,
       plans.map((plan) =>
         this.resolve(plan, createdByDate, busyElsewhere, targets, queues, actor.id)
       )
@@ -751,8 +750,11 @@ export class BulkReservationService {
   // --- request-level rules ---------------------------------------------------
 
   /**
-   * The two conditions that invalidate the **whole** request, and the day list
-   * everything downstream uses.
+   * The two conditions that invalidate the **whole** request.
+   *
+   * An assertion, and nothing else: it hands nothing back, so there is exactly
+   * one list of days in this file — the caller's own `input.dates` — and no
+   * reader has to prove to themselves that a returned copy still matches it.
    *
    * A day in the past and a closed window are contract errors on the procedure;
    * a weekend, a holiday, a full day and a day the caller is already booked on
@@ -763,7 +765,7 @@ export class BulkReservationService {
    * offending day rather than whichever one the client happened to list first —
    * pinned by `bulk-reservation.db.spec.ts`, "names the earliest offending day,
    * not the first one listed". That sort is deliberately **local to the scan**:
-   * the list handed back stays in request order, because the write order has
+   * the caller's list is left in request order, because the write order has
    * exactly one authority (`allocateBulk`) and a second sort here would make
    * that one unfalsifiable. See `doc/decision/0092-*` §"One authority".
    */
@@ -772,7 +774,7 @@ export class BulkReservationService {
     actor: AuthenticatedUser,
     settings: ReservationWindowSettings,
     today: DateOnly
-  ): DateOnly[] {
+  ): void {
     if (dates.length === 0) {
       throw new DomainError('VALIDATION_FAILED', {
         message: 'A bulk booking must name at least one day.',
@@ -783,7 +785,6 @@ export class BulkReservationService {
       this.policy.assertNotInThePast(date, today);
       this.policy.assertWindowOpen(date, actor, settings, today);
     }
-    return [...dates];
   }
 
   /**
