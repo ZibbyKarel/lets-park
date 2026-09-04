@@ -399,7 +399,8 @@ of its protocol.
 
 | file | what it owns |
 | --- | --- |
-| `realtime.gateway.ts` | the handshake, the four commands, the broadcast path |
+| `realtime.gateway.ts` | the four commands, the day rooms, the broadcast path — and installing the handshake as middleware |
+| `realtime-handshake.ts` | who may connect: the credential, the verification, the rejection taxonomy, and the `UserSummary` an authenticated socket carries |
 | `lock.service.ts` | the editing holds, their TTL and their expiry |
 | `realtime-io.adapter.ts` | how the Socket.io server is constructed; the cluster seam |
 | `realtime.publisher.ts` | the after-commit `DomainEventPublisher` |

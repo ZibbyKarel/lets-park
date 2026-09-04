@@ -30,9 +30,10 @@ import { RealtimeDomainEventPublisher } from './realtime.publisher';
  *
  * `AuthModule` is imported for `JwksVerifierService` and `AuthUserService`,
  * which {@link RealtimeHandshakeAuthenticator} injects and which it exports for
- * exactly this reason (`doc/decision/0042-*`): the handshake must reuse the process's single JWKS client rather than open a
- * second one with its own cache, rate limiter and rotation moment.
- * `PrismaService` and `GracefulShutdownService` arrive from global modules.
+ * exactly this reason (`doc/decision/0042-*`): the handshake must reuse the
+ * process's single JWKS client rather than open a second one with its own
+ * cache, rate limiter and rotation moment. `PrismaService` and
+ * `GracefulShutdownService` arrive from global modules.
  */
 @Module({
   imports: [AuthModule],

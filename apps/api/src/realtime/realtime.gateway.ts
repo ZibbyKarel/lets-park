@@ -454,11 +454,11 @@ export class RealtimeGateway
    * same gate.
    *
    * `realtime-handshake.ts`'s `loadUserSummary` *also* narrows to three
-   * fields, which made this gate
-   * unfalsifiable for a while: deleting it failed no test, because nothing
-   * could produce a fat holder any more. `realtime-ack-leak.spec.ts` restores
-   * the ability to fail — it substitutes a `LockService` whose grant carries
-   * the whole row, which is exactly the shape a dropped `select` produces.
+   * fields, which made this gate unfalsifiable for a while: deleting it failed
+   * no test, because nothing could produce a fat holder any more.
+   * `realtime-ack-leak.spec.ts` restores the ability to fail — it
+   * substitutes a `LockService` whose grant carries the whole row, which is
+   * exactly the shape a dropped `select` produces.
    *
    * A payload the contract refuses is dropped rather than sent: the client's
    * `parseAck` would refuse it anyway, and an unacknowledged `cell:lock`

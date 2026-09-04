@@ -6,12 +6,12 @@
  *
  * `realtime.gateway.spec.ts` asserts that no acknowledgement carries an
  * `icsToken`, and it passes — but it passes because `realtime-handshake.ts`'s
- * `loadUserSummary` builds
- * its three fields explicitly, *not* because {@link RealtimeGateway.acknowledge}
- * validates. Mutation testing proved it: deleting the ack's `safeParse`
- * entirely failed **zero** tests. A defence that only the code path it guards
- * can reach is a defence nothing can falsify, and this project's signature
- * defect is claims that were reasoned rather than exercised.
+ * `loadUserSummary` builds its three fields explicitly, *not* because
+ * {@link RealtimeGateway.acknowledge} validates. Mutation testing proved it:
+ * deleting the ack's `safeParse` entirely failed **zero** tests. A defence that
+ * only the code path it guards can reach is a defence nothing can falsify, and
+ * this project's signature defect is claims that were reasoned rather than
+ * exercised.
  *
  * So this spec removes the narrowing that hides it. `LockService` is replaced
  * with one whose grant returns the **whole user row** as its holder — exactly
@@ -47,8 +47,7 @@ const SECRETS = ['icsToken', 'email', 'oktaId', 'role', 'active', 'preferredPark
  *
  * `as unknown as UserSummary` is the point of the class: TypeScript refuses
  * this shape, and the shipped `realtime-handshake.ts` `loadUserSummary` cannot
- * produce it — but a
- * Prisma `select` that is silently dropped can, and did.
+ * produce it — but a Prisma `select` that is silently dropped can, and did.
  *
  * Nothing expires here: expiry has its own tests against the real service in
  * `lock.service.spec.ts` and `realtime.gateway.spec.ts`, and a lapse in the
