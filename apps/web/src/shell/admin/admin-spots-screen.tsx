@@ -262,6 +262,9 @@ export function AdminSpotsScreen({
   ];
 
   const tableError = failureShownIn('table');
+  // Only the delete dialog carries its failure inside itself; the form dialog
+  // takes the same value through its own `errorMessage` prop.
+  const deleteError = dialog?.kind === 'delete' ? failureShownIn('dialog') : null;
 
   return (
     <ScreenDataGuard state={spots} onRetry={onRetry} headingLevel={3}>
@@ -331,16 +334,12 @@ export function AdminSpotsScreen({
             }}
             onCancel={() => changeDialog(null)}
           >
-            {dialog?.kind === 'delete' ? <DeleteError message={failureShownIn('dialog')} /> : null}
+            {deleteError === null ? null : <Toast tone="danger">{deleteError}</Toast>}
           </ConfirmDialog>
         </div>
       )}
     </ScreenDataGuard>
   );
-}
-
-function DeleteError({ message }: { readonly message: string | null }) {
-  return message === null ? null : <Toast tone="danger">{message}</Toast>;
 }
 
 /**
