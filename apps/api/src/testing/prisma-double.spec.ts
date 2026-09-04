@@ -41,6 +41,20 @@ describe('PrismaDouble', () => {
       expect(rows.map((row) => row.label)).toEqual(['A1', 'B1']);
     });
 
+    it('imposes no ordering when none was asked for', async () => {
+      // Prisma promises nothing about the order of an unordered findMany, and
+      // `bulk-reservation.service.ts` issues one. The double used to sort
+      // anyway, which would let a test rely on an order production may not
+      // give it — this pins the absence of that sort, not a preference for
+      // insertion order.
+      double.seedSpot({ label: 'B1', group: 'IT' });
+      double.seedSpot({ label: 'A1', group: 'SHARED' });
+
+      const rows = await double.asPrismaService().client.parkingSpot.findMany({});
+
+      expect(rows.map((row) => row.label)).toEqual(['B1', 'A1']);
+    });
+
     it('refuses a filter key it does not model instead of ignoring it', async () => {
       double.seedSpot({ label: 'A1' });
 
