@@ -14,11 +14,8 @@
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
-import { addDays, addMonths, parseDateOnly, todayInPrague } from '@lets-park/shared-types';
+import { parseDateOnly, todayInPrague } from '@lets-park/shared-types';
 import type { DateOnly } from '@lets-park/shared-types';
-
-/** Months in a year — the step `withYear` in `lot-screen.tsx` moves by. */
-const MONTHS_IN_YEAR = 12;
 
 /** The tile for one spot, whatever state it is in. */
 export function spotTile(page: Page, label: string): Locator {
@@ -53,35 +50,46 @@ export function spotDialog(page: Page): Locator {
  * Moves the screen to `target`.
  *
  * The day is component state, not a route, so it can only be reached through
- * the controls: the year and month `<select>`s, then the ‹ / › day steppers.
- * The number of steps is computed with the **application's own** date helpers
- * — `addMonths` owns the "31 January, one month on, is 28 February" clamp
- * (`lot-screen.tsx` moves the month through the same function), so mirroring
- * that arithmetic here rather than re-deriving it is what keeps the helper
- * correct on the four days of the year where it matters.
+ * the header's date pill, which opens `DatePickerDialog`. The year and month
+ * `<select>`s inside it only browse the grid — see `date-picker-dialog.tsx` —
+ * so this clicks the target day's own cell rather than stepping through days
+ * one at a time, the way the sticky footer bar this replaced required.
+ *
+ * The pill is found by its leading Czech weekday name rather than by the full
+ * formatted date: `formatFullDate` lives behind `@lets-park/i18n`'s barrel,
+ * which also exports `./lib/provider` (JSX), and this project's
+ * `tsconfig.json` has no `jsx` option — the same reason `lot-screen.tsx`'s
+ * date arithmetic used to be mirrored here with `@lets-park/shared-types`
+ * alone. A four-digit year alone is not enough to anchor it: a taken tile's
+ * accessible name carries the holder's plate (`doc/decision/`'s license-plate
+ * format is four digits too), so this anchors on the one thing on the whole
+ * screen that starts with a weekday name. The day cell carries the same full
+ * date as its accessible name — not the bare number the cell prints — so it
+ * is matched the same way: a weekday word, then the wanted day number
+ * followed immediately by a full stop, which no other day in the grid can
+ * also produce (`7.` cannot match inside `17.` or `27.`).
  */
+const CZECH_WEEKDAY_START = /^(pondělí|úterý|středa|čtvrtek|pátek|sobota|neděle) /u;
+
 export async function goToDate(page: Page, target: DateOnly): Promise<void> {
-  let current = todayInPrague();
   const wanted = parseDateOnly(target);
+  const from = parseDateOnly(todayInPrague());
 
-  const startYear = parseDateOnly(current).year;
-  if (wanted.year !== startYear) {
-    await page.getByRole('combobox', { name: 'Rok' }).selectOption(String(wanted.year));
-    current = addMonths(current, (wanted.year - startYear) * MONTHS_IN_YEAR);
+  await page.getByRole('button', { name: CZECH_WEEKDAY_START }).click();
+  const dialog = page.getByRole('dialog', { name: 'Vybrat datum' });
+  await expect(dialog).toBeVisible();
+
+  if (wanted.year !== from.year) {
+    await dialog.getByRole('combobox', { name: 'Rok' }).selectOption(String(wanted.year));
+  }
+  if (wanted.month !== from.month) {
+    await dialog.getByRole('combobox', { name: 'Měsíc' }).selectOption(String(wanted.month));
   }
 
-  const startMonth = parseDateOnly(current).month;
-  if (wanted.month !== startMonth) {
-    await page.getByRole('combobox', { name: 'Měsíc' }).selectOption(String(wanted.month));
-    current = addMonths(current, wanted.month - startMonth);
-  }
-
-  const forward = current < target;
-  const step = forward ? 'Následující den' : 'Předchozí den';
-  while (current !== target) {
-    await page.getByRole('button', { name: step }).click();
-    current = addDays(current, forward ? 1 : -1);
-  }
+  await dialog
+    .getByRole('button', { name: new RegExp(`^\\S+ ${String(wanted.day)}\\. `, 'u') })
+    .click();
+  await expect(dialog).toBeHidden();
 
   // Landing on a weekend or a public holiday would make every write on this
   // day impossible for a reason that has nothing to do with what is under

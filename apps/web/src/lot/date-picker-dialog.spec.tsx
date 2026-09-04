@@ -1,0 +1,87 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { IntlProvider, formatFullDate } from '@lets-park/i18n';
+import { DatePickerDialog } from './date-picker-dialog';
+
+/**
+ * The dialog's own job, on top of what `./date-picker-view.spec.ts` already
+ * covers for the grid arithmetic: it opens on the month of `selectedDate`,
+ * lets month/year navigation browse without moving that selection, and calls
+ * `onSelect` with the parsed date a cell button carries — never a raw click
+ * event, same convention as every other dialog in `lot/`.
+ */
+
+const SELECTED = '2026-09-15';
+const YEARS = [2025, 2026, 2027] as const;
+
+function renderDialog(overrides: { open?: boolean; selectedDate?: string } = {}) {
+  const onClose = jest.fn();
+  const onSelect = jest.fn();
+
+  const utils = render(
+    <IntlProvider>
+      <DatePickerDialog
+        open={overrides.open ?? true}
+        onClose={onClose}
+        selectedDate={overrides.selectedDate ?? SELECTED}
+        years={YEARS}
+        onSelect={onSelect}
+      />
+    </IntlProvider>
+  );
+
+  return { ...utils, onClose, onSelect, user: userEvent.setup() };
+}
+
+describe('DatePickerDialog — opening', () => {
+  it('renders nothing when closed', () => {
+    renderDialog({ open: false });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('opens on the month of selectedDate, with that day marked', () => {
+    renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+    expect(within(dialog).getByRole('button', { name: formatFullDate(SELECTED) })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+});
+
+describe('DatePickerDialog — browsing does not select', () => {
+  it('moves the grid a month forward without calling onSelect', async () => {
+    const { onSelect, user } = renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Následující den' }));
+
+    expect(
+      within(dialog).getByRole('button', { name: formatFullDate('2026-10-01') })
+    ).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('jumps the grid to a chosen month and year', async () => {
+    const { user } = renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Měsíc' }), '1');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Rok' }), '2027');
+
+    expect(
+      within(dialog).getByRole('button', { name: formatFullDate('2027-01-01') })
+    ).toBeInTheDocument();
+  });
+});
+
+describe('DatePickerDialog — picking a day', () => {
+  it('calls onSelect with the parsed date of the clicked cell', async () => {
+    const { onSelect, user } = renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+
+    await user.click(within(dialog).getByRole('button', { name: formatFullDate('2026-09-20') }));
+
+    expect(onSelect).toHaveBeenCalledWith('2026-09-20');
+  });
+});

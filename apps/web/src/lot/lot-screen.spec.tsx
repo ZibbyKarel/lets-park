@@ -1,6 +1,7 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
+import { formatFullDate } from '@lets-park/i18n';
 import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
 import { profile, T0 } from '../testing/fixtures';
 import { createProviderWrapper } from '../testing/providers';
@@ -556,22 +557,31 @@ describe('LotScreen — onCancelReservation looks the id up off day.spots', () =
   });
 });
 
-describe('LotScreen — withMonth and withYear', () => {
-  it('clamps the day when a month change lands on a shorter month', async () => {
-    // FIXED_TODAY is 2026-01-31; February 2026 has 28 days.
+describe('LotScreen — the header date picker', () => {
+  it('browses to another month without moving the day, until one is picked', async () => {
+    // FIXED_TODAY is 2026-01-31; February 2026 has 28 days, so day 31 cannot
+    // be clicked there — proof that browsing the grid does not commit a date
+    // on its own.
     const { user } = setup();
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Měsíc' }), '2');
+    await user.click(screen.getByRole('button', { name: formatFullDate(DATE) }));
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Měsíc' }), '2');
+    await user.click(within(dialog).getByRole('button', { name: formatFullDate('2026-02-28') }));
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('28. února 2026');
+    expect(screen.queryByRole('dialog', { name: 'Vybrat datum' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: formatFullDate('2026-02-28') })).toBeInTheDocument();
   });
 
-  it('moves the year while keeping the day and month, when it fits', async () => {
+  it('browses to another year, then commits whichever day is picked', async () => {
     const { user } = setup();
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Rok' }), '2027');
+    await user.click(screen.getByRole('button', { name: formatFullDate(DATE) }));
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Rok' }), '2027');
+    await user.click(within(dialog).getByRole('button', { name: formatFullDate('2027-01-31') }));
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('31. ledna 2027');
+    expect(screen.getByRole('button', { name: formatFullDate('2027-01-31') })).toBeInTheDocument();
   });
 });
 

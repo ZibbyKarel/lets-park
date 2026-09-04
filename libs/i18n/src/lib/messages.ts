@@ -183,10 +183,8 @@ export interface CzechSettingsMessages {
  * decline (the admin screen's "1 den / 2 dny / 5 dní") that screen is Task 27's.
  */
 export interface CzechLotMessages {
-  /** `4 volných` — the green-dot pill in the header. */
-  readonly freeCount: string;
-  /** `5 obsazených` — the blue-dot pill next to it. */
-  readonly takenCount: string;
+  /** `5 z 9 obsazeno` — the pill in the header. */
+  readonly occupiedCount: string;
   /** The header's primary action. Its modal's copy is the `bulk` namespace. */
   readonly bulkReservation: string;
 
@@ -219,18 +217,33 @@ export interface CzechLotMessages {
   readonly legendFree: string;
   readonly legendWaitlist: string;
 
-  /** `‹` / `›` / `Dnes` and the two selectors of the sticky day bar. */
+  /** `‹` / `›` / `Dnes` beside the header's date pill. */
   readonly previousDay: string;
   readonly nextDay: string;
   readonly today: string;
-  readonly monthLabel: string;
-  readonly yearLabel: string;
-  /** Second line of the day bar on an ordinary day. */
+  /** Second line of the date pill on an ordinary day. */
   readonly workday: string;
   /** Second line on a public holiday: `STÁTNÍ SVÁTEK · Den české státnosti`. */
   readonly holiday: string;
   /** Second line on a Saturday or Sunday. */
   readonly weekend: string;
+
+  /** Title of the date-picker dialog the header's date pill opens. */
+  readonly datePickerTitle: string;
+  /** The two selectors inside it. */
+  readonly monthLabel: string;
+  readonly yearLabel: string;
+  readonly weekdayMon: string;
+  readonly weekdayTue: string;
+  readonly weekdayWed: string;
+  readonly weekdayThu: string;
+  readonly weekdayFri: string;
+  readonly weekdaySat: string;
+  readonly weekdaySun: string;
+  /** Accessible name of a day button, interpolating its full date. */
+  readonly dayCell: string;
+  /** Accessible name of the calendar grid itself. */
+  readonly gridLabel: string;
 
   /** Green banner, `lockMode: 'AUTO'` — carries the window's last day. */
   readonly bannerOpen: string;
@@ -634,8 +647,7 @@ export const csMessages: CzechMessages = {
       'Preferované místo už není k dispozici. Zvolte prosím jiné, nebo možnost Bez preference.',
   },
   lot: {
-    freeCount: '{count} volných',
-    takenCount: '{count} obsazených',
+    occupiedCount: '{taken} z {total} obsazeno',
     bulkReservation: 'Hromadná rezervace',
 
     groupFree: '{free} z {total} volných',
@@ -657,11 +669,22 @@ export const csMessages: CzechMessages = {
     previousDay: 'Předchozí den',
     nextDay: 'Následující den',
     today: 'Dnes',
-    monthLabel: 'Měsíc',
-    yearLabel: 'Rok',
     workday: 'Pracovní den',
     holiday: 'Státní svátek · {name}',
     weekend: 'Víkend',
+
+    datePickerTitle: 'Vybrat datum',
+    monthLabel: 'Měsíc',
+    yearLabel: 'Rok',
+    weekdayMon: 'PO',
+    weekdayTue: 'ÚT',
+    weekdayWed: 'ST',
+    weekdayThu: 'ČT',
+    weekdayFri: 'PÁ',
+    weekdaySat: 'SO',
+    weekdaySun: 'NE',
+    dayCell: '{date}',
+    gridLabel: 'Výběr data',
 
     bannerOpen: 'Rezervace na {month} jsou otevřené — zapisovat lze do {until}.',
     bannerOpenForced: 'Rezervace na {month} jsou otevřené.',

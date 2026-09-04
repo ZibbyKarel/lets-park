@@ -88,11 +88,12 @@ const DATE_PATTERN = /\d{4}-\d{2}-\d{2}/u;
 /**
  * Every date this page has asked to subscribe to, in order of first request.
  *
- * A `Set` rather than a "current room": `goToDate` steps through days, so a
- * page subscribes and unsubscribes several times on its way to the target, and
- * what a caller wants to know is whether the one it cares about was ever
- * reached. Unsubscription is not tracked because no spec navigates *away* from
- * the day it is about to assert on.
+ * A `Set` rather than a "current room": `goToDate` opens the date picker on
+ * today's room and then jumps straight to the target's, so a page still
+ * subscribes to more than one date on its way there, and what a caller wants
+ * to know is whether the one it cares about was ever reached. Unsubscription
+ * is not tracked because no spec navigates *away* from the day it is about to
+ * assert on.
  */
 type SubscribedDates = ReadonlySet<string>;
 

@@ -8,7 +8,7 @@
  * that cache entry, holds the cell lock while the dialog is open, and hands
  * plain data to the presentational pieces beside it. Everything it decides is
  * a pure function in `./lot-view`; everything it draws is
- * `./lot-grid`, `./lot-header`, `./date-nav-bar` and `./spot-dialog`.
+ * `./lot-grid`, `./lot-header`, `./date-picker-dialog` and `./spot-dialog`.
  *
  * Nothing here names `@tanstack/react-query`, `socket.io-client`, `next-intl`,
  * `next-auth` or `@orpc/client` — the wrapper rule, enforced by
@@ -18,7 +18,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDays,
-  addMonths,
   formatMonthName,
   parseDateOnly,
   todayInPrague,
@@ -33,7 +32,7 @@ import { useApi } from '../shell/api-provider';
 import { useCurrentUser } from '../shell/use-current-user';
 import { ScreenError, ScreenLoading } from '../shell/screen-state';
 import { LotHeader, RealtimeNotice, WindowBanner } from './lot-header';
-import { DayBar } from './date-nav-bar';
+import { DatePickerDialog } from './date-picker-dialog';
 import { LotGrid } from './lot-grid';
 import { BulkReservationModal } from './bulk-modal';
 import { SpotDialog } from './spot-dialog';
@@ -47,26 +46,8 @@ import {
   toRealtimeNoticeView,
 } from './lot-view';
 
-/** How far the year picker reaches either side of the day on screen. */
+/** How far the date-picker's year selector reaches either side of the day on screen. */
 const YEAR_PICKER_RADIUS = 1;
-
-const MONTHS_IN_YEAR = 12;
-
-/**
- * Moves the day to another month or year.
- *
- * Always through `addMonths`, never by rebuilding the parts: that function
- * already owns the "31 January, one month on, is 28 February" clamp
- * (`@lets-park/shared-types`), and a second implementation of that rule here
- * would be a second thing to get wrong on four days of the year.
- */
-function withMonth(date: DateOnly, month: number): DateOnly {
-  return addMonths(date, month - parseDateOnly(date).month);
-}
-
-function withYear(date: DateOnly, year: number): DateOnly {
-  return addMonths(date, (year - parseDateOnly(date).year) * MONTHS_IN_YEAR);
-}
 
 export function LotScreen() {
   const t = useTranslations('lot');
@@ -89,6 +70,7 @@ export function LotScreen() {
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // The modal's grid is the month of `date`, and its selection belongs to that
   // month — the contract refuses a batch spanning two. Moving the day is
@@ -239,6 +221,7 @@ export function LotScreen() {
     <>
       <LotHeader
         date={date}
+        note={toDayNoteView(date)}
         counts={counts}
         sectionTitle={sections('lot')}
         // The design's `batchAllowed = windowOpen || admin`, expressed through
@@ -253,6 +236,18 @@ export function LotScreen() {
         showBulk={day.canReserveMonth}
         onBulk={() => {
           setBulkOpen(true);
+        }}
+        onPreviousDay={() => {
+          setDate((current) => addDays(current, -1));
+        }}
+        onNextDay={() => {
+          setDate((current) => addDays(current, 1));
+        }}
+        onToday={() => {
+          setDate(todayInPrague());
+        }}
+        onOpenDatePicker={() => {
+          setDatePickerOpen(true);
         }}
       />
 
@@ -269,6 +264,19 @@ export function LotScreen() {
         }}
         anchorDate={date}
         canReserveMonth={day.canReserveMonth}
+      />
+
+      <DatePickerDialog
+        open={datePickerOpen}
+        onClose={() => {
+          setDatePickerOpen(false);
+        }}
+        selectedDate={date}
+        years={years}
+        onSelect={(selected) => {
+          setDate(selected);
+          setDatePickerOpen(false);
+        }}
       />
 
       <WindowBanner banner={banner} />
@@ -288,29 +296,6 @@ export function LotScreen() {
       ) : (
         <LotGrid groups={groups} onOpenSpot={openDialog} onAdminOpenSpot={openDialog} />
       )}
-
-      <DayBar
-        date={date}
-        note={toDayNoteView(date)}
-        month={parts.month}
-        year={parts.year}
-        years={years}
-        onPreviousDay={() => {
-          setDate((current) => addDays(current, -1));
-        }}
-        onNextDay={() => {
-          setDate((current) => addDays(current, 1));
-        }}
-        onToday={() => {
-          setDate(todayInPrague());
-        }}
-        onMonth={(month) => {
-          setDate((current) => withMonth(current, month));
-        }}
-        onYear={(year) => {
-          setDate((current) => withYear(current, year));
-        }}
-      />
 
       <SpotDialog
         spot={openSpot}

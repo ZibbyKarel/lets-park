@@ -3,23 +3,26 @@
 /**
  * Everything above the map. All presentational.
  *
- * - {@link LotHeader} — the section eyebrow, the day as a heading, the two
- *   count pills and the bulk-reservation button;
+ * - {@link LotHeader} — the date pill (prev/next day, and a button that opens
+ *   `./date-picker-dialog`'s `DatePickerDialog`), the "Dnes" shortcut, the
+ *   occupancy pill and the bulk-reservation button. This is where
+ *   `./date-nav-bar`'s sticky footer bar moved to
+ *   (`doc/design/lets-park-design.dc.html`'s current `isLot` header row) —
+ *   there is no footer left on this screen (Task 25 revisited).
  * - {@link WindowBanner} — the one true sentence about the month's window;
  * - {@link RealtimeNotice} — the affordance for a refused socket.
- *
- * The sticky day picker at the bottom of the design is `./date-nav-bar`'s
- * `DayBar`, not this file's — split out for Task 25 (`doc/decision/0140-*`).
  */
 
 import { Button, Stack, cx } from '@lets-park/design-system/primitives';
 import { formatFullDate, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
-import type { BannerView, LotCounts } from './lot-view';
+import type { BannerView, DayNoteView, LotCounts } from './lot-view';
 
 export interface LotHeaderProps {
   readonly date: DateOnly;
+  readonly note: DayNoteView;
   readonly counts: LotCounts;
+  /** Accessible page title. Not shown — the design has no visible heading. */
   readonly sectionTitle: string;
   /**
    * `windowOpen || admin` — the design's `batchAllowed`. When it is false the
@@ -29,28 +32,66 @@ export interface LotHeaderProps {
    */
   readonly showBulk: boolean;
   readonly onBulk: () => void;
+  readonly onPreviousDay: () => void;
+  readonly onNextDay: () => void;
+  readonly onToday: () => void;
+  /** Opens `./date-picker-dialog`'s `DatePickerDialog`, owned by `./lot-screen.tsx`. */
+  readonly onOpenDatePicker: () => void;
 }
 
-export function LotHeader({ date, counts, sectionTitle, showBulk, onBulk }: LotHeaderProps) {
+export function LotHeader({
+  date,
+  note,
+  counts,
+  sectionTitle,
+  showBulk,
+  onBulk,
+  onPreviousDay,
+  onNextDay,
+  onToday,
+  onOpenDatePicker,
+}: LotHeaderProps) {
   const t = useTranslations('lot');
 
   return (
-    <Stack direction="row" wrap align="end" justify="between" spacing={6} className="mb-6">
-      <div>
-        <p className="mb-2 text-xs font-bold uppercase tracking-caps text-fg-2">{sectionTitle}</p>
-        <h1 className="text-4xl font-bold leading-tight tracking-tight text-fg">
-          {formatFullDate(date)}
-        </h1>
-      </div>
+    <Stack direction="row" wrap align="center" justify="between" spacing={6} className="mb-6">
+      {/* The design has no visible page title — the date pill is the heading
+          now — but the document still needs one `h1` for assistive tech. */}
+      <h1 className="sr-only">{sectionTitle}</h1>
 
       <Stack direction="row" wrap align="center" spacing={3}>
-        <p className="flex h-9 items-center gap-2 rounded-cta border border-border bg-bg px-4 text-base">
-          <span aria-hidden="true" className="size-2 rounded-cta bg-car-2" />
-          {t('freeCount', { count: counts.free })}
+        <Stack
+          direction="row"
+          align="center"
+          spacing={1}
+          className="rounded-cta border border-border bg-bg p-1"
+        >
+          <Button variant="ghost" size="sm" aria-label={t('previousDay')} onClick={onPreviousDay}>
+            ‹
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onOpenDatePicker}>
+            {formatFullDate(date)}
+          </Button>
+          <Button variant="ghost" size="sm" aria-label={t('nextDay')} onClick={onNextDay}>
+            ›
+          </Button>
+        </Stack>
+        <p
+          className={cx(
+            'text-xs font-bold uppercase tracking-caps',
+            note.highlighted ? 'text-fg' : 'text-fg-3'
+          )}
+        >
+          {t(note.key, { name: note.name })}
         </p>
+      </Stack>
+
+      <Stack direction="row" wrap align="center" spacing={3}>
+        <Button variant="outline" size="sm" onClick={onToday}>
+          {t('today')}
+        </Button>
         <p className="flex h-9 items-center gap-2 rounded-cta border border-border bg-bg px-4 text-base">
-          <span aria-hidden="true" className="size-2 rounded-cta bg-car-3" />
-          {t('takenCount', { count: counts.taken })}
+          {t('occupiedCount', { taken: counts.taken, total: counts.free + counts.taken })}
         </p>
         {showBulk ? (
           <Button size="sm" onClick={onBulk}>

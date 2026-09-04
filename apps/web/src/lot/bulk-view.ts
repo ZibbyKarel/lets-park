@@ -20,19 +20,19 @@
  */
 
 import {
-  addDays,
   compareDateOnly,
-  dayOfWeek,
-  endOfMonth,
   isBefore,
   isBusinessDay,
   isWeekend,
   parseDateOnly,
-  startOfMonth,
-  toYearMonth,
   type DateOnly,
-  type YearMonth,
 } from '@lets-park/i18n';
+import {
+  buildCalendarGrid,
+  type CalendarGrid,
+  type CalendarSlot,
+  type CalendarWeek,
+} from './calendar-grid';
 import type {
   BulkDayPlan,
   BulkDayResult,
@@ -71,26 +71,12 @@ export type BulkDayCell = {
  * part of this request anyway (the contract refuses a batch spanning two
  * months).
  *
- * `key` is minted here rather than in the component so that the renderer never
- * has to fall back to an array index for a blank slot, which is a real React
- * hazard rather than a lint preference: the grid re-lays out when the month
- * changes, and index keys would carry a February cell's state onto a March one.
+ * The layout itself — which days these are, and how they pad to whole weeks —
+ * is `./calendar-grid.ts`'s; this module only supplies {@link BulkDayCell}.
  */
-export interface BulkGridSlot {
-  readonly key: string;
-  readonly day: BulkDayCell | null;
-}
-
-export interface BulkGridWeek {
-  readonly key: string;
-  readonly slots: readonly BulkGridSlot[];
-}
-
-export interface BulkMonthGrid {
-  readonly month: YearMonth;
-  /** Rows of exactly seven slots, Monday first. */
-  readonly weeks: readonly BulkGridWeek[];
-}
+export type BulkGridSlot = CalendarSlot<BulkDayCell>;
+export type BulkGridWeek = CalendarWeek<BulkDayCell>;
+export type BulkMonthGrid = CalendarGrid<BulkDayCell>;
 
 /**
  * One day's cell.
@@ -128,32 +114,7 @@ function toCell(date: DateOnly, today: DateOnly): BulkDayCell {
  * let one stale cell throw away a month's selection.
  */
 export function buildMonthGrid(anchor: DateOnly, today: DateOnly): BulkMonthGrid {
-  const month = toYearMonth(anchor);
-  const first = startOfMonth(anchor);
-  const dayCount = parseDateOnly(endOfMonth(anchor)).day;
-  const leadingBlanks = dayOfWeek(first) - 1;
-
-  const slots: BulkGridSlot[] = Array.from({ length: leadingBlanks }, (_unused, index) => ({
-    key: `${month}-lead-${String(index)}`,
-    day: null,
-  }));
-  for (let offset = 0; offset < dayCount; offset += 1) {
-    const day = toCell(addDays(first, offset), today);
-    slots.push({ key: day.date, day });
-  }
-  while (slots.length % DAYS_PER_WEEK !== 0) {
-    slots.push({ key: `${month}-trail-${String(slots.length)}`, day: null });
-  }
-
-  const weeks: BulkGridWeek[] = [];
-  for (let start = 0; start < slots.length; start += DAYS_PER_WEEK) {
-    weeks.push({
-      key: `${month}-w${String(start / DAYS_PER_WEEK)}`,
-      slots: slots.slice(start, start + DAYS_PER_WEEK),
-    });
-  }
-
-  return { month, weeks };
+  return buildCalendarGrid(anchor, (date) => toCell(date, today));
 }
 
 /**
