@@ -10,7 +10,7 @@ import * as z from 'zod';
 import { userSchema } from '../schemas/entities';
 import { userRoleSchema } from '../schemas/enums';
 import { idSchema } from '../schemas/primitives';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors } from './builder';
 
 /**
  * What an admin may see of another person: every field of `userSchema` except

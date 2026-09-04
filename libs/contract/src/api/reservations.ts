@@ -8,7 +8,7 @@
 import * as z from 'zod';
 import { reservationSchema } from '../schemas/entities';
 import { dateOnlySchema, idSchema } from '../schemas/primitives';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors } from './builder';
 
 /**
  * Derived from the entity, not written out again: the server owns `id`,

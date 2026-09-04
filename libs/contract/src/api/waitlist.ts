@@ -8,7 +8,7 @@
 import * as z from 'zod';
 import { waitlistEntrySchema } from '../schemas/entities';
 import { dateOnlySchema, idSchema } from '../schemas/primitives';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors } from './builder';
 
 export const joinWaitlistInputSchema = waitlistEntrySchema.pick({
   parkingSpotId: true,

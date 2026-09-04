@@ -22,7 +22,7 @@ import {
   MAX_BULK_BOOKING_DAYS,
 } from '@lets-park/shared-types';
 import { dateOnlySchema, idSchema, yearMonthSchema } from '../schemas/primitives';
-import { authed, contractErrors } from './errors';
+import { authed, contractErrors } from './builder';
 
 export const bulkDayOutcomeKindSchema = z.enum(BULK_DAY_OUTCOMES);
 export type BulkDayOutcomeKind = z.infer<typeof bulkDayOutcomeKindSchema>;

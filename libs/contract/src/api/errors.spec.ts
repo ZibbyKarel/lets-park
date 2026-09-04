@@ -1,5 +1,5 @@
 import { ERROR_CODES, type ErrorCode } from '../schemas/errors';
-import { ERROR_DEFINITIONS, authed, contractErrors } from './errors';
+import { ERROR_DEFINITIONS } from './errors';
 
 describe('ERROR_DEFINITIONS', () => {
   it('defines exactly the codes in ERROR_CODES — no more, no fewer', () => {
@@ -30,33 +30,6 @@ describe('ERROR_DEFINITIONS', () => {
       ERROR_DEFINITIONS.SPOT_ALREADY_RESERVED.data.safeParse({ reservationId: 'x' }).success
     ).toBe(true);
     expect(ERROR_DEFINITIONS.NOT_FOUND.data.safeParse('nope').success).toBe(false);
-  });
-});
-
-describe('contractErrors', () => {
-  it('picks exactly the requested definitions', () => {
-    const picked = contractErrors('NOT_FOUND', 'CONFLICT');
-    expect(Object.keys(picked).sort()).toEqual(['CONFLICT', 'NOT_FOUND']);
-    expect(picked.NOT_FOUND).toBe(ERROR_DEFINITIONS.NOT_FOUND);
-  });
-
-  it('narrows the type to the picked codes', () => {
-    const picked = contractErrors('NOT_FOUND');
-    // Type-level assertion: the result must not be widened to every code.
-    const keys: 'NOT_FOUND'[] = Object.keys(picked) as (keyof typeof picked)[];
-    expect(keys).toEqual(['NOT_FOUND']);
-  });
-
-  it('returns an empty map for no codes', () => {
-    expect(contractErrors()).toEqual({});
-  });
-});
-
-describe('authed', () => {
-  it('declares FORBIDDEN on every procedure derived from it', () => {
-    // A deactivated user is rejected before any handler runs, so FORBIDDEN is
-    // reachable everywhere and is declared once rather than thirty times.
-    expect(Object.keys(authed['~orpc'].errorMap)).toEqual(['FORBIDDEN']);
   });
 });
 

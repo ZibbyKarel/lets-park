@@ -1,7 +1,7 @@
 import { type AnyContractProcedure, isContractProcedure } from '@orpc/contract';
 import { DATE_A, TIMESTAMP, UUID_A, UUID_B, UUID_C } from '../__fixtures__/fixtures';
 import { ERROR_CODES } from '../schemas/errors';
-import { noInputSchema } from './errors';
+import { noInputSchema } from './builder';
 import type { ContractClient } from './router';
 import { contract } from './router';
 

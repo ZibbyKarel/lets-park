@@ -10,7 +10,7 @@ import * as z from 'zod';
 import { parkingSpotSchema } from '../schemas/entities';
 import { parkingGroupSchema } from '../schemas/enums';
 import { idSchema } from '../schemas/primitives';
-import { authed, contractErrors, noInputSchema } from './errors';
+import { authed, contractErrors, noInputSchema } from './builder';
 
 export const spotListOutputSchema = z.object({
   spots: z.array(parkingSpotSchema),

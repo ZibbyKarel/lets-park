@@ -6,7 +6,7 @@
 import * as z from 'zod';
 import { userSchema } from '../schemas/entities';
 import { idSchema } from '../schemas/primitives';
-import { authed, contractErrors, noInputSchema } from './errors';
+import { authed, contractErrors, noInputSchema } from './builder';
 
 /**
  * The caller's own record, `icsToken` included.

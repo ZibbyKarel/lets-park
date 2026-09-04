@@ -13,7 +13,7 @@ import * as z from 'zod';
 import { parkingSpotSchema, publicReservationSchema } from '../schemas/entities';
 import { dateOnlySchema, idSchema } from '../schemas/primitives';
 import { monthWindowOverviewSchema } from '../schemas/reservation-window';
-import { authed } from './errors';
+import { authed } from './builder';
 
 /** One spot's row in the day overview. */
 export const daySpotOverviewSchema = z.object({

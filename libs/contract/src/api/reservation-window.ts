@@ -13,7 +13,7 @@ import {
   monthWindowOverviewSchema,
   reservationWindowSettingsSchema,
 } from '../schemas/reservation-window';
-import { authed, contractErrors, noInputSchema } from './errors';
+import { authed, contractErrors, noInputSchema } from './builder';
 
 export const getReservationWindowSettingsContract = authed
   .input(noInputSchema)
