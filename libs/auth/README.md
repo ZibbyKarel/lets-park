@@ -6,8 +6,9 @@ in the workspace allowed to import that package, including `next-auth/react`,
 
 Two entry points:
 
-- `@lets-park/auth` — server: `createAuth`, `createAuthConfig`, the token refresher, the
-  access-token provider.
+- `@lets-park/auth` — server: `createAuth`, `OKTA_PROVIDER_ID`, and the types `Auth` and
+  `AuthOptions`. `createAuth` is the one way in; `createAuthConfig`, the token refresher and
+  the access-token seam are its implementation and stay module-scoped.
 - `@lets-park/auth/client` — browser: `AuthProvider`, `useRequireAuth`,
   `useAccessTokenProvider`, plus `useSession`/`signIn`/`signOut`.
 

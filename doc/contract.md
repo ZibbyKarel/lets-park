@@ -691,7 +691,7 @@ The contract builds on it, but the backend and `libs/i18n` use it too.
 | --- | --- |
 | date-only | `isDateOnly`, `assertDateOnly`, `parseDateOnly`, `formatDateOnly`, `addDays`, `addMonths`, `differenceInDays`, `compareDateOnly`, `isBefore/isAfter/isSameDay`, `startOfMonth`, `endOfMonth`, `toYearMonth`, `startOfYearMonth`, `dayOfWeek`, `isWeekend`, `daysInMonth` |
 | Europe/Prague | `PRAGUE_TIME_ZONE`, `todayInPrague`, `toDateOnlyInPrague`, `startOfDayInPrague`, `endOfDayExclusiveInPrague` |
-| Czech public holidays | `easterSunday`, `goodFriday`, `easterMonday`, `czechPublicHolidays`, `czechPublicHolidayOn`, `isCzechPublicHoliday`, `isBusinessDay` |
+| Czech public holidays | `czechPublicHolidayOn`, `isCzechPublicHoliday`, `isBusinessDay`, and the type `CzechHoliday` |
 | enums and defaults | `PARKING_GROUPS`, `USER_ROLES`, `RESERVATION_LOCK_MODES`, `MONTH_LOCK_STATES`, `DEFAULT_OPEN_DAYS_BEFORE`, `MIN/MAX_OPEN_DAYS_BEFORE`, `DEFAULT_RESERVATION_LOCK_MODE` |
 | bulk reservation | `BULK_DAY_OUTCOMES`, `BULK_UNAVAILABLE_REASONS`, `MAX_BULK_BOOKING_DAYS` |
 | reservation window | `isMonthOpen`, `monthLockState`, `reservationWindowRange`, `MAX_MONTH_WINDOW_SPAN` |
@@ -701,6 +701,17 @@ Arithmetic is calendar-based, and the timezone is resolved at a single
 boundary — see `doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary.md`. Movable holidays (Good Friday, Easter
 Monday) are computed with the Meeus/Jones/Butcher algorithm, not from a
 table, so they never go stale.
+
+The holiday row is a **named** export list rather than a star, and it is
+shorter than the module behind it. The Easter arithmetic (`easterSunday`,
+`goodFriday`, `easterMonday`, `GOOD_FRIDAY_FIRST_YEAR`) and the year's holiday
+table (`czechPublicHolidays`, `CZECH_HOLIDAY_IDS`, `CzechHolidayId`) stay
+module-scoped: they are how the calendar is *computed*, not what a caller asks
+it, nothing outside the lib names any of them, and `czech-holidays.spec.ts`
+imports the module directly. The narrowness matters more here than elsewhere
+because this barrel is also `@lets-park/i18n`'s, re-exported wholesale under
+the same names (`doc/decision/0003-*`) — so a symbol published here is
+published to the browser bundle too.
 
 ---
 

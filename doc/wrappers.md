@@ -358,8 +358,19 @@ including `next-auth/react`, `next-auth/jwt` and `next-auth/providers/okta`, all
 
 | import path | runs where | contains |
 | --- | --- | --- |
-| `@lets-park/auth` | Next.js server runtime | `createAuth`, `createAuthConfig` and its callbacks, `createTokenRefresher`, `createAccessTokenProvider` |
+| `@lets-park/auth` | Next.js server runtime | `createAuth`, `OKTA_PROVIDER_ID`, and the types `Auth` and `AuthOptions` |
 | `@lets-park/auth/client` | browser | `AuthProvider`, `useRequireAuth`, `useAccessTokenProvider`, and `useSession`/`signIn`/`signOut` re-exported |
+
+There is exactly one way in on the server side, and it is `createAuth`: one call in `apps/web`
+produces the route handlers, the universal `auth()`, server-side `signIn`/`signOut` and a
+`getAccessToken` ready to hand to `createApiClient`. `OKTA_PROVIDER_ID` sits beside it because
+the sign-in page has to name the provider it dials. Everything the lib is assembled from —
+`createAuthConfig` and its three callbacks, the token refresher, the access-token seam, the
+sign-out revocation registry — stays module-scoped: it is `createAuth`'s implementation, not a
+second supported way to build an Auth.js instance, and publishing it made it impossible to
+tell from the interface which of twenty-eight symbols was the entry point. The lib's own specs
+reach them through `./lib/config`, `./lib/refresh`, `./lib/revocation` and
+`./lib/access-token`.
 
 The split is the same idea as `@lets-park/contract` / `@lets-park/contract/realtime`: Auth.js's
 server half pulls in route handlers and `next/server`, which have no business in a browser
@@ -518,18 +529,34 @@ shape written down twice.
 | export | what it is |
 | --- | --- |
 | `RealtimeProvider` | the one connection, in context. Rendered once, in `apps/web`'s provider boundary |
-| `useRealtimeConnection` | **creates** the socket — the handshake token, the status, the teardown. `RealtimeProvider` is this plus a context |
-| `useRealtime` | **reads** the connection — `{ socket, status, reconnect, reportInvalidPayload }`. Throws outside a provider rather than silently doing nothing |
+| `useRealtime` | **reads** the connection — `{ status, reconnect, reportInvalidPayload }`. Throws outside a provider rather than silently doing nothing |
 | `RealtimeStatus` | `connecting \| connected \| disconnected \| rejected`. `rejected` is a refused handshake: terminal for that socket, and the one status a UI can offer an action on (`reconnect()`) |
 | `useRealtimeEvent` | one server → client event, payload already parsed against its contract schema |
 | `useDayRoom` | joins one day's room, and rejoins it after every reconnect |
 | `useCellLock` | the editing hold: take, renew, release |
-| `createRealtimeSocket` | the factory, for the app's own composition and for tests outside React |
-| `parseServerEvent` / `parseAck` | the parsing layer on its own |
 | `AccessTokenProvider` | re-exported from `@lets-park/api-client`, not redeclared — see below |
 
-One creator, one reader. A feature cannot open a second connection by rendering a component
-twice.
+**One creator, and it is not exported at all.** `useRealtimeConnection` — the hook that builds
+the socket, owns its lifetime and tears it down — stays module-scoped, so `RealtimeProvider`
+is the only way to open a connection. That is a stronger version of the guarantee the barrel
+used to state as "one creator, one reader": a feature cannot open a second connection by
+rendering a component twice, and now it cannot open one at all without going through the
+provider.
+
+`createRealtimeSocket`, `toHandshakeAuth`, `parseServerEvent`, `parseAck`, the cell-lock
+timing constants and the two delay functions are withheld for the same reason, plus a sharper
+one: they traffic in `socket.io-client`'s `Socket`, which is the single object this whole
+wrapper exists to keep out of `apps/web`. The ESLint ban is on the **import**, and a
+re-exported type walks straight past it — publishing the factory would have handed the app the
+banned object through the front door. The lib's own specs reach all of it through
+`./lib/socket`, `./lib/connection`, `./lib/validation` and `./lib/timing`.
+
+`useRealtime` returns `RealtimeConnection`, which does **not** name the socket. The provider
+still puts one into context at runtime — `RealtimeInternals` is what the hooks inside this lib
+actually read — but neither that interface nor `useRealtimeInternals` leaves the barrel, so
+app code has no type to cast to and no hook to reach it with. Every consumer in `apps/web`
+destructures `status` and `reconnect` and nothing else, which is what the narrower type now
+says out loud.
 
 ### Usage
 
@@ -674,9 +701,15 @@ That is the entire public surface a caller needs: contract values in, an RFC 554
 the property step 4 of the recipe above asks for, and `calendar-pipeline.spec.ts` is the running
 example of it (a real HTTP response, built through the wrapper, parsed by an independent library).
 
-The other exports are the pieces a caller may legitimately need to *assert* on:
-`ICS_CALENDAR_NAME`, `ICS_REFRESH_INTERVAL_SECONDS`, `ICS_UID_DOMAIN`, `icsEventSummary`,
-`icsEventDescription`, `icsEventUid`.
+The only other exports are the two pieces a caller legitimately needs to *assert* on:
+`ICS_CALENDAR_NAME` and `icsEventUid`. `apps/api`'s calendar pipeline suite reads a rendered
+feed back and has to name what it expects to find in it; writing those two out a second time
+there is how a test starts passing against the wrong document.
+
+`ICS_REFRESH_INTERVAL_SECONDS`, `ICS_UID_DOMAIN`, `icsEventSummary` and `icsEventDescription`
+stay module-scoped. They are how the document is built, not what a caller asks for, and the
+lib's own spec imports them from `./lib/reservation-calendar` already — a caller that wanted
+one of them would be reimplementing `buildReservationCalendar` rather than using it.
 
 ### What the wrapper is actually protecting against
 
