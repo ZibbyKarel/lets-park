@@ -24,11 +24,8 @@ npx prisma db seed                    # development fixture: 9 spots, 4 users
 npm run dev                           # api on :3000, web on :4200
 ```
 
-Then open <http://localhost:4200> and sign in. `mock-oauth2-server` asks for a
-subject and accepts anything; type `dev-user`, and put
-`{"email":"user@example.com","name":"Dev User"}` in its _Optional claims JSON_
-box — the API needs an `email` to recognise the seeded account
-(`doc/decision/0180-the-e2e-login-types-the-claims-the-mock-issuer-does-not-mint`).
+Then open <http://localhost:4200> and sign in — see **How to log in on dev**,
+below.
 
 |             |                                                                                                                         |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -39,6 +36,28 @@ box — the API needs an `email` to recognise the seeded account
 
 `.env` is git-ignored and **does not travel with a git worktree**; a missing
 `DATABASE_URL` is the usual cause of a mysterious `P1000`.
+
+## How to log in on dev
+
+`mock-oauth2-server` asks for a subject and accepts anything; the API matches
+the seeded account by **email**, so it has to be given as an optional claim.
+On the sign-in screen, click the Okta button, then in the mock issuer's form
+enter a subject and put the JSON below in its _Optional claims JSON_ box
+(`doc/decision/0180-the-e2e-login-types-the-claims-the-mock-issuer-does-not-mint`).
+Leaving the claims box empty signs you in without an `email`, which the API
+does not recognise.
+
+| Persona      | Subject        | Optional claims JSON                                     | Role  |
+| ------------ | -------------- | -------------------------------------------------------- | ----- |
+| Dev Admin    | `dev-admin`    | `{"email":"admin@example.com","name":"Dev Admin"}`       | ADMIN |
+| Dev User     | `dev-user`     | `{"email":"user@example.com","name":"Dev User"}`         | USER  |
+| Dev User 2   | `dev-user2`    | `{"email":"user2@example.com","name":"Dev User Two"}`    | USER  |
+| Dev Inactive | `dev-inactive` | `{"email":"inactive@example.com","name":"Dev Inactive"}` | USER  |
+
+These four come from the seed fixture (`libs/database/src/lib/seed-data.ts`)
+and only exist after `npx prisma db seed`. Open a second browser (or a private
+window) as `dev-user2` to see the realtime cell-lock and booking broadcasts
+land in another tab.
 
 ## Everyday commands
 

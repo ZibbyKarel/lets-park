@@ -1,15 +1,8 @@
 # TODO
 
-Ideas and open questions, not approved work. Nothing on this list has been
-agreed against `plan.md`; an entry that would need `plan.md` to change says so
-on its own line, because a backlog item read on its own reads as an instruction.
+- [ ] tlačítko "Zkusit znovu" po neúspěšném přihlášení nic nedělá. Mělo by přesměrovat zpět na login
 
-English, like every other document here — `CLAUDE.md` reserves Czech for
-`plan.md` and for UI copy.
-
-- [x] Copy the `codebase-design`, `graphify` and `pr-review-toolkit` skills and
-      the `format-changed` and `review-before-commit` hooks over from
-      `../shoptet-partner-cli`, and check they behave correctly in this repo.
+- [ ] jsem přihlášen jako dev-admin ale nevidím odkaz na stránku /sprava v menu pod user avatarem
 
 - [ ] `libs/design-system` should be one package rather than three nested ones.
 
@@ -33,3 +26,5 @@ English, like every other document here — `CLAUDE.md` reserves Czech for
       are Czech today because the interface is (`doc/decision/0029-*`), and the
       e2e page objects address them by name, so this is a product decision plus
       a migration rather than a rename.
+
+- [ ] projdi celou code-base a použij skill codebase-design pr-review-toolkit (code-simplifier a silent-failure-hunter) na její refaktoring.
