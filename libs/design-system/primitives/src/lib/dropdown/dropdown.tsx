@@ -13,8 +13,12 @@ import {
 
 import { FOCUS_RING, INSET_FOCUS_RING } from '../control-size';
 import { cx } from '../cx';
-import { DismissableLayerProvider, useDismissableLayer } from '../dismissable-layer/dismissable-layer';
+import {
+  DismissableLayerProvider,
+  useDismissableLayer,
+} from '../dismissable-layer/dismissable-layer';
 import { getTabbableElements } from '../use-focus-trap';
+import { DropdownSeparator } from './dropdown-separator';
 
 export type DropdownAlign = 'start' | 'end';
 
@@ -361,15 +365,4 @@ export function Dropdown({
       </DismissableLayerProvider>
     </div>
   );
-}
-
-/**
- * Thin horizontal rule for separating groups of menu items.
- *
- * Module-private: `Dropdown` renders it itself for an item with
- * `separator: true`, which is the only way a caller asks for one. It exists as
- * a function so its markup lives in one place, not as a second entry point.
- */
-function DropdownSeparator() {
-  return <div role="separator" className="mx-1 my-1 h-px bg-divider" />;
 }
