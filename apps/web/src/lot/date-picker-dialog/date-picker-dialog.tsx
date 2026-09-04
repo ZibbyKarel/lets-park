@@ -4,16 +4,16 @@
  * {@link DatePickerDialog} — the calendar the header's date pill opens
  * (`doc/design/lets-park-design.dc.html`'s `datePickerOpen` branch).
  *
- * The grid itself borrows `./bulk-modal.tsx`'s table: a `<caption>` for the
+ * The grid itself borrows `../bulk-modal/bulk-modal.tsx`'s table: a `<caption>` for the
  * accessible name, weekday heads, and a button per day. What differs is the
  * rule a cell obeys — every day here is pickable, since this dialog only
  * navigates the lot screen, it never books — which is exactly why the layout
- * moved to `./calendar-grid.ts` rather than this file reaching into
- * `./bulk-view.ts` for a grid shaped by booking rules that do not apply here.
+ * moved to `../calendar-grid.ts` rather than this file reaching into
+ * `../bulk-modal/bulk-view.ts` for a grid shaped by booking rules that do not apply here.
  *
- * Picking a day calls `onSelect` with nothing further: the caller (`./lot-header.tsx`
- * via `./lot-screen.tsx`) decides that choosing a day also closes the dialog,
- * the same way a click in `./bulk-modal.tsx`'s grid never closes anything —
+ * Picking a day calls `onSelect` with nothing further: the caller (`../lot-header/lot-header.tsx`
+ * via `../lot-screen/lot-screen.tsx`) decides that choosing a day also closes the dialog,
+ * the same way a click in `../bulk-modal/bulk-modal.tsx`'s grid never closes anything —
  * the two dialogs simply differ on that point, and neither should guess the
  * other's convention.
  */

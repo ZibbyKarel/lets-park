@@ -2,7 +2,7 @@
 
 ## What
 
-In `apps/web/src/shell/admin/admin-users-screen.tsx`, switching the viewer's own
+In `apps/web/src/shell/admin/admin-users-screen/admin-users-screen.tsx`, switching the viewer's own
 **Admin** switch *off* opens a `ConfirmDialog` instead of writing. Every other
 combination — promoting anybody, demoting anybody else, the viewer granting
 themselves the role back — is unchanged and immediate.
@@ -33,14 +33,14 @@ themselves the role back — is unchanged and immediate.
 
 ## How
 
-- `apps/web/src/shell/admin/admin-users-screen.tsx` — one `useState`, one guard
+- `apps/web/src/shell/admin/admin-users-screen/admin-users-screen.tsx` — one `useState`, one guard
   in the role switch's `onCheckedChange`, one `ConfirmDialog` at the foot of the
   rendered tree.
 - `libs/i18n/src/lib/messages.ts` — three new keys in `admin`
   (`usersSelfRoleConfirmTitle`, `…Description`, `…Action`) and their interface
   declarations. **This is the one file outside `apps/web` this change touches**;
   it is an additive leaf in the `admin` namespace.
-- `apps/web/src/shell/admin/admin-users-screen.spec.tsx` — six tests: it asks
+- `apps/web/src/shell/admin/admin-users-screen/admin-users-screen.spec.tsx` — six tests: it asks
   and writes nothing; it names what is lost; it writes once confirmed; it writes
   nothing when cancelled and leaves the switch checked; it does not ask for
   self-promotion; it does not ask for somebody else's demotion. The pre-existing

@@ -9,8 +9,8 @@ import type { DayNoteView } from '../lot-view';
  * draws: every decision the brief cares about is made elsewhere and handed in
  * as a prop. This suite checks it renders what it is given and reports every
  * control back through its callback, never a raw DOM event — the same
- * contract `./date-nav-bar.spec.tsx` checked for the sticky bar this
- * component absorbed (`doc/decision/0140-*` revisited).
+ * contract the sticky bar's own suite once checked, before `LotHeader`
+ * absorbed it (`doc/decision/0140-*` revisited).
  */
 
 const DATE = '2026-09-28';

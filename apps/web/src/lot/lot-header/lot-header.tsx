@@ -35,7 +35,7 @@ export interface LotHeaderProps {
   readonly onPreviousDay: () => void;
   readonly onNextDay: () => void;
   readonly onToday: () => void;
-  /** Opens `./date-picker-dialog`'s `DatePickerDialog`, owned by `./lot-screen.tsx`. */
+  /** Opens `./date-picker-dialog`'s `DatePickerDialog`, owned by `../lot-screen/lot-screen.tsx`. */
   readonly onOpenDatePicker: () => void;
 }
 

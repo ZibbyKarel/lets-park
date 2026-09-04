@@ -1,6 +1,6 @@
 # 0172 – The preferred-spot label has four states, not two
 
-**Date:** 2026-09-03 · **Status:** accepted · **Affects:** `apps/web/src/lot/bulk-view.ts`
+**Date:** 2026-09-03 · **Status:** accepted · **Affects:** `apps/web/src/lot/bulk-modal/bulk-view.ts`
 
 ## What
 
@@ -42,11 +42,11 @@ one.
 
 ## How
 
-- `apps/web/src/lot/bulk-view.ts` — `toPreferredSpotView(preferredParkingSpotId, spots)`. The two
+- `apps/web/src/lot/bulk-modal/bulk-view.ts` — `toPreferredSpotView(preferredParkingSpotId, spots)`. The two
   `undefined` inputs mean "still loading" and are checked before the `null` that means "no
   preference": `undefined` and `null` are different answers here, which is why
   `exactOptionalPropertyTypes` being on workspace-wide matters.
-- `apps/web/src/lot/bulk-modal.tsx` — `preferredSpotNote()`, a total `switch` over the four kinds.
+- `apps/web/src/lot/bulk-modal/bulk-modal.tsx` — `preferredSpotNote()`, a total `switch` over the four kinds.
 - `bulk-view.spec.ts` has one test per state, the `unavailable` one named for what it prevents;
   `bulk-modal.spec.tsx` asserts that a retired spot renders the "už není k dispozici" sentence
   **and** that the old label is nowhere on screen.

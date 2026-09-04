@@ -21,7 +21,7 @@
  * (`libs/contract/src/schemas/reservation-window.ts`), so the row says so in
  * words — "automaticky by bylo otevřeno …" — instead of stating it as fact.
  *
- * Presentational: `./admin-window-panel.tsx` is the connected half.
+ * Presentational: `../admin-window-panel.tsx` is the connected half.
  */
 
 import type {
@@ -55,7 +55,7 @@ import { LockModeChoice } from '../lock-mode-choice/lock-mode-choice';
  * it is the at-a-glance signal an admin reads before the words, so a locked
  * month rendered green is a lie that no amount of correct text undoes.
  *
- * `BANNER_STATE_TONE` in `./window-view.ts` is its counterpart for the
+ * `BANNER_STATE_TONE` in `../window-banner/window-view.ts` is its counterpart for the
  * overview banner: same three values, a different `Tone` type, a different
  * design artifact, and a pin of its own. See that docblock for why they stay
  * two maps.

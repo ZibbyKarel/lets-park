@@ -3,7 +3,7 @@
  * month out as seven-wide, Monday-first rows, with `null` slots for the days
  * before the 1st and after the last that belong to a neighbouring month.
  *
- * Extracted from `./bulk-view.ts`'s `buildMonthGrid` when `./date-picker-view.ts`
+ * Extracted from `./bulk-modal/bulk-view.ts`'s `buildMonthGrid` when `./date-picker-dialog/date-picker-view.ts`
  * needed the identical layout for a different cell shape — the bulk grid's
  * cells carry a `selectable`/`block` reason, the date picker's carry only
  * whether the day is the one currently open. Both callers own their own cell

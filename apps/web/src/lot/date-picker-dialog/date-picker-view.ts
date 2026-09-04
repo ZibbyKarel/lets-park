@@ -3,9 +3,9 @@
  * (`datePickerOpen` branch), which browses a month grid to jump the lot
  * screen to any day.
  *
- * Unlike `./bulk-view.ts`'s grid, every day here is selectable: this picker
+ * Unlike `../bulk-modal/bulk-view.ts`'s grid, every day here is selectable: this picker
  * only navigates, it never books, so a past day, a weekend or a holiday is as
- * pickable as any other. `./calendar-grid.ts` supplies the week layout both
+ * pickable as any other. `../calendar-grid.ts` supplies the week layout both
  * grids share; this module supplies the one fact its cells carry — is this
  * the day currently open on the lot screen.
  */

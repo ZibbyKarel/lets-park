@@ -2,7 +2,7 @@
 
 ## What
 
-`apps/web/src/shell/admin/admin-users-screen.tsx` renders **four** columns —
+`apps/web/src/shell/admin/admin-users-screen/admin-users-screen.tsx` renders **four** columns —
 `Jméno`, `E-mail`, `Admin`, `Aktivní` — where
 `doc/design/screens/03-admin-users.png` draws three. The fourth is a `Switch`
 per row, wired to `admin.user.update({ id, active })`.

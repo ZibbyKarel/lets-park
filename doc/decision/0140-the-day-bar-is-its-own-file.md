@@ -3,7 +3,7 @@
 ## What
 
 `DayBar` — the fixed date-navigation bar at the bottom of the lot screen
-(Task 25) — moved out of `apps/web/src/lot/lot-header.tsx` into its own
+(Task 25) — moved out of `apps/web/src/lot/lot-header/lot-header.tsx` into its own
 `apps/web/src/lot/date-nav-bar.tsx`, with its own `date-nav-bar.spec.tsx`.
 `lot-header.tsx` keeps `LotHeader`, `WindowBanner` and `RealtimeNotice`; its
 module doc comment was updated to say so. `lot-screen.tsx`'s only change is

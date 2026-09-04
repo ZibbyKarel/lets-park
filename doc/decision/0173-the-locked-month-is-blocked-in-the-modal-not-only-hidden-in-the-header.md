@@ -1,7 +1,7 @@
 # 0173 – The locked month is blocked in the modal, not only hidden in the header
 
 **Date:** 2026-09-03 · **Status:** accepted, **amended 2026-09-03 (fix round 1)** ·
-**Affects:** `apps/web/src/lot/bulk-modal.tsx`, `apps/web/src/lot/lot-screen.tsx`
+**Affects:** `apps/web/src/lot/bulk-modal/bulk-modal.tsx`, `apps/web/src/lot/lot-screen/lot-screen.tsx`
 **Follows on from:** `doc/decision/0120-*` · **Amended by:** `doc/decision/0175-*` (which field),
 `doc/decision/0176-*` (where the gate sits)
 
@@ -67,9 +67,9 @@ named test fails when it is deleted.
 
 ## How
 
-- `apps/web/src/lot/lot-screen.tsx` — `showBulk={day.canReserveMonth}` and
+- `apps/web/src/lot/lot-screen/lot-screen.tsx` — `showBulk={day.canReserveMonth}` and
   `canReserveMonth={day.canReserveMonth}` on the modal, with the reason at the call site.
-- `apps/web/src/lot/bulk-modal.tsx` — the `if (!canReserveMonth)` branch sits above the schedule
+- `apps/web/src/lot/bulk-modal/bulk-modal.tsx` — the `if (!canReserveMonth)` branch sits above the schedule
   and select branches and below the result branch.
 - Proven separately, as two named tests in `bulk-modal.spec.tsx`:
   - *"refuses the whole flow when the caller may not reserve in this month"* — the modal opened

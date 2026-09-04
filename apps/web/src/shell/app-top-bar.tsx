@@ -5,7 +5,7 @@
  *
  * The whole file is the wiring: which two sources the name and email come
  * from, where the role comes from, and what the two menu actions do. Every
- * *rule* lives in `./top-bar.tsx`, which is why this one is three expressions
+ * *rule* lives in `./top-bar/top-bar.tsx`, which is why this one is three expressions
  * long and has no branches of its own.
  *
  * ## Why the session guard lives here

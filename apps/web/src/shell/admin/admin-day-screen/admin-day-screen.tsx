@@ -20,7 +20,7 @@
  * screen for the grid itself.
  *
  * Presentational: every value arrives as a prop, and nothing here fetches. The
- * connected half is `./admin-day-panel.tsx`, the same split as
+ * connected half is `../admin-day-panel.tsx`, the same split as
  * `settings-screen.tsx` / `settings-page.tsx`.
  */
 

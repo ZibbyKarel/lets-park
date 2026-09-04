@@ -4,7 +4,7 @@
  * What `/settings` renders, given a profile, the active spots, and the
  * mutation state around them — and nothing about how any of that is fetched.
  *
- * Split from `./settings-page.tsx` for the same reason `TopBar`/`AdminScreen`
+ * Split from `../settings-page.tsx` for the same reason `TopBar`/`AdminScreen`
  * are split from their connected wrappers: the *rules* here (which of the
  * loading/error/form states is shown, what a submit sends, when the confirm
  * dialog opens) are testable with plain props, no session, no query client and

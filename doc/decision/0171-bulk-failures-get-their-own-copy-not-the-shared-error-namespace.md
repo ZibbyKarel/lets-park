@@ -7,7 +7,7 @@
 
 A failed `reservation.previewBulk` / `reservation.confirmBulk` is rendered from the **`bulk`**
 message namespace, not from the shared `errors` one. `toBulkErrorMessageKey` (in
-`apps/web/src/lot/bulk-view.ts`) reads the contract code through `toContractError` and maps each of
+`apps/web/src/lot/bulk-modal/bulk-view.ts`) reads the contract code through `toContractError` and maps each of
 the six codes the two procedures can produce onto its own key:
 
 | code | key | says |
@@ -58,8 +58,8 @@ plus a fallback says exactly what is known.
 ## How
 
 - `libs/i18n/src/lib/messages.ts` — the `bulk` namespace and `CzechBulkMessages`.
-- `apps/web/src/lot/bulk-view.ts` — `BULK_ERROR_KEYS` and `toBulkErrorMessageKey`.
-- `apps/web/src/lot/bulk-modal.tsx` — one `role="alert"` paragraph, rendered on whichever step the
+- `apps/web/src/lot/bulk-modal/bulk-view.ts` — `BULK_ERROR_KEYS` and `toBulkErrorMessageKey`.
+- `apps/web/src/lot/bulk-modal/bulk-modal.tsx` — one `role="alert"` paragraph, rendered on whichever step the
   failure happened on; a failed confirmation deliberately leaves the user on the proposal, because
   there is no result to show.
 - `bulk-view.spec.ts` builds every failure by driving a **real** `RPCLink` with a stubbed `fetch`

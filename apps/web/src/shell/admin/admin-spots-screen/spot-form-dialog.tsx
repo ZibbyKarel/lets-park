@@ -47,7 +47,7 @@ export function SpotFormDialog({
   const submit = form.handleSubmit((values) => {
     void onSubmit(values).catch(() => {
       // `errorMessage` renders inside the still-open modal; see `ConfirmDialog`
-      // above for the same shape.
+      // for the same shape.
     });
   });
 

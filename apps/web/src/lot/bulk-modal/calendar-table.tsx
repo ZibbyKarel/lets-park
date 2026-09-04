@@ -27,7 +27,7 @@ export function badgeLabel(badge: BulkBadgeView, t: ReturnType<typeof useTransla
  * The schedule a batch of days resolves to — `reservation.previewBulk`'s
  * proposal and `reservation.confirmBulk`'s result both print the same rows
  * through this component, so the two steps of the bulk-reservation modal
- * (`../bulk-modal.tsx`) quote the same rendering rather than each keeping
+ * (`./bulk-modal.tsx`) quote the same rendering rather than each keeping
  * its own copy.
  */
 export interface CalendarTableProps {

@@ -4,7 +4,7 @@
  * `SettingsScreen`, connected to the session, the API and the router.
  *
  * Mirrors `AppTopBar`'s split from `TopBar`: every *rule* about what is shown
- * and what a save or a regeneration does lives in `./settings-screen.tsx`,
+ * and what a save or a regeneration does lives in `./settings-screen/settings-screen.tsx`,
  * which is why this file is wiring only.
  */
 

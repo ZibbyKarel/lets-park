@@ -13,7 +13,7 @@ showed, day by day, and
 - when any day does not, renders a `role="alert"` panel above the schedule listing **only** the
   days that moved, each as `Návrh: …` / `Skutečnost: …`.
 
-The comparison is `diffBulkSchedule` in `apps/web/src/lot/bulk-view.ts`. Two answers for one date
+The comparison is `diffBulkSchedule` in `apps/web/src/lot/bulk-modal/bulk-view.ts`. Two answers for one date
 count as the same when the outcome kind, the spot **id**, the preferred-spot flag, the queue
 position and the unavailable reason all agree. `reservationId` / `waitlistEntryId` are excluded:
 they exist only on the result, and their absence from the proposal is not a difference a user cares
@@ -54,10 +54,10 @@ user did not ask for and must not have to hunt for, which is what `alert` is for
 
 ## How
 
-- `apps/web/src/lot/bulk-view.ts` — `sameOutcome` and `diffBulkSchedule`, pure and sorted
+- `apps/web/src/lot/bulk-modal/bulk-view.ts` — `sameOutcome` and `diffBulkSchedule`, pure and sorted
   ascending; `toScheduleRows` re-sorts both lists into date order so a reader comparing them does
   not also have to account for two orderings.
-- `apps/web/src/lot/bulk-modal.tsx` — the result step; `describeOutcome` renders one side of a
+- `apps/web/src/lot/bulk-modal/bulk-modal.tsx` — the result step; `describeOutcome` renders one side of a
   difference as one phrase, with `resultChangedMissing` ("nic") for the `null` side.
 - `bulk-view.spec.ts` covers the comparison itself — a matching pair, a spot that became a queue
   place, a queue position that moved, a day on one side only, the ordering, and the fact that

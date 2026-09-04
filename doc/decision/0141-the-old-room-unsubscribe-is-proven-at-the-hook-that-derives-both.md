@@ -2,7 +2,7 @@
 
 ## What
 
-Two named tests were added to `apps/web/src/lot/use-lot-realtime.spec.tsx`:
+Two named tests were added to `apps/web/src/lot/lot-screen/use-lot-realtime.spec.tsx`:
 
 - `unsubscribes from the old room when the day changes` — rerenders the
   harness from `DATE` to `OTHER_DATE` and asserts the room events are exactly
@@ -84,14 +84,14 @@ was never at fault.
 
 Code review found that this file's `useAccessTokenProvider` mock —
 `() => async () => 'irrelevant'`, a **new** closure on every call — is the
-exact double used at `apps/web/src/lot/lot-screen.spec.tsx:44`, unchanged by
+exact double used at `apps/web/src/lot/lot-screen/lot-screen.spec.tsx:44`, unchanged by
 this task, and proved live that dropping `date` from `invalidateDay`'s
 `useCallback` deps in `lot-screen.tsx` survived all 18 tests there. That
 mock instability is what let mutation #2 above survive in *this* file too,
 so the fix belongs at the mock's definition, not as a per-spec patch.
 
 Both files now use the same stable-reference pattern already established in
-`apps/web/src/shell/api-provider.spec.tsx`:
+`apps/web/src/shell/api-provider/api-provider.spec.tsx`:
 
 ```ts
 jest.mock('@lets-park/auth/client', () => ({
@@ -134,11 +134,11 @@ mock would have churned `api`'s identity.
 
 ### Verified by (fix round 1)
 
-- `apps/web/src/lot/use-lot-realtime.spec.tsx` — mock fixed; re-ran mutation
+- `apps/web/src/lot/lot-screen/use-lot-realtime.spec.tsx` — mock fixed; re-ran mutation
   #2 above (`[api, date] → [api]`, no `useState` workaround) and confirmed
   `patches the new day's cache entry after the day changes, not the old one`
   now fails directly; reverted, suite green (15/15).
-- `apps/web/src/lot/lot-screen.spec.tsx` — mock fixed; new test
+- `apps/web/src/lot/lot-screen/lot-screen.spec.tsx` — mock fixed; new test
   `invalidates the day now on screen, not the one it left, after a day
   change` added (19 tests total). Re-applied the reviewer's mutation
   (`invalidateDay`'s deps dropping `date`) and confirmed that named test

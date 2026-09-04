@@ -86,8 +86,8 @@ already has both through `@lets-park/i18n`. There is no information in it the cl
   exemption in a locked month; and the ordering case that proves the exemption does not rescue a
   Saturday. The three disagreement tests assert `window.state === 'OPEN'` rather than assuming it,
   because a fixture whose month was quietly locked would pass every one of them.
-- `apps/web/src/lot/lot-screen.tsx` — both `showBulk` and the modal's prop.
-- `apps/web/src/lot/bulk-modal.tsx` — the prop is renamed `canReserveMonth`, so the wrong field
+- `apps/web/src/lot/lot-screen/lot-screen.tsx` — both `showBulk` and the modal's prop.
+- `apps/web/src/lot/bulk-modal/bulk-modal.tsx` — the prop is renamed `canReserveMonth`, so the wrong field
   cannot be passed without a type error.
 
 ## Risk

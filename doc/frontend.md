@@ -253,9 +253,10 @@ variables or result are serialised anywhere in `SettingsPage`.
 ## Bulk reservation (the lot screen's modal)
 
 The "Hromadná rezervace" button on the lot header opens a three-step modal that
-lives in `src/lot/bulk-modal.tsx`, with every decision it makes as a pure
-function in `src/lot/bulk-view.ts`. It has its own document:
-`doc/bulk-reservation-modal.md`.
+lives in `src/lot/bulk-modal/bulk-modal.tsx`, with every decision it makes as a
+pure function in `src/lot/bulk-modal/bulk-view.ts` (the calendar table and the
+schedule-preview step are their own files beside it — `doc/decision/0299-*`).
+It has its own document: `doc/bulk-reservation-modal.md`.
 
 Three things about it are worth knowing from here rather than from there. Its
 third step is **not** optional: the confirmation is compared with the proposal
@@ -384,15 +385,16 @@ Two conventions hold across the five:
 
 ## The bottom date-navigation bar
 
-`DayBar` (`apps/web/src/lot/date-nav-bar.tsx`, Task 25) is the sticky bar at
-the bottom of the parking overview (`doc/design/screens/07-lot.png`,
-`13-lot-user-bottom.png`): prev/next arrows either side of the current date, a
-month and year select, and a "Dnes" button. It is pure presentation — every
-decision it draws arrives as a prop, and every interaction it reports goes
-back out through a callback, same as `LotHeader`/`WindowBanner` beside it in
-`./lot-header`. It has its own file and its own spec
-(`date-nav-bar.spec.tsx`); see `doc/decision/0140-*` for why it was split out
-of `lot-header.tsx`.
+`DayBar` (Task 25) is the sticky bar at the bottom of the parking overview
+(`doc/design/screens/07-lot.png`, `13-lot-user-bottom.png`): prev/next arrows
+either side of the current date, a month and year select, and a "Dnes"
+button. It is pure presentation — every decision it draws arrives as a prop,
+and every interaction it reports goes back out through a callback, same as
+`WindowBanner` beside it. `doc/decision/0140-*` split it into its own
+`date-nav-bar.tsx`; it was later folded back into `LotHeader`
+(`apps/web/src/lot/lot-header/lot-header.tsx`'s module comment says so), so it
+no longer has a file or spec of its own — its behaviour below is covered by
+`lot-header.spec.tsx`.
 
 The Czech public-holiday and weekend highlighting the design calls for
 ("STÁTNÍ SVÁTEK · DEN ČESKÉ STÁTNOSTI" on a yellow bar, "Víkend" on a

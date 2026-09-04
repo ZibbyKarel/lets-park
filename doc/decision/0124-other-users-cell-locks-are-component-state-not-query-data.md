@@ -5,7 +5,7 @@
 `cell:locked` / `cell:unlocked` are the one pair of realtime events on the
 parking screen that do **not** patch the query cache. They feed a
 `Map<parkingSpotId, CellLockView>` held in `useCellLocks`
-(`apps/web/src/lot/use-cell-locks.ts`), which the screen passes into
+(`apps/web/src/lot/lot-screen/use-cell-locks.ts`), which the screen passes into
 `toSpotView` as part of its context.
 
 The map is emptied when the day changes and when the connection drops, and
@@ -83,7 +83,7 @@ than depending on one.
 
 ## Verified by
 
-`apps/web/src/lot/use-cell-locks.spec.tsx` (20 tests). Measured (mutants
+`apps/web/src/lot/lot-screen/use-cell-locks.spec.tsx` (20 tests). Measured (mutants
 M12–M14 in the task report): mutating the sweep to never expire fails **5**
 tests — three on `pruneExpiredLocks` and two on the hook; mutating the effect to
 keep holds across a disconnect fails **1**; mutating the `cell:locked` handler

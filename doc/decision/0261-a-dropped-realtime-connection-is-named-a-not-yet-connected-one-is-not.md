@@ -45,9 +45,9 @@ omits the button when it is absent.
 
 - `apps/web/src/lot/lot-view.ts` — `RealtimeNoticeView` and
   `toRealtimeNoticeView`.
-- `apps/web/src/lot/lot-header.tsx` — `RealtimeNotice`'s `onReconnect` is
+- `apps/web/src/lot/lot-header/lot-header.tsx` — `RealtimeNotice`'s `onReconnect` is
   optional; the button is conditional on it.
-- `apps/web/src/lot/lot-screen.tsx` — a `useRef` latched to `true` on the first
+- `apps/web/src/lot/lot-screen/lot-screen.tsx` — a `useRef` latched to `true` on the first
   `connected` (written during render: it only ever goes false → true, and it is
   read in the same render that sets it).
 - `lot-view.spec.ts` covers the rule; `lot-screen.spec.tsx` covers what is drawn,

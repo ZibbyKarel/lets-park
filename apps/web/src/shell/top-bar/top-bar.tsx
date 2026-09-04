@@ -11,7 +11,7 @@
  * roving tabindex, click-outside and Escape handling all come from `Dropdown`.
  *
  * It takes what it draws as props and reports what was chosen through two
- * callbacks; `./app-top-bar.tsx` is the half that reads the session and the
+ * callbacks; `../app-top-bar.tsx` is the half that reads the session and the
  * profile. The split is not ceremony: every rule this file encodes — when the
  * `ADMIN` badge appears, when `Správa` appears, what the initials are, which
  * entry is destructive — is then a pure function of its input, and a test can

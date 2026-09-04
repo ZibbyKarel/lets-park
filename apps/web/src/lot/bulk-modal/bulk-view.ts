@@ -1,7 +1,7 @@
 /**
  * Everything the bulk modal decides, as pure functions.
  *
- * The same split `./lot-view.ts` makes, for the same reason: the month grid's
+ * The same split `../lot-view.ts` makes, for the same reason: the month grid's
  * arithmetic, the "which days may be picked" rule, the preferred-spot label's
  * three failure modes, and — the one that matters most — the comparison of the
  * confirmed schedule against the proposal are all testable without a DOM, a
@@ -72,7 +72,7 @@ export type BulkDayCell = {
  * months).
  *
  * The layout itself — which days these are, and how they pad to whole weeks —
- * is `./calendar-grid.ts`'s; this module only supplies {@link BulkDayCell}.
+ * is `../calendar-grid.ts`'s; this module only supplies {@link BulkDayCell}.
  */
 export type BulkGridSlot = CalendarSlot<BulkDayCell>;
 export type BulkGridWeek = CalendarWeek<BulkDayCell>;

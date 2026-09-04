@@ -57,7 +57,7 @@ was already true, now says where it is true and points at the test.
   calls `signIn('okta')`; setting `error: 'RefreshTokenError'` calls `signOut()`
   and not `signIn`; `loading` does neither; and the redirect fires once, not
   once per render.
-- `apps/web/src/lot/lot-screen.spec.tsx` — the test *"does not fetch the day
+- `apps/web/src/lot/lot-screen/lot-screen.spec.tsx` — the test *"does not fetch the day
   before the session exists"* also asserted `getByRole('status')` reads
   "Načítá se…" for an `unauthenticated` session, i.e. it pinned the broken
   behaviour as correct. The gate assertion stays; the spinner assertion is

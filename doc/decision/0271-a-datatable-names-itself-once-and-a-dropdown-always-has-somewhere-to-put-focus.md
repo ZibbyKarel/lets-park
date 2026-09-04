@@ -40,12 +40,12 @@ working, and returns focus to the trigger on close like every other path.
 
 ## How
 
-- `libs/design-system/compounds/src/lib/data-table.tsx`: `aria-label` removed,
+- `libs/design-system/compounds/src/lib/data-table/data-table.tsx`: `aria-label` removed,
   and the comment that used to justify it now says why the section is
   deliberately unnamed. `data-table.spec.tsx` asserts
   `queryByRole('region')` finds nothing while `getByRole('table', { name })`
   still resolves. Re-adding the attribute fails it.
-- `libs/design-system/primitives/src/lib/dropdown.tsx`: the focus effect checks
+- `libs/design-system/primitives/src/lib/dropdown/dropdown.tsx`: the focus effect checks
   `item && !item.disabled` before focusing it and falls through to
   `menuRef.current?.focus()`. `tabIndex={-1}` keeps the panel out of the tab
   order, so the menu is still one stop. Three tests in `dropdown.spec.tsx`

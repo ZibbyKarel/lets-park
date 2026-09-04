@@ -24,7 +24,7 @@ import type { MonthLockState } from '@lets-park/i18n';
 /**
  * Colour per state for the **banner**, matching `06-admin-overview.png`'s green
  * band for an open month. Exported for the same reason as
- * `BADGE_STATE_TONE` in `./admin-window-screen.tsx`: it is signal, not
+ * `BADGE_STATE_TONE` in `../admin-window-screen/admin-window-screen.tsx`: it is signal, not
  * decoration.
  *
  * The two maps hold the same three values today and are still two maps, named

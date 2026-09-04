@@ -306,7 +306,7 @@ export class ReservationsService {
     // day, which can shorten queues on spots nobody in this request named. Each
     // of those cells needs its own `waitlist:updated`: the web cache patches
     // `waitlistCount` only for the cell an event names
-    // (`apps/web/src/lot/day-overview-cache.ts`), so a cell that went 1 → 0 in
+    // (`apps/web/src/lot/lot-screen/day-overview-cache.ts`), so a cell that went 1 → 0 in
     // silence keeps showing "1 waiting" — and everyone queued behind the
     // promoted person there keeps a position one too high — until something
     // unrelated forces a refetch. Sequential rather than `Promise.all`: these

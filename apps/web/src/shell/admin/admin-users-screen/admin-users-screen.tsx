@@ -36,7 +36,7 @@
  * administration, is visible in the row afterwards, and is undone by the same
  * switch.
  *
- * Presentational: everything arrives as a prop. `./admin-users-panel.tsx` is
+ * Presentational: everything arrives as a prop. `../admin-users-panel.tsx` is
  * the connected half.
  */
 

@@ -22,7 +22,7 @@ import { RealtimeProvider } from '@lets-park/realtime-client';
 export interface RealtimeBoundaryProps {
   /**
    * **Origin** of the API — no path. Socket.io reads a path in the URL as a
-   * namespace; see `apiOriginOf` in `../api-url.ts`.
+   * namespace; see `apiOriginOf` in `../../api-url.ts`.
    */
   readonly url: string;
   readonly children: ReactNode;

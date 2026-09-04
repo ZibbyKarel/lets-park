@@ -25,7 +25,7 @@
  * than offering a control that cannot work. See
  * `doc/decision/0164-parking-categories-stay-a-closed-enum.md`.
  *
- * Presentational: `./admin-spots-panel.tsx` is the connected half.
+ * Presentational: `../admin-spots-panel.tsx` is the connected half.
  */
 
 import { useState } from 'react';

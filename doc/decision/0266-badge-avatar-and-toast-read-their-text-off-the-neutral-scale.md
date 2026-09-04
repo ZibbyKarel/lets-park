@@ -54,7 +54,7 @@ Two pairings the review also flagged were deliberately **not** changed — see
 
 ## How
 
-- `libs/design-system/primitives/src/lib/badge.tsx`, `avatar.tsx`, `toast.tsx`,
+- `libs/design-system/primitives/src/lib/badge/badge.tsx`, `avatar.tsx`, `toast.tsx`,
   `button.tsx`.
 - Guarded by `libs/design-system/primitives/src/lib/contrast.spec.tsx`, which
   renders every tone and variant, reads the colour classes **off the rendered

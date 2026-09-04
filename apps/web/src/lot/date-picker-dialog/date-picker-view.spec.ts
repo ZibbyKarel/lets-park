@@ -1,10 +1,10 @@
 import { buildDatePickerGrid } from './date-picker-view';
 
 /**
- * Unlike `./bulk-view.spec.ts`'s `buildMonthGrid`, there is no "which days
+ * Unlike `../bulk-modal/bulk-view.spec.ts`'s `buildMonthGrid`, there is no "which days
  * may be picked" suite here — every day this grid produces is selectable,
  * because `./date-picker-dialog.tsx` only navigates the lot screen, it never
- * books. What is worth asserting is the layout `./calendar-grid.ts` gives it
+ * books. What is worth asserting is the layout `../calendar-grid.ts` gives it
  * (Monday-first, padded to whole weeks) and the one fact this module adds:
  * which cell, if any, is the day currently open.
  */

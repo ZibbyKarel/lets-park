@@ -5,7 +5,7 @@
 `doc/design/screens/11-settings.png` shows only the licence-plate and
 preferred-spot form. `plan.md` separately requires that the caller be able to
 see their ICS calendar-subscription URL, copy it, and regenerate the token
-behind a confirmation. `apps/web/src/shell/settings-screen.tsx` adds this as a
+behind a confirmation. `apps/web/src/shell/settings-screen/settings-screen.tsx` adds this as a
 second `<section>` inside the *same* `Modal`, below the form and above the
 footer, rather than as its own route or its own dialog.
 
