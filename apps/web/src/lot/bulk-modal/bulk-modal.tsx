@@ -41,16 +41,14 @@ import {
   buildMonthGrid,
   diffBulkSchedule,
   toBadge,
-  toBadgeMessage,
   toBulkErrorMessageKey,
   toPreferredSpotMessage,
   toPreferredSpotView,
   weekendColumns,
-  type BulkBadgeView,
   type BulkDayCell,
   type BulkDayOutcomeView,
 } from './bulk-view';
-import { CalendarTable } from './calendar-table';
+import { CalendarTable, badgeLabel } from './calendar-table';
 import { SchedulePreviewModal } from './schedule-preview-modal';
 
 export interface BulkReservationModalProps {
@@ -206,17 +204,12 @@ function BulkReservationModalContent({
     );
   };
 
-  function badgeLabel(badge: BulkBadgeView): string {
-    const message = toBadgeMessage(badge);
-    return t(message.messageKey, message.values);
-  }
-
   /** One side of a difference, as one readable phrase. */
   function describeOutcome(day: BulkDayOutcomeView | null): string {
     if (day === null) {
       return t('resultChangedMissing');
     }
-    const label = badgeLabel(toBadge(day));
+    const label = badgeLabel(toBadge(day), t);
     return day.outcome === 'UNAVAILABLE' ? label : `${label} · ${day.parkingSpotLabel}`;
   }
 

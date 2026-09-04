@@ -18,7 +18,7 @@ const BADGE_TONES: Record<BulkBadgeView['kind'], BadgeTone> = {
   UNAVAILABLE: 'neutral',
 };
 
-function badgeLabel(badge: BulkBadgeView, t: ReturnType<typeof useTranslations>): string {
+export function badgeLabel(badge: BulkBadgeView, t: ReturnType<typeof useTranslations>): string {
   const message = toBadgeMessage(badge);
   return t(message.messageKey, message.values);
 }
