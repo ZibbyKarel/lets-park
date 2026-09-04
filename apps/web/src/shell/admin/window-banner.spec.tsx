@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import type { MonthWindowOverview } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
-import { STATE_GLYPH, STATE_TONE, WindowBanner } from './window-banner';
+import { WindowBanner } from './window-banner';
+import { STATE_GLYPH, STATE_TONE } from './window-view';
 
 /**
  * One class per tone, read off `toast.tsx`'s own `TONE_CLASSES`.
