@@ -31,6 +31,7 @@ import { PrismaService } from '../database/prisma.service';
 import {
   DATABASE_HEALTH_TIMEOUT_MESSAGE,
   DatabaseHealthIndicator,
+  describeDatabaseProbeFailure,
 } from './database.health-indicator';
 import { HealthController } from './health.controller';
 
@@ -172,12 +173,9 @@ describe('HealthController', () => {
       expect(serialized).not.toContain('lets_park');
     });
 
-    it('logs the driver error it refuses to put in the response', async () => {
-      // The two halves of this pair say deliberately different things. The
-      // response must not name the host, the database or the user; the log is
-      // the only place an operator can tell a rotated password from DNS from
-      // an exhausted pool, and without it a crash loop has one symptom and
-      // three possible fixes.
+    it('says the probe failed, in scalars an operator can alert on', async () => {
+      // Without this line a crash loop has one symptom and three possible
+      // fixes. What discriminates them is the code, not a prose message.
       const recorder = recordingLogger();
       prisma.behaviour = 'down';
       controller = await createController(prisma, recorder.logger);
@@ -187,10 +185,35 @@ describe('HealthController', () => {
       expect(recorder.lines).toHaveLength(1);
       const line = recorder.lines[0];
       expect(line?.message).toBe('Readiness database probe failed');
-      expect(line?.bindings['err']).toBeInstanceOf(Error);
-      // The cause the response is forbidden to carry survives here, in full.
-      expect((line?.bindings['err'] as Error).message).toContain('10.0.0.7');
-      expect((line?.bindings['err'] as Error).message).toContain('lets_park');
+      expect(line?.bindings).toEqual({
+        kind: 'Error',
+        prismaCode: 'none',
+        sqlState: 'none',
+        timedOut: false,
+        timeoutMs: HEALTH_DB_TIMEOUT_MS,
+      });
+    });
+
+    it('does not log the error either — a Prisma failure can carry the password', async () => {
+      // The regression this pins: the first version of this log line was
+      // `{ err: error }`, which pino's serializer expands into whatever the
+      // error transitively holds. `PrismaStub` throws a message carrying the
+      // host and the user precisely so that a serialized error would be
+      // visible here. The rule is the one
+      // `slack/slack-client.service.ts:277-279` already states for the bot
+      // token, and the response-side leak test above is its twin: BOTH sides
+      // are scalars-only now, for different reasons.
+      const recorder = recordingLogger();
+      prisma.behaviour = 'down';
+      controller = await createController(prisma, recorder.logger);
+
+      await controller.ready().catch(() => undefined);
+
+      const serialized = JSON.stringify(recorder.lines);
+      expect(serialized).not.toContain('10.0.0.7');
+      expect(serialized).not.toContain('lets_park');
+      expect(recorder.lines[0]?.bindings['err']).toBeUndefined();
+      expect(recorder.lines[0]?.bindings['message']).toBeUndefined();
     });
 
     it('says nothing when the probe succeeds — a healthy probe is not a log line', async () => {
@@ -202,7 +225,7 @@ describe('HealthController', () => {
       expect(recorder.lines).toHaveLength(0);
     });
 
-    it('logs the timeout too, so a hung pool is distinguishable in the logs', async () => {
+    it('marks a timeout as one, so a hung pool is distinguishable in the logs', async () => {
       const recorder = recordingLogger();
       prisma.behaviour = 'hang';
       controller = await createController(prisma, recorder.logger);
@@ -210,9 +233,7 @@ describe('HealthController', () => {
       await controller.ready().catch(() => undefined);
 
       expect(recorder.lines).toHaveLength(1);
-      expect((recorder.lines[0]?.bindings['err'] as Error).message).toBe(
-        DATABASE_HEALTH_TIMEOUT_MESSAGE
-      );
+      expect(recorder.lines[0]?.bindings).toMatchObject({ timedOut: true });
     });
 
     it('fails fast instead of hanging when the database never answers', async () => {
@@ -230,6 +251,86 @@ describe('HealthController', () => {
       // A hanging probe reads as "still starting" to most orchestrators, which
       // is the wrong answer; it has to fail inside the configured window.
       expect(elapsed).toBeLessThan(HEALTH_DB_TIMEOUT_MS * 10);
+    });
+  });
+});
+
+/**
+ * The descriptor is tested directly because the property that matters — that
+ * nothing it returns can be a credential — is a property of the function, and
+ * the shapes worth checking are Prisma error shapes the `PrismaStub` cannot
+ * produce.
+ */
+describe('describeDatabaseProbeFailure', () => {
+  it('lifts the Prisma code and SQLSTATE out of a rejected password', () => {
+    // The shape a rotated password arrives in: `P2010` from Prisma with the
+    // driver's `28P01` in `meta`, and a message naming host and user.
+    const error = Object.assign(
+      new Error('Raw query failed. Code: `28P01`. Message: password authentication failed'),
+      { code: 'P2010', meta: { code: '28P01', message: 'FATAL: password authentication failed' } }
+    );
+
+    expect(describeDatabaseProbeFailure(error)).toEqual({
+      kind: 'Error',
+      prismaCode: 'P2010',
+      sqlState: '28P01',
+      timedOut: false,
+    });
+  });
+
+  it('reads the initialization error code, where Prisma puts it on errorCode', () => {
+    const error = Object.assign(new Error('Could not parse the database URL'), {
+      errorCode: 'P1013',
+    });
+
+    expect(describeDatabaseProbeFailure(error)).toMatchObject({ prismaCode: 'P1013' });
+  });
+
+  it('returns nothing that could be a connection string', () => {
+    // Every field is a scalar from a fixed vocabulary or a strict pattern. A
+    // driver that puts the DSN where a code belongs must not get it published:
+    // that is what the patterns are for, and this is the assertion that would
+    // have caught the `{ err: error }` version of this log line.
+    const dsn = 'postgresql://lets_park:s3cret@10.0.0.7:5432/lets_park';
+    const error = Object.assign(new Error(`connect ECONNREFUSED for ${dsn}`), {
+      code: dsn,
+      errorCode: dsn,
+      meta: { code: dsn, dbCode: dsn, message: dsn },
+    });
+
+    const serialized = JSON.stringify(describeDatabaseProbeFailure(error));
+
+    expect(serialized).not.toContain('s3cret');
+    expect(serialized).not.toContain('10.0.0.7');
+    expect(serialized).not.toContain('lets_park');
+    expect(describeDatabaseProbeFailure(error)).toMatchObject({
+      prismaCode: 'none',
+      sqlState: 'none',
+    });
+  });
+
+  it('says `none` rather than falling back to the message when there is no code', () => {
+    // `none` is diagnostic in its own right: the failure never reached a driver.
+    expect(describeDatabaseProbeFailure(new Error('boom'))).toEqual({
+      kind: 'Error',
+      prismaCode: 'none',
+      sqlState: 'none',
+      timedOut: false,
+    });
+  });
+
+  it('survives a thrown non-Error without inventing a shape', () => {
+    expect(describeDatabaseProbeFailure('boom')).toEqual({
+      kind: 'string',
+      prismaCode: 'none',
+      sqlState: 'none',
+      timedOut: false,
+    });
+  });
+
+  it("recognises this indicator's own timeout", () => {
+    expect(describeDatabaseProbeFailure(new Error(DATABASE_HEALTH_TIMEOUT_MESSAGE))).toMatchObject({
+      timedOut: true,
     });
   });
 });
