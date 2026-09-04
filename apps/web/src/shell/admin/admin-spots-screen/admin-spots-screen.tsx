@@ -28,25 +28,14 @@
  * Presentational: `./admin-spots-panel.tsx` is the connected half.
  */
 
-import { useId, useState } from 'react';
-import * as z from 'zod';
+import { useState } from 'react';
 import type {
   CreateSpotInput,
   ParkingGroup,
   ParkingSpot,
   SpotListOutput,
 } from '@lets-park/contract';
-import { FormField, FormProvider, useAppForm } from '@lets-park/form';
-import {
-  Badge,
-  Button,
-  Input,
-  Modal,
-  Select,
-  Stack,
-  Switch,
-  Toast,
-} from '@lets-park/design-system/primitives';
+import { Badge, Button, Select, Stack, Switch, Toast } from '@lets-park/design-system/primitives';
 import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { PARKING_GROUPS, useTranslations } from '@lets-park/i18n';
@@ -55,10 +44,11 @@ import { useAdminWriteError, type AdminWriteFailure } from '../admin-errors';
 import {
   isDialogSaving,
   shouldShowFailureIn,
-  toCategoryCounts,
   type FailureSurface,
   type SpotDialog,
 } from './spots-view';
+import { CategoryBand } from './category-band';
+import { SpotFormDialog } from './spot-form-dialog';
 
 /** How a spot stands today, as the day overview reports it. */
 export interface SpotToday {
@@ -107,13 +97,6 @@ export interface AdminSpotsScreenProps {
    */
   readonly onDiscardFailure: () => void;
 }
-
-/** Field-level validation. The contract re-checks the same shape on arrival. */
-const spotFormSchema = z.object({
-  label: z.string().trim().min(1),
-  group: z.enum(PARKING_GROUPS),
-});
-type SpotFormValues = z.infer<typeof spotFormSchema>;
 
 export function AdminSpotsScreen({
   onRetry,
@@ -334,116 +317,5 @@ export function AdminSpotsScreen({
         </Stack>
       )}
     </ScreenDataGuard>
-  );
-}
-
-/**
- * The band under the table header: one chip per category with its count.
- *
- * What is counted, and why inactive spots are in it, is
- * {@link toCategoryCounts}.
- */
-function CategoryBand({ spots }: { readonly spots: readonly ParkingSpot[] }) {
-  const t = useTranslations('admin');
-  const labelId = useId();
-
-  return (
-    // A named group, so the band is distinguishable from the table's own
-    // "Kategorie" column heading — to a screen reader as much as to a test.
-    <Stack role="group" aria-labelledby={labelId} direction="row" align="center" wrap spacing={3}>
-      <span id={labelId} className="text-xs font-bold uppercase tracking-caps text-fg-3">
-        {t('spotsCategories')}
-      </span>
-      {toCategoryCounts(spots).map(({ group, count }) => (
-        <span
-          key={group}
-          className="inline-flex h-8 items-center gap-2 rounded-cta bg-bg-muted px-3 text-sm font-medium text-fg"
-        >
-          {group}
-          <span className="text-fg-3">{count}</span>
-        </span>
-      ))}
-      <span className="text-xs text-fg-3">{t('spotsCategoriesFixed')}</span>
-    </Stack>
-  );
-}
-
-interface SpotFormDialogProps {
-  /**
-   * The spot being edited, or `null` when adding a new one — narrowed to the
-   * two fields the form actually edits, so the dialog cannot start reading
-   * `active` or an id it has no business acting on.
-   */
-  readonly spot: Pick<ParkingSpot, 'label' | 'group'> | null;
-  readonly errorMessage: string | null;
-  readonly saving: boolean;
-  readonly onCancel: () => void;
-  readonly onSubmit: (values: SpotFormValues) => Promise<void>;
-}
-
-/** Add / edit, in the same `Modal` the settings screen uses. */
-function SpotFormDialog({ spot, errorMessage, saving, onCancel, onSubmit }: SpotFormDialogProps) {
-  const t = useTranslations('admin');
-
-  const form = useAppForm<SpotFormValues>({
-    schema: spotFormSchema,
-    defaultValues: {
-      label: spot?.label ?? '',
-      group: spot?.group ?? PARKING_GROUPS[0],
-    },
-  });
-
-  const submit = form.handleSubmit((values) => {
-    void onSubmit(values).catch(() => {
-      // `errorMessage` renders inside the still-open modal; see `ConfirmDialog`
-      // above for the same shape.
-    });
-  });
-
-  return (
-    <Modal
-      open
-      onClose={onCancel}
-      title={spot === null ? t('spotsCreateTitle') : t('spotsEditTitle', { label: spot.label })}
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" size="lg" onClick={onCancel} disabled={saving}>
-            {t('spotsCancel')}
-          </Button>
-          <Button variant="primary" size="lg" onClick={submit} loading={saving}>
-            {t('spotsSave')}
-          </Button>
-        </>
-      }
-    >
-      <FormProvider {...form}>
-        <Stack spacing={5}>
-          <FormField
-            name="label"
-            render={({ field, error: fieldError }) => (
-              <Input
-                label={t('spotsLabelField')}
-                error={fieldError ? t('spotsLabelRequired') : undefined}
-                {...field}
-              />
-            )}
-          />
-          <FormField
-            name="group"
-            render={({ field, error: fieldError }) => (
-              <Select label={t('spotsGroupField')} error={fieldError} {...field}>
-                {PARKING_GROUPS.map((group) => (
-                  <option key={group} value={group}>
-                    {group}
-                  </option>
-                ))}
-              </Select>
-            )}
-          />
-          {errorMessage ? <Toast tone="danger">{errorMessage}</Toast> : null}
-        </Stack>
-      </FormProvider>
-    </Modal>
   );
 }
