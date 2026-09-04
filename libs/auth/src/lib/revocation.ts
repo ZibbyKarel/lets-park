@@ -72,6 +72,8 @@
  * first place — only `sub`.
  */
 
+import { processGlobalMap } from './process-global';
+
 /** The one field of an Auth.js JWT this module reads. */
 export interface RevocableToken {
   /**
@@ -140,20 +142,6 @@ export interface SignOutRegistryOptions {
 const unixSeconds = (): number => Math.floor(Date.now() / 1000);
 
 /**
- * The key under which the revocations hang off `globalThis`.
- *
- * `Symbol.for` rather than `Symbol`: the global symbol registry is shared by
- * everything in the realm, so two copies of this module resolve it to the same
- * symbol. A plain `Symbol()` would be a different key in each copy, which is the
- * whole problem this exists to solve.
- */
-const REVOKED_KEY = Symbol.for('@lets-park/auth:signed-out-sessions');
-
-interface GlobalWithRevoked {
-  [REVOKED_KEY]?: Map<string, number>;
-}
-
-/**
  * Thrown when this module is loaded somewhere it cannot work.
  *
  * A boot failure, on purpose. See {@link sharedRevokedStore}.
@@ -183,19 +171,14 @@ export class SignOutRevocationUnavailableError extends Error {
 /**
  * The one revocation map for the whole Node process.
  *
- * **This indirection is not defensive style; without it the feature does not
- * work at all.** Next.js compiles the proxy, the `/api/auth/*` route handlers
- * and the server components into *separate bundles*, each with its own module
- * registry — so `createAuth()` runs once per bundle and a module-level `Map`
- * would give each of them a private one. Measured on this application: a single
- * `next start` process built **three** `createAuthConfig` instances, the
- * sign-out event reached exactly one of them, and every later authorization
- * check ran against a different, empty registry. Sign-out looked revoked from
- * the endpoint that performed it and was honoured everywhere it mattered.
- *
- * `globalThis` crosses that boundary because all three bundles run in the same
- * V8 realm — which is true here precisely because the proxy runs on the Node.js
- * runtime (`doc/decision/0100-*`).
+ * **The sharing is not defensive style; without it the feature does not work at
+ * all.** `createAuth()` runs once per Next.js bundle, and a module-level `Map`
+ * would give each of them a private one (`processGlobalMap` in
+ * `./process-global` has the measurement). Observed here before the fix: the
+ * sign-out event reached exactly one of the three registries, and every later
+ * authorization check ran against a different, empty one. Sign-out looked
+ * revoked from the endpoint that performed it and was honoured nowhere it
+ * mattered.
  *
  * ### Why this throws rather than warns
  *
@@ -244,15 +227,17 @@ export class SignOutRevocationUnavailableError extends Error {
  * the guard failing open on the shape most likely to reach it. It is now
  * treated like any other non-Node value: it throws.
  */
-export function sharedRevokedStore(): Map<string, number> {
+export const sharedRevokedStore = processGlobalMap<number>(
+  'signed-out-sessions',
+  requireNodeRuntime
+);
+
+/** The guard above, as a function, so `processGlobalMap` can run it. */
+function requireNodeRuntime(): void {
   const runtime = process.env['NEXT_RUNTIME'];
   if (runtime !== undefined && runtime !== 'nodejs') {
     throw new SignOutRevocationUnavailableError(runtime);
   }
-
-  const container = globalThis as GlobalWithRevoked;
-  container[REVOKED_KEY] ??= new Map<string, number>();
-  return container[REVOKED_KEY];
 }
 
 /**

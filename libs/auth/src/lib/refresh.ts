@@ -23,6 +23,8 @@
  * minute is enough to cover both, and short enough that a token is never held
  * far past its useful life.
  */
+import { processGlobalMap } from './process-global';
+
 export const REFRESH_SKEW_SECONDS = 60;
 
 /**
@@ -149,49 +151,29 @@ async function readJsonOrUndefined(response: Response): Promise<unknown> {
 }
 
 /**
- * The key under which the refresh state hangs off `globalThis`.
- *
- * `Symbol.for` rather than `Symbol`, for the same realm-wide reason as
- * `REVOKED_KEY` in `revocation.ts`: two copies of this module — and Next.js
- * builds three — must resolve the same key, or each gets a private slot and the
- * coalescing below covers nothing.
- */
-const REFRESH_STATE_KEY = Symbol.for('@lets-park/auth:token-refresh-state');
-
-interface GlobalWithRefreshState {
-  [REFRESH_STATE_KEY]?: Map<string, TokenRefreshState>;
-}
-
-/**
  * The one refresh-state table for the whole Node process.
+ *
+ * No runtime guard: unlike `sharedRevokedStore`, this one's failure mode off
+ * the Node.js runtime is a redundant token grant, not a security control
+ * quietly not holding — see {@link sharedRefreshState} for the full trade.
  *
  * Deliberately not re-exported from `libs/auth/src/index.ts`: it hands out a
  * process-global mutable map that any importer could clear.
  */
-export function sharedRefreshStates(): Map<string, TokenRefreshState> {
-  const container = globalThis as GlobalWithRefreshState;
-  container[REFRESH_STATE_KEY] ??= new Map<string, TokenRefreshState>();
-  return container[REFRESH_STATE_KEY];
-}
+export const sharedRefreshStates = processGlobalMap<TokenRefreshState>('token-refresh-state');
 
 /**
  * The refresh state for one issuer and client, shared by every bundle in the
  * process.
  *
- * **This indirection is not defensive style; without it the coalescing does not
- * cover the case it exists for.** Next.js compiles the proxy, the
- * `/api/auth/*` route handlers and the server components into *separate
- * bundles*, each with its own module registry, so `createAuthConfig` runs three
- * times in one `next start` — measured, and recorded in
- * `doc/decision/0231-*`. A refresher whose in-flight slot lives in a closure
- * therefore has two siblings that cannot see it, and the proxy and the root
- * layout — which read the **same request cookie** — each send their own
- * `refresh_token` grant. Measured before this fix: two grants where
- * `doc/decision/0051-*` promised one.
- *
- * `globalThis` crosses the bundle boundary because all three run in the same V8
- * realm, which is true here because the proxy runs on the Node.js runtime
- * (`doc/decision/0100-*`).
+ * **The sharing is not defensive style; without it the coalescing does not
+ * cover the case it exists for.** `createAuthConfig` runs three times in one
+ * `next start`, once per Next.js bundle (`processGlobalMap` in
+ * `./process-global` has the measurement). A refresher whose in-flight slot
+ * lives in a closure therefore has two siblings that cannot see it, and the
+ * proxy and the root layout — which read the **same request cookie** — each
+ * send their own `refresh_token` grant. Measured before this fix: two grants
+ * where `doc/decision/0051-*` promised one.
  *
  * Keyed by issuer **and** client id, not by refresh token: the token is the key
  * *inside* {@link TokenRefreshState.inFlight}, and one process could in
