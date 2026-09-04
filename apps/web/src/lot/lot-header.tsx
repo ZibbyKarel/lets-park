@@ -12,7 +12,7 @@
  * `DayBar`, not this file's — split out for Task 25 (`doc/decision/0140-*`).
  */
 
-import { Button, cx } from '@lets-park/design-system/primitives';
+import { Button, Stack, cx } from '@lets-park/design-system/primitives';
 import { formatFullDate, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import type { BannerView, LotCounts } from './lot-view';
@@ -35,7 +35,7 @@ export function LotHeader({ date, counts, sectionTitle, showBulk, onBulk }: LotH
   const t = useTranslations('lot');
 
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-6">
+    <Stack direction="row" wrap align="end" justify="between" spacing={6} className="mb-6">
       <div>
         <p className="mb-2 text-xs font-bold uppercase tracking-caps text-fg-2">{sectionTitle}</p>
         <h1 className="text-4xl font-bold leading-tight tracking-tight text-fg">
@@ -43,7 +43,7 @@ export function LotHeader({ date, counts, sectionTitle, showBulk, onBulk }: LotH
         </h1>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <Stack direction="row" wrap align="center" spacing={3}>
         <p className="flex h-9 items-center gap-2 rounded-cta border border-border bg-bg px-4 text-base">
           <span aria-hidden="true" className="size-2 rounded-cta bg-car-2" />
           {t('freeCount', { count: counts.free })}
@@ -57,8 +57,8 @@ export function LotHeader({ date, counts, sectionTitle, showBulk, onBulk }: LotH
             {t('bulkReservation')}
           </Button>
         ) : null}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -78,10 +78,13 @@ export function WindowBanner({ banner }: { readonly banner: BannerView }) {
   const isSuccess = banner.tone === 'success';
 
   return (
-    <div
+    <Stack
+      direction="row"
+      align="center"
+      spacing={3}
       role="status"
       className={cx(
-        'mb-5 flex items-center gap-3 rounded-md border px-4 py-3',
+        'mb-5 rounded-md border px-4 py-3',
         isSuccess
           ? 'border-brand-green bg-brand-green-100'
           : 'border-brand-yellow bg-brand-yellow-100'
@@ -97,7 +100,7 @@ export function WindowBanner({ banner }: { readonly banner: BannerView }) {
         {isSuccess ? '✓' : '⊘'}
       </span>
       <p className="text-base leading-snug text-fg">{t(banner.messageKey, banner.values)}</p>
-    </div>
+    </Stack>
   );
 }
 
@@ -132,9 +135,13 @@ export function RealtimeNotice({
   const t = useTranslations('lot');
 
   return (
-    <div
+    <Stack
+      direction="row"
+      wrap
+      align="center"
+      spacing={3}
       role="status"
-      className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-brand-yellow bg-brand-yellow-100 px-4 py-3"
+      className="mb-5 rounded-md border border-brand-yellow bg-brand-yellow-100 px-4 py-3"
     >
       <p className="flex-1 text-base leading-snug text-fg">{t('realtimeRejected')}</p>
       {onReconnect === undefined ? null : (
@@ -142,6 +149,6 @@ export function RealtimeNotice({
           {t('realtimeReconnect')}
         </Button>
       )}
-    </div>
+    </Stack>
   );
 }

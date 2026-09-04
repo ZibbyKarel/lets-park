@@ -19,7 +19,7 @@
  * are `--lot-*` custom properties in `app/global.css`.
  */
 
-import { Badge, cx } from '@lets-park/design-system/primitives';
+import { Badge, Box, Stack, cx } from '@lets-park/design-system/primitives';
 import { useTranslations } from '@lets-park/i18n';
 import type { SpotGroupView, SpotView } from './lot-view';
 
@@ -263,14 +263,14 @@ export function LotGrid({ groups, onOpenSpot, onAdminOpenSpot }: LotGridProps) {
   const t = useTranslations('lot');
 
   return (
-    <div className="lot-asphalt rounded-lg bg-neutral-600 p-4 shadow-lg">
+    <Box padding={4} radius="lg" className="lot-asphalt bg-neutral-600 shadow-lg">
       {groups.map((group) => (
         <section
           key={group.group}
           aria-label={t('groupLabel', { group: group.group })}
           className="mb-5 rounded-md border border-neutral-0/15 bg-brand-dark/10 px-3 pb-5 pt-4"
         >
-          <div className="mb-4 flex items-center gap-3">
+          <Stack direction="row" align="center" spacing={3} className="mb-4">
             <h2 className="text-xs font-bold uppercase tracking-caps text-neutral-0/90">
               {group.group}
             </h2>
@@ -278,9 +278,13 @@ export function LotGrid({ groups, onOpenSpot, onAdminOpenSpot }: LotGridProps) {
             <span className="text-xs text-neutral-0/50">
               {t('groupFree', { free: group.freeCount, total: group.totalCount })}
             </span>
-          </div>
+          </Stack>
 
-          <div className="flex flex-wrap border-l-[length:var(--lot-line-w)] border-neutral-0/50">
+          <Stack
+            direction="row"
+            wrap
+            className="border-l-[length:var(--lot-line-w)] border-neutral-0/50"
+          >
             {group.spots.map((spot) => (
               <SpotTile
                 key={spot.spotId}
@@ -289,7 +293,7 @@ export function LotGrid({ groups, onOpenSpot, onAdminOpenSpot }: LotGridProps) {
                 onAdminOpen={onAdminOpenSpot}
               />
             ))}
-          </div>
+          </Stack>
         </section>
       ))}
 
@@ -310,6 +314,6 @@ export function LotGrid({ groups, onOpenSpot, onAdminOpenSpot }: LotGridProps) {
           {t('legendWaitlist')}
         </li>
       </ul>
-    </div>
+    </Box>
   );
 }

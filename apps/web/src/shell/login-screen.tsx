@@ -13,7 +13,7 @@
  * `doc/auth.md` §"The flow, end to end".
  */
 
-import { Button } from '@lets-park/design-system/primitives';
+import { Button, Stack } from '@lets-park/design-system/primitives';
 import { useTranslations } from '@lets-park/i18n';
 import { Brand } from './brand';
 
@@ -26,7 +26,7 @@ export function LoginScreen({ action }: LoginScreenProps) {
   const t = useTranslations('login');
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-bg px-4 text-center">
+    <Stack align="center" justify="center" spacing={8} className="min-h-dvh bg-bg px-4 text-center">
       <Brand size="lg" asHeading />
 
       <p className="text-md leading-loose text-fg-3">
@@ -56,6 +56,6 @@ export function LoginScreen({ action }: LoginScreenProps) {
       </form>
 
       <p className="text-xs font-bold uppercase tracking-caps text-neutral-400">{t('footnote')}</p>
-    </div>
+    </Stack>
   );
 }

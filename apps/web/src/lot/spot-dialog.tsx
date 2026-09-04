@@ -30,7 +30,7 @@
  *    own position are shown instead.
  */
 
-import { Avatar, Button, Modal, cx } from '@lets-park/design-system/primitives';
+import { Avatar, Button, Modal, Stack } from '@lets-park/design-system/primitives';
 import { formatDayAndMonth, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import { initialsOf } from '../shell/initials';
@@ -179,7 +179,12 @@ export function SpotDialog({
     >
       {isTaken && spot.holderName !== null ? (
         <div className="mb-5">
-          <div className="mb-3 flex items-center gap-3 rounded-md border border-border px-4 py-3">
+          <Stack
+            direction="row"
+            align="center"
+            spacing={3}
+            className="mb-3 rounded-md border border-border px-4 py-3"
+          >
             <Avatar initials={initialsOf(spot.holderName)} tone="neutral" size="lg" />
             <div>
               <p className="text-base font-bold text-fg">{spot.holderName}</p>
@@ -187,7 +192,7 @@ export function SpotDialog({
                 {t('occupiedBy', { plate: spot.holderPlate ?? t('noPlate') })}
               </p>
             </div>
-          </div>
+          </Stack>
 
           <p className="mb-2 text-xs font-bold uppercase tracking-caps text-fg-2">
             {t('queueHeading')}
@@ -206,11 +211,11 @@ export function SpotDialog({
       ) : null}
 
       {!canReserve && !isInfo ? (
-        <div
-          className={cx(
-            'mb-5 flex items-start gap-3 rounded-md border border-brand-yellow',
-            'bg-brand-yellow-100 px-4 py-3'
-          )}
+        <Stack
+          direction="row"
+          align="start"
+          spacing={3}
+          className="mb-5 rounded-md border border-brand-yellow bg-brand-yellow-100 px-4 py-3"
         >
           <span
             aria-hidden="true"
@@ -219,7 +224,7 @@ export function SpotDialog({
             ⊘
           </span>
           <p className="text-sm leading-normal text-fg">{t('lockNote', { month: monthName })}</p>
-        </div>
+        </Stack>
       ) : null}
 
       {error === null || error === undefined ? null : (

@@ -33,7 +33,7 @@ import {
   type DateOnly,
 } from '@lets-park/i18n';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
-import { Badge, Button, Modal, cx } from '@lets-park/design-system/primitives';
+import { Badge, Box, Button, Modal, cx } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
 import { useApi } from '../shell/api-provider';
@@ -297,9 +297,11 @@ function BulkReservationModalContent({
             {t('resultUnchanged')}
           </p>
         ) : (
-          <div
+          <Box
             role="alert"
-            className="mb-5 rounded-md border border-brand-yellow bg-brand-yellow-100 px-4 py-3"
+            radius="md"
+            padding={[3, 4]}
+            className="mb-5 border border-brand-yellow bg-brand-yellow-100"
           >
             <p className="text-base font-bold text-fg">{t('resultChangedTitle')}</p>
             <p className="mt-1 text-base leading-loose text-fg-2">
@@ -320,7 +322,7 @@ function BulkReservationModalContent({
                 </li>
               ))}
             </ul>
-          </div>
+          </Box>
         )}
 
         {renderSchedule(result.days)}
