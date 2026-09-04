@@ -8,8 +8,9 @@
  * environment behind `apps/web/src/env.ts`'s back.
  */
 
-import { createAuth, createAuthConfig } from '../index';
-import type { AuthOptions } from '../index';
+import { createAuth } from './create-auth';
+import { createAuthConfig } from './config';
+import type { AuthOptions } from './config';
 
 const OPTIONS: AuthOptions = {
   issuer: 'https://example.okta.test/oauth2/default',

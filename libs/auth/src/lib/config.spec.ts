@@ -11,22 +11,25 @@
 
 import type { Account, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
+// Module imports, not `../index`: `createAuthConfig` and the callbacks it is
+// built from are `createAuth`'s implementation and are deliberately absent
+// from the barrel, which publishes the entry point and nothing else.
+// `sharedRevokedStore` and `sharedRefreshStates` were always reached this way —
+// both hand out process-global mutable state, and the tests are the only
+// things that need to reset them between cases.
 import {
   createAuthConfig,
   isAuthorized,
-  OKTA_PROVIDER_ID,
   OKTA_SCOPES,
   projectSession,
-  REFRESH_SKEW_SECONDS,
-  REFRESH_TOKEN_ERROR,
   rotateAccessToken,
-} from '../index';
-// Deep imports on purpose: neither is part of the lib's public API (both hand
-// out process-global mutable state), and the tests are the only things that
-// need to reset them between cases.
+} from './config';
+import type { AuthOptions } from './config';
+import { OKTA_PROVIDER_ID, REFRESH_TOKEN_ERROR } from './session';
+import { REFRESH_SKEW_SECONDS } from './refresh';
+import type { TokenRefresher } from './refresh';
 import { sharedRevokedStore } from './revocation';
 import { sharedRefreshStates } from './refresh';
-import type { AuthOptions, TokenRefresher } from '../index';
 import { discoveryDocument, stubFetch } from '../__fixtures__/stub-fetch';
 
 const ISSUER = 'https://example.okta.test/oauth2/default';

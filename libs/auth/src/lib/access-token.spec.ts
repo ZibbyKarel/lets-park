@@ -11,7 +11,8 @@
 import type { Session } from 'next-auth';
 import { createApiClient } from '@lets-park/api-client';
 import type { ApiFetch } from '@lets-park/api-client';
-import { accessTokenOf, createAccessTokenProvider, REFRESH_TOKEN_ERROR } from '../index';
+import { accessTokenOf, createAccessTokenProvider } from './access-token';
+import { REFRESH_TOKEN_ERROR } from './session';
 import { rpcPayload } from '../__fixtures__/stub-fetch';
 
 const API_URL = 'https://api.test/rpc';

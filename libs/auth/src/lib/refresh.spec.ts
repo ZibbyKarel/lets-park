@@ -1,9 +1,11 @@
 /**
  * What the refresher actually puts on the wire, and when.
  *
- * These tests import only `../index` — the wrapper's public entry point — and
- * never `next-auth`; the last test in this file reads its own source to keep
- * that true (same device as `libs/api-client/src/lib/api-client.spec.ts`).
+ * These tests import only from within this lib and never `next-auth`; the last
+ * test in this file reads its own source to keep that true (same device as
+ * `libs/api-client/src/lib/api-client.spec.ts`). They name `./refresh`
+ * directly because the refresher is `createAuth`'s implementation and is not
+ * published from the barrel.
  */
 
 import { readFileSync } from 'node:fs';
@@ -12,10 +14,9 @@ import {
   REFRESH_SKEW_SECONDS,
   shouldRefresh,
   TokenRefreshError,
-} from '../index';
-// Deep import on purpose, the same way `config.spec.ts` deep-imports
-// `sharedRevokedStore`: the shared refresh state is not part of the lib's public
-// API (it is a process-global mutable table) and only its own tests touch it.
+} from './refresh';
+// The shared refresh state is a process-global mutable table; only its own
+// tests touch it.
 import { sharedRefreshState, sharedRefreshStates } from './refresh';
 import type { TokenRefreshState } from './refresh';
 import { discoveryDocument, stubFetch } from '../__fixtures__/stub-fetch';
