@@ -661,8 +661,10 @@ export default [
    * `projectService: true` is what makes a *typed* rule possible at all — it
    * asks typescript-eslint to build a real program per file rather than parse
    * it standalone, which is also why it is the one block in this file that
-   * costs measurable wall-clock time (`npm run lint`: ~17s before, see
-   * `.superpowers/sdd/refactor-cleanup/task-16-report.md` for the after).
+   * costs measurable wall-clock time. Measured, three cold-cache runs of
+   * `npm run lint` each: median **9.3s without this block, 14.8s with it** —
+   * about 1.6x. `nx.json`'s lint `inputs` carry `^default` for the same reason
+   * this block exists; see the note there.
    *
    * Why this rule and no other: the codebase names the failure it catches, in
    * `apps/api/src/reservations/composite-domain-event.publisher.ts` — an
