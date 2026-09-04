@@ -11,6 +11,8 @@ function renderDialog(props: Partial<Parameters<typeof ConfirmDialog>[0]> = {}) 
     <ConfirmDialog
       open
       title="Opravdu smazat?"
+      confirmLabel="Potvrdit"
+      cancelLabel="Zrušit"
       onConfirm={onConfirm}
       onCancel={onCancel}
       {...props}
@@ -35,8 +37,8 @@ describe('ConfirmDialog', () => {
     expect(dialog).toHaveAccessibleDescription('Tuto akci nelze vrátit zpět.');
   });
 
-  it('defaults the two button labels to the generic Czech verbs', () => {
-    renderDialog();
+  it('renders the generic Czech verbs the caller supplies on the two buttons', () => {
+    renderDialog({ confirmLabel: 'Potvrdit', cancelLabel: 'Zrušit' });
 
     expect(screen.getByRole('button', { name: 'Potvrdit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zrušit' })).toBeInTheDocument();

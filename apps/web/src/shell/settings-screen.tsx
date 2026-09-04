@@ -364,6 +364,7 @@ export function SettingsScreen({
         title={t('icsRegenerateConfirmTitle')}
         description={t('icsRegenerateConfirmDescription')}
         confirmLabel={t('icsRegenerateConfirmButton')}
+        cancelLabel={t('cancel')}
         tone="danger"
         loading={ics.isRegenerating}
         onConfirm={() => void handleConfirmRegenerate()}

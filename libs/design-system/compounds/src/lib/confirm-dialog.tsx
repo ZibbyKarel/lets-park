@@ -29,10 +29,19 @@ export interface ConfirmDialogProps {
    * other than cancel would be a trap.
    */
   onCancel: () => void;
-  /** Label of the confirming button. Defaults to `'Potvrdit'` ("Confirm"). */
-  confirmLabel?: string | undefined;
-  /** Label of the dismissing button. Defaults to `'Zrušit'` ("Cancel"). */
-  cancelLabel?: string | undefined;
+  /**
+   * Label of the confirming button.
+   *
+   * **Required, like {@link cancelLabel}, and deliberately so.** Both are
+   * user-visible copy, and this library has no access to `libs/i18n` — a
+   * compound that called `useTranslations` would stop being presentation-only.
+   * Defaulting them to the generic Czech verbs emitted copy from outside the
+   * message catalogue; requiring them puts it in app code, where the catalogue
+   * is, and the compiler asks the next call site for it.
+   */
+  confirmLabel: string;
+  /** Label of the dismissing button. See {@link confirmLabel}. */
+  cancelLabel: string;
   /** Visual weight of the confirming button. Defaults to `default`. */
   tone?: ConfirmDialogTone | undefined;
   /**
@@ -52,12 +61,11 @@ export interface ConfirmDialogProps {
  * only the "Smazat" button that would open one
  * (`doc/design/screens/04-admin-spots.png`). It is assembled entirely out of
  * `Modal` and `Button`, so every value in it is one the design already fixed;
- * what is new is only the composition and the two default labels. See
+ * what is new is only the composition. See
  * `doc/decision/0071-empty-state-and-confirm-dialog-are-invented.md`.
  *
- * Domain-free: the copy is entirely the caller's. `title` is required, and the
- * two labels default to the generic Czech verbs rather than to anything about
- * deleting a parking spot.
+ * Domain-free: the copy is entirely the caller's — `title` and both button
+ * labels are required, because nothing here may reach `libs/i18n`.
  *
  * Focus lands on `Modal`'s × button, the first tabbable element in the dialog —
  * so a destructive confirmation never opens with the destructive button armed
@@ -69,8 +77,8 @@ export function ConfirmDialog({
   description,
   onConfirm,
   onCancel,
-  confirmLabel = 'Potvrdit',
-  cancelLabel = 'Zrušit',
+  confirmLabel,
+  cancelLabel,
   tone = 'default',
   loading = false,
   children,

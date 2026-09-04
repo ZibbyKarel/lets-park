@@ -58,6 +58,9 @@ const meta: Meta<typeof DataTable<Item>> = {
     data: ITEMS,
     getRowId: (row: Item) => row.id,
     minWidth: '560px',
+    // The empty state's copy is the caller's — the compound has no catalogue
+    // to fall back on. Every story inherits this one unless it says otherwise.
+    emptyTitle: 'Žádná data',
   },
   parameters: {
     backgrounds: { value: 'page' },

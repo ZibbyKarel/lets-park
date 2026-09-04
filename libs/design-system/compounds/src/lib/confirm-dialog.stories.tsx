@@ -11,6 +11,10 @@ const meta: Meta<typeof ConfirmDialog> = {
     title: 'Opravdu smazat položku?',
     description: 'Tuto akci nelze vrátit zpět.',
     tone: 'default',
+    // Both labels are the caller's copy — the compound has no catalogue to
+    // fall back on. Stories that mean something else override `confirmLabel`.
+    confirmLabel: 'Potvrdit',
+    cancelLabel: 'Zrušit',
   },
   argTypes: {
     tone: { control: 'inline-radio', options: ['default', 'danger'] },

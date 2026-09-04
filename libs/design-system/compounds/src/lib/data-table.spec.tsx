@@ -54,6 +54,7 @@ function renderTable(props: Partial<Parameters<typeof DataTable<Item>>[0]> = {})
       columns={COLUMNS}
       data={ITEMS}
       getRowId={(row) => row.id}
+      emptyTitle="Žádná data"
       {...props}
     />
   );
@@ -358,6 +359,7 @@ describe('DataTable', () => {
           columns={COLUMNS}
           data={ITEMS}
           getRowId={(row) => row.id}
+          emptyTitle="Žádná data"
           sort={{ columnId: 'label', direction: 'desc' }}
         />
       );
@@ -399,7 +401,13 @@ describe('DataTable', () => {
       // left it at (nothing, here) — not whatever the controlled press above
       // reported, which the internal-state guard never wrote.
       rerender(
-        <DataTable title="Položky" columns={COLUMNS} data={ITEMS} getRowId={(row) => row.id} />
+        <DataTable
+          title="Položky"
+          columns={COLUMNS}
+          data={ITEMS}
+          getRowId={(row) => row.id}
+          emptyTitle="Žádná data"
+        />
       );
 
       expect(labelOrder()).toEqual(['Beta', 'Gama', 'Alfa']);
@@ -432,8 +440,8 @@ describe('DataTable', () => {
   });
 
   describe('empty state', () => {
-    it('shows the default Czech title when there are no rows', () => {
-      renderTable({ data: [] });
+    it("shows the caller's title when there are no rows", () => {
+      renderTable({ data: [], emptyTitle: 'Žádná data' });
 
       expect(screen.getByText('Žádná data')).toBeInTheDocument();
     });

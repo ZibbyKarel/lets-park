@@ -124,8 +124,17 @@ export interface DataTableProps<TData> {
   sort?: DataTableSort | null | undefined;
   /** Called with the ordering a header press asks for, in both modes. */
   onSortChange?: ((sort: DataTableSort) => void) | undefined;
-  /** Title of the empty state. Defaults to `'Žádná data'` ("No data"). */
-  emptyTitle?: string | undefined;
+  /**
+   * Title of the empty state.
+   *
+   * **Required, and deliberately so.** This is user-visible copy, and this
+   * library has no access to `libs/i18n` — a compound that called
+   * `useTranslations` would stop being presentation-only. A default here would
+   * be a Czech sentence emitted from outside the message catalogue; making the
+   * prop required puts it in app code, where the catalogue is, and lets the
+   * compiler say so at the next call site rather than at the next reader.
+   */
+  emptyTitle: string;
   /** Second line of the empty state. */
   emptyDescription?: ReactNode | undefined;
   /** Call to action in the empty state, usually a `Button`. */
@@ -196,7 +205,7 @@ export function DataTable<TData extends DataTableRow>({
   defaultSort,
   sort,
   onSortChange,
-  emptyTitle = 'Žádná data',
+  emptyTitle,
   emptyDescription,
   emptyAction,
   className,
