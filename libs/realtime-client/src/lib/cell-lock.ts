@@ -112,26 +112,41 @@ export const MIN_CELL_LOCK_RENEW_DELAY_MS = 1_000;
 export type CellLockHolder = Extract<CellLockAck, { result: 'HELD_BY_OTHER' }>['lockedBy'];
 
 /**
+ * Where the hold on one cell stands, as a union over `status`.
+ *
  * - `idle` — not asked for (disabled, or no connection).
  * - `requesting` — asked, no answer yet.
- * - `held` — this client holds it, and is renewing it.
- * - `held-by-other` — somebody else has it; {@link CellLockState.lockedBy} says
- *   who, and {@link CellLockState.expiresAt} until when. **It is not terminal:**
- *   the hook asks again when the gateway broadcasts `cell:unlocked` for this
- *   cell, and again if that `expiresAt` passes without one arriving, so a
- *   consumer rendering "právě upravuje …" off this status will see it clear.
+ * - `held` — this client holds it until `expiresAt`, and is renewing it.
+ * - `held-by-other` — `lockedBy` has it until `expiresAt`. **It is not
+ *   terminal:** the hook asks again when the gateway broadcasts `cell:unlocked`
+ *   for this cell, and again if that `expiresAt` passes without one arriving,
+ *   so a consumer rendering "právě upravuje …" off this status will see it
+ *   clear.
+ *
+ * A union rather than a status beside two nullable fields, because the second
+ * of those bullets is a *mechanism*, not a description: both of the things that
+ * un-stick a `held-by-other` need an `expiresAt` — `contendedRetryDelayMs`
+ * takes a non-nullable `string` — so a `held-by-other` carrying `null` could
+ * schedule no backstop timer and would freeze a tile on "právě upravuje …" for
+ * a user who closed their laptop, which is the exact failure
+ * `doc/decision/0111-*` exists to prevent. The flat shape let the compiler sign
+ * that off. It also means a consumer reading `lockedBy` gets a holder rather
+ * than `CellLockHolder | null` in every status, with a fallback to invent.
  */
-export type CellLockStatus = 'idle' | 'requesting' | 'held' | 'held-by-other';
+export type CellLockState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'requesting' }
+  | { readonly status: 'held'; readonly expiresAt: string }
+  | {
+      readonly status: 'held-by-other';
+      readonly expiresAt: string;
+      readonly lockedBy: CellLockHolder;
+    };
 
-export interface CellLockState {
-  readonly status: CellLockStatus;
-  /** When the hold lapses, ISO UTC. Set for `held` and `held-by-other`. */
-  readonly expiresAt: string | null;
-  /** Only ever set for `held-by-other`. */
-  readonly lockedBy: CellLockHolder | null;
-}
+/** Derived, so the four statuses are stated once. */
+export type CellLockStatus = CellLockState['status'];
 
-const IDLE: CellLockState = { status: 'idle', expiresAt: null, lockedBy: null };
+const IDLE: CellLockState = { status: 'idle' };
 
 export interface UseCellLockOptions extends CellLockCommand {
   /**
@@ -254,7 +269,7 @@ export function useCellLock(options: UseCellLockOptions): CellLockState {
       // is the frozen "právě upravuje …" the whole hook exists to prevent.
       const { status } = stateRef.current;
       if (status === 'idle' || status === 'held-by-other') {
-        setState({ status: 'requesting', expiresAt: null, lockedBy: null });
+        setState({ status: 'requesting' });
       }
 
       // `.timeout()` rather than a bare `emit`: without it a lost ack means the
@@ -298,7 +313,7 @@ export function useCellLock(options: UseCellLockOptions): CellLockState {
         const ack = parsed.data;
         if (ack.result === 'ACQUIRED') {
           held = true;
-          setState({ status: 'held', expiresAt: ack.expiresAt, lockedBy: null });
+          setState({ status: 'held', expiresAt: ack.expiresAt });
           schedule(request, renewDelayMs(ack.expiresAt, Date.now()));
           return;
         }
