@@ -29,7 +29,7 @@ import type {
   MonthWindowOverview,
   ReservationLockMode,
 } from '@lets-park/contract';
-import { Badge, Stepper, Toast } from '@lets-park/design-system/primitives';
+import { Badge, Card, Grid, Stack, Stepper, Toast } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
 import {
   formatDayAndMonth,
@@ -103,67 +103,71 @@ export function AdminWindowScreen({
   return (
     <ScreenDataGuard state={reservationWindow} onRetry={onRetry} headingLevel={3}>
       {({ settings: { openDaysBefore, lockMode }, months }) => (
-        <div className="grid gap-6 md:grid-cols-2">
-          <section
-            aria-label={t('windowOpenTitle')}
-            className="flex flex-col gap-5 rounded-lg border border-border bg-bg p-6"
-          >
-            <div>
-              <h3 className="text-lg font-bold text-fg">{t('windowOpenTitle')}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-fg-3">{t('windowOpenDescription')}</p>
-            </div>
+        <Grid columns={{ base: 1, md: 2 }} spacing={6}>
+          <section aria-label={t('windowOpenTitle')}>
+            <Card className="h-full">
+              <Stack spacing={5}>
+                <div>
+                  <h3 className="text-lg font-bold text-fg">{t('windowOpenTitle')}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-fg-3">
+                    {t('windowOpenDescription')}
+                  </p>
+                </div>
 
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-bold uppercase tracking-caps text-fg-3">
-                {t('windowDaysLabel')}
-              </span>
-              <Stepper
-                label={t('windowDaysLabel')}
-                value={openDaysBefore}
-                min={MIN_OPEN_DAYS_BEFORE}
-                max={MAX_OPEN_DAYS_BEFORE}
-                disabled={isSaving}
-                decrementLabel={t('windowDaysDecrement')}
-                incrementLabel={t('windowDaysIncrement')}
-                formatValue={(count) => t('windowDaysValue', { count })}
-                onValueChange={(next) => onChange({ openDaysBefore: next, lockMode })}
-              />
-            </div>
+                <Stack spacing={3}>
+                  <span className="text-xs font-bold uppercase tracking-caps text-fg-3">
+                    {t('windowDaysLabel')}
+                  </span>
+                  <Stepper
+                    label={t('windowDaysLabel')}
+                    value={openDaysBefore}
+                    min={MIN_OPEN_DAYS_BEFORE}
+                    max={MAX_OPEN_DAYS_BEFORE}
+                    disabled={isSaving}
+                    decrementLabel={t('windowDaysDecrement')}
+                    incrementLabel={t('windowDaysIncrement')}
+                    formatValue={(count) => t('windowDaysValue', { count })}
+                    onValueChange={(next) => onChange({ openDaysBefore: next, lockMode })}
+                  />
+                </Stack>
 
-            <LockModeChoice
-              label={t('windowLockLabel')}
-              value={lockMode}
-              disabled={isSaving}
-              options={RESERVATION_LOCK_MODES.map((mode) => ({
-                value: mode,
-                label: t(`windowLock${mode}`),
-              }))}
-              onValueChange={(next) => onChange({ openDaysBefore, lockMode: next })}
-            />
+                <LockModeChoice
+                  label={t('windowLockLabel')}
+                  value={lockMode}
+                  disabled={isSaving}
+                  options={RESERVATION_LOCK_MODES.map((mode) => ({
+                    value: mode,
+                    label: t(`windowLock${mode}`),
+                  }))}
+                  onValueChange={(next) => onChange({ openDaysBefore, lockMode: next })}
+                />
 
-            {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
-            {saveErrorMessage === null && isSaved ? (
-              <Toast tone="success">{t('windowSaved')}</Toast>
-            ) : null}
+                {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
+                {saveErrorMessage === null && isSaved ? (
+                  <Toast tone="success">{t('windowSaved')}</Toast>
+                ) : null}
+              </Stack>
+            </Card>
           </section>
 
-          <section
-            aria-label={t('windowMonthsTitle')}
-            className="flex flex-col rounded-lg border border-border bg-bg"
-          >
-            <div className="border-b border-divider px-6 py-5">
-              <h3 className="text-lg font-bold text-fg">{t('windowMonthsTitle')}</h3>
-              <p className="mt-1 text-sm text-fg-3">
-                {t('windowMonthsDescription', { today: formatDayMonthAndYear(today) })}
-              </p>
-            </div>
-            <ul className="flex flex-col">
-              {months.map((month) => (
-                <MonthRow key={month.month} month={month} />
-              ))}
-            </ul>
+          <section aria-label={t('windowMonthsTitle')}>
+            <Card padding={0} className="h-full">
+              <Stack>
+                <div className="border-b border-divider px-6 py-5">
+                  <h3 className="text-lg font-bold text-fg">{t('windowMonthsTitle')}</h3>
+                  <p className="mt-1 text-sm text-fg-3">
+                    {t('windowMonthsDescription', { today: formatDayMonthAndYear(today) })}
+                  </p>
+                </div>
+                <ul className="flex flex-col">
+                  {months.map((month) => (
+                    <MonthRow key={month.month} month={month} />
+                  ))}
+                </ul>
+              </Stack>
+            </Card>
           </section>
-        </div>
+        </Grid>
       )}
     </ScreenDataGuard>
   );

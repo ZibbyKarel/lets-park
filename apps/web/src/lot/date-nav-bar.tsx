@@ -17,7 +17,7 @@
  * This component only chooses which classes and copy that answer maps to.
  */
 
-import { Button, Select, cx } from '@lets-park/design-system/primitives';
+import { Button, Select, Stack, cx } from '@lets-park/design-system/primitives';
 import { formatFullDate, formatMonthName, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import type { DayNoteView } from './lot-view';
@@ -63,14 +63,18 @@ export function DayBar({
   const t = useTranslations('lot');
 
   return (
-    <div
+    <Stack
+      direction="row"
+      align="center"
+      justify="center"
+      wrap
+      spacing={4}
       className={cx(
-        'sticky bottom-0 z-[var(--z-sticky)] mt-6 flex flex-wrap items-center justify-center',
-        'gap-4 rounded-md border px-4 py-4',
+        'sticky bottom-0 z-[var(--z-sticky)] mt-6 rounded-md border px-4 py-4',
         note.highlighted ? 'border-brand-yellow bg-brand-yellow-100' : 'border-border bg-bg'
       )}
     >
-      <div className="flex items-center gap-3">
+      <Stack direction="row" align="center" spacing={3}>
         <Button variant="outline" size="sm" aria-label={t('previousDay')} onClick={onPreviousDay}>
           ‹
         </Button>
@@ -88,9 +92,9 @@ export function DayBar({
         <Button variant="outline" size="sm" aria-label={t('nextDay')} onClick={onNextDay}>
           ›
         </Button>
-      </div>
+      </Stack>
 
-      <div className="flex items-center gap-3">
+      <Stack direction="row" align="center" spacing={3}>
         <Select
           aria-label={t('monthLabel')}
           value={String(month)}
@@ -120,7 +124,7 @@ export function DayBar({
         <Button variant="outline" size="sm" onClick={onToday}>
           {t('today')}
         </Button>
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }

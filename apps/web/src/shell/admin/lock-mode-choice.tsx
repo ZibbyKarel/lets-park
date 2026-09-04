@@ -27,7 +27,7 @@
  */
 
 import { useId, useRef, type KeyboardEvent } from 'react';
-import { cx, FOCUS_RING } from '@lets-park/design-system/primitives';
+import { cx, FOCUS_RING, Stack } from '@lets-park/design-system/primitives';
 
 export interface LockModeOption<TValue extends string> {
   readonly value: TValue;
@@ -102,15 +102,17 @@ export function LockModeChoice<TValue extends string>({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <Stack spacing={3}>
       <span id={labelId} className="text-xs font-bold uppercase tracking-caps text-fg-3">
         {label}
       </span>
-      <div
+      <Stack
         role="radiogroup"
         aria-labelledby={labelId}
         onKeyDown={onKeyDown}
-        className="flex flex-wrap gap-3"
+        direction="row"
+        wrap
+        spacing={3}
       >
         {options.map((option, index) => {
           const isSelected = option.value === value;
@@ -148,7 +150,7 @@ export function LockModeChoice<TValue extends string>({
             </button>
           );
         })}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }

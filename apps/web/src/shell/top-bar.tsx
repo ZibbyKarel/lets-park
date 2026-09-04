@@ -18,7 +18,7 @@
  * ask about all of them without a router, a session or a network.
  */
 
-import { Avatar, Badge, Dropdown, cx } from '@lets-park/design-system/primitives';
+import { Avatar, Badge, Dropdown, Stack, cx } from '@lets-park/design-system/primitives';
 import type { DropdownItem } from '@lets-park/design-system/primitives';
 import type { UserRole } from '@lets-park/contract';
 import { useTranslations } from '@lets-park/i18n';
@@ -91,7 +91,7 @@ export function TopBar({ name, email, role, onNavigate, onSignOut }: TopBarProps
         <Brand />
       </Link>
 
-      <div className="flex items-center gap-3">
+      <Stack direction="row" align="center" spacing={3}>
         {isAdmin ? (
           <Badge tone="info" className="uppercase tracking-caps">
             {t('adminBadge')}
@@ -119,7 +119,7 @@ export function TopBar({ name, email, role, onNavigate, onSignOut }: TopBarProps
           items={items}
           onSelect={onSelect}
         />
-      </div>
+      </Stack>
     </header>
   );
 }

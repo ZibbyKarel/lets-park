@@ -42,7 +42,7 @@
 
 import { useMemo, useState } from 'react';
 import type { AdminListUsersOutput, AdminUser } from '@lets-park/contract';
-import { Avatar, Input, Switch, Toast } from '@lets-park/design-system/primitives';
+import { Avatar, Input, Stack, Switch, Toast } from '@lets-park/design-system/primitives';
 import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
@@ -196,7 +196,7 @@ export function AdminUsersScreen({
   return (
     <ScreenDataGuard state={users} onRetry={onRetry} headingLevel={3}>
       {() => (
-        <div className="flex flex-col gap-4">
+        <Stack spacing={4}>
           {updateErrorMessage ? <Toast tone="danger">{updateErrorMessage}</Toast> : null}
 
           <DataTable
@@ -245,7 +245,7 @@ export function AdminUsersScreen({
               if (viewerId !== undefined) onRoleChange(viewerId, false);
             }}
           />
-        </div>
+        </Stack>
       )}
     </ScreenDataGuard>
   );

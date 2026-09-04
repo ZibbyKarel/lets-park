@@ -43,6 +43,7 @@ import {
   Input,
   Modal,
   Select,
+  Stack,
   Switch,
   Toast,
 } from '@lets-park/design-system/primitives';
@@ -263,7 +264,7 @@ export function AdminSpotsScreen({
   return (
     <ScreenDataGuard state={spots} onRetry={onRetry} headingLevel={3}>
       {(loaded) => (
-        <div className="flex flex-col gap-4">
+        <Stack spacing={4}>
           {tableError ? <Toast tone="danger">{tableError}</Toast> : null}
 
           <DataTable
@@ -330,7 +331,7 @@ export function AdminSpotsScreen({
           >
             {deleteError === null ? null : <Toast tone="danger">{deleteError}</Toast>}
           </ConfirmDialog>
-        </div>
+        </Stack>
       )}
     </ScreenDataGuard>
   );
@@ -349,7 +350,7 @@ function CategoryBand({ spots }: { readonly spots: readonly ParkingSpot[] }) {
   return (
     // A named group, so the band is distinguishable from the table's own
     // "Kategorie" column heading — to a screen reader as much as to a test.
-    <div role="group" aria-labelledby={labelId} className="flex flex-wrap items-center gap-3">
+    <Stack role="group" aria-labelledby={labelId} direction="row" align="center" wrap spacing={3}>
       <span id={labelId} className="text-xs font-bold uppercase tracking-caps text-fg-3">
         {t('spotsCategories')}
       </span>
@@ -363,7 +364,7 @@ function CategoryBand({ spots }: { readonly spots: readonly ParkingSpot[] }) {
         </span>
       ))}
       <span className="text-xs text-fg-3">{t('spotsCategoriesFixed')}</span>
-    </div>
+    </Stack>
   );
 }
 
@@ -417,7 +418,7 @@ function SpotFormDialog({ spot, errorMessage, saving, onCancel, onSubmit }: Spot
       }
     >
       <FormProvider {...form}>
-        <div className="flex flex-col gap-5">
+        <Stack spacing={5}>
           <FormField
             name="label"
             render={({ field, error: fieldError }) => (
@@ -441,7 +442,7 @@ function SpotFormDialog({ spot, errorMessage, saving, onCancel, onSubmit }: Spot
             )}
           />
           {errorMessage ? <Toast tone="danger">{errorMessage}</Toast> : null}
-        </div>
+        </Stack>
       </FormProvider>
     </Modal>
   );

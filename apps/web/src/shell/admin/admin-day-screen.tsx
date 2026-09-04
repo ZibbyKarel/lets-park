@@ -25,7 +25,7 @@
  */
 
 import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
-import { Badge, Button } from '@lets-park/design-system/primitives';
+import { Badge, Button, Stack } from '@lets-park/design-system/primitives';
 import { DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { formatFullDate, useTranslations } from '@lets-park/i18n';
@@ -101,8 +101,8 @@ export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreen
         const taken = overview.spots.length - free;
 
         return (
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+          <Stack spacing={6}>
+            <Stack direction="row" wrap align="center" justify="between" spacing={4}>
               <div>
                 <p className="text-xs font-bold uppercase tracking-caps text-fg-3">
                   {t('dayEyebrow')}
@@ -111,14 +111,14 @@ export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreen
                   {formatFullDate(date)}
                 </h3>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <Stack direction="row" wrap align="center" spacing={3}>
                 <CountPill dotClassName="bg-brand-green" label={t('dayFree', { count: free })} />
                 <CountPill dotClassName="bg-brand-blue" label={t('dayTaken', { count: taken })} />
                 <Button variant="primary" onClick={onOpenLot}>
                   {t('dayOpenLot')}
                 </Button>
-              </div>
-            </div>
+              </Stack>
+            </Stack>
 
             <WindowBanner window={overview.window} />
 
@@ -133,7 +133,7 @@ export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreen
               emptyTitle={t('dayEmpty')}
               emptyDescription={t('dayEmptyDescription')}
             />
-          </div>
+          </Stack>
         );
       }}
     </ScreenDataGuard>

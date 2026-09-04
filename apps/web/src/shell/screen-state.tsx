@@ -17,7 +17,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Button } from '@lets-park/design-system/primitives';
+import { Button, Stack } from '@lets-park/design-system/primitives';
 import { EmptyState } from '@lets-park/design-system/compounds';
 import type { EmptyStateHeadingLevel } from '@lets-park/design-system/compounds';
 import { toContractError } from '@lets-park/api-client';
@@ -41,13 +41,13 @@ export function ScreenLoading({ label }: ScreenLoadingProps) {
   const text = label ?? t('loading');
 
   return (
-    <div role="status" className="flex flex-col items-center justify-center gap-3 px-6 py-16">
+    <Stack role="status" align="center" justify="center" spacing={3} className="px-6 py-16">
       <span
         aria-hidden="true"
         className="size-6 animate-spin rounded-cta border-2 border-border border-t-brand-blue"
       />
       <span className="text-sm text-fg-3">{text}</span>
-    </div>
+    </Stack>
   );
 }
 

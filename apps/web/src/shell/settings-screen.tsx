@@ -27,6 +27,7 @@ import {
   Input,
   Modal,
   Select,
+  Stack,
   Toast,
   type ToastTone,
 } from '@lets-park/design-system/primitives';
@@ -304,7 +305,7 @@ export function SettingsScreen({
 
         {ready ? (
           <FormProvider {...form}>
-            <div className="flex flex-col gap-5">
+            <Stack spacing={5}>
               <form
                 id={SETTINGS_FORM_ID}
                 onSubmit={form.handleSubmit((values) => onSave(toUpdateInput(values)))}
@@ -354,7 +355,7 @@ export function SettingsScreen({
                 onRequestRegenerate={() => setConfirmOpen(true)}
                 isRegenerating={ics.isRegenerating}
               />
-            </div>
+            </Stack>
           </FormProvider>
         ) : null}
       </Modal>
@@ -427,7 +428,7 @@ function IcsSection({
             readOnly
             onFocus={(event) => event.currentTarget.select()}
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <Stack direction="row" align="center" wrap spacing={3}>
             {/* `size="lg"`, matching the footer's Cancel/Save buttons — the
                 design shows one control height throughout the modal. */}
             <Button type="button" variant="secondary" size="lg" onClick={onCopy}>
@@ -442,7 +443,7 @@ function IcsSection({
             >
               {t('icsRegenerate')}
             </Button>
-          </div>
+          </Stack>
           {copyState === 'idle' ? null : (
             <Toast tone={COPY_FEEDBACK_TONE[copyState]}>
               {copyState === 'copied' ? t('icsCopied') : t('icsCopyFailed')}
