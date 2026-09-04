@@ -102,6 +102,7 @@ import type {
   PreviewBulkOutput,
   ReservationWindowSettings,
 } from '@lets-park/contract';
+import type { CellRef } from '@lets-park/contract/realtime';
 import type { Prisma } from '@lets-park/database';
 import { Prisma as PrismaNamespace } from '@lets-park/database';
 import type { DateOnly } from '@lets-park/shared-types';
@@ -170,9 +171,21 @@ interface ConfirmOutcome {
   events: DomainEvent[];
 }
 
-/** A `(spot, date)` cell, as a map key. */
-function cellKey(parkingSpotId: string, date: DateOnly): string {
-  return `${date}|${parkingSpotId}`;
+/**
+ * A `(spot, date)` cell, as a map key.
+ *
+ * Takes the contract's own {@link CellRef} rather than two positional strings,
+ * for the reason `LockService.cellKey` does: `DateOnly` and a spot id are both
+ * bare `string` (`doc/decision/0014-*`, `doc/decision/0016-*`), so a
+ * transposition at a call site would type-check and produce a key that simply
+ * never matches. Named fields make that mistake unrepresentable.
+ *
+ * `|` is safe as a separator because both halves are closed shapes the contract
+ * validated before they reached here — `YYYY-MM-DD` and a UUID — so neither can
+ * contain one and no two distinct cells can collide on a key.
+ */
+function cellKey(cell: CellRef): string {
+  return `${cell.date}|${cell.parkingSpotId}`;
 }
 
 @Injectable()
@@ -323,7 +336,8 @@ export class BulkReservationService {
             payload: {
               date,
               parkingSpotId: row.parkingSpotId,
-              waitlistCount: (queues.get(cellKey(row.parkingSpotId, date)) ?? []).length,
+              waitlistCount: (queues.get(cellKey({ date, parkingSpotId: row.parkingSpotId })) ?? [])
+                .length,
             },
           };
         }),
@@ -451,7 +465,7 @@ export class BulkReservationService {
     });
 
     for (const row of rows) {
-      const key = cellKey(row.parkingSpotId, toDateOnly(row.date));
+      const key = cellKey({ date: toDateOnly(row.date), parkingSpotId: row.parkingSpotId });
       const queue = queues.get(key) ?? [];
       queue.push(row);
       queues.set(key, queue);
@@ -653,7 +667,7 @@ export class BulkReservationService {
       return { outcome: 'UNAVAILABLE', date: plan.date, reason: 'NO_SPOTS_AVAILABLE' };
     }
 
-    const queue = queues.get(cellKey(target.id, plan.date)) ?? [];
+    const queue = queues.get(cellKey({ date: plan.date, parkingSpotId: target.id })) ?? [];
     const index = queue.findIndex((row) => row.userId === userId);
     const entry = queue[index];
     if (entry === undefined) {
