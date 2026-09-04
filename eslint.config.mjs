@@ -655,6 +655,53 @@ export default [
       'no-console': 'error',
     },
   },
+  /**
+   * Type-aware linting for the backend and the libs: `no-floating-promises`.
+   *
+   * `projectService: true` is what makes a *typed* rule possible at all — it
+   * asks typescript-eslint to build a real program per file rather than parse
+   * it standalone, which is also why it is the one block in this file that
+   * costs measurable wall-clock time (`npm run lint`: ~17s before, see
+   * `.superpowers/sdd/refactor-cleanup/task-16-report.md` for the after).
+   *
+   * Why this rule and no other: the codebase names the failure it catches, in
+   * `apps/api/src/reservations/composite-domain-event.publisher.ts` — an
+   * escaping rejection is worse than an escaping throw, because `apps/api`
+   * installs no `unhandledRejection` handler, so Node's default terminates the
+   * process **after COMMIT**, on a user's cancellation path. Every `void`ed
+   * promise in the tree today is correct; what was missing was the enforcement,
+   * which rested entirely on convention and review.
+   *
+   * `ignoreVoid` keeps its default (`true`): `void promise` stays the
+   * documented way to say "detached on purpose", which is the convention the
+   * existing sites already follow, each with a comment beside it. Turning it
+   * off would not find a bug — it would demand ~24 disables for code the
+   * analysis pass already read and cleared.
+   *
+   * **`apps/web/**` is deliberately out.** Its React
+   * `void queryClient.invalidateQueries(...)` sites need their own pass, and a
+   * half-considered sweep of them would bury the backend result this block is
+   * for. `.tsx` is listed for `libs/**` only, for the same reason: the design
+   * system and the wrapper libs are in, the app's React tree is not.
+   *
+   * Scoped to `.ts`/`.tsx` rather than `LINTED_EXTENSIONS`: a file the
+   * TypeScript project service does not own parses as a hard error rather than
+   * a lint finding, and the `.cjs`/`.mjs` tooling configs are not in any
+   * tsconfig.
+   */
+  {
+    basePath: workspaceRoot,
+    files: ['apps/api/**/*.ts', 'libs/**/*.ts', 'libs/**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: workspaceRoot,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+    },
+  },
   // Standalone scripts and tooling are allowed to print to the console.
   {
     basePath: workspaceRoot,
