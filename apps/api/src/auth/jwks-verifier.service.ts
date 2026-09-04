@@ -65,7 +65,7 @@ import type { AuthTokenClaims } from './token-claims';
 import { authTokenClaimsSchema } from './token-claims';
 
 /** Path appended to the issuer to reach its OIDC discovery document (RFC 8414). */
-export const OIDC_DISCOVERY_PATH = '/.well-known/openid-configuration';
+const OIDC_DISCOVERY_PATH = '/.well-known/openid-configuration';
 
 /**
  * Why a key could not be produced. This is the operator-facing classification —
@@ -100,7 +100,7 @@ export type AuthFailureKind = (typeof AUTH_FAILURE_KINDS)[number];
  * be a flood. One line a minute per kind, carrying the count of everything it
  * swallowed, tells an operator both what broke and how hard.
  */
-export const AUTH_FAILURE_LOG_INTERVAL_MS = 60_000;
+const AUTH_FAILURE_LOG_INTERVAL_MS = 60_000;
 
 /** Longest `kid` echoed into a log line. It is attacker-controlled input. */
 const MAX_LOGGED_KID_LENGTH = 64;
@@ -127,7 +127,7 @@ export class JwksVerificationError extends Error {
  * purpose: an unreachable IdP must fail the request quickly rather than hold a
  * connection open until the client gives up.
  */
-export const JWKS_REQUEST_TIMEOUT_MS = 5_000;
+const JWKS_REQUEST_TIMEOUT_MS = 5_000;
 
 /**
  * How long a signing key is reused before it is fetched again.
@@ -138,10 +138,10 @@ export const JWKS_REQUEST_TIMEOUT_MS = 5_000;
  * first request that uses it, not up to ten minutes later. This TTL only bounds
  * how long a *withdrawn* key stays usable.
  */
-export const JWKS_CACHE_MAX_AGE_MS = 600_000;
+const JWKS_CACHE_MAX_AGE_MS = 600_000;
 
 /** How many distinct `kid`s are kept. An issuer publishes a handful at most. */
-export const JWKS_CACHE_MAX_ENTRIES = 5;
+const JWKS_CACHE_MAX_ENTRIES = 5;
 
 /**
  * Ceiling on JWKS fetches per minute.
@@ -152,7 +152,7 @@ export const JWKS_CACHE_MAX_ENTRIES = 5;
  * the failure mode is "some logins fail during a flood", never "a token is
  * accepted without a key".
  */
-export const JWKS_REQUESTS_PER_MINUTE = 12;
+const JWKS_REQUESTS_PER_MINUTE = 12;
 
 /**
  * The two fields of the discovery document this application uses. Loose, like
