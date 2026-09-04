@@ -726,8 +726,9 @@ export default [
    *
    * One visible consequence, so nobody "fixes" it by halves: the `libs/form`
    * specs now wrap `handleSubmit` in `void`, while the two production callers
-   * — `apps/web/src/shell/settings-screen.tsx` and
-   * `apps/web/src/shell/admin/admin-spots-screen.tsx` — still pass it bare,
+   * — `apps/web/src/shell/settings-screen/settings-screen.tsx` and
+   * `apps/web/src/shell/admin/admin-spots-screen/admin-spots-screen.tsx` —
+   * still pass it bare,
    * purely because `apps/web/**` is outside this block. That is the same
    * finding waiting for the web pass, not an inconsistency to paper over.
    *

@@ -39,7 +39,7 @@ and refuses removing the last active admin whatever the browser sends.
 ```
 apps/web/src/
   app/(app)/admin/page.tsx       wiring: profile + the four connected panels
-  shell/admin-screen.tsx         role gate, page chrome, the tab strip
+  shell/admin-screen/admin-screen.tsx  role gate, page chrome, the tab strip
   shell/admin/
     admin-errors.ts              (operation, code) -> Czech sentence
     window-banner.tsx            the month's window, as one sentence
@@ -161,8 +161,8 @@ Without the first, a refused `Smazat` greeted the admin inside the next empty
 same shape back. `doc/decision/0167-*`.
 
 **Colour is copy here.** The month badges take their tone from
-`BADGE_STATE_TONE` (`shell/admin/admin-window-screen.tsx`) and the window banner
-from `BANNER_STATE_TONE` (`shell/admin/window-view.ts`), each exported so a spec
+`BADGE_STATE_TONE` (`shell/admin/admin-window-screen/admin-window-screen.tsx`) and the window banner
+from `BANNER_STATE_TONE` (`shell/admin/window-banner/window-view.ts`), each exported so a spec
 can pin the mapping against the design — `Otevřeno` green, `Uzamčeno` yellow,
 `Zatím neotevřeno` grey. A locked month drawn green is read as open before a
 word of it is. The two maps agree today and are deliberately not one map: they

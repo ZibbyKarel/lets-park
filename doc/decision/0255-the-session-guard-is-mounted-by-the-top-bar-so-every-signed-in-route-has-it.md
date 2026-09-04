@@ -29,7 +29,7 @@ was already true, now says where it is true and points at the test.
   else is attempted with it — was never called.
 - **`/admin` was only nominally covered.** `AdminScreen` early-returns
   `<ScreenLoading />` while `useCurrentUser()` is pending
-  (`shell/admin-screen.tsx`), so the panels that *did* call `useRequireAuth`
+  (`shell/admin-screen/admin-screen.tsx`), so the panels that *did* call `useRequireAuth`
   were never mounted in exactly the states where it was needed. Putting the
   guard above the tabs fixes that without touching `AdminScreen`.
 - **The top bar rather than the layout.** `(app)/layout.tsx` has no

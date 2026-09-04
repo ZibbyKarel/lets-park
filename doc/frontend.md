@@ -178,7 +178,7 @@ which would publish it to every visitor.
 
 ## The top bar
 
-`shell/top-bar.tsx` is **presentational** — props in, callbacks out, no data
+`shell/top-bar/top-bar.tsx` is **presentational** — props in, callbacks out, no data
 fetching — and `shell/app-top-bar.tsx` is the connected wrapper. Left: the
 brand, wrapped in a link to `/`. Right: an `Admin` badge for administrators,
 then the avatar with the user's initials, their name, and a dropdown holding
@@ -200,7 +200,7 @@ the BMP is not cut in half.
 
 ## Settings (`/settings`)
 
-`shell/settings-screen.tsx` is **presentational** — profile, spots, and the
+`shell/settings-screen/settings-screen.tsx` is **presentational** — profile, spots, and the
 mutation state around them in as props, callbacks out — and
 `shell/settings-page.tsx` is the connected wrapper, following the same split
 as `TopBar`/`AppTopBar` and `AdminScreen`/`admin/page.tsx`.
@@ -279,7 +279,7 @@ sentence saying nothing was created (`doc/decision/0176-*`).
 
 ## Loading, empty and error
 
-`shell/screen-state.tsx` holds the three states themselves *and* the type that
+`shell/screen-state/screen-state.tsx` holds the three states themselves *and* the type that
 says which of them a screen is in, so a screen imports both from a single
 place. The three renderers first:
 
@@ -358,8 +358,10 @@ Three details are worth knowing before using it:
 
 Five screens split their decisions out of the component that renders them, into
 a sibling module with no React, no hooks and no network in it:
-`lot/lot-view.ts`, `lot/bulk-view.ts`, `shell/settings-view.ts`,
-`shell/admin/spots-view.ts` and `shell/admin/window-view.ts`. Each has a
+`lot/lot-view.ts`, `lot/bulk-modal/bulk-view.ts`,
+`shell/settings-screen/settings-view.ts`,
+`shell/admin/admin-spots-screen/spots-view.ts` and
+`shell/admin/window-banner/window-view.ts`. Each has a
 `*-view.spec.ts` beside it.
 
 The reason is the same in all five, and `lot/lot-view.ts` states it first:

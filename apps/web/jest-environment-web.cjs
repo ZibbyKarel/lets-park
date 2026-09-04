@@ -5,7 +5,7 @@
  * with the same contents; `doc/decision/0037-*` explains the mechanism in
  * full. Two things in `apps/web` need it:
  *
- * - `src/shell/screen-state.spec.tsx` builds its errors by driving a **real**
+ * - `src/shell/screen-state/screen-state.spec.tsx` builds its errors by driving a **real**
  *   `RPCLink` (through `createApiClient`) rather than hand-rolling an oRPC
  *   error object — which means `@orpc/client` is imported, and merely
  *   importing it in bare jsdom fails with
