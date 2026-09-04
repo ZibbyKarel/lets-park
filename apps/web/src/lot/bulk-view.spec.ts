@@ -140,8 +140,7 @@ describe('buildMonthGrid — which days may be picked', () => {
     // 2026-09-05 Saturday, 2026-09-06 Sunday.
     for (const date of ['2026-09-05', '2026-09-06']) {
       const cell = cellOn(grid, date);
-      expect(cell.selectable).toBe(false);
-      expect(cell.block).toBe('WEEKEND');
+      expect(cell).toMatchObject({ selectable: false, block: 'WEEKEND' });
       expect(cell.weekendColumn).toBe(true);
     }
   });
@@ -150,8 +149,7 @@ describe('buildMonthGrid — which days may be picked', () => {
     // 28 September — Den české státnosti, a Monday in 2026. The design greys
     // this exact cell out.
     const cell = cellOn(grid, '2026-09-28');
-    expect(cell.selectable).toBe(false);
-    expect(cell.block).toBe('HOLIDAY');
+    expect(cell).toMatchObject({ selectable: false, block: 'HOLIDAY' });
     expect(cell.weekendColumn).toBe(false);
   });
 
@@ -162,7 +160,6 @@ describe('buildMonthGrid — which days may be picked', () => {
       dayOfMonth: 15,
       weekendColumn: false,
       selectable: true,
-      block: null,
     });
   });
 
@@ -170,7 +167,7 @@ describe('buildMonthGrid — which days may be picked', () => {
     // One `PAST_DATE` day rejects the whole batch (doc/decision/0090-*), so a
     // past cell must not be offered.
     const midMonth = buildMonthGrid('2026-09-15', '2026-09-15');
-    expect(cellOn(midMonth, '2026-09-14').block).toBe('PAST');
+    expect(cellOn(midMonth, '2026-09-14')).toMatchObject({ selectable: false, block: 'PAST' });
     expect(cellOn(midMonth, '2026-09-15').selectable).toBe(true);
   });
 
@@ -179,8 +176,8 @@ describe('buildMonthGrid — which days may be picked', () => {
     // the most durable fact about a day. Reversing the two checks would put
     // "in the past" on a cell whose real reason never changes.
     const late = buildMonthGrid('2026-09-15', '2026-09-30');
-    expect(cellOn(late, '2026-09-05').block).toBe('WEEKEND');
-    expect(cellOn(late, '2026-09-28').block).toBe('HOLIDAY');
+    expect(cellOn(late, '2026-09-05')).toMatchObject({ selectable: false, block: 'WEEKEND' });
+    expect(cellOn(late, '2026-09-28')).toMatchObject({ selectable: false, block: 'HOLIDAY' });
   });
 });
 
@@ -346,8 +343,7 @@ describe('weekendColumns — the design’s recessed right-hand columns', () => 
       date: `2026-09-${String(dayOfMonth).padStart(2, '0')}`,
       dayOfMonth,
       weekendColumn,
-      selectable: !weekendColumn,
-      block: weekendColumn ? 'WEEKEND' : null,
+      ...(weekendColumn ? { selectable: false, block: 'WEEKEND' } : { selectable: true }),
     });
     const grid: BulkMonthGrid = {
       month: '2026-09',

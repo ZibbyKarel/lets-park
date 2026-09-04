@@ -368,8 +368,12 @@ function CategoryBand({ spots }: { readonly spots: readonly ParkingSpot[] }) {
 }
 
 interface SpotFormDialogProps {
-  /** The spot being edited, or `null` when adding a new one. */
-  readonly spot: ParkingSpot | null;
+  /**
+   * The spot being edited, or `null` when adding a new one — narrowed to the
+   * two fields the form actually edits, so the dialog cannot start reading
+   * `active` or an id it has no business acting on.
+   */
+  readonly spot: Pick<ParkingSpot, 'label' | 'group'> | null;
   readonly errorMessage: string | null;
   readonly saving: boolean;
   readonly onCancel: () => void;

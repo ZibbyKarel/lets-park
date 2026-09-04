@@ -36,17 +36,12 @@ import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
 // it must stay free of `@orpc/contract` (`libs/contract/src/realtime/index.ts`).
 // Importing these from `@lets-park/contract` would not even compile.
 import type {
+  CellRef,
   ReservationCancelledEvent,
   ReservationCreatedEvent,
   ReservationReassignedEvent,
   WaitlistUpdatedEvent,
 } from '@lets-park/contract/realtime';
-
-/** A cell reference, as every server → client event carries one. */
-interface CellRefLike {
-  readonly date: string;
-  readonly parkingSpotId: string;
-}
 
 /**
  * Whether an event describes the day this cache entry holds.
@@ -56,8 +51,13 @@ interface CellRefLike {
  * was deactivated, or added, since this overview was fetched — mapping over
  * the rows would then silently produce an identical array and a pointless
  * re-render.
+ *
+ * `CellRef` is the contract's own name for the pair, and the one every event
+ * below is built on; the server calls the same shape `LockCell`
+ * (`apps/api/src/realtime/lock.service.ts`). Re-declaring it structurally here
+ * would be a second definition of a shape the contract owns.
  */
-function locate(day: DayOverviewOutput, event: CellRefLike): number {
+function locate(day: DayOverviewOutput, event: CellRef): number {
   if (day.date !== event.date) return -1;
   return day.spots.findIndex((row) => row.spot.id === event.parkingSpotId);
 }
@@ -170,7 +170,7 @@ export function applyWaitlistUpdated(
 }
 
 /** The row this event is about, or `null` if it is about another day or spot. */
-function rowFor(day: DayOverviewOutput, event: CellRefLike): DaySpotOverview | null {
+function rowFor(day: DayOverviewOutput, event: CellRef): DaySpotOverview | null {
   const index = locate(day, event);
   return index === -1 ? null : (day.spots[index] ?? null);
 }

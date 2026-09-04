@@ -47,16 +47,22 @@ const DAYS_PER_WEEK = 7;
 /** Why a cell in the month grid cannot be picked. */
 export type BulkCellBlock = 'WEEKEND' | 'HOLIDAY' | 'PAST';
 
-export interface BulkDayCell {
+/**
+ * One day in the month grid.
+ *
+ * `selectable` and `block` were a `boolean` beside a nullable, correlated by a
+ * comment reading "`null` exactly when `selectable` is `true`". They are one
+ * fact: a cell is blocked, and there is a reason, or it is not. As a union the
+ * reason is reachable only where it exists and cannot be attached to a day the
+ * user may pick.
+ */
+export type BulkDayCell = {
   readonly date: DateOnly;
   /** The number printed in the cell. */
   readonly dayOfMonth: number;
   /** Saturday or Sunday — the two columns the design sets apart on the right. */
   readonly weekendColumn: boolean;
-  readonly selectable: boolean;
-  /** `null` exactly when `selectable` is `true`. */
-  readonly block: BulkCellBlock | null;
-}
+} & ({ readonly selectable: true } | { readonly selectable: false; readonly block: BulkCellBlock });
 
 /**
  * A slot in a week row. `day` is `null` for a slot before the 1st or after the
@@ -109,8 +115,7 @@ function toCell(date: DateOnly, today: DateOnly): BulkDayCell {
     date,
     dayOfMonth: parseDateOnly(date).day,
     weekendColumn: isWeekend(date),
-    selectable: block === null,
-    block,
+    ...(block === null ? { selectable: true } : { selectable: false, block }),
   };
 }
 
