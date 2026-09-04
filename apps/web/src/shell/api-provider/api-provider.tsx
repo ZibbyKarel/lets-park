@@ -23,7 +23,7 @@ import { useAccessTokenProvider } from '@lets-park/auth/client';
 import { createApiClient } from '@lets-park/api-client';
 import { createApiQueryUtils } from '@lets-park/query';
 import type { ApiQueryUtils } from '@lets-park/query';
-import { apiRpcUrl } from '../api-url';
+import { apiRpcUrl } from '../../api-url';
 
 const ApiContext = createContext<ApiQueryUtils | null>(null);
 

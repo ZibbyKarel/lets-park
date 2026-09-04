@@ -23,9 +23,9 @@ import type { DropdownItem } from '@lets-park/design-system/primitives';
 import type { UserRole } from '@lets-park/contract';
 import { useTranslations } from '@lets-park/i18n';
 import Link from 'next/link';
-import { ADMIN_ROUTE, LOT_ROUTE, SETTINGS_ROUTE } from '../routes';
-import { Brand } from './brand';
-import { initialsOf } from './initials';
+import { ADMIN_ROUTE, LOT_ROUTE, SETTINGS_ROUTE } from '../../routes';
+import { Brand } from '../brand';
+import { initialsOf } from '../initials';
 
 /** Menu entry ids. `Dropdown.onSelect` reports one of these back. */
 export const MENU_SETTINGS = 'settings';

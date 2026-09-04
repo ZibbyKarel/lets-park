@@ -1,4 +1,4 @@
-import { ScreenLoading } from '../../shell/screen-state';
+import { ScreenLoading } from '../../shell/screen-state/screen-state';
 
 /**
  * What a signed-in screen shows while its Server Component work is in flight.

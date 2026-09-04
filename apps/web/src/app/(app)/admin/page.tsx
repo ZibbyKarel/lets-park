@@ -12,7 +12,7 @@
  * split, and same reason, as `app-top-bar.tsx` / `top-bar.tsx`.
  */
 
-import { AdminScreen } from '../../../shell/admin-screen';
+import { AdminScreen } from '../../../shell/admin-screen/admin-screen';
 import { AdminDayPanel } from '../../../shell/admin/admin-day-panel';
 import { AdminSpotsPanel } from '../../../shell/admin/admin-spots-panel';
 import { AdminUsersPanel } from '../../../shell/admin/admin-users-panel';

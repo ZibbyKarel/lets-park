@@ -34,7 +34,7 @@ import { Avatar, Button, Modal, Stack } from '@lets-park/design-system/primitive
 import { formatDayAndMonth, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import { initialsOf } from '../../shell/initials';
-import { ScreenError } from '../../shell/screen-state';
+import { ScreenError } from '../../shell/screen-state/screen-state';
 import type { SpotView } from '../lot-view';
 
 export interface SpotDialogProps {

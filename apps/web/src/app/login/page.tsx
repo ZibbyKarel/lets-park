@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { OKTA_PROVIDER_ID } from '@lets-park/auth';
 import { auth, signIn } from '../../auth';
 import { LOT_ROUTE } from '../../routes';
-import { LoginScreen } from '../../shell/login-screen';
+import { LoginScreen } from '../../shell/login-screen/login-screen';
 
 /**
  * The one page an unauthenticated visitor may see.

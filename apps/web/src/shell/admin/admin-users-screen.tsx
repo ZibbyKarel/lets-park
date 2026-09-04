@@ -47,8 +47,8 @@ import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
 import { initialsOf } from '../initials';
-import { ScreenDataGuard } from '../screen-state';
-import type { ScreenData } from '../screen-state';
+import { ScreenDataGuard } from '../screen-state/screen-state';
+import type { ScreenData } from '../screen-state/screen-state';
 import { useAdminWriteError } from './admin-errors';
 
 /** One field of one row is being written. `null` when nothing is in flight. */

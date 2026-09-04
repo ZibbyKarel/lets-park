@@ -16,7 +16,7 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { QueryProvider } from '@lets-park/query';
 import { IntlProvider } from '@lets-park/i18n';
-import { ApiProvider } from '../shell/api-provider';
+import { ApiProvider } from '../shell/api-provider/api-provider';
 
 /** The URL the specs use. Never fetched from: every transport is stubbed. */
 const API_URL = 'http://localhost:3000/api';

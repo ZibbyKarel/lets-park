@@ -15,8 +15,8 @@ import type { CreateSpotInput, ParkingGroup } from '@lets-park/contract';
 import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { todayInPrague } from '@lets-park/i18n';
-import { useApi } from '../api-provider';
-import { screenDataOf } from '../screen-state';
+import { useApi } from '../api-provider/api-provider';
+import { screenDataOf } from '../screen-state/screen-state';
 import type { AdminWrite, AdminWriteFailure } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 

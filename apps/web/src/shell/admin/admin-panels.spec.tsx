@@ -34,7 +34,7 @@ let mockApi: FakeApi;
 let mockRouterPush: jest.Mock;
 let mockViewer: MyProfile | undefined;
 
-jest.mock('../api-provider', () => ({
+jest.mock('../api-provider/api-provider', () => ({
   useApi: () => mockApi,
 }));
 

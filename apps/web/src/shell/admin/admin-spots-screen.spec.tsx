@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { ParkingSpot, SpotListOutput } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
 import { failureWithCode } from '../../testing/contract-failure';
-import type { ScreenData } from '../screen-state';
+import type { ScreenData } from '../screen-state/screen-state';
 import type { AdminWrite } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 import type { AdminSpotsScreenProps } from './admin-spots-screen';

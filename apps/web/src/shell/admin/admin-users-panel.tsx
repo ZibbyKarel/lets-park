@@ -12,8 +12,8 @@
 import { useState } from 'react';
 import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
-import { useApi } from '../api-provider';
-import { screenDataOf } from '../screen-state';
+import { useApi } from '../api-provider/api-provider';
+import { screenDataOf } from '../screen-state/screen-state';
 import { useCurrentUser } from '../use-current-user';
 import { AdminUsersScreen, type PendingUserChange } from './admin-users-screen';
 

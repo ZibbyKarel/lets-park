@@ -30,8 +30,8 @@ import { AuthProvider } from '@lets-park/auth/client';
 import type { AuthSession } from '@lets-park/auth/client';
 import { IntlProvider } from '@lets-park/i18n';
 import { QueryProvider, createQueryClient } from '@lets-park/query';
-import { ApiProvider } from '../shell/api-provider';
-import { RealtimeBoundary } from '../shell/realtime-boundary';
+import { ApiProvider } from '../shell/api-provider/api-provider';
+import { RealtimeBoundary } from '../shell/realtime-boundary/realtime-boundary';
 
 export interface ProvidersProps {
   /**

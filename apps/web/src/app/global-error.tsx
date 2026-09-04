@@ -2,7 +2,7 @@
 
 import { Container } from '@lets-park/design-system/primitives';
 import { IntlProvider } from '@lets-park/i18n';
-import { ScreenError } from '../shell/screen-state';
+import { ScreenError } from '../shell/screen-state/screen-state';
 import './global.css';
 
 /**

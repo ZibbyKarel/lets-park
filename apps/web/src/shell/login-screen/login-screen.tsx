@@ -15,7 +15,7 @@
 
 import { Button, Stack } from '@lets-park/design-system/primitives';
 import { useTranslations } from '@lets-park/i18n';
-import { Brand } from './brand';
+import { Brand } from '../brand';
 
 export interface LoginScreenProps {
   /** Server Action that starts the Okta authorization-code flow. */

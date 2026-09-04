@@ -23,7 +23,7 @@ import { useSession } from '@lets-park/auth/client';
 import { useQuery } from '@lets-park/query';
 import type { UseQueryResult } from '@lets-park/query';
 import type { MyProfile } from '@lets-park/contract';
-import { useApi } from './api-provider';
+import { useApi } from './api-provider/api-provider';
 
 /** The caller's own profile row. Idle until there is a session to send. */
 export function useCurrentUser(): UseQueryResult<MyProfile> {

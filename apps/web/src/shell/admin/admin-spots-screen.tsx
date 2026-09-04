@@ -50,7 +50,7 @@ import {
 import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { PARKING_GROUPS, useTranslations } from '@lets-park/i18n';
-import { ScreenDataGuard, type ScreenData } from '../screen-state';
+import { ScreenDataGuard, type ScreenData } from '../screen-state/screen-state';
 import { useAdminWriteError, type AdminWriteFailure } from './admin-errors';
 import {
   isDialogSaving,

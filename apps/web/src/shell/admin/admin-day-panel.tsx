@@ -17,8 +17,8 @@ import { useRequireAuth } from '@lets-park/auth/client';
 import { useQuery } from '@lets-park/query';
 import { todayInPrague } from '@lets-park/i18n';
 import { LOT_ROUTE } from '../../routes';
-import { useApi } from '../api-provider';
-import { screenDataOf } from '../screen-state';
+import { useApi } from '../api-provider/api-provider';
+import { screenDataOf } from '../screen-state/screen-state';
 import { AdminDayScreen } from './admin-day-screen';
 
 export function AdminDayPanel() {

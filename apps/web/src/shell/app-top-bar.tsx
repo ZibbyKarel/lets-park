@@ -34,7 +34,7 @@
 import { useRouter } from 'next/navigation';
 import { signOut, useRequireAuth } from '@lets-park/auth/client';
 import { LOGIN_ROUTE } from '../routes';
-import { TopBar } from './top-bar';
+import { TopBar } from './top-bar/top-bar';
 import { useCurrentUser } from './use-current-user';
 
 export function AppTopBar() {

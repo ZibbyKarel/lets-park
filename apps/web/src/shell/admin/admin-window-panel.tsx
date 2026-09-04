@@ -15,8 +15,8 @@ import type { ReservationLockMode } from '@lets-park/contract';
 import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { addMonths, startOfMonth, todayInPrague, toYearMonth } from '@lets-park/i18n';
-import { useApi } from '../api-provider';
-import { screenDataOf } from '../screen-state';
+import { useApi } from '../api-provider/api-provider';
+import { screenDataOf } from '../screen-state/screen-state';
 import { AdminWindowScreen } from './admin-window-screen';
 
 /**

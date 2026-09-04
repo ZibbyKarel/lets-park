@@ -42,8 +42,8 @@ import {
   useTranslations,
 } from '@lets-park/i18n';
 import type { DateOnly, MonthLockState } from '@lets-park/i18n';
-import { ScreenDataGuard } from '../screen-state';
-import type { ScreenData } from '../screen-state';
+import { ScreenDataGuard } from '../screen-state/screen-state';
+import type { ScreenData } from '../screen-state/screen-state';
 import { useAdminWriteError } from './admin-errors';
 import { LockModeChoice } from './lock-mode-choice';
 

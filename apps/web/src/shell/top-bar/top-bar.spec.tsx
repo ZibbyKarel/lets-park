@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
 import type { UserRole } from '@lets-park/contract';
-import { ADMIN_ROUTE, SETTINGS_ROUTE } from '../routes';
+import { ADMIN_ROUTE, SETTINGS_ROUTE } from '../../routes';
 import { TopBar } from './top-bar';
 
 /**

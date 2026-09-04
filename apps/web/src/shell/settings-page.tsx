@@ -14,9 +14,9 @@ import type { UpdateMySettingsInput } from '@lets-park/contract';
 import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { LOT_ROUTE } from '../routes';
-import { useApi } from './api-provider';
+import { useApi } from './api-provider/api-provider';
 import { useCurrentUser } from './use-current-user';
-import { SettingsScreen } from './settings-screen';
+import { SettingsScreen } from './settings-screen/settings-screen';
 
 export interface SettingsPageProps {
   /**

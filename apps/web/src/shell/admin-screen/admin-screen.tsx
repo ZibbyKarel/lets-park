@@ -29,7 +29,7 @@ import type { UserRole } from '@lets-park/contract';
 import { useTranslations } from '@lets-park/i18n';
 import { Tabs } from '@lets-park/design-system/primitives';
 import { EmptyState } from '@lets-park/design-system/compounds';
-import { ScreenError, ScreenLoading } from './screen-state';
+import { ScreenError, ScreenLoading } from '../screen-state/screen-state';
 
 /** The body of each tab, in the order the design's strip lists them. */
 export interface AdminPanels {

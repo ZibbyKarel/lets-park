@@ -33,7 +33,7 @@ import {
 } from '@lets-park/design-system/primitives';
 import { ConfirmDialog } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
-import { ScreenError, ScreenLoading } from './screen-state';
+import { ScreenError, ScreenLoading } from '../screen-state/screen-state';
 import {
   NO_PREFERRED_SPOT,
   shouldClearPreferredSpot,

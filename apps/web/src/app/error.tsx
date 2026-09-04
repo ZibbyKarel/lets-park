@@ -1,7 +1,7 @@
 'use client';
 
 import { Container } from '@lets-park/design-system/primitives';
-import { ScreenError } from '../shell/screen-state';
+import { ScreenError } from '../shell/screen-state/screen-state';
 
 /**
  * The last line of defence: anything a page or a layout throws lands here.
