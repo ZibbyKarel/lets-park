@@ -83,12 +83,18 @@ interface TreeProps {
  * note in `cell-lock.ts`). That case is covered by `connection.spec.tsx`,
  * which asserts the socket is closed on unmount.
  */
-function Tree({ editorMounted = true, onInvalidPayload, ...editor }: TreeProps) {
+function Tree({
+  editorMounted = true,
+  // Required on `RealtimeProvider`; a no-op for the specs that are not about
+  // reporting, the real `jest.fn()` for the one that is.
+  onInvalidPayload = () => undefined,
+  ...editor
+}: TreeProps) {
   return (
     <RealtimeProvider
       url={API_URL}
       getAccessToken={() => 'jwt-value'}
-      {...(onInvalidPayload === undefined ? {} : { onInvalidPayload })}
+      onInvalidPayload={onInvalidPayload}
     >
       {editorMounted ? <Editor {...editor} /> : null}
     </RealtimeProvider>

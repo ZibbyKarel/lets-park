@@ -54,7 +54,10 @@ afterEach(() => {
 
 function Providers({
   children,
-  onInvalidPayload,
+  // `onInvalidPayload` is required on `RealtimeProvider`, so the harness
+  // supplies a no-op for the specs that are not about reporting. The specs
+  // that *are* pass their own `jest.fn()`.
+  onInvalidPayload = () => undefined,
   getAccessToken = () => 'jwt-value',
 }: {
   children: ReactNode;
@@ -65,7 +68,7 @@ function Providers({
     <RealtimeProvider
       url={API_URL}
       getAccessToken={getAccessToken}
-      {...(onInvalidPayload === undefined ? {} : { onInvalidPayload })}
+      onInvalidPayload={onInvalidPayload}
     >
       {children}
     </RealtimeProvider>
@@ -356,6 +359,27 @@ describe('useRealtimeEvent', () => {
       event: 'waitlist:updated',
       issues: ['waitlistCount: Too small: expected number to be >=0'],
     });
+  });
+
+  it('will not compile without a reporter — the lib has no silent mode', () => {
+    // This lib drops a refused payload rather than throwing, so
+    // `onInvalidPayload` is the only trace the drop leaves. It used to be
+    // optional, which made silence the default for every consumer of the
+    // mandatory socket.io wrapper: a screen whose board quietly stopped
+    // updating while the socket stayed `connected`, so no status UI said
+    // anything either.
+    //
+    // The pin is a compile-time one because that is where the guarantee lives;
+    // `realtime-client:typecheck` runs `tsc --noEmit` over this file, so the
+    // `@ts-expect-error` fails the build the day the prop goes optional again.
+    const requiresReporter = () => (
+      // @ts-expect-error `onInvalidPayload` is required on RealtimeProvider.
+      <RealtimeProvider url={API_URL} getAccessToken={() => 'jwt-value'}>
+        <span />
+      </RealtimeProvider>
+    );
+
+    expect(requiresReporter).toBeInstanceOf(Function);
   });
 
   it('drops a payload whose id is not a uuid', async () => {

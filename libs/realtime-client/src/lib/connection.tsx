@@ -93,7 +93,8 @@ export interface RealtimeConnection {
   /**
    * Reports a payload that failed its schema. Referentially stable, so an
    * effect may depend on it. Calls whatever `onInvalidPayload` the provider
-   * was last rendered with.
+   * was last rendered with — which always exists, because the prop is
+   * required.
    */
   readonly reportInvalidPayload: InvalidPayloadHandler;
 }
@@ -111,8 +112,27 @@ export interface RealtimeConnectionOptions {
    * going to refuse.
    */
   readonly enabled?: boolean;
-  /** Called for each payload that fails its contract schema. */
-  readonly onInvalidPayload?: InvalidPayloadHandler;
+  /**
+   * Called for each payload that fails its contract schema.
+   *
+   * **Required, on purpose.** This lib drops a refused payload rather than
+   * throwing — one malformed broadcast must not take a working page down — so
+   * this callback is the only trace the drop leaves anywhere. When it was
+   * optional the lib had a silent mode that type-checked and linted: a
+   * consumer that never passed it would show a board that quietly stopped
+   * updating, with the socket still `connected`, so no status UI said anything
+   * either. `libs/realtime-client` is the mandatory wrapper for
+   * `socket.io-client`, so every future consumer arrives through here and
+   * inherited that default.
+   *
+   * The lib does not supply a default itself: `validation.ts` states the
+   * invariant that this lib never logs (its payloads share a socket with the
+   * access token), and `no-console` is an error across `libs/**`. So the
+   * decision belongs to the consumer — and requiring the prop makes a consumer
+   * that wants silence write it down, where it is greppable and reviewable,
+   * instead of getting it by omission.
+   */
+  readonly onInvalidPayload: InvalidPayloadHandler;
 }
 
 /**
@@ -239,7 +259,7 @@ export function useRealtimeConnection(options: RealtimeConnectionOptions): Realt
   }, [url, path, enabled, generation]);
 
   const reportInvalidPayload = useCallback<InvalidPayloadHandler>((report) => {
-    onInvalidPayloadRef.current?.(report);
+    onInvalidPayloadRef.current(report);
   }, []);
 
   return useMemo(
