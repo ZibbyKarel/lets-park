@@ -1,49 +1,17 @@
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { createApiClient } from '@lets-park/api-client';
-import { contract, ERROR_CODES, ERROR_DEFINITIONS } from '@lets-park/contract';
+import { contract, ERROR_CODES } from '@lets-park/contract';
 import type { ErrorCode } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { failureWithCode } from '../../testing/contract-failure';
 import { ADMIN_WRITE_MESSAGES, useAdminWriteError, type AdminWrite } from './admin-errors';
 
 /**
- * Failures are produced by a **real** `RPCLink` — a client built with
- * `createApiClient`, one real procedure called on it, only `fetch` replaced —
- * exactly as `settings-screen.spec.tsx` does, and for the same reason: a
- * hand-built `ORPCError` would assert this file's idea of the wire shape
- * instead of the transport's, and `apps/web` may not import `@orpc/client` at
- * all to build one directly.
+ * Failures come from {@link failureWithCode} — a **real** `RPCLink` with only
+ * `fetch` replaced. A hand-built `ORPCError` would assert this file's idea of
+ * the wire shape instead of the transport's, and `apps/web` may not import
+ * `@orpc/client` at all to build one directly.
  */
-const API_URL = 'https://api.test/rpc';
-
-async function failureWithCode(code: ErrorCode): Promise<unknown> {
-  // The status the contract itself assigns the code, not a guess: `RPCLink`
-  // derives a *different* code from the status when the body cannot be read,
-  // so a mismatched pair here would silently test the wrong error.
-  const status = ERROR_DEFINITIONS[code].status;
-  const body = {
-    json: { defined: false as const, code, status, message: 'developer-facing' },
-    meta: [],
-  };
-  const client = createApiClient({
-    url: API_URL,
-    fetch: async () =>
-      new Response(JSON.stringify(body), {
-        status,
-        headers: { 'content-type': 'application/json' },
-      }),
-  });
-
-  const marker = Symbol('resolved');
-  const outcome = await client.me.get().then(
-    () => marker,
-    (error: unknown) => error
-  );
-  if (outcome === marker) {
-    throw new Error('expected the call to reject, but it resolved');
-  }
-  return outcome;
-}
 
 function wrapper({ children }: { children: ReactNode }) {
   return <IntlProvider>{children}</IntlProvider>;

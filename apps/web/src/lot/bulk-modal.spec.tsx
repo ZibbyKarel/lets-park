@@ -1,15 +1,14 @@
-import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryProvider, createApiQueryUtils, createQueryClient } from '@lets-park/query';
-import { IntlProvider } from '@lets-park/i18n';
+import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import type {
   ConfirmBulkOutput,
   MyProfile,
   ParkingSpot,
   PreviewBulkOutput,
 } from '@lets-park/contract';
-import { ApiProvider } from '../shell/api-provider';
+import { profile as sharedProfile } from '../testing/fixtures';
+import { createProviderWrapper } from '../testing/providers';
 import { BulkReservationModal } from './bulk-modal';
 
 /**
@@ -109,21 +108,13 @@ function spot(id: string, label: string): ParkingSpot {
   return { id, label, group: 'IT', active: true, createdAt: T0, updatedAt: T0 };
 }
 
+/**
+ * The shared viewer, but holding {@link PREFERRED_SPOT_ID} — the one field this
+ * file's subject is about, and the one field the two copies of this fixture
+ * ever disagreed on.
+ */
 function profile(overrides: Partial<MyProfile> = {}): MyProfile {
-  return {
-    id: 'user-viewer',
-    email: 'karel.zibar@firma.cz',
-    name: 'Karel Zíbar',
-    licensePlate: '4AB 1234',
-    role: 'USER',
-    oktaId: 'okta-1',
-    active: true,
-    icsToken: 'ics-token',
-    preferredParkingSpotId: PREFERRED_SPOT_ID,
-    createdAt: T0,
-    updatedAt: T0,
-    ...overrides,
-  };
+  return sharedProfile({ preferredParkingSpotId: PREFERRED_SPOT_ID, ...overrides });
 }
 
 function preview(overrides: Partial<PreviewBulkOutput> = {}): PreviewBulkOutput {
@@ -225,15 +216,7 @@ function setup(options: SetupOptions = {}) {
   const invalidate = jest.spyOn(client, 'invalidateQueries');
   const onClose = jest.fn();
 
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryProvider client={client}>
-        <ApiProvider url="http://localhost:3000/api">
-          <IntlProvider>{children}</IntlProvider>
-        </ApiProvider>
-      </QueryProvider>
-    );
-  }
+  const Wrapper = createProviderWrapper(client);
 
   const utils = render(
     <BulkReservationModal

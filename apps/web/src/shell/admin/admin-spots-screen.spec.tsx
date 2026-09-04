@@ -1,42 +1,15 @@
 import { useState } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createApiClient } from '@lets-park/api-client';
-import { ERROR_DEFINITIONS } from '@lets-park/contract';
-import type { ErrorCode, ParkingSpot, SpotListOutput } from '@lets-park/contract';
+import type { ParkingSpot, SpotListOutput } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { failureWithCode } from '../../testing/contract-failure';
 import type { ScreenData } from '../screen-state';
 import type { AdminWrite } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 import type { AdminSpotsScreenProps } from './admin-spots-screen';
 
 const TIMESTAMP = '2026-08-28T09:15:00.000Z';
-
-/** See `admin-errors.spec.tsx` — a real `RPCLink` failure, only `fetch` stubbed. */
-async function failureWithCode(code: ErrorCode): Promise<unknown> {
-  const status = ERROR_DEFINITIONS[code].status;
-  const client = createApiClient({
-    url: 'https://api.test/rpc',
-    fetch: async () =>
-      new Response(
-        JSON.stringify({
-          json: { defined: false as const, code, status, message: 'developer-facing' },
-          meta: [],
-        }),
-        { status, headers: { 'content-type': 'application/json' } }
-      ),
-  });
-
-  const marker = Symbol('resolved');
-  const outcome = await client.me.get().then(
-    () => marker,
-    (error: unknown) => error
-  );
-  if (outcome === marker) {
-    throw new Error('expected the call to reject, but it resolved');
-  }
-  return outcome;
-}
 
 function aSpot(overrides: Partial<ParkingSpot> & { id: string; label: string }): ParkingSpot {
   return {

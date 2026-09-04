@@ -1,9 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createApiClient } from '@lets-park/api-client';
-import { ERROR_DEFINITIONS } from '@lets-park/contract';
-import type { ErrorCode, MonthWindowOverview, ReservationLockMode } from '@lets-park/contract';
+import type { MonthWindowOverview, ReservationLockMode } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { failureWithCode } from '../../testing/contract-failure';
 import { AdminWindowScreen, STATE_TONE } from './admin-window-screen';
 import type { AdminWindowScreenProps } from './admin-window-screen';
 
@@ -20,32 +19,6 @@ type WindowOverrides = Partial<Omit<AdminWindowScreenProps, 'reservationWindow'>
   readonly lockMode?: ReservationLockMode;
   readonly months?: MonthWindowOverview[];
 };
-
-/** See `admin-errors.spec.tsx` — a real `RPCLink` failure, only `fetch` stubbed. */
-async function failureWithCode(code: ErrorCode): Promise<unknown> {
-  const status = ERROR_DEFINITIONS[code].status;
-  const client = createApiClient({
-    url: 'https://api.test/rpc',
-    fetch: async () =>
-      new Response(
-        JSON.stringify({
-          json: { defined: false as const, code, status, message: 'developer-facing' },
-          meta: [],
-        }),
-        { status, headers: { 'content-type': 'application/json' } }
-      ),
-  });
-
-  const marker = Symbol('resolved');
-  const outcome = await client.me.get().then(
-    () => marker,
-    (error: unknown) => error
-  );
-  if (outcome === marker) {
-    throw new Error('expected the call to reject, but it resolved');
-  }
-  return outcome;
-}
 
 /** September, named because two tests reach for it on its own. */
 const SEPTEMBER: MonthWindowOverview = {

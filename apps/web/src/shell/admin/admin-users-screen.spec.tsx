@@ -1,9 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createApiClient } from '@lets-park/api-client';
-import { ERROR_DEFINITIONS } from '@lets-park/contract';
-import type { AdminUser, ErrorCode } from '@lets-park/contract';
+import type { AdminUser } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { failureWithCode } from '../../testing/contract-failure';
 import { AdminUsersScreen, matchesUserSearch } from './admin-users-screen';
 import type { AdminUsersScreenProps } from './admin-users-screen';
 
@@ -36,42 +35,6 @@ const PETR = aUser({
   email: 'petr.novak@firma.cz',
   active: false,
 });
-
-/**
- * A real `RPCLink` failure — a client built with `createApiClient`, one real
- * procedure called on it, only `fetch` replaced. Same construction, and the
- * same reason, as `settings-screen.spec.tsx`: `apps/web` may not import
- * `@orpc/client` to hand-build an `ORPCError`, and one built here would assert
- * this file's idea of the wire shape rather than the transport's.
- */
-async function failureWithCode(code: ErrorCode): Promise<unknown> {
-  // The status the contract assigns the code. `RPCLink` derives a different
-  // code from the status when it cannot read the body, so the pair has to
-  // agree or the test silently exercises the wrong error.
-  const status = ERROR_DEFINITIONS[code].status;
-  const body = {
-    json: { defined: false as const, code, status, message: 'developer-facing' },
-    meta: [],
-  };
-  const client = createApiClient({
-    url: 'https://api.test/rpc',
-    fetch: async () =>
-      new Response(JSON.stringify(body), {
-        status,
-        headers: { 'content-type': 'application/json' },
-      }),
-  });
-
-  const marker = Symbol('resolved');
-  const outcome = await client.me.get().then(
-    () => marker,
-    (error: unknown) => error
-  );
-  if (outcome === marker) {
-    throw new Error('expected the call to reject, but it resolved');
-  }
-  return outcome;
-}
 
 function renderScreen(overrides: Partial<AdminUsersScreenProps> = {}) {
   const onRetry = jest.fn();

@@ -1,10 +1,9 @@
-import type { ReactNode } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryProvider, createApiQueryUtils, createQueryClient } from '@lets-park/query';
-import { IntlProvider } from '@lets-park/i18n';
+import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
-import { ApiProvider } from '../shell/api-provider';
+import { profile } from '../testing/fixtures';
+import { createProviderWrapper } from '../testing/providers';
 import { LotScreen } from './lot-screen';
 
 /**
@@ -134,23 +133,6 @@ function dayKey(date: string) {
 
 function meKey() {
   return createApiQueryUtils(buildClient() as never).me.get.queryOptions().queryKey;
-}
-
-function profile(overrides: Partial<MyProfile> = {}): MyProfile {
-  return {
-    id: VIEWER,
-    email: 'karel.zibar@firma.cz',
-    name: 'Karel Zíbar',
-    licensePlate: '4AB 1234',
-    role: 'USER',
-    oktaId: 'okta-1',
-    active: true,
-    icsToken: 'ics-token',
-    preferredParkingSpotId: null,
-    createdAt: T0,
-    updatedAt: T0,
-    ...overrides,
-  };
 }
 
 function freeSpot(overrides: Partial<DaySpotOverview> = {}): DaySpotOverview {
@@ -288,15 +270,7 @@ function setup(
 
   const invalidate = jest.spyOn(client, 'invalidateQueries');
 
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryProvider client={client}>
-        <ApiProvider url="http://localhost:3000/api">
-          <IntlProvider>{children}</IntlProvider>
-        </ApiProvider>
-      </QueryProvider>
-    );
-  }
+  const Wrapper = createProviderWrapper(client);
 
   const utils = render(<LotScreen />, { wrapper: Wrapper });
 

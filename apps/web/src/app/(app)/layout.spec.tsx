@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { QueryProvider, createQueryClient } from '@lets-park/query';
-import { IntlProvider } from '@lets-park/i18n';
-import { ApiProvider } from '../../shell/api-provider';
+import { createQueryClient } from '@lets-park/query';
+import { createProviderWrapper } from '../../testing/providers';
 import AppLayout from './layout';
 
 /**
@@ -110,15 +109,7 @@ function setup(
 
   const client = createQueryClient({ defaultOptions: { queries: { retry: false } } });
 
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryProvider client={client}>
-        <ApiProvider url="http://localhost:3000/api">
-          <IntlProvider>{children}</IntlProvider>
-        </ApiProvider>
-      </QueryProvider>
-    );
-  }
+  const Wrapper = createProviderWrapper(client);
 
   const utils = render(
     <AppLayout>
