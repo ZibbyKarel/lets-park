@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Container } from '@lets-park/design-system/primitives';
 import { AppTopBar } from '../../shell/app-top-bar';
 
 /**
@@ -23,7 +24,9 @@ export default function AppLayout({ children }: { readonly children: ReactNode }
   return (
     <>
       <AppTopBar />
-      <main className="mx-auto w-full max-w-[var(--container)] px-4 py-8">{children}</main>
+      <main>
+        <Container>{children}</Container>
+      </main>
     </>
   );
 }

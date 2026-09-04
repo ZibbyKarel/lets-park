@@ -1,5 +1,6 @@
 'use client';
 
+import { Container } from '@lets-park/design-system/primitives';
 import { ScreenError } from '../shell/screen-state';
 
 /**
@@ -23,8 +24,10 @@ export default function AppError({
   readonly reset: () => void;
 }) {
   return (
-    <main className="mx-auto w-full max-w-[var(--container)] px-4 py-16">
-      <ScreenError error={error} onRetry={reset} headingLevel={2} />
+    <main>
+      <Container padding={[16, 4]}>
+        <ScreenError error={error} onRetry={reset} headingLevel={2} />
+      </Container>
     </main>
   );
 }

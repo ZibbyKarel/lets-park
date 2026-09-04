@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { EmptyState } from '@lets-park/design-system/compounds';
+import { Container } from '@lets-park/design-system/primitives';
 import { useTranslations } from '@lets-park/i18n';
 import { LOT_ROUTE } from '../routes';
 
@@ -21,20 +22,22 @@ export default function NotFound() {
   const t = useTranslations('shell');
 
   return (
-    <main className="mx-auto w-full max-w-[var(--container)] px-4 py-16">
-      <EmptyState
-        headingLevel={2}
-        title={t('notFoundTitle')}
-        description={t('notFoundDescription')}
-        action={
-          <Link
-            href={LOT_ROUTE}
-            className="rounded-sm text-sm font-bold text-brand-blue underline outline-none hover:text-brand-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
-          >
-            {t('backToLot')}
-          </Link>
-        }
-      />
+    <main>
+      <Container padding={[16, 4]}>
+        <EmptyState
+          headingLevel={2}
+          title={t('notFoundTitle')}
+          description={t('notFoundDescription')}
+          action={
+            <Link
+              href={LOT_ROUTE}
+              className="rounded-sm text-sm font-bold text-brand-blue underline outline-none hover:text-brand-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+            >
+              {t('backToLot')}
+            </Link>
+          }
+        />
+      </Container>
     </main>
   );
 }

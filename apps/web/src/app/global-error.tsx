@@ -1,5 +1,6 @@
 'use client';
 
+import { Container } from '@lets-park/design-system/primitives';
 import { IntlProvider } from '@lets-park/i18n';
 import { ScreenError } from '../shell/screen-state';
 import './global.css';
@@ -48,8 +49,10 @@ export default function GlobalError({
     <html lang="cs">
       <body>
         <IntlProvider>
-          <main className="mx-auto w-full max-w-[var(--container)] px-4 py-16">
-            <ScreenError error={error} onRetry={reset} />
+          <main>
+            <Container padding={[16, 4]}>
+              <ScreenError error={error} onRetry={reset} />
+            </Container>
           </main>
         </IntlProvider>
       </body>
