@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createApiClient } from '@lets-park/api-client';
 import { IntlProvider } from '@lets-park/i18n';
+import { failureWithCode } from '../testing/contract-failure';
 import { SpotDialog } from './spot-dialog';
 import type { SpotView } from './lot-view';
 
@@ -267,61 +267,21 @@ describe('SpotDialog — the caller’s own reservation', () => {
   });
 });
 
-/**
- * A failure produced by a **real** `RPCLink`, with only the `fetch` at the
- * bottom replaced — the same technique, and for the same reason, as
- * `shell/screen-state.spec.tsx`: a hand-built error object asserts this
- * file's idea of the wire shape instead of the transport's. The first version
- * of the test below did construct one by hand, and it passed the developer's
- * intent while failing against the real shape — which is precisely the failure
- * mode `doc/frontend.md` warns about.
- */
-async function contractFailure(code: string, status: number, message: string): Promise<unknown> {
-  const client = createApiClient({
-    url: 'https://api.test/rpc',
-    fetch: async () =>
-      // The payload is **not** at the top level: oRPC's RPC protocol wraps
-      // every body in its `{ json, meta }` envelope. Getting that wrong is
-      // exactly what a hand-built error object hides — the first draft of
-      // this helper omitted it and produced an error `toContractError` could
-      // not read, which is the same silence a genuinely unrecognised code
-      // would produce.
-      new Response(JSON.stringify({ json: { defined: false, code, status, message }, meta: [] }), {
-        status,
-        headers: { 'content-type': 'application/json' },
-      }),
-  });
-
-  const marker = Symbol('resolved');
-  const outcome = await client.me.get().then(
-    () => marker,
-    (error: unknown) => error
-  );
-  if (outcome === marker) throw new Error('expected the call to reject, but it resolved');
-  return outcome;
-}
-
 describe('SpotDialog — failures', () => {
   it('renders a contract error by its code, never by its message', async () => {
     // The error carries a developer-facing English `message`, which must not
     // reach the page; the Czech sentence comes from the code.
-    const error = await contractFailure(
-      'SPOT_ALREADY_RESERVED',
-      409,
-      'The spot is already reserved for that day.'
-    );
+    const error = await failureWithCode('SPOT_ALREADY_RESERVED');
     renderDialog({ error });
 
     expect(
       screen.getByText('Toto parkovací místo je na daný den už rezervované.')
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText('The spot is already reserved for that day.')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText('developer-facing')).not.toBeInTheDocument();
   });
 
   it('renders the window codes the two write actions can raise', async () => {
-    const locked = await contractFailure('RESERVATIONS_LOCKED', 403, 'Reservations are locked.');
+    const locked = await failureWithCode('RESERVATIONS_LOCKED');
     renderDialog({ error: locked });
 
     expect(screen.getByText('Rezervační okno pro tento měsíc je už uzamčené.')).toBeInTheDocument();

@@ -1,8 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
+import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import type {
   ConfirmBulkOutput,
+  ErrorCode,
   MyProfile,
   ParkingSpot,
   PreviewBulkOutput,
@@ -78,7 +80,20 @@ jest.mock('@lets-park/api-client', () => ({
 const realApiClient =
   jest.requireActual<typeof import('@lets-park/api-client')>('@lets-park/api-client');
 
-async function contractFailure(code: string, status: number): Promise<unknown> {
+/**
+ * The status is **derived**, never passed: `ContractExceptionFilter` answers
+ * with `ERROR_DEFINITIONS[code].status` and nothing else, so a hand-picked
+ * status manufactures a wire shape the server cannot produce — a test that
+ * cannot fail for the reason it claims to check. Three call sites here and in
+ * `spot-dialog.spec.tsx` did exactly that, and disagreed with each other on
+ * the same code.
+ *
+ * `apps/web/src/testing/contract-failure.ts` is the shared version. This file
+ * cannot use it: it `jest.mock`s `@lets-park/api-client` wholesale, so a helper
+ * importing the module normally would get the mock.
+ */
+async function contractFailure(code: ErrorCode): Promise<unknown> {
+  const status = ERROR_DEFINITIONS[code].status;
   const client = realApiClient.createApiClient({
     url: 'https://api.test/rpc',
     fetch: async () =>
@@ -704,7 +719,7 @@ describe('BulkReservationModal — what each typed failure says', () => {
   it('tells the user nothing was written when the batch lost a race', async () => {
     const { user } = setup();
     const confirm = await reachSchedule(user);
-    apiMocks.confirmBulk.mockRejectedValue(await contractFailure('CONFLICT', 409));
+    apiMocks.confirmBulk.mockRejectedValue(await contractFailure('CONFLICT'));
 
     await user.click(confirm);
 
@@ -722,7 +737,7 @@ describe('BulkReservationModal — what each typed failure says', () => {
     // request is never the reason: a weekend is a per-day fact inside a
     // *successful* response (`doc/decision/0090-*`).
     const { user } = setup({
-      previewFailure: await contractFailure('VALIDATION_FAILED', 422),
+      previewFailure: await contractFailure('VALIDATION_FAILED'),
     });
 
     await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
@@ -741,7 +756,7 @@ describe('BulkReservationModal — what each typed failure says', () => {
   it('says the month is locked when the API refuses the confirmation', async () => {
     const { user } = setup();
     const confirm = await reachSchedule(user);
-    apiMocks.confirmBulk.mockRejectedValue(await contractFailure('RESERVATIONS_LOCKED', 422));
+    apiMocks.confirmBulk.mockRejectedValue(await contractFailure('RESERVATIONS_LOCKED'));
 
     await user.click(confirm);
 
