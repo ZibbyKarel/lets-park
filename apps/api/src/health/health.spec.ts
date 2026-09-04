@@ -25,6 +25,8 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { TerminusModule } from '@nestjs/terminus';
+import { getLoggerToken } from 'nestjs-pino';
+import type { PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../database/prisma.service';
 import {
   DATABASE_HEALTH_TIMEOUT_MESSAGE,
@@ -51,7 +53,44 @@ class PrismaStub {
   }
 }
 
-async function createController(prisma: PrismaStub): Promise<HealthController> {
+/**
+ * What the indicator wrote to the log, in the order it wrote it.
+ *
+ * Kept as a recording double rather than a spy on a real pino instance so the
+ * assertions can read the *bindings object* — the `err` the response is
+ * forbidden to carry has to be provably present here, and a serialized log
+ * line would only prove that some string contains the host.
+ */
+interface LogLine {
+  readonly bindings: Record<string, unknown>;
+  readonly message: string;
+}
+
+function recordingLogger(): { logger: PinoLogger; lines: LogLine[] } {
+  const lines: LogLine[] = [];
+  const record =
+    () =>
+    (bindings: Record<string, unknown>, message: string): void => {
+      lines.push({ bindings, message });
+    };
+
+  return {
+    lines,
+    logger: {
+      trace: record(),
+      debug: record(),
+      info: record(),
+      warn: record(),
+      error: record(),
+      fatal: record(),
+    } as unknown as PinoLogger,
+  };
+}
+
+async function createController(
+  prisma: PrismaStub,
+  logger: PinoLogger = recordingLogger().logger
+): Promise<HealthController> {
   const moduleRef = await Test.createTestingModule({
     imports: [TerminusModule.forRoot({ errorLogStyle: 'json', logger: false })],
     controllers: [HealthController],
@@ -62,6 +101,7 @@ async function createController(prisma: PrismaStub): Promise<HealthController> {
         provide: ConfigService,
         useValue: { get: () => HEALTH_DB_TIMEOUT_MS },
       },
+      { provide: getLoggerToken(DatabaseHealthIndicator.name), useValue: logger },
     ],
   }).compile();
 
@@ -130,6 +170,49 @@ describe('HealthController', () => {
 
       expect(serialized).not.toContain('10.0.0.7');
       expect(serialized).not.toContain('lets_park');
+    });
+
+    it('logs the driver error it refuses to put in the response', async () => {
+      // The two halves of this pair say deliberately different things. The
+      // response must not name the host, the database or the user; the log is
+      // the only place an operator can tell a rotated password from DNS from
+      // an exhausted pool, and without it a crash loop has one symptom and
+      // three possible fixes.
+      const recorder = recordingLogger();
+      prisma.behaviour = 'down';
+      controller = await createController(prisma, recorder.logger);
+
+      await controller.ready().catch(() => undefined);
+
+      expect(recorder.lines).toHaveLength(1);
+      const line = recorder.lines[0];
+      expect(line?.message).toBe('Readiness database probe failed');
+      expect(line?.bindings['err']).toBeInstanceOf(Error);
+      // The cause the response is forbidden to carry survives here, in full.
+      expect((line?.bindings['err'] as Error).message).toContain('10.0.0.7');
+      expect((line?.bindings['err'] as Error).message).toContain('lets_park');
+    });
+
+    it('says nothing when the probe succeeds — a healthy probe is not a log line', async () => {
+      const recorder = recordingLogger();
+      controller = await createController(prisma, recorder.logger);
+
+      await controller.ready();
+
+      expect(recorder.lines).toHaveLength(0);
+    });
+
+    it('logs the timeout too, so a hung pool is distinguishable in the logs', async () => {
+      const recorder = recordingLogger();
+      prisma.behaviour = 'hang';
+      controller = await createController(prisma, recorder.logger);
+
+      await controller.ready().catch(() => undefined);
+
+      expect(recorder.lines).toHaveLength(1);
+      expect((recorder.lines[0]?.bindings['err'] as Error).message).toBe(
+        DATABASE_HEALTH_TIMEOUT_MESSAGE
+      );
     });
 
     it('fails fast instead of hanging when the database never answers', async () => {

@@ -16,6 +16,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { HealthIndicatorResult } from '@nestjs/terminus';
 import { HealthIndicatorService } from '@nestjs/terminus';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../database/prisma.service';
 import type { ApiEnv } from '../env';
 
@@ -29,7 +30,8 @@ export class DatabaseHealthIndicator {
   constructor(
     private readonly prisma: PrismaService,
     private readonly healthIndicatorService: HealthIndicatorService,
-    configService: ConfigService<ApiEnv, true>
+    configService: ConfigService<ApiEnv, true>,
+    @InjectPinoLogger(DatabaseHealthIndicator.name) private readonly logger: PinoLogger
   ) {
     this.timeoutMs = configService.get('HEALTH_DB_TIMEOUT_MS', { infer: true });
   }
@@ -42,6 +44,23 @@ export class DatabaseHealthIndicator {
       await this.withTimeout(this.prisma.ping());
       return indicator.up({ responseTimeMs: Date.now() - startedAt });
     } catch (error) {
+      // The log is where the *cause* survives. The coarse `reason` below tells
+      // an operator that the database is unreachable and nothing more, so
+      // without this line a rotated password (`28P01`), a host that no longer
+      // resolves and an exhausted pool all present as one indistinguishable
+      // symptom — three different fixes behind one 503 and a restart loop. The
+      // logs are the authenticated side of this pair: the driver's message is
+      // safe here and is not safe in the response, which is exactly why the two
+      // halves say different things.
+      //
+      // Deliberately not rate-limited or deduplicated. Probes fire on an
+      // interval, so a crash loop repeats this line — that repetition is the
+      // signal, not noise.
+      this.logger.warn(
+        { err: error, timeoutMs: this.timeoutMs },
+        'Readiness database probe failed'
+      );
+
       // The reason is deliberately coarse. `/health/ready` is usually reachable
       // to more people than the logs are, and a driver error message can carry
       // the host, the database name and occasionally the user.
