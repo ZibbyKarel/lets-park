@@ -67,7 +67,7 @@ npx nx run web-e2e:e2e                   # documented in doc/testing.md, not re-
 root Nx supplies it from `.env`. In a **worktree** it does not — `.env` is
 git-ignored and does not travel — so the target fails before it reaches a test:
 `DATABASE_URL is not set. … It does not skip itself, on purpose.` (measured from
-a stripped shell: exit 1 without it, exit 0 and **8 suites / 92 tests** with it).
+a stripped shell: exit 1 without it, exit 0 and **8 suites / 94 tests** with it).
 Either copy `.env` in, or pass it for the one command:
 
 ```bash

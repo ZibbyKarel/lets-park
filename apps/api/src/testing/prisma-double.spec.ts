@@ -18,16 +18,20 @@ describe('PrismaDouble', () => {
 
   describe('parkingSpot.findMany', () => {
     it('answers the filters and ordering it models', async () => {
-      double.seedSpot({ label: 'B1', group: 'IT' });
-      double.seedSpot({ label: 'A1', group: 'SHARED' });
-      double.seedSpot({ label: 'A2', group: 'SHARED', active: false });
+      // Seeded so that insertion order and group-then-label order DIFFER
+      // (insertion gives B1, A1; the ordering asked for gives A1, B1). A
+      // fixture where the two coincide would pass whether or not the delegate
+      // honours `orderBy` at all.
+      double.seedSpot({ label: 'B1', group: 'SHARED' });
+      double.seedSpot({ label: 'A1', group: 'IT' });
+      double.seedSpot({ label: 'A2', group: 'IT', active: false });
 
       const rows = await double.asPrismaService().client.parkingSpot.findMany({
         where: { active: true },
         orderBy: [{ group: 'asc' }, { label: 'asc' }],
       });
 
-      expect(rows.map((row) => row.label)).toEqual(['B1', 'A1']);
+      expect(rows.map((row) => row.label)).toEqual(['A1', 'B1']);
     });
 
     it('honours a label-only ordering rather than imposing its own', async () => {
@@ -47,8 +51,12 @@ describe('PrismaDouble', () => {
       // anyway, which would let a test rely on an order production may not
       // give it — this pins the absence of that sort, not a preference for
       // insertion order.
-      double.seedSpot({ label: 'B1', group: 'IT' });
-      double.seedSpot({ label: 'A1', group: 'SHARED' });
+      // The groups are deliberately the reverse of the labels: insertion order
+      // is B1, A1 and group-then-label order is A1, B1, so re-adding the sort
+      // this test exists to forbid turns it red. With both spots in
+      // ascending-group order the two lists coincide and the guard is unpinned.
+      double.seedSpot({ label: 'B1', group: 'SHARED' });
+      double.seedSpot({ label: 'A1', group: 'IT' });
 
       const rows = await double.asPrismaService().client.parkingSpot.findMany({});
 
