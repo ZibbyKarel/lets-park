@@ -160,8 +160,6 @@ export interface ScreenDataGuardProps<T> {
   readonly onRetry?: () => void;
   /** See `EmptyStateProps.headingLevel`: only the page knows its own outline. */
   readonly headingLevel?: EmptyStateHeadingLevel;
-  /** Overrides the loading state's default "Načítá se…". */
-  readonly loadingLabel?: string;
   /** Drawn only once there is data to draw it from. */
   readonly children: (data: T) => ReactNode;
 }
@@ -173,16 +171,18 @@ export interface ScreenDataGuardProps<T> {
  * belong *inside* something it has already opened — a modal that keeps its
  * header and footer while its body is loading — cannot use an early return
  * without losing the frame. Both call shapes are the same expression here.
+ *
+ * No `label` for the loading state, because no screen overrides it. A site that
+ * needs one still has `ScreenLoading` itself.
  */
 export function ScreenDataGuard<T>({
   state,
   onRetry,
   headingLevel,
-  loadingLabel,
   children,
 }: ScreenDataGuardProps<T>) {
   if (state.kind === 'loading') {
-    return <ScreenLoading {...(loadingLabel === undefined ? {} : { label: loadingLabel })} />;
+    return <ScreenLoading />;
   }
 
   if (state.kind === 'error') {
