@@ -52,6 +52,7 @@ import {
   type BulkDayCell,
   type BulkDayOutcomeView,
 } from './bulk-view';
+import { CalendarTable } from './calendar-table';
 
 export interface BulkReservationModalProps {
   readonly open: boolean;
@@ -369,59 +370,23 @@ function BulkReservationModalContent({
   // --------------------------------------------------------------- schedule
   if (proposal !== null) {
     return (
-      <Modal
+      <CalendarTable
         open={open}
         onClose={onClose}
-        size="md"
-        title={t('scheduleTitle')}
-        description={t('scheduleDescription')}
-        closeLabel={t('close')}
-        closeOnScrimClick={false}
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              disabled={pending}
-              onClick={() => {
-                setProposal(null);
-                setFailure(null);
-              }}
-            >
-              {t('ctaBack')}
-            </Button>
-            <Button
-              loading={confirmBulk.isPending}
-              disabled={pending}
-              onClick={() => {
-                // The days of the **proposal on screen**, not of `selected`.
-                // They agree today, because both procedures answer one entry
-                // per requested day — but "we confirm exactly what you were
-                // shown" is the invariant, and reading it off the thing that
-                // was shown is the only way to state it.
-                confirmBulk.mutate({ dates: proposal.days.map((day) => day.date) });
-              }}
-            >
-              {t('ctaConfirm')}
-            </Button>
-          </>
-        }
-      >
-        {renderSchedule(proposal.days)}
-        <p className="mt-4 text-base text-fg-2">
-          {/*
-            The server's own count, exactly as the result step uses
-            `result.summary`. Re-deriving it here by filtering `days` would put
-            two authorities behind one sentence, and the moment they disagreed
-            the user would read a difference between the two steps that the
-            comparison panel cannot explain, because no day moved.
-          */}
-          {t('scheduleSummary', {
-            assigned: proposal.summary.assigned,
-            queued: proposal.summary.queued,
-          })}
-        </p>
-        {failureNote}
-      </Modal>
+        t={t}
+        proposal={proposal}
+        pending={pending}
+        onBack={() => {
+          setProposal(null);
+          setFailure(null);
+        }}
+        confirmPending={confirmBulk.isPending}
+        onConfirm={() => {
+          confirmBulk.mutate({ dates: proposal.days.map((day) => day.date) });
+        }}
+        renderSchedule={renderSchedule}
+        failureNote={failureNote}
+      />
     );
   }
 
