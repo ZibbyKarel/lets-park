@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-table';
 import { useMemo, useState, type ReactNode } from 'react';
 
-import { EmptyState } from './empty-state';
+import { EmptyState } from '../empty-state/empty-state';
 
 /**
  * The only `@tanstack/react-table` feature this table turns on.
