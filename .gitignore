@@ -3,6 +3,8 @@ plan.md
 .superpowers/
 .playwright-mcp/
 storage-state*.json
+# Superpowers-generated docs (specs, plans) — not project documentation (see doc/)
+/docs/
 
 # compiled output
 dist/
