@@ -61,7 +61,7 @@ export const NO_PREFERRED_SPOT = '';
  * is a named function rather than four lines inside an effect: the bad case is
  * a race, and a race is not something a render test states well.
  *
- * `lot/bulk-view.ts`'s `toPreferredSpotView` treats a retired preference the
+ * `lot/bulk-modal/bulk-view.ts`'s `toPreferredSpotView` treats a retired preference the
  * same way — as no preference at all — but answers a different question (which
  * sentence to print), so the two are deliberately not one function.
  */

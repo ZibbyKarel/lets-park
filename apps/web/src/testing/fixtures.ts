@@ -2,7 +2,7 @@
  * Domain fixtures shared by more than one spec.
  *
  * `profile()` was written out twice, thirteen fields at a time
- * (`lot/lot-screen.spec.tsx`, `lot/bulk-modal.spec.tsx`), differing only in
+ * (`lot/lot-screen/lot-screen.spec.tsx`, `lot/bulk-modal/bulk-modal.spec.tsx`), differing only in
  * `preferredParkingSpotId`. Thirteen fields is enough that a new required field
  * on `MyProfile` should break one place, not two — and enough that a reader
  * cannot tell at a glance which of the two copies is the odd one.

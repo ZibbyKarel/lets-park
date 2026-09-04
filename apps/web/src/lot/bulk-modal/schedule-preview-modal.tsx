@@ -7,7 +7,7 @@ import type { PreviewBulkOutput } from '@lets-park/contract';
 import { CalendarTable } from './calendar-table';
 
 /**
- * Step 2 of {@link ../bulk-modal.BulkReservationModal} — the schedule
+ * Step 2 of {@link BulkReservationModalContent} in `./bulk-modal.tsx` — the schedule
  * `reservation.previewBulk` proposed, with the confirm/back footer.
  *
  * Every identifier this reads was in `BulkReservationModalContent`'s

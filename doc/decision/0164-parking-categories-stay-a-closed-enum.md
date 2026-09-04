@@ -6,7 +6,7 @@
 chips (`IT ×`, `Shared ×`), a "Nová kategorie" text field and a "Přidat
 kategorii" button.
 
-The implemented band (`CategoryBand` in `admin-spots-screen.tsx`) renders one
+The implemented band (`CategoryBand` in `category-band.tsx`) renders one
 chip per category with its count, and one sentence:
 
 > Kategorie jsou pevně dané — IT a Shared.

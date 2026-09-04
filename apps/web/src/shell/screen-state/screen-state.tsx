@@ -110,7 +110,7 @@ export function ScreenError({ error, onRetry, headingLevel }: ScreenErrorProps) 
  * As a discriminated union the combination cannot be written down. `data`
  * exists only on the branch that has it, so the ready branch cannot be reached
  * without it, and the comment is replaced by a compile error. This is the same
- * shape `lot/bulk-view.ts` uses for `PreferredSpotView` and `BulkBadgeView`.
+ * shape `lot/bulk-modal/bulk-view.ts` uses for `PreferredSpotView` and `BulkBadgeView`.
  *
  * `onRetry` stays a sibling prop: retrying is the caller's capability, not a
  * property of the data, and it is the same function in all three states.

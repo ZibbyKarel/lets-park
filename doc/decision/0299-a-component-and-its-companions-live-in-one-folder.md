@@ -24,8 +24,8 @@ never shortened to `./button`.
 one `jest.mock` string literal that named a moved file.
 
 A second, smaller change rode with the same convention: eight long components
-were split, pulling a private subcomponent or a pure-function module out of
-each into its own file in the same folder (below, "Splitting the long
+were examined, and seven of them had a private subcomponent or a pure-function
+module pulled out into its own file in the same folder (below, "Splitting the long
 files").
 
 ## Why no `index.ts`
@@ -50,7 +50,7 @@ following a redirect.
 
 ## What counts as a group, and what doesn't
 
-Three shapes appear in `apps/web` and `libs/design-system`; only the first
+Four shapes appear in `apps/web` and `libs/design-system`; only the first
 gets a folder.
 
 1. **A component with at least one companion** (a spec, a story, or both).
@@ -68,11 +68,21 @@ gets a folder.
    them has its own spec, so foldering any one would produce a one-file
    directory and leave the spec that actually covers it orphaned one level up.
 
+4. **A shared helper module with its own spec.** `cx.ts`, `gap.ts` and
+   `padding.ts` (primitives), `initials.ts` (shell), `admin-errors.ts`
+   (admin) and `lot-view.ts` (lot) each sit flat beside their own
+   `.spec.ts`. A spec is a companion, so shape 1 read on its own would
+   folder these — it does not, because they are not components, and the
+   sole-importer rule below governs them instead: every one has several
+   importers, so it stays where every importer can reach it without
+   descending into a sibling's folder.
+
 ## The sole-importer rule for `.ts` helpers
 
 A pure-function/view module moves into a component's folder only if exactly
 one non-spec file imports it — the same test the design applies to any
-private implementation detail. Measured:
+private implementation detail. Measured **before the splitting below**, which
+is when the placement was decided:
 
 | Module                | Importers            | Moved?             |
 | --------------------- | -------------------- | ------------------ |
@@ -89,10 +99,18 @@ something that isn't private to it. `calendar-grid.ts` in particular is
 shared by `bulk-modal/` and `date-picker-dialog/` for exactly this reason —
 it stays at `apps/web/src/lot/calendar-grid.ts`, not inside either.
 
+The splitting then added one importer to two of these: `bulk-view.ts` now has
+two (`calendar-table.tsx` joined it) and `lot-view.ts` has six
+(`spot-tile.tsx`). Neither changes its placement, and for opposite reasons —
+`bulk-view.ts`'s second importer lives inside the folder it moved into, so it
+is still private to that group, while `lot-view.ts` only moved further from
+the threshold. The counts are recorded here as they were when the decision was
+taken; re-measure before citing them.
+
 ## Splitting the long files
 
-Part of the same effort pulled a private piece out of eight components that
-had grown long. Results:
+Part of the same effort pulled a private piece out of seven of the eight
+components that had grown long. Results:
 
 | File                                        | Before | After | Extracted                                          |
 | ------------------------------------------- | ------ | ----- | -------------------------------------------------- |

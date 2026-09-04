@@ -2,7 +2,7 @@
  * The provider stack three specs mount their subject inside.
  *
  * `<QueryProvider><ApiProvider><IntlProvider>` was written out byte-identically
- * in `lot/lot-screen.spec.tsx`, `lot/bulk-modal.spec.tsx` and
+ * in `lot/lot-screen/lot-screen.spec.tsx`, `lot/bulk-modal/bulk-modal.spec.tsx` and
  * `app/(app)/layout.spec.tsx`. It is the *order* that matters — `ApiProvider`
  * needs a query client above it, and every Czech string in the tree comes from
  * `IntlProvider` — and an order nobody can see three copies of at once is an
