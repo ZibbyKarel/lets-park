@@ -1,92 +1,65 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { useTranslations } from '@lets-park/i18n';
-import { Button, Modal } from '@lets-park/design-system/primitives';
-import type { PreviewBulkOutput } from '@lets-park/contract';
+import { formatDayAndMonth, formatWeekdayName } from '@lets-park/i18n';
+import type { useTranslations } from '@lets-park/i18n';
+import { Badge } from '@lets-park/design-system/primitives';
+import type { BadgeTone } from '@lets-park/design-system/primitives';
+import {
+  toBadgeMessage,
+  toScheduleRows,
+  type BulkBadgeView,
+  type BulkDayOutcomeView,
+} from './bulk-view';
 
-/**
- * Step 2 of {@link ../bulk-modal.BulkReservationModal} — the schedule
- * `reservation.previewBulk` proposed, with the confirm/back footer.
- *
- * Every identifier the schedule section read from
- * `BulkReservationModalContent`'s closure arrives here as a prop, in the
- * order the parent already computed them. `confirmPending` and `onConfirm`
- * stand in for the `confirmBulk` mutation object itself, which app code may
- * not import the type of directly (`@tanstack/react-query` is wrapped by
- * `@lets-park/query`).
- */
-export interface CalendarTableProps {
-  readonly open: boolean;
-  readonly onClose: () => void;
-  readonly t: ReturnType<typeof useTranslations>;
-  readonly proposal: PreviewBulkOutput;
-  readonly pending: boolean;
-  readonly onBack: () => void;
-  readonly confirmPending: boolean;
-  readonly onConfirm: () => void;
-  readonly renderSchedule: (days: PreviewBulkOutput['days']) => ReactNode;
-  readonly failureNote: ReactNode;
+const BADGE_TONES: Record<BulkBadgeView['kind'], BadgeTone> = {
+  ASSIGNED_PREFERRED: 'success',
+  ASSIGNED: 'info',
+  QUEUED: 'warning',
+  UNAVAILABLE: 'neutral',
+};
+
+function badgeLabel(badge: BulkBadgeView, t: ReturnType<typeof useTranslations>): string {
+  const message = toBadgeMessage(badge);
+  return t(message.messageKey, message.values);
 }
 
-export function CalendarTable({
-  open,
-  onClose,
-  t,
-  proposal,
-  pending,
-  onBack,
-  confirmPending,
-  onConfirm,
-  renderSchedule,
-  failureNote,
-}: CalendarTableProps) {
+/**
+ * The schedule a batch of days resolves to — `reservation.previewBulk`'s
+ * proposal and `reservation.confirmBulk`'s result both print the same rows
+ * through this component, so the two steps of the bulk-reservation modal
+ * (`../bulk-modal.tsx`) quote the same rendering rather than each keeping
+ * its own copy.
+ */
+export interface CalendarTableProps {
+  readonly days: readonly BulkDayOutcomeView[];
+  readonly t: ReturnType<typeof useTranslations>;
+}
+
+export function CalendarTable({ days, t }: CalendarTableProps) {
+  // No empty-list branch: both procedures answer one entry per requested day
+  // and the call to action is disabled at zero selection, so `rows` cannot be
+  // empty. A branch that cannot render is copy nobody will ever proof-read
+  // (`doc/decision/0021-*`'s unreachable-member rule, applied to a catalog).
+  // Only a preview that filtered days out of its response would change that.
+  const rows = toScheduleRows(days);
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="md"
-      title={t('scheduleTitle')}
-      description={t('scheduleDescription')}
-      closeLabel={t('close')}
-      closeOnScrimClick={false}
-      footer={
-        <>
-          <Button variant="secondary" disabled={pending} onClick={onBack}>
-            {t('ctaBack')}
-          </Button>
-          <Button
-            loading={confirmPending}
-            disabled={pending}
-            onClick={() => {
-              // The days of the **proposal on screen**, not of `selected`.
-              // They agree today, because both procedures answer one entry
-              // per requested day — but "we confirm exactly what you were
-              // shown" is the invariant, and reading it off the thing that
-              // was shown is the only way to state it.
-              onConfirm();
-            }}
-          >
-            {t('ctaConfirm')}
-          </Button>
-        </>
-      }
-    >
-      {renderSchedule(proposal.days)}
-      <p className="mt-4 text-base text-fg-2">
-        {/*
-          The server's own count, exactly as the result step uses
-          `result.summary`. Re-deriving it here by filtering `days` would put
-          two authorities behind one sentence, and the moment they disagreed
-          the user would read a difference between the two steps that the
-          comparison panel cannot explain, because no day moved.
-        */}
-        {t('scheduleSummary', {
-          assigned: proposal.summary.assigned,
-          queued: proposal.summary.queued,
-        })}
-      </p>
-      {failureNote}
-    </Modal>
+    <ul className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <li
+          key={row.date}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border px-4 py-3"
+        >
+          <span className="text-base text-fg">
+            {formatDayAndMonth(row.date)} · {formatWeekdayName(row.date)}
+          </span>
+          <span className="flex items-center gap-3">
+            {row.spotLabel === null ? null : (
+              <span className="text-sm font-bold text-fg-2">{row.spotLabel}</span>
+            )}
+            <Badge tone={BADGE_TONES[row.badge.kind]}>{badgeLabel(row.badge, t)}</Badge>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

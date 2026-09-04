@@ -33,8 +33,7 @@ import {
   type DateOnly,
 } from '@lets-park/i18n';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
-import { Badge, Box, Button, Modal, cx } from '@lets-park/design-system/primitives';
-import type { BadgeTone } from '@lets-park/design-system/primitives';
+import { Box, Button, Modal, cx } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
 import { useApi } from '../../shell/api-provider/api-provider';
 import { useCurrentUser } from '../../shell/use-current-user';
@@ -46,13 +45,13 @@ import {
   toBulkErrorMessageKey,
   toPreferredSpotMessage,
   toPreferredSpotView,
-  toScheduleRows,
   weekendColumns,
   type BulkBadgeView,
   type BulkDayCell,
   type BulkDayOutcomeView,
 } from './bulk-view';
 import { CalendarTable } from './calendar-table';
+import { SchedulePreviewModal } from './schedule-preview-modal';
 
 export interface BulkReservationModalProps {
   readonly open: boolean;
@@ -79,13 +78,6 @@ export interface BulkReservationModalProps {
    */
   readonly canReserveMonth: boolean;
 }
-
-const BADGE_TONES: Record<BulkBadgeView['kind'], BadgeTone> = {
-  ASSIGNED_PREFERRED: 'success',
-  ASSIGNED: 'info',
-  QUEUED: 'warning',
-  UNAVAILABLE: 'neutral',
-};
 
 /** Monday-first column heads, in the message catalog's key order. */
 const WEEKDAY_KEYS = [
@@ -233,35 +225,6 @@ function BulkReservationModalContent({
     return t(message.messageKey, message.values);
   }
 
-  // No empty-list branch: both procedures answer one entry per requested day
-  // and the call to action is disabled at zero selection, so `rows` cannot be
-  // empty. A branch that cannot render is copy nobody will ever proof-read
-  // (`doc/decision/0021-*`'s unreachable-member rule, applied to a catalog).
-  // Only a preview that filtered days out of its response would change that.
-  function renderSchedule(days: readonly BulkDayOutcomeView[]) {
-    const rows = toScheduleRows(days);
-    return (
-      <ul className="flex flex-col gap-2">
-        {rows.map((row) => (
-          <li
-            key={row.date}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border px-4 py-3"
-          >
-            <span className="text-base text-fg">
-              {formatDayAndMonth(row.date)} · {formatWeekdayName(row.date)}
-            </span>
-            <span className="flex items-center gap-3">
-              {row.spotLabel === null ? null : (
-                <span className="text-sm font-bold text-fg-2">{row.spotLabel}</span>
-              )}
-              <Badge tone={BADGE_TONES[row.badge.kind]}>{badgeLabel(row.badge)}</Badge>
-            </span>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
   const failureNote =
     failure === null ? null : (
       <p role="alert" className="mt-4 text-base text-danger">
@@ -326,7 +289,7 @@ function BulkReservationModalContent({
           </Box>
         )}
 
-        {renderSchedule(result.days)}
+        <CalendarTable days={result.days} t={t} />
 
         <p className="mt-4 text-base text-fg-2">
           {t('scheduleSummary', {
@@ -370,7 +333,7 @@ function BulkReservationModalContent({
   // --------------------------------------------------------------- schedule
   if (proposal !== null) {
     return (
-      <CalendarTable
+      <SchedulePreviewModal
         open={open}
         onClose={onClose}
         t={t}
@@ -382,9 +345,13 @@ function BulkReservationModalContent({
         }}
         confirmPending={confirmBulk.isPending}
         onConfirm={() => {
+          // The days of the **proposal on screen**, not of `selected`. They
+          // agree today, because both procedures answer one entry per
+          // requested day — but "we confirm exactly what you were shown" is
+          // the invariant, and reading it off the thing that was shown is
+          // the only way to state it.
           confirmBulk.mutate({ dates: proposal.days.map((day) => day.date) });
         }}
-        renderSchedule={renderSchedule}
         failureNote={failureNote}
       />
     );
