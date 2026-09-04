@@ -3,8 +3,9 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
-import type { ErrorCode, ParkingSpot } from '@lets-park/contract';
+import type { ErrorCode, ParkingSpot, SpotListOutput } from '@lets-park/contract';
 import { csMessages, IntlProvider } from '@lets-park/i18n';
+import type { ScreenData } from '../screen-state';
 import type { AdminWrite } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 import type { AdminSpotsScreenProps } from './admin-spots-screen';
@@ -58,7 +59,20 @@ const TODAY: ReadonlyMap<string, SpotToday> = new Map([
   [SHARED.id, { holderName: 'Lucie Marková' }],
 ]);
 
-function makeProps(overrides: Partial<AdminSpotsScreenProps> = {}) {
+/**
+ * The screen's props, with the spot list given as plain rows.
+ *
+ * `spots` is a `ScreenData` union now, and almost every test in this file
+ * varies the *rows*. Assembling the ready state here keeps those call sites
+ * exactly as they were; `spotsState` is for the two that want the loading or
+ * error state instead.
+ */
+type Overrides = Partial<Omit<AdminSpotsScreenProps, 'spots'>> & {
+  readonly spots?: readonly ParkingSpot[];
+  readonly spotsState?: ScreenData<SpotListOutput>;
+};
+
+function makeProps({ spots, spotsState, ...overrides }: Overrides = {}) {
   const spies = {
     onRetry: jest.fn(),
     onCreate: jest.fn<Promise<void>, [unknown]>().mockResolvedValue(undefined),
@@ -69,10 +83,10 @@ function makeProps(overrides: Partial<AdminSpotsScreenProps> = {}) {
   };
 
   const props: AdminSpotsScreenProps = {
-    isPending: false,
-    isError: false,
-    error: null,
-    spots: [TAKEN, FREE, SHARED, RETIRED],
+    spots: spotsState ?? {
+      kind: 'ready',
+      data: { spots: [...(spots ?? [TAKEN, FREE, SHARED, RETIRED])] },
+    },
     todayBySpotId: TODAY,
     pendingSpotId: null,
     isSaving: false,
@@ -85,7 +99,7 @@ function makeProps(overrides: Partial<AdminSpotsScreenProps> = {}) {
   return { props, spies };
 }
 
-function renderScreen(overrides: Partial<AdminSpotsScreenProps> = {}) {
+function renderScreen(overrides: Overrides = {}) {
   const { props, spies } = makeProps(overrides);
 
   render(
@@ -613,7 +627,7 @@ describe('AdminSpotsScreen', () => {
   });
 
   it('waits while the list is in flight', () => {
-    renderScreen({ isPending: true, spots: undefined });
+    renderScreen({ spotsState: { kind: 'loading' } });
 
     expect(screen.getByRole('status')).toHaveTextContent('Načítá se…');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -621,9 +635,7 @@ describe('AdminSpotsScreen', () => {
 
   it('offers a retry when the list could not be loaded', async () => {
     const { onRetry, user } = renderScreen({
-      isError: true,
-      spots: undefined,
-      error: new Error('connection refused'),
+      spotsState: { kind: 'error', error: new Error('connection refused') },
     });
 
     expect(screen.queryByText(/connection refused/u)).not.toBeInTheDocument();

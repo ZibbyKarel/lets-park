@@ -1,7 +1,8 @@
 /**
- * Where a failed spot write is shown, as pure functions.
+ * What the spots screen decides, as pure functions: where a failed write is
+ * shown, whose write a spinner belongs to, and what the category band counts.
  *
- * The rule lives here rather than in the 500-line screen that draws it, for
+ * The rules live here rather than in the 500-line screen that draws them, for
  * the reason `lot/lot-view.ts` gives for its own half of the app: a decision
  * spread over a lookup table, a type and a nested conditional inside a
  * component body can only be exercised through the DOM, while the same
@@ -10,10 +11,24 @@
  * No React, no hooks, no network.
  */
 
+import type { ParkingGroup, ParkingSpot } from '@lets-park/contract';
+import { PARKING_GROUPS } from '@lets-park/i18n';
 import type { AdminWrite } from './admin-errors';
 
-/** Which of the three dialogs is open. Mirrors `SpotDialog['kind']`. */
-export type SpotDialogKind = 'create' | 'edit' | 'delete';
+/**
+ * Which dialog the screen has open, and on what. `null` means none.
+ *
+ * Lives here rather than in the screen because two of the rules below are
+ * about it, and a type whose invariants are stated elsewhere is a type nobody
+ * checks against them.
+ */
+export type SpotDialog =
+  | { readonly kind: 'create' }
+  | { readonly kind: 'edit'; readonly spot: ParkingSpot }
+  | { readonly kind: 'delete'; readonly spot: ParkingSpot };
+
+/** Which of the three dialogs is open. Derived, so it cannot drift. */
+type SpotDialogKind = SpotDialog['kind'];
 
 /** A surface that can *start* a write: the table, or one of the three dialogs. */
 type FailureHome = 'table' | SpotDialogKind;
@@ -47,7 +62,12 @@ const WRITE_ORIGINS: Partial<Record<AdminWrite, readonly FailureHome[]>> = {
   spotRevive: ['table'],
 };
 
-/** The surface an admin is looking at: whichever dialog is open, else the table. */
+/**
+ * The surface an admin is looking at: whichever dialog is open, else the table.
+ *
+ * Exported for its own spec rather than for a call site: it is the smaller
+ * half of {@link shouldShowFailureIn} and is worth stating on its own.
+ */
 export function failureSurfaceOf(dialogKind: SpotDialogKind | null): FailureSurface {
   return dialogKind === null ? 'table' : 'dialog';
 }
@@ -76,4 +96,47 @@ export function shouldShowFailureIn(
     return false;
   }
   return failureSurfaceOf(dialogKind) === where;
+}
+
+/**
+ * Whether the write in flight belongs to the open dialog.
+ *
+ * `isSaving` is "any write anywhere", so reading it directly put the dialog's
+ * "Uložit" into its loading state — and disabled "Zrušit" — because an
+ * unrelated row switch was mid-flight. `pendingSpotId` is the row scope the
+ * panel already keeps: `null` for a create, which has no id yet, and the
+ * spot's id for everything else. Comparing the two is what confines the
+ * dialog's spinner to the dialog's own write.
+ */
+export function isDialogSaving(
+  isSaving: boolean,
+  dialog: SpotDialog | null,
+  pendingSpotId: string | null
+): boolean {
+  if (!isSaving || dialog === null) {
+    return false;
+  }
+  return pendingSpotId === (dialog.kind === 'create' ? null : dialog.spot.id);
+}
+
+export interface CategoryCount {
+  readonly group: ParkingGroup;
+  readonly count: number;
+}
+
+/**
+ * One count per category, in the enum's own order.
+ *
+ * Counts every spot the table shows, inactive ones included — the number has
+ * to agree with the rows underneath it, and hiding retired spots from the
+ * count while showing them in the list would make the two disagree. Every
+ * category is listed even at zero: the band's other job is to say which
+ * categories exist at all, and a closed enum with a missing member reads as a
+ * category that was removed (`doc/decision/0164-*`).
+ */
+export function toCategoryCounts(spots: readonly ParkingSpot[]): readonly CategoryCount[] {
+  return PARKING_GROUPS.map((group) => ({
+    group,
+    count: spots.filter((spot) => spot.group === group).length,
+  }));
 }

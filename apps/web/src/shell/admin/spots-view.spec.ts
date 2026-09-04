@@ -1,4 +1,22 @@
-import { failureSurfaceOf, shouldShowFailureIn } from './spots-view';
+import type { ParkingSpot } from '@lets-park/contract';
+import {
+  failureSurfaceOf,
+  isDialogSaving,
+  shouldShowFailureIn,
+  toCategoryCounts,
+} from './spots-view';
+
+function aSpot(overrides: Partial<ParkingSpot> = {}): ParkingSpot {
+  return {
+    id: 'spot-1',
+    label: 'E2.92',
+    group: 'IT',
+    active: true,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
 
 describe('failureSurfaceOf', () => {
   it('is the table when no dialog is open', () => {
@@ -58,5 +76,63 @@ describe('shouldShowFailureIn', () => {
     expect(shouldShowFailureIn('userUpdate', null, 'table')).toBe(false);
     expect(shouldShowFailureIn('windowUpdate', null, 'table')).toBe(false);
     expect(shouldShowFailureIn('windowUpdate', 'edit', 'dialog')).toBe(false);
+  });
+});
+
+describe('isDialogSaving', () => {
+  const SPOT = aSpot({ id: 'spot-a' });
+
+  it('is false with no dialog open, whatever is in flight', () => {
+    expect(isDialogSaving(true, null, 'spot-a')).toBe(false);
+  });
+
+  it('is false when nothing is in flight at all', () => {
+    expect(isDialogSaving(false, { kind: 'edit', spot: SPOT }, null)).toBe(false);
+  });
+
+  it('claims a write on the spot the open dialog is about', () => {
+    expect(isDialogSaving(true, { kind: 'edit', spot: SPOT }, 'spot-a')).toBe(true);
+    expect(isDialogSaving(true, { kind: 'delete', spot: SPOT }, 'spot-a')).toBe(true);
+  });
+
+  it('disowns a write on some other row', () => {
+    // The defect this exists for: a row switch mid-flight used to put the open
+    // dialog's "Uložit" into its loading state and disable "Zrušit".
+    expect(isDialogSaving(true, { kind: 'edit', spot: SPOT }, 'spot-b')).toBe(false);
+  });
+
+  it('claims the write with no id, which is the create', () => {
+    expect(isDialogSaving(true, { kind: 'create' }, null)).toBe(true);
+  });
+
+  it('disowns a row write while the create dialog is open', () => {
+    expect(isDialogSaving(true, { kind: 'create' }, 'spot-a')).toBe(false);
+  });
+});
+
+describe('toCategoryCounts', () => {
+  it('counts each category, listing every one the enum has', () => {
+    expect(
+      toCategoryCounts([aSpot({ id: '1' }), aSpot({ id: '2', group: 'SHARED' }), aSpot({ id: '3' })])
+    ).toEqual([
+      { group: 'IT', count: 2 },
+      { group: 'SHARED', count: 1 },
+    ]);
+  });
+
+  it('counts retired spots too, because the table still lists them', () => {
+    // The band sits above the rows; a count that disagreed with what is
+    // underneath it would be worse than no count.
+    expect(toCategoryCounts([aSpot({ active: false })])).toEqual([
+      { group: 'IT', count: 1 },
+      { group: 'SHARED', count: 0 },
+    ]);
+  });
+
+  it('still names every category for an empty lot', () => {
+    expect(toCategoryCounts([])).toEqual([
+      { group: 'IT', count: 0 },
+      { group: 'SHARED', count: 0 },
+    ]);
   });
 });

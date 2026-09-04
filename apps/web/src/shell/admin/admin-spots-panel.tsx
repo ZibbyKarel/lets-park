@@ -16,6 +16,7 @@ import { useRequireAuth } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { todayInPrague } from '@lets-park/i18n';
 import { useApi } from '../api-provider';
+import { screenDataOf } from '../screen-state';
 import type { AdminWrite } from './admin-errors';
 import { AdminSpotsScreen, type SpotToday } from './admin-spots-screen';
 
@@ -138,11 +139,8 @@ export function AdminSpotsPanel() {
 
   return (
     <AdminSpotsScreen
-      isPending={spotsQuery.isPending}
-      isError={spotsQuery.isError}
-      error={spotsQuery.error}
       onRetry={() => void spotsQuery.refetch()}
-      spots={spotsQuery.data?.spots}
+      spots={screenDataOf(spotsQuery)}
       todayBySpotId={todayBySpotId}
       onCreate={async (input: CreateSpotInput) => {
         startWrite('spotCreate', null);

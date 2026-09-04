@@ -30,7 +30,12 @@
 
 import { useId, useState } from 'react';
 import * as z from 'zod';
-import type { CreateSpotInput, ParkingGroup, ParkingSpot } from '@lets-park/contract';
+import type {
+  CreateSpotInput,
+  ParkingGroup,
+  ParkingSpot,
+  SpotListOutput,
+} from '@lets-park/contract';
 import { FormField, FormProvider, useAppForm } from '@lets-park/form';
 import {
   Badge,
@@ -44,9 +49,15 @@ import {
 import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { PARKING_GROUPS, useTranslations } from '@lets-park/i18n';
-import { ScreenError, ScreenLoading } from '../screen-state';
+import { ScreenDataGuard, type ScreenData } from '../screen-state';
 import { useAdminWriteError, type AdminWrite } from './admin-errors';
-import { shouldShowFailureIn, type FailureSurface } from './spots-view';
+import {
+  isDialogSaving,
+  shouldShowFailureIn,
+  toCategoryCounts,
+  type FailureSurface,
+  type SpotDialog,
+} from './spots-view';
 
 /** How a spot stands today, as the day overview reports it. */
 export interface SpotToday {
@@ -55,12 +66,9 @@ export interface SpotToday {
 }
 
 export interface AdminSpotsScreenProps {
-  readonly isPending: boolean;
-  readonly isError: boolean;
-  readonly error: unknown;
   readonly onRetry: () => void;
-  /** `undefined` exactly when `isPending || isError`. Inactive spots included. */
-  readonly spots: readonly ParkingSpot[] | undefined;
+  /** The spot list as one state. Inactive spots included. */
+  readonly spots: ScreenData<SpotListOutput>;
   /**
    * Today's state per spot id. A spot missing from the map has no state to show
    * — an inactive spot is not in the day overview at all — and renders as a
@@ -111,16 +119,7 @@ const spotFormSchema = z.object({
 });
 type SpotFormValues = z.infer<typeof spotFormSchema>;
 
-/** Which dialog is open, and on what. `null` means none. */
-type SpotDialog =
-  | { readonly kind: 'create' }
-  | { readonly kind: 'edit'; readonly spot: ParkingSpot }
-  | { readonly kind: 'delete'; readonly spot: ParkingSpot };
-
 export function AdminSpotsScreen({
-  isPending,
-  isError,
-  error,
   onRetry,
   spots,
   todayBySpotId,
@@ -148,8 +147,6 @@ export function AdminSpotsScreen({
     setDialog(next);
   }
 
-  const all = spots ?? [];
-
   /**
    * The sentence to print on `where`, or `null` when nothing belongs there.
    *
@@ -167,19 +164,7 @@ export function AdminSpotsScreen({
       : null;
   }
 
-  /**
-   * Whether the write in flight belongs to the open dialog.
-   *
-   * `isSaving` is "any write anywhere", so using it directly put the dialog's
-   * "Uložit" into its loading state — and disabled "Zrušit" — because an
-   * unrelated row switch was mid-flight. `pendingSpotId` is the row scope the
-   * panel already keeps: `null` for a create, the spot's id for everything
-   * else.
-   */
-  const dialogSaving =
-    isSaving &&
-    dialog !== null &&
-    pendingSpotId === (dialog.kind === 'create' ? null : dialog.spot.id);
+  const dialogSaving = isDialogSaving(isSaving, dialog, pendingSpotId);
 
   const columns: DataTableColumn<ParkingSpot>[] = [
     {
@@ -276,83 +261,81 @@ export function AdminSpotsScreen({
     },
   ];
 
-  if (isPending) {
-    return <ScreenLoading />;
-  }
-
-  if (isError || spots === undefined) {
-    return <ScreenError error={error} onRetry={onRetry} headingLevel={3} />;
-  }
-
   const tableError = failureShownIn('table');
 
   return (
-    <div className="flex flex-col gap-4">
-      {tableError ? <Toast tone="danger">{tableError}</Toast> : null}
+    <ScreenDataGuard state={spots} onRetry={onRetry} headingLevel={3}>
+      {(loaded) => (
+        <div className="flex flex-col gap-4">
+          {tableError ? <Toast tone="danger">{tableError}</Toast> : null}
 
-      <DataTable
-        columns={columns}
-        data={[...all]}
-        getRowId={(spot) => spot.id}
-        title={t('spotsTitle')}
-        description={t('spotsDescription')}
-        actions={
-          <Button variant="primary" size="lg" onClick={() => changeDialog({ kind: 'create' })}>
-            {t('spotsAdd')}
-          </Button>
-        }
-        toolbar={<CategoryBand spots={all} />}
-        defaultSort={{ columnId: 'label', direction: 'asc' }}
-        minWidth="900px"
-        emptyTitle={t('spotsEmpty')}
-        emptyDescription={t('spotsEmptyDescription')}
-      />
-
-      {dialog?.kind === 'create' || dialog?.kind === 'edit' ? (
-        <SpotFormDialog
-          // A fresh form per spot. Without it an edit→edit transition would
-          // reuse the mounted form and its previous `defaultValues`.
-          key={dialog.kind === 'edit' ? dialog.spot.id : 'create'}
-          spot={dialog.kind === 'edit' ? dialog.spot : null}
-          errorMessage={failureShownIn('dialog')}
-          saving={dialogSaving}
-          onCancel={() => changeDialog(null)}
-          onSubmit={async (values) => {
-            if (dialog.kind === 'edit') {
-              await onSave({ id: dialog.spot.id, ...values });
-            } else {
-              await onCreate(values);
+          <DataTable
+            columns={columns}
+            data={[...loaded.spots]}
+            getRowId={(spot) => spot.id}
+            title={t('spotsTitle')}
+            description={t('spotsDescription')}
+            actions={
+              <Button variant="primary" size="lg" onClick={() => changeDialog({ kind: 'create' })}>
+                {t('spotsAdd')}
+              </Button>
             }
-            changeDialog(null);
-          }}
-        />
-      ) : null}
+            toolbar={<CategoryBand spots={loaded.spots} />}
+            defaultSort={{ columnId: 'label', direction: 'asc' }}
+            minWidth="900px"
+            emptyTitle={t('spotsEmpty')}
+            emptyDescription={t('spotsEmptyDescription')}
+          />
 
-      <ConfirmDialog
-        open={dialog?.kind === 'delete'}
-        title={t('spotsDeleteTitle', { label: dialog?.kind === 'delete' ? dialog.spot.label : '' })}
-        description={t('spotsDeleteDescription')}
-        confirmLabel={t('spotsDeleteConfirm')}
-        cancelLabel={t('spotsCancel')}
-        tone="danger"
-        loading={dialogSaving}
-        onConfirm={() => {
-          if (dialog?.kind !== 'delete') {
-            return;
-          }
-          void onDeactivate(dialog.spot.id).then(
-            () => changeDialog(null),
-            () => {
-              // Left open on purpose: the sentence below is the retry
-              // affordance, and closing would hide why nothing happened.
-            }
-          );
-        }}
-        onCancel={() => changeDialog(null)}
-      >
-        {dialog?.kind === 'delete' ? <DeleteError message={failureShownIn('dialog')} /> : null}
-      </ConfirmDialog>
-    </div>
+          {dialog?.kind === 'create' || dialog?.kind === 'edit' ? (
+            <SpotFormDialog
+              // A fresh form per spot. Without it an edit→edit transition would
+              // reuse the mounted form and its previous `defaultValues`.
+              key={dialog.kind === 'edit' ? dialog.spot.id : 'create'}
+              spot={dialog.kind === 'edit' ? dialog.spot : null}
+              errorMessage={failureShownIn('dialog')}
+              saving={dialogSaving}
+              onCancel={() => changeDialog(null)}
+              onSubmit={async (values) => {
+                if (dialog.kind === 'edit') {
+                  await onSave({ id: dialog.spot.id, ...values });
+                } else {
+                  await onCreate(values);
+                }
+                changeDialog(null);
+              }}
+            />
+          ) : null}
+
+          <ConfirmDialog
+            open={dialog?.kind === 'delete'}
+            title={t('spotsDeleteTitle', {
+              label: dialog?.kind === 'delete' ? dialog.spot.label : '',
+            })}
+            description={t('spotsDeleteDescription')}
+            confirmLabel={t('spotsDeleteConfirm')}
+            cancelLabel={t('spotsCancel')}
+            tone="danger"
+            loading={dialogSaving}
+            onConfirm={() => {
+              if (dialog?.kind !== 'delete') {
+                return;
+              }
+              void onDeactivate(dialog.spot.id).then(
+                () => changeDialog(null),
+                () => {
+                  // Left open on purpose: the sentence below is the retry
+                  // affordance, and closing would hide why nothing happened.
+                }
+              );
+            }}
+            onCancel={() => changeDialog(null)}
+          >
+            {dialog?.kind === 'delete' ? <DeleteError message={failureShownIn('dialog')} /> : null}
+          </ConfirmDialog>
+        </div>
+      )}
+    </ScreenDataGuard>
   );
 }
 
@@ -363,9 +346,8 @@ function DeleteError({ message }: { readonly message: string | null }) {
 /**
  * The band under the table header: one chip per category with its count.
  *
- * Counts every spot the table shows, inactive ones included — the number has to
- * agree with the rows underneath it, and hiding retired spots from the count
- * while showing them in the list would make the two disagree.
+ * What is counted, and why inactive spots are in it, is
+ * {@link toCategoryCounts}.
  */
 function CategoryBand({ spots }: { readonly spots: readonly ParkingSpot[] }) {
   const t = useTranslations('admin');
@@ -378,13 +360,13 @@ function CategoryBand({ spots }: { readonly spots: readonly ParkingSpot[] }) {
       <span id={labelId} className="text-xs font-bold uppercase tracking-caps text-fg-3">
         {t('spotsCategories')}
       </span>
-      {PARKING_GROUPS.map((group) => (
+      {toCategoryCounts(spots).map(({ group, count }) => (
         <span
           key={group}
           className="inline-flex h-8 items-center gap-2 rounded-cta bg-bg-muted px-3 text-sm font-medium text-fg"
         >
           {group}
-          <span className="text-fg-3">{spots.filter((spot) => spot.group === group).length}</span>
+          <span className="text-fg-3">{count}</span>
         </span>
       ))}
       <span className="text-xs text-fg-3">{t('spotsCategoriesFixed')}</span>
