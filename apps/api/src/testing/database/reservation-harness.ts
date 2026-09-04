@@ -14,7 +14,6 @@
  * connection at the moment it is invoked, which can only see committed rows.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../../auth/authenticated-user';
 import { AuditLogService } from '../../audit/audit-log.service';
 import type { PrismaClient, User as UserRow, ParkingSpot as SpotRow } from '@lets-park/database';
@@ -31,7 +30,7 @@ import { ReservationsService } from '../../reservations/reservations.service';
 import { WaitlistPromotionService } from '../../reservations/waitlist-promotion.service';
 import { WaitlistService } from '../../reservations/waitlist.service';
 import { ReservationWindowService } from '../../reservation-window/reservation-window.service';
-import { requireDatabaseUrl } from './test-database';
+import { requireDatabaseUrl, unique } from './test-database';
 
 /**
  * A publisher that remembers what it was handed, and optionally runs a probe at
@@ -119,21 +118,6 @@ export function buildHarness(client: PrismaClient): Harness {
 }
 
 // --- fixtures ---------------------------------------------------------------
-
-/**
- * A value nothing else in the database can collide with.
- *
- * The random segment is not decoration. Jest gives each spec file its own module
- * registry, so a counter alone restarts at zero per file while `process.pid`
- * stays the same — and the suites share one database, so the second file's
- * fixtures collided with the first's on `User_email_key`.
- */
-const RUN_ID = randomUUID().slice(0, 8);
-let counter = 0;
-function unique(prefix: string): string {
-  counter += 1;
-  return `${prefix}-${RUN_ID}-${counter}`;
-}
 
 export async function seedUser(
   client: PrismaClient,

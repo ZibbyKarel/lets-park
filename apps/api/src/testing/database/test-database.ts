@@ -39,6 +39,7 @@
  * (`doc/decision/0066-*` §Risk).
  */
 
+import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from 'pg';
@@ -74,6 +75,27 @@ export function requireDatabaseUrl(): string {
     );
   }
   return url;
+}
+
+/**
+ * A value nothing else in the database can collide with.
+ *
+ * The random segment is not decoration. Jest gives each spec file its own module
+ * registry, so a counter alone restarts at zero per file while `process.pid`
+ * stays the same — and the suites share one database, so the second file's
+ * fixtures collided with the first's on `User_email_key`.
+ *
+ * It lives here, beside {@link requireDatabaseUrl}, rather than in
+ * `reservation-harness.ts`, because every `*.db.spec.ts` already imports this
+ * module for the connection string: a spec that needs a unique fixture value
+ * finds this one before it is tempted to re-type a pid-and-counter version.
+ * `calendar.db.spec.ts` did exactly that.
+ */
+const RUN_ID = randomUUID().slice(0, 8);
+let uniqueCounter = 0;
+export function unique(prefix: string): string {
+  uniqueCounter += 1;
+  return `${prefix}-${RUN_ID}-${uniqueCounter}`;
 }
 
 /** The same URL, pointing at a different database on the same server. */

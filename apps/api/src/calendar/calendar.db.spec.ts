@@ -26,24 +26,7 @@ import { Prisma } from '@lets-park/database';
 import type { PrismaClient } from '@lets-park/database';
 import { createPrismaClient } from '@lets-park/database';
 import { toDateColumn, toDateOnly } from '../common/prisma-mapping';
-
-function connectionString(): string {
-  const url = process.env['DATABASE_URL'];
-  if (url === undefined || url === '') {
-    throw new Error(
-      'DATABASE_URL is not set. This suite needs a real PostgreSQL — start it with ' +
-        '`docker compose --profile dev up -d` and run `nx run api:test-db`. It does not ' +
-        'skip itself, on purpose.'
-    );
-  }
-  return url;
-}
-
-let counter = 0;
-function unique(prefix: string): string {
-  counter += 1;
-  return `${prefix}-calendar-db-${process.pid}-${counter}`;
-}
+import { requireDatabaseUrl, unique } from '../testing/database/test-database';
 
 /** Runs `work` in a transaction that is always rolled back, returning its value. */
 async function inRolledBackTransaction<T>(
@@ -86,7 +69,7 @@ describe('the ICS feed against a real PostgreSQL', () => {
   let prisma: PrismaClient;
 
   beforeAll(() => {
-    prisma = createPrismaClient({ connectionString: connectionString() });
+    prisma = createPrismaClient({ connectionString: requireDatabaseUrl() });
   });
 
   afterAll(async () => {

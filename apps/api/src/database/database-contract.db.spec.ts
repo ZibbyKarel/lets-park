@@ -31,6 +31,7 @@
 import { Prisma } from '@lets-park/database';
 import type { PrismaClient } from '@lets-park/database';
 import { createPrismaClient } from '@lets-park/database';
+import { requireDatabaseUrl } from '../testing/database/test-database';
 import {
   isWriteConflict,
   mapPrismaErrorCode,
@@ -38,18 +39,6 @@ import {
 } from '../common/errors/prisma-error-mapping';
 
 const DATE = new Date('2099-01-05T00:00:00.000Z');
-
-function connectionString(): string {
-  const url = process.env['DATABASE_URL'];
-  if (url === undefined || url === '') {
-    throw new Error(
-      'DATABASE_URL is not set. This suite needs a real PostgreSQL — start it with ' +
-        '`docker compose --profile dev up -d` and run `nx run api:test-db`. It does not ' +
-        'skip itself, on purpose.'
-    );
-  }
-  return url;
-}
 
 /**
  * Runs `work` inside a transaction that is **always** rolled back, and returns
@@ -113,7 +102,7 @@ describe('what PostgreSQL actually does', () => {
   let prisma: PrismaClient;
 
   beforeAll(() => {
-    prisma = createPrismaClient({ connectionString: connectionString() });
+    prisma = createPrismaClient({ connectionString: requireDatabaseUrl() });
   });
 
   afterAll(async () => {
