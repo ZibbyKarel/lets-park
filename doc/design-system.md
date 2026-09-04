@@ -620,8 +620,10 @@ libs/design-system/compounds/
   user appears in this lib, including in fixtures. The sample rows are generic
   items, even though the screens these were drawn for are exactly those tables.
 - **Czech UI copy arrives as a required prop**, never as a hardcoded literal
-  and never as a default — `emptyTitle`, `confirmLabel`, `cancelLabel`. Same
-  rule as the primitives' `closeLabel`. These three used to default to
+  and never as a default — `emptyTitle`, `confirmLabel`, `cancelLabel`. The
+  primitives do not yet follow this rule: `Modal`'s `closeLabel` is still
+  optional with a `'Zavřít'` default (`modal.tsx:45,78`), and is the next
+  candidate. These three used to default to
   `'Žádná data'` / `'Potvrdit'` / `'Zrušit'`, which put user-visible Czech
   outside `libs/i18n` at any call site that omitted them; nothing here may
   call `useTranslations`, so requiring the prop is what keeps the copy in app
