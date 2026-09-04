@@ -17,3 +17,6 @@ export const SPACING = {
   24: '96px',
   32: '128px',
 } as const;
+
+/** Every step on the spacing scale, e.g. for a component prop restricted to it. */
+export type SpacingKey = keyof typeof SPACING;
