@@ -133,14 +133,35 @@ export function easterMonday(year: number): DateOnly {
 }
 
 /**
+ * Every year's holiday list, computed once.
+ *
+ * The list is a pure function of the year, so there is nothing to invalidate:
+ * `czechPublicHolidayOn` is called once per rendered day by
+ * `apps/web/src/lot/lot-view.ts`, and without this a painted month re-ran the
+ * Easter algorithm and re-sorted the same thirteen entries thirty-odd times.
+ */
+const holidaysByYear = new Map<number, readonly CzechHoliday[]>();
+
+/**
  * All Czech public holidays of the given year, ordered by date.
  *
  * Note that Easter Sunday itself is *not* a public holiday in Czechia; only
  * Good Friday and Easter Monday are — and Good Friday only from
  * {@link GOOD_FRIDAY_FIRST_YEAR} onwards, so years before that return one
  * holiday fewer.
+ *
+ * The returned array is shared between callers — it is the cache entry, not a
+ * copy — so it is frozen, and so is every entry in it. `Object.freeze` is
+ * shallow: freezing only the array would still let a caller write
+ * `holidays[0].name` and rewrite what every later caller reads, which is
+ * strictly worse than the pre-cache behaviour of corrupting a private copy.
  */
 export function czechPublicHolidays(year: number): readonly CzechHoliday[] {
+  const cached = holidaysByYear.get(year);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const holidays: CzechHoliday[] = [
     ...(year >= GOOD_FRIDAY_FIRST_YEAR
       ? [{ id: 'GOOD_FRIDAY' as const, date: goodFriday(year), name: 'Velký pátek' }]
@@ -152,9 +173,11 @@ export function czechPublicHolidays(year: number): readonly CzechHoliday[] {
       name,
     })),
   ];
-  return holidays.sort((left, right) =>
-    left.date < right.date ? -1 : left.date > right.date ? 1 : 0
-  );
+  holidays.sort((left, right) => (left.date < right.date ? -1 : left.date > right.date ? 1 : 0));
+
+  const frozen = Object.freeze(holidays.map((holiday) => Object.freeze(holiday)));
+  holidaysByYear.set(year, frozen);
+  return frozen;
 }
 
 /** The holiday falling on `date`, or `null` when it is an ordinary day. */
