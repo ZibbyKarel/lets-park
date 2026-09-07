@@ -116,6 +116,14 @@ describe('czechPublicHolidays', () => {
   it('does not make Easter Sunday itself a holiday', () => {
     expect(isCzechPublicHoliday(easterSunday(2026))).toBe(false);
   });
+
+  it('covers every declared holiday id and no others, in every year', () => {
+    for (const year of [2016, 2024, 2026, 2030]) {
+      const ids = czechPublicHolidays(year).map((holiday) => holiday.id);
+      expect([...ids].sort()).toEqual([...CZECH_HOLIDAY_IDS].sort());
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
 });
 
 describe('czechPublicHolidayOn / isCzechPublicHoliday', () => {

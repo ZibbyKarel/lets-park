@@ -38,19 +38,49 @@ export interface CzechHoliday {
   readonly name: string;
 }
 
-/** Fixed-date holidays: `[month (1-based), day, id, Czech name]`. */
-const FIXED_HOLIDAYS: readonly [number, number, CzechHolidayId, string][] = [
-  [1, 1, 'NEW_YEAR', 'Nový rok'],
-  [5, 1, 'LABOUR_DAY', 'Svátek práce'],
-  [5, 8, 'VICTORY_DAY', 'Den vítězství'],
-  [7, 5, 'CYRIL_AND_METHODIUS', 'Den slovanských věrozvěstů Cyrila a Metoděje'],
-  [7, 6, 'JAN_HUS', 'Den upálení mistra Jana Husa'],
-  [9, 28, 'CZECH_STATEHOOD', 'Den české státnosti'],
-  [10, 28, 'INDEPENDENT_CZECHOSLOVAK_STATE', 'Den vzniku samostatného československého státu'],
-  [11, 17, 'STRUGGLE_FOR_FREEDOM_AND_DEMOCRACY', 'Den boje za svobodu a demokracii'],
-  [12, 24, 'CHRISTMAS_EVE', 'Štědrý den'],
-  [12, 25, 'CHRISTMAS_DAY', '1. svátek vánoční'],
-  [12, 26, 'SECOND_CHRISTMAS_DAY', '2. svátek vánoční'],
+/**
+ * A holiday whose date is a fixed calendar day, independent of the year.
+ *
+ * The fields are named rather than positional on purpose: 5 July and 6 July
+ * are two different holidays one transposition apart, and in a tuple table
+ * nothing but the reader's care distinguished `[7, 5, …]` from `[7, 6, …]`.
+ */
+interface FixedHoliday {
+  /** 1-based month, as `formatDateOnly` expects. */
+  readonly month: number;
+  readonly day: number;
+  readonly id: CzechHolidayId;
+  /** Official Czech name, as displayed in the UI. */
+  readonly name: string;
+}
+
+const FIXED_HOLIDAYS: readonly FixedHoliday[] = [
+  { month: 1, day: 1, id: 'NEW_YEAR', name: 'Nový rok' },
+  { month: 5, day: 1, id: 'LABOUR_DAY', name: 'Svátek práce' },
+  { month: 5, day: 8, id: 'VICTORY_DAY', name: 'Den vítězství' },
+  {
+    month: 7,
+    day: 5,
+    id: 'CYRIL_AND_METHODIUS',
+    name: 'Den slovanských věrozvěstů Cyrila a Metoděje',
+  },
+  { month: 7, day: 6, id: 'JAN_HUS', name: 'Den upálení mistra Jana Husa' },
+  { month: 9, day: 28, id: 'CZECH_STATEHOOD', name: 'Den české státnosti' },
+  {
+    month: 10,
+    day: 28,
+    id: 'INDEPENDENT_CZECHOSLOVAK_STATE',
+    name: 'Den vzniku samostatného československého státu',
+  },
+  {
+    month: 11,
+    day: 17,
+    id: 'STRUGGLE_FOR_FREEDOM_AND_DEMOCRACY',
+    name: 'Den boje za svobodu a demokracii',
+  },
+  { month: 12, day: 24, id: 'CHRISTMAS_EVE', name: 'Štědrý den' },
+  { month: 12, day: 25, id: 'CHRISTMAS_DAY', name: '1. svátek vánoční' },
+  { month: 12, day: 26, id: 'SECOND_CHRISTMAS_DAY', name: '2. svátek vánoční' },
 ];
 
 /**
@@ -116,7 +146,7 @@ export function czechPublicHolidays(year: number): readonly CzechHoliday[] {
       ? [{ id: 'GOOD_FRIDAY' as const, date: goodFriday(year), name: 'Velký pátek' }]
       : []),
     { id: 'EASTER_MONDAY', date: easterMonday(year), name: 'Velikonoční pondělí' },
-    ...FIXED_HOLIDAYS.map(([month, day, id, name]) => ({
+    ...FIXED_HOLIDAYS.map(({ month, day, id, name }) => ({
       id,
       date: formatDateOnly({ year, month, day }),
       name,
