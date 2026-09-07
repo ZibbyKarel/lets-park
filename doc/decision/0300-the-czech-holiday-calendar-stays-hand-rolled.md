@@ -56,7 +56,7 @@ things were fixed:
   `[7, 6, 'JAN_HUS', …]`), where a month/day transposition was invisible to the type system.
   It is now a named-field table.
 - `czechPublicHolidays(year)` rebuilt and re-sorted the year on every call. The real per-day
-  callers are `buildMonthGrid` in `apps/web/src/lot/bulk-modal/bulk-view.ts` (35–42 cells per
+  callers are `buildMonthGrid` in `apps/web/src/lot/bulk-modal/bulk-view.ts` (28–31 days per
   rendered month), `planDay` in `apps/api/src/reservations/bulk-allocator.ts` (once per date in
   a bulk request), and `isReservableDay` in `apps/api/src/overview/day-overview.service.ts` — so
   walking a month's worth of days re-ran the Easter algorithm thirty-odd times, server-side as
