@@ -7,8 +7,10 @@
  * Easter algorithm (Meeus/Jones/Butcher for the Gregorian calendar) rather
  * than from a hard-coded table that would silently expire.
  *
- * The Czech names are domain data shown in the UI, so they stay Czech; the
- * stable `id` is what feature code and `libs/i18n` should key on.
+ * The Czech names are domain data shown in the UI, so they stay Czech (see
+ * `CLAUDE.md` on UI copy); the stable `id` is what feature code and
+ * `libs/i18n` key on. Localizing the labels is deliberately not this
+ * module's job — see `doc/decision/0300-*`.
  */
 
 import { addDays, formatDateOnly, isWeekend, parseDateOnly, type DateOnly } from './date-only';
@@ -32,9 +34,21 @@ export const CZECH_HOLIDAY_IDS = [
 export type CzechHolidayId = (typeof CZECH_HOLIDAY_IDS)[number];
 
 export interface CzechHoliday {
+  /**
+   * Stable, language-independent identity. This is what callers, tests and
+   * message catalogs key on; it never changes once published.
+   */
   readonly id: CzechHolidayId;
   readonly date: DateOnly;
-  /** Official Czech name, as displayed in the UI. */
+  /**
+   * The official Czech name, as published in act 245/2000 Sb.
+   *
+   * It is a **default label**, not the translation layer: this module is the
+   * calendar, not the place that answers "what is this day called in the
+   * user's language". When the app grows a second locale, the localized
+   * string comes from the message catalog keyed on {@link id}, and `name`
+   * stays as the Czech fallback the law actually uses.
+   */
   readonly name: string;
 }
 
