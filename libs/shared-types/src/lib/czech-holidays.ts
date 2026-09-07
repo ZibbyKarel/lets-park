@@ -150,9 +150,13 @@ export function easterMonday(year: number): DateOnly {
  * Every year's holiday list, computed once.
  *
  * The list is a pure function of the year, so there is nothing to invalidate:
- * `czechPublicHolidayOn` is called once per rendered day by
- * `apps/web/src/lot/lot-view.ts`, and without this a painted month re-ran the
- * Easter algorithm and re-sorted the same thirteen entries thirty-odd times.
+ * this is walked once per day in a range, not once per request, by
+ * `buildMonthGrid` in `apps/web/src/lot/bulk-modal/bulk-view.ts` (35–42 cells
+ * per rendered month), by `planDay` in `apps/api/src/reservations/bulk-allocator.ts`
+ * (once per date in a bulk request), and by `isReservableDay` in
+ * `apps/api/src/overview/day-overview.service.ts`. Without this, walking a
+ * month's worth of days re-ran the Easter algorithm and re-sorted the same
+ * thirteen entries thirty-odd times — server-side as well as in the browser.
  */
 const holidaysByYear = new Map<number, readonly CzechHoliday[]>();
 

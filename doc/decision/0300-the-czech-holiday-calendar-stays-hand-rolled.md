@@ -15,6 +15,9 @@ being revisited.
 The npm registry was searched on 2026-09-07 for a library that does this. Exactly two
 candidates exist.
 
+The table below is a snapshot **as of 2026-09-07** — read "Last published" against that date,
+not against whatever date you are reading this.
+
 | Package          | Latest | Last published | Types | License           | Unpacked | Deps                                                  |
 | ---------------- | ------ | -------------- | ----- | ----------------- | -------- | ----------------------------------------------------- |
 | `czech-holidays` | 1.0.6  | 2022-04-28     | none  | GPL-3.0-or-later  | 39 KB    | —                                                     |
@@ -52,11 +55,15 @@ things were fixed:
 - The fixed-date table was a positional tuple (`[7, 5, 'CYRIL_AND_METHODIUS', …]` next to
   `[7, 6, 'JAN_HUS', …]`), where a month/day transposition was invisible to the type system.
   It is now a named-field table.
-- `czechPublicHolidays(year)` rebuilt and re-sorted the year on every call, and
-  `czechPublicHolidayOn` is called once per rendered day — so painting a month re-ran the
-  Easter algorithm thirty-odd times in the browser. The list is now memoized per year in a
-  module-level `Map`, and both it and its entries are frozen before it escapes. It is a pure
-  function of the year, so there is nothing to invalidate.
+- `czechPublicHolidays(year)` rebuilt and re-sorted the year on every call. The real per-day
+  callers are `buildMonthGrid` in `apps/web/src/lot/bulk-modal/bulk-view.ts` (35–42 cells per
+  rendered month), `planDay` in `apps/api/src/reservations/bulk-allocator.ts` (once per date in
+  a bulk request), and `isReservableDay` in `apps/api/src/overview/day-overview.service.ts` — so
+  walking a month's worth of days re-ran the Easter algorithm thirty-odd times, server-side as
+  well as in the browser. (`apps/web/src/lot/lot-view.ts`'s `toDayNoteView` is called once per
+  rendered day _screen_, not once per day of a month, so it was not the driver.) The list is now
+  memoized per year in a module-level `Map`, and both it and its entries are frozen before it
+  escapes. It is a pure function of the year, so there is nothing to invalidate.
 - The `CzechHoliday` doc comment now says outright that `id` is the key and `name` is a Czech
   default label, so localizing holiday names is the message catalog's job.
 
@@ -77,12 +84,26 @@ and the `CzechHoliday` type keep their names, signatures and semantics.
   `Object.freeze` is shallow, so sealing only the array would leave `holidays[0].name`
   writable and make the situation strictly worse than before the cache. The nested freeze is
   load-bearing, not decoration, and `czech-holidays.spec.ts` fails if the inner one is
-  removed. The function is not exported from the lib's barrel
+  removed. `czechPublicHolidays` itself is not exported from the lib's barrel
   (`libs/shared-types/src/index.ts`), so no consumer outside `libs/shared-types` is affected
-  either way.
-- If this app ever needs a second country's holidays, `date-holidays` is the answer and this
-  record is the thing to revisit — the rejection is about one country and a browser bundle, not
-  about the package.
+  either way — but `czechPublicHolidayOn` **is** barrel-exported, and it now returns an element
+  of that same shared, frozen array rather than a fresh object. A future caller that writes to a
+  field of the holiday it gets back sees a silent no-op or a `TypeError`, depending on strict
+  mode. No current caller does this.
+- `holidaysByYear` grows without bound: nothing ever evicts an entry. The year comes from a
+  validated `DateOnly` whose pattern allows any four digits, so the ceiling is on the order of
+  10,000 entries × 13 frozen objects — a few MB — and only reachable by walking that many
+  distinct years through a request-influenced path in a long-lived API process. It is bounded
+  and does not need a code change, just this note so nobody has to re-derive it.
+- This record's rejection of `date-holidays` rests on this lib's barrel being re-exported
+  wholesale as `@lets-park/i18n` (`doc/decision/0003-*`), which puts everything it publishes in
+  the browser bundle. Adding a second country would not change that fact, so this record is
+  **not** a green light for adopting `date-holidays` later — a second country still means an
+  11 MB dependency reaching the browser unless the consumer changes shape. The one case where
+  the calculus could differ is a holiday lookup that stays entirely server-side and never
+  reaches `apps/web` (so it could live outside this barrel, or behind a lib that is not
+  re-exported as `@lets-park/i18n`) — anyone reaching for `date-holidays` should confirm that
+  condition first, not treat "a second country" alone as sufficient.
 
 ## Alternatives considered
 
