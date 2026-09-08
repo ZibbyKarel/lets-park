@@ -15,7 +15,7 @@ exactly one **wrapper lib** — the single place in the whole workspace allowed 
 | forbidden package | wrapper lib | tag |
 | --- | --- | --- |
 | `react-hook-form` | `libs/form` (done, Task 18) | `type:util`, `scope:web` |
-| `@tanstack/react-table` | `libs/design-system/compounds` | `type:ui`, `scope:web`, `ds:compounds` |
+| `@tanstack/react-table` | `libs/design-system/src/compounds` | `type:ui`, `scope:web` |
 | `@tanstack/react-query` | `libs/query` (done, Task 19) | `type:util`, `scope:web` |
 | `@orpc/client` | `libs/api-client` (done, Task 19) | `type:util`, `scope:web` |
 | `socket.io-client` | `libs/realtime-client` | `type:util`, `scope:web` |
@@ -88,7 +88,7 @@ domain form:
 
 ```tsx
 import * as z from 'zod';
-import { Checkbox, Input, Select } from '@lets-park/design-system-primitives';
+import { Checkbox, Input, Select } from '@lets-park/design-system/primitives';
 import { FormField, FormProvider, useAppForm } from '@lets-park/form';
 
 const bookingSchema = z.object({
@@ -180,7 +180,7 @@ parking domain instead of the generic demo schema.
 | file | what it verifies |
 | --- | --- |
 | `use-app-form.spec.tsx` | `useAppForm` + `FormField` on a bare `<input>`: a Zod error propagates into `role="alert"` and `aria-invalid`; a valid submit calls the handler with the values after Zod parsing |
-| `app-form.spec.tsx` | the same, on real `Input`/`Select`/`Checkbox` from `@lets-park/design-system-primitives` — three fields, three different primitives, one Zod schema; plus a test that reads its own source file and verifies there is no direct import of `react-hook-form` in it |
+| `app-form.spec.tsx` | the same, on real `Input`/`Select`/`Checkbox` from `@lets-park/design-system/primitives` — three fields, three different primitives, one Zod schema; plus a test that reads its own source file and verifies there is no direct import of `react-hook-form` in it |
 
 Zod in the tests is always a local `z.object(...)` schema, not an import from
 `@lets-park/contract` — `libs/form` is domain-independent, and `@orpc/contract` (ESM-only,
@@ -608,8 +608,9 @@ both the global ban and this lib's exemption were generated before the lib exist
 was added to `NPM_ALLOWLIST`, and `libs/realtime-client/eslint.config.mjs` is the generator's
 default — it sets **no** `no-restricted-imports` of its own, so the root's copy is not
 replaced. (That rule is a single rule: a lib-local config that sets it wins outright and
-silently switches the wrapper ban off for that lib. `libs/design-system/{primitives,tokens}`
-spread `restrictWrappedLibraries().patterns` back in for exactly that reason.)
+silently switches the wrapper ban off for that lib. Every block in
+`libs/design-system/eslint.config.mjs` spreads `restrictWrappedLibraries().patterns`
+back in for exactly that reason.)
 
 `socket.io-parser` was **not** allow-listed either, although the test fixture needs
 Socket.io's numeric packet type codes to feed an inbound packet — CONNECT_ERROR included, and

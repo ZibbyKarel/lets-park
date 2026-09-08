@@ -39,7 +39,7 @@ const WRAPPED_LIBRARIES = {
     use: '@lets-park/form',
   },
   '@tanstack/react-table': {
-    owner: 'libs/design-system/compounds',
+    owner: 'libs/design-system/src/compounds',
     use: '@lets-park/design-system/compounds',
   },
   '@tanstack/react-query': {
@@ -84,8 +84,9 @@ const WRAPPED_LIBRARIES = {
  * block that sets it wins outright, so a lib adding its own bans without
  * spreading these in would silently switch the wrapper ban off for itself —
  * which is exactly the kind of enforcement-shaped hole this file has been
- * caught in before. `libs/design-system/{primitives,tokens}/eslint.config.mjs`
- * both spread `restrictWrappedLibraries().patterns` for that reason.
+ * caught in before. `libs/design-system/eslint.config.mjs` spreads
+ * `restrictWrappedLibraries().patterns` into every one of its blocks for that
+ * reason.
  */
 export function restrictWrappedLibraries(allowedPackages = []) {
   return {
@@ -151,14 +152,13 @@ export function restrictWrappedLibrariesDynamically(allowedPackages = []) {
  * (`hasBannedImport` → `depConstraints.filter(...).find(...)` in
  * `@nx/eslint-plugin/dist/src/utils/runtime-lint-utils.js`). Constraints are
  * therefore ANDed, and a package must appear in the list of every matching
- * dimension. Spreading npm allow-lists across `type:`, `scope:` and `ds:` would
- * mean listing `react` in three places and getting an intersection nobody can
- * predict.
+ * dimension. Spreading npm allow-lists across `type:` and `scope:` would mean
+ * listing `react` in two places and getting an intersection nobody can predict.
  *
  * `type:` is used because it is the one dimension that **partitions** the
  * workspace: every project carries exactly one `type:` tag, so a list here
- * covers everything and leaves no project unconstrained. `scope:` and `ds:`
- * stay purely about direction of dependency, which is what they model.
+ * covers everything and leaves no project unconstrained. `scope:` stays purely
+ * about direction of dependency, which is what it models.
  *
  * ## Why a list is mandatory on every tag
  *
@@ -186,9 +186,9 @@ const NPM_ALLOWLIST = {
   feature: ['tslib'],
 
   /**
-   * Design system (`libs/design-system/*`). React plus styling helpers and
-   * Storybook; TanStack Table is here because `ds:compounds` owns the DataTable
-   * wrapper. Never a backend package.
+   * Design system (`libs/design-system`). React plus styling helpers and
+   * Storybook; TanStack Table is here because the design system's compounds
+   * layer owns the DataTable wrapper. Never a backend package.
    */
   ui: [
     'tslib',
@@ -401,40 +401,24 @@ const DEP_CONSTRAINTS = [
   },
 
   // --- design-system layer dimension ----------------------------
-  // tokens -> primitives -> compounds, one direction only.
-  // `type:ui` alone cannot express this because all three layers
-  // carry that tag.
+  // Gone, deliberately. `ds:tokens` / `ds:primitives` / `ds:compounds` tagged
+  // three Nx projects, and `@nx/enforce-module-boundaries` constrained the
+  // tokens -> primitives -> compounds direction between them. The three layers
+  // are now three directories of one project (`libs/design-system`), and one
+  // project carries one tag set, so there is no project boundary left for these
+  // entries to match — leaving them here would be three constraints that never
+  // fire, which is worse than none.
   //
-  // These entries constrain **workspace** dependencies only, and deliberately
-  // carry no `allowedExternalImports`. Task 8's branch had tighter npm
-  // allow-lists here, on the theory that Nx ANDs constraints across dimensions
-  // so a second list would intersect and could only narrow. **That was probed
-  // at merge and it is false.** With `clsx` on `NPM_ALLOWLIST.ui` and absent
-  // from a `ds:primitives` list, an `import clsx from 'clsx'` inside
-  // `libs/design-system/primitives` produced **no error at all**: a matching
-  // constraint that permits the package is enough, so the second list never
-  // narrows anything. Carrying it would have been a rule that reads as
-  // enforcement and enforces nothing — the exact failure this file has already
-  // been caught in four times.
+  // The rule itself is unchanged and still enforced: `plan.md` line 51 states
+  // it, and `libs/design-system/eslint.config.mjs` now enforces it with
+  // path-scoped `no-restricted-imports` groups that catch both the workspace
+  // alias and a relative escape, each with a probe recorded beside it. See
+  // doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md.
   //
-  // The npm surface therefore stays on the `type:` dimension
-  // (`doc/decision/0017-*`), and the design system's tighter surface is
-  // enforced where it actually fires: `no-restricted-imports` in
-  // `libs/design-system/primitives/eslint.config.mjs` and
-  // `libs/design-system/tokens/eslint.config.mjs`, each with a probe recorded
-  // beside it.
-  {
-    sourceTag: 'ds:tokens',
-    onlyDependOnLibsWithTags: ['type:util'],
-  },
-  {
-    sourceTag: 'ds:primitives',
-    onlyDependOnLibsWithTags: ['ds:tokens', 'type:util'],
-  },
-  {
-    sourceTag: 'ds:compounds',
-    onlyDependOnLibsWithTags: ['ds:tokens', 'ds:primitives', 'type:util'],
-  },
+  // The npm surface stays where it always was, on the `type:` dimension
+  // (`doc/decision/0017-*`): a second allow-list on a `ds:` tag was probed at
+  // Task 8's merge and does **not** intersect — Nx accepts a package as soon as
+  // any matching constraint permits it.
 ];
 
 /**
@@ -446,7 +430,7 @@ const DEP_CONSTRAINTS = [
  * `@lets-park/form` plus design-system primitives (`Input`, `Select`,
  * `Checkbox`), with no direct `react-hook-form` import anywhere in that file
  * (`doc/decision/0030-*`, Task 18). That demo can only run if the test file
- * may import `design-system-primitives` (`type:ui`), which the general
+ * may import the design system (`design-system`, `type:ui`), which the general
  * `type:util` constraint forbids — composing the design system is supposed to
  * happen in app/feature code (global constraint 5), and `libs/form`'s own
  * *shipped* source must stay just as constrained as every other wrapper lib.
@@ -586,7 +570,7 @@ export default [
   },
   ...wrapperLibOverrides,
   // See `formSpecDepConstraints` above: only `libs/form`'s own test files may
-  // reach `design-system-primitives` (`type:ui`), to demonstrate the wrapper
+  // reach the design system (`design-system`, `type:ui`), to demonstrate the wrapper
   // building a real form without a direct `react-hook-form` import.
   // `allowCircularSelfDependency` is needed alongside it because that same
   // demo imports `@lets-park/form` by its workspace alias from inside
