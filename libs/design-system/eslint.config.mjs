@@ -114,16 +114,20 @@ const BOUNDARY_OPTIONS = moduleBoundaryOptions();
  * prove nothing about the file.
  *
  * Nothing shipped from this project imports `tailwindcss`, and nothing should.
- * Scoped to `src/**\/*.spec.ts` rather than added to `NPM_ALLOWLIST.ui`, which
- * would reach every `type:ui` project's shipped source — the same reasoning the
- * root config gives for `ical.js` in `calendarExportSpecDepConstraints`.
+ * Scoped to `src/tokens/**\/*.spec.ts` rather than added to `NPM_ALLOWLIST.ui`,
+ * which would reach every `type:ui` project's shipped source — the same
+ * reasoning the root config gives for `ical.js` in
+ * `calendarExportSpecDepConstraints`.
  *
- * One honest widening to note: this glob used to cover the tokens *project*'s
- * spec files and now covers all three layers' spec files, since they share a
- * `src/`. Only `src/tokens/lib/theme-css.spec.ts` needs it. Narrowing the glob
- * to `src/tokens/**\/*.spec.ts` would be tighter and is a fair change to make
- * later; it is left project-wide here so that this merge changes packaging and
- * not policy, and so the widening is written down rather than discovered.
+ * The glob names the tokens layer specifically, not `src/**\/*.spec.ts`. When
+ * the three layers became three directories of one project, the project-wide
+ * spelling would have handed the allowance to the primitives layer's three
+ * plain spec files (`cx`, `gap`, `padding`) as well, which have no business
+ * importing a CSS compiler. `src/tokens/lib/theme-css.spec.ts` is the only file
+ * in the workspace that needs it, and the glob now says so. Probed in both
+ * directions: an `import { compile } from 'tailwindcss'` in
+ * `src/primitives/lib/cx.spec.ts` errors, and `theme-css.spec.ts`'s real import
+ * lints clean.
  *
  * Probe it before trusting it: add `import { compile } from 'tailwindcss'` to
  * `src/tokens/lib/colors.ts` and run `npx nx lint design-system
@@ -246,7 +250,7 @@ export default [
     },
   },
   {
-    files: ['src/**/*.spec.ts'],
+    files: ['src/tokens/**/*.spec.ts'],
     rules: {
       '@nx/enforce-module-boundaries': [
         'error',
