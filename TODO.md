@@ -1,17 +1,8 @@
 # TODO
 
-- [x] `apps/web`: all routes and URLs should be in English. Note that the URLs (7c5920c)
-      are Czech today because the interface is (`doc/decision/0029-*`), and the
-      e2e page objects address them by name, so this is a product decision plus
-      a migration rather than a rename.
-
-- [x] zbavit se dlouhých souborů - komponent hlavně. spiousta komponent v apps/web je dlouhých přitom můžeme jednoduše vyndat nějakou logiku do custom hooků nebo vyndat nějaký opakující se element do jiného souboru jako vlastní komponentu. Příklad třeba bulk-modal kde celá table může jít ven jako separátní CalendarTable komponenta (628a517)
-
-- [x] u komponentových souborů v apps/web a libs/design-system, které patří k sobě jako komponenta+stories+testy+subkomponenty by měly jít do vlastní složky (628a517)
-
 - [ ] `libs/design-system` should be one package rather than three nested ones.
 
-- [ ] `libs/shared-types` → `czech-holidays`: is there a library for this? The
+- [x] `libs/shared-types` → `czech-holidays`: is there a library for this? The (branch todo-2-libs-shared-types-czech-holidays-is-there-a-library-for-this)
       whole file is unsatisfying.
 
 - [ ] flow rezervování míst pro admin usera se liší od flow rezervace normálního usera - user rezervuje pro sebe ale admin může rezervovat pro ostaní uživatele (včetně sebe) tzn musí tam být selector uživatelů, který vybere jméno i spz (měla by jít změnit), případně rezervovat místo pro hosta.
@@ -41,3 +32,5 @@
   - přidat přepínač jazyků do menu pod user avatarem
 
 - [ ] pokud existuje jen jeden administrátor v systému tak musíme zařídit že se mu nemůže role administrátora odstranit -> disablujeme toggle
+
+- [ ] udělat indexy ve složkách doc, doc/decision pro lepší vyhledávání agenty a napsat krátký odstavec do CLaude.md o tom že se mají nejprve dívat na indexové soubory a až pak číst konkrétní.
