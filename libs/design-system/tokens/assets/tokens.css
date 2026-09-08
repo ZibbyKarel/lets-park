@@ -1,0 +1,240 @@
+/* ============================================================
+   GENERATED FILE — do not hand-edit.
+   Source: libs/design-system/tokens/src/lib/*.ts (DESIGN_TOKENS).
+   Regenerate with: npx nx run design-system-tokens:generate-css
+   ============================================================ */
+
+/* ---------- Web fonts (Neue Haas Grotesk Display Pro) ---------- */
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 250;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-25Th.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-35XLt.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 350;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-45Lt.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-55Rg.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-56It.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-65Md.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-75Bd.otf") format("opentype");
+}
+@font-face {
+  font-family: "NHaasGroteskDS";
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/NHaasGroteskDSPro-95Blk.otf") format("opentype");
+}
+
+/* ---------- Tokens ---------- */
+:root {
+  /* --- Brand color palette --- */
+  --brand-blue: #008FFF;
+  --brand-green: #00DB33;
+  --brand-yellow: #FFBE0E;
+  --brand-light: #E2F2FF;
+  --brand-dark: #23221F;
+  --brand-black: #23221F;
+
+  --text: #15181E;
+
+  --brand-blue-700: #0070D6;
+  --brand-green-700: #00B82A;
+  --brand-yellow-700: #E5A800;
+
+  --brand-blue-100: var(--brand-light);
+  --brand-green-100: #D2F8DC;
+  --brand-yellow-100: #FFF4D2;
+
+  /* --- Neutrals --- */
+  --neutral-0: #FFFFFF;
+  --neutral-50: #FAFAFA;
+  --neutral-100: #F4F4F5;
+  --neutral-200: #E7E7EA;
+  --neutral-300: #D1D1D6;
+  --neutral-400: #A1A1AA;
+  --neutral-500: #71717A;
+  --neutral-600: #52525B;
+  --neutral-700: #3F3F46;
+  --neutral-800: #27272A;
+  --neutral-900: #18181B;
+  --neutral-950: #23221F;
+
+  /* --- Semantic surfaces --- */
+  --bg: var(--neutral-0);
+  --bg-soft: var(--neutral-50);
+  --bg-muted: var(--neutral-100);
+  --bg-inverse: var(--brand-dark);
+
+  /* --- Semantic foreground --- */
+  --fg: var(--text);
+  --fg-2: var(--neutral-700);
+  --fg-3: var(--neutral-500);
+  --fg-on-yellow: var(--brand-dark);
+  --fg-on-green: var(--neutral-0);
+  --fg-on-blue: var(--neutral-0);
+  --fg-on-light: var(--brand-dark);
+  --fg-on-dark: var(--neutral-0);
+
+  /* --- Lines --- */
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --divider: var(--neutral-100);
+
+  /* --- Status --- */
+  --success: var(--brand-green);
+  --info: var(--brand-blue);
+  --warning: var(--brand-yellow);
+  --danger: #E5484D;
+  --danger-100: #FCE5E5;
+
+  /* --- Car color palette ---
+     Scoped ONLY to the repeating glyphs on the app's map surface — see
+     car-palette.ts. Deliberately namespaced away from the general palette. */
+  --palette-car-1: #fcaf00;
+  --palette-car-2: #00e25a;
+  --palette-car-3: #3b88ff;
+
+  /* --- Type families --- */
+  --font-sans: "NHaasGroteskDS", "Neue Haas Grotesk", "Helvetica Neue", "Inter", "Arial", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  /* --- Type scale --- */
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-base: 16px;
+  --fs-md: 18px;
+  --fs-lg: 20px;
+  --fs-xl: 24px;
+  --fs-2xl: 32px;
+  --fs-3xl: 40px;
+  --fs-4xl: 56px;
+  --fs-5xl: 72px;
+  --fs-6xl: 96px;
+
+  /* --- Line heights --- */
+  --lh-tight: 1.05;
+  --lh-snug: 1.15;
+  --lh-normal: 1.4;
+  --lh-loose: 1.6;
+
+  /* --- Letter spacing --- */
+  --tracking-tight: -0.02em;
+  --tracking-snug: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.08em;
+
+  /* --- Spacing scale (4px base) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* --- Radii --- */
+  --radius-photos: 2px;
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-cta: 360px;
+  --radius-pill: var(--radius-cta);
+
+  /* --- Shadows --- */
+  --shadow-xs: 0 1px 2px rgba(35,34,31,0.04);
+  --shadow-sm: 0 2px 6px rgba(35,34,31,0.06);
+  --shadow-md: 0 8px 24px rgba(35,34,31,0.08);
+  --shadow-lg: 0 20px 48px rgba(35,34,31,0.12);
+  --shadow-blue: 0 12px 28px rgba(0,143,255,0.35);
+  --shadow-yellow: 0 12px 28px rgba(255,190,14,0.35);
+
+  /* --- Motion --- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+
+  /* --- Layout --- */
+  --container: 1200px;
+  --container-wide: 1320px;
+
+  /* --- Controls ---
+     DERIVED from lets-park-design.dc.html, NOT from colors_and_type.css —
+     see controls.ts and doc/decision/0011-derived-control-tokens-and-rounding.md. */
+  --control-h-sm: 36px;
+  --control-h-md: 40px;
+  --control-h-lg: 48px;
+  --control-h-xl: 56px;
+
+  --switch-w: 46px;
+  --switch-h: 26px;
+  --switch-pad: 3px;
+  --switch-knob: 20px;
+  --switch-knob-shadow: 0 1px 2px rgba(35,34,31,0.24);
+
+  /* --- Overlays and layering ---
+     DERIVED from lets-park-design.dc.html where the design draws the thing,
+     invented where it does not — see overlays.ts and doc/decision/0052-*. */
+  --z-sticky: 40;
+  --z-bar: 50;
+  --z-overlay: 60;
+  --z-dropdown: 70;
+  --z-toast: 80;
+  --z-tooltip: 90;
+
+  --scrim: rgba(10,10,10,0.6);
+
+  --modal-w-sm: 460px;
+  --modal-w-md: 620px;
+  --menu-min-w: 246px;
+  --tab-indicator-h: 3px;
+  --tooltip-max-w: 240px;
+  --toast-w: 380px;
+}

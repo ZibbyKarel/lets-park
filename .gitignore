@@ -1,0 +1,83 @@
+# Project-specific
+plan.md
+.superpowers/
+.playwright-mcp/
+storage-state*.json
+# Superpowers-generated docs (specs, plans) — not project documentation (see doc/)
+/docs/
+
+# compiled output
+dist/
+tmp/
+out-tsc/
+.next/
+build/
+*.tsbuildinfo
+
+# dependencies
+node_modules/
+
+# Nx
+.nx/
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+
+# test artifacts
+coverage/
+test-output/
+playwright-report/
+test-results/
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# env
+.env
+.env.local
+# The containerised stack's own environment (docker-compose.yml, §app profile).
+# `.env.docker.example` beside it is committed; this one holds real values.
+.env.docker
+*.local
+
+# misc
+/.sass-cache
+/connect.lock
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/worktrees
+.claude/settings.local.json
+
+# Next.js
+.next
+out
+next-env.d.ts
+
+graphify-out
+
+# Session handoff notes — intentionally not committed
+handoff.md
+
+# Playwright storage state (live session cookies) — never committed
+apps/web-e2e/.auth/

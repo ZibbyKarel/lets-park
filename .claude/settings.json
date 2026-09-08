@@ -1,0 +1,57 @@
+{
+  "worktree": {
+    "baseRef": "head"
+  },
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "claude-security@claude-plugins-official": true,
+    "prisma@pleaseai": true,
+    "zod@pleaseai": true,
+    "tanstack-query@tanstack-skills": true,
+    "tanstack-table@tanstack-skills": true,
+    "tanstack-form@tanstack-skills": true,
+    "fullstack-dev-skills@fullstack-dev-skills": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/zibar/.local/bin/graphify hook-guard search"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git commit:*)",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/review-before-commit.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/zibar/.local/bin/graphify hook-guard read"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-changed.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

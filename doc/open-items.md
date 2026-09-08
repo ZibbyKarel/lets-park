@@ -1,0 +1,58 @@
+# Deferred, parked, and open items
+
+Every deferred minor, parked finding, known limitation and open follow-up the
+implementation run left behind. This is the honest list of what is *not* done:
+nothing here blocks the branch, and nothing here was hidden.
+
+Four rows have been closed since the list was compiled and are struck through
+below, with what closed them. The rest are open. Two deserve to be read before
+anything else, because they are the only two that describe an enforcement
+mechanism that does not enforce:
+
+- **Test helpers are not truly unreachable from shipped code.** A `tsconfig`
+  `exclude` filters the root file set, not what an import pulls in. No backdoor
+  exists today; the guarantee that none can be added is the thing that is
+  missing. It was named as needing its own task and never got one.
+- **The health check's `defined`/`status` fields have no schema in
+  `libs/contract`.** A live contract-first gap, named twice and never scheduled.
+
+The single most overdue item is the ninth copy of the jest ESM-transform block.
+It is a scheduling problem, not a code problem — every task that touched it
+declined to consolidate because doing so meant editing another in-flight task's
+files. There are no in-flight tasks now.
+
+## Documentation
+
+| Item | Where | Why it was deferred | Severity as the ledger judged it |
+| --- | --- | --- | --- |
+| Risk section still cites `login.spec.ts:76` (twice: body and Risk) while the test moved to `:100` | `doc/decision/0189-*` | Append-only records are arguably correct-as-written, but the Risk section is live debugging guidance pointing at the wrong line; referred to the task review, which deferred it again to the final whole-branch review triage | Minor (final review's Minor finding, unresolved as of the last ledger entry) |
+| Five duplicate decision numbers predate the renumbering discipline: `0011`, `0012`, `0013`, `0024`, `0025`, each naming two unrelated records | `doc/decision/` | Renumbering would collide with decision records unmerged branches were still writing; the four ambiguous `NNNN-*` glob citations were disambiguated to full slugs instead of fixing the underlying duplicates | Low (`F5`), parked repeatedly across Tasks 23, 28, 29 |
+| The `{1: 89}` histogram quoted for socket counts was collected with a now-retired counter and is not labelled as such | `doc/decision/0187-*`, `doc/decision/0221-*` | Chose labelling over re-collecting — the retired counter can only undercount, so a duplicate it missed would also read 89, and the number isn't what the retraction actually rests on — but the record now says to re-run it before quoting it again | Minor, deferred |
+| `0221`'s Risk section names only a transport drop as a legitimate second connection | `doc/decision/0221-*` | A rebuilt socket (a rejected handshake, `reconnect()`, an `enabled` flip in `realtime-boundary.tsx:42`) is also legitimate and isn't covered — a triage gap | Minor, deferred |
+| The product-owner residual section (the ~15s two-tab cell-lock hazard) has no cross-reference from the product-facing part of the doc | `doc/realtime.md` | The section sits under "The gateway" with no pointer from "The cell lock > 2. The hold is given back"; one cross-reference would finish it | Minor, deferred |
+| A bare assertion about an unidentified request survives verbatim, although the implementer's report claimed it was replaced by a candidate-set enumeration | `doc/decision/0230-*` | A claimed documentation change that did not happen | Minor, deferred to final-review triage |
+| ~~`REALTIME_LOCK_TTL_MS` is missing from `.env.example`~~ | `.env.example` | Confirmed documentation-only — the key is defaulted in `env.ts`, so boot is unaffected — but left unadded rather than fixed | **Closed** — `.env.example:76` carries it, commented, with its default. |
+
+## Code
+
+| Item | Where | Why it was deferred | Severity as the ledger judged it |
+| --- | --- | --- | --- |
+| `NEXT_RUNTIME=''` (empty string) slips past the sign-out runtime guard meant to fail closed off the Node.js runtime | `apps/web` sign-out revocation guard (`decision/0230-*`/`0231-*`) | Found during Task 33's fix-round falsification; not closed in this round | Minor, deferred to final-review triage |
+| The prune-boundary's "could no longer be valid anyway" reasoning is off by `delta+15s` (jose's `clockTolerance`) thirty days out | `apps/web` revocation store / `doc/decision/0189-*` | Not exploitable, but the same asserted-rather-than-derived clock reasoning the fix round was rewritten specifically to escape | Minor, deferred |
+| ~~A dangling `{@link DIAGNOSTIC_BUDGET_MS}` reference in a spec's docstring~~ | `apps/api/src/calendar/calendar-logging.spec.ts` (`waitForEmitted` docstring) | Doc-only; Minors never enter the fix-round loop | **Closed** — now `{@link WAIT_BUDGET_MS}`, the name the constant actually has. |
+| ~~`apps/web/src/routes.ts` has the task numbers swapped in comments~~ | `apps/web/src/routes.ts` | Noticed and deliberately not fixed — left alone as out of Task 27's diff | **Closed** — settings is Task 26 and admin Task 27 in `doc/implementation-plan.md:831,850`; the comments now say so. |
+| `CAR_COLOR_PALETTE` carries domain context ("car") in its identifier, inside an otherwise domain-clean design-system tokens lib | `libs/design-system/tokens` (`car-palette.ts`) | A real but narrower instance of the "domain words leaking into the design system" class, pre-existing from Task 7 and disclosed rather than hidden behind a "0 hits" claim | Still open, recorded so it isn't forgotten |
+| `signing-key-not-found` logs at `debug`, invisible at the documented default `LOG_LEVEL=info` | `apps/api` auth / JWKS verification | A log-level judgment, not a defect — at the default level an operator cannot distinguish one caller's stale `kid` from an IdP rotating to an unpublished key and every user failing, though the doc names the exact scenario | Accepted, non-blocking, parked |
+| The refusal-counter reset guarantee is asserted in three places (a code comment, `doc/realtime.md`, decision `0061`'s policy table) but no test holds it — deleting the reset line leaves the suite at 69/69 | `libs/realtime-client` | Parked for Task 28's e2e sweep rather than spending a fix round on one test; the mildest possible instance of the project's "claim in three places, exercised by none" class — never actually revisited by Task 28 | Low, deferred (`t21-residual-1`) |
+| "Test helpers are not truly unreachable from shipped code": a shipped module re-exporting a test fixture double (`../__fixtures__/stub-fetch`) passes both `typecheck` and `lint` clean | `apps/api`, workspace-wide `tsconfig` `exclude` behaviour | `exclude` in a tsconfig filters only the root file set, not what an import pulls in — the same mechanism the "no auth test backdoors" guarantee elsewhere in the project relies on. No live backdoor exists today, but the enforcement everyone was relying on is not enforcement | Named as needing "its own task," never dispatched |
+| `libs/contract` has no schema anywhere for the health check's `defined`/`status` fields | `libs/contract` | A live contract-first gap, named twice as needing its own task (once from Task 10's review, once again at Task 20) and never scheduled | Needs its own task, never dispatched |
+
+## Infrastructure / tooling
+
+| Item | Where | Why it was deferred | Severity as the ledger judged it |
+| --- | --- | --- | --- |
+| The jest ESM-transform (`transformIgnorePatterns`) block is duplicated across libs, reaching a **ninth** copy by the end of the ledger | `doc/decision/0020-*` | Every task that touches it declines to consolidate, because doing so mid-wave means editing another in-flight task's owned files — a scheduling problem, not a code problem. A reviewer said at copy six/seven it should be "scheduled, not deferred again"; it reached copy eight, then nine, still unconsolidated | Real and overdue by the project's own account |
+| `contract:test` intermittently exits 1 on a jest-worker SIGSEGV with 0 tests failing | `libs/contract` test runner | Reproduced independently by at least two separate agents in two different suites (`overview.spec.ts`, `spots.spec.ts`), always with 0 test failures; treated as infrastructure contention and merged past rather than fixed | Standing item on an infra-ticket list |
+| ~~The e2e suite orphans its own `next start` process on port 4200~~ | `apps/web-e2e` | Noted as worth a ticket during Task 32, not investigated | **Closed** — this was Critical 4 of the final review: the orphan was adopted on the next run, so the suite tested a stale build. `doc/decision/0285-*`; `playwright.config.mts:145` no longer reuses an existing server for the built app. |
+| A flaky `SlackClient` test appeared in a `run-many` run | `apps/api/src/slack` | Noted in passing during Task 32, not investigated | Deferred, out of scope |
+| The realtime socket-counting tracer's docstring claims to count "whichever transport carries it," but WebTransport is unhooked, a Worker/Service Worker realm isn't instrumented at all, and a same-origin iframe is instrumented but invisible to the counter (which reads only the main frame) | `apps/web-e2e` support tracer (`realtimeSocketsInDocument`) | Same class as the defect Task 32 had just finished fixing one instance of — a docstring wider than its code | Minor, deferred |

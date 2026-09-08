@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/shoptet-design-system-f51668fb-0f5c-4e10-8b76-2e498b5fe8e9/colors_and_type.css">
+<style>
+  body { background: #FAFAFA; }
+  a { color: #008FFF; text-decoration: none; }
+  a:hover { color: #0070D6; text-decoration: underline; }
+  button { font-family: inherit; }
+  select, input { font-family: inherit; }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#FAFAFA;color:#15181E;font-family:var(--font-sans)">
+
+  <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;background:#FFFFFF">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:52px;height:52px;border-radius:16px;background:#008FFF;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;letter-spacing:-0.02em">P</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.02em">Let’s Park</div>
+      </div>
+      <div style="font-size:18px;line-height:1.6;color:#71717A;max-width:360px;text-align:center">Rezervace firemních parkovacích míst.<br>Přihlaste se firemním účtem.</div>
+      <button onClick="{{ login }}" style="display:inline-flex;align-items:center;gap:12px;height:56px;padding:0 34px;border:none;border-radius:360px;background:#008FFF;color:#fff;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(35,34,31,0.06);transition:background 200ms cubic-bezier(0.22,1,0.36,1),box-shadow 120ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:#0070D6;box-shadow:0 12px 28px rgba(0,143,255,0.35)" style-active="transform:scale(0.97)">
+        <span style="width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.22);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">O</span>
+        Login přes OKTA Verify
+      </button>
+      <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;color:#A1A1AA">Interní nástroj · pouze pro zaměstnance</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+    <div style="min-height:100vh">
+
+      <div style="position:sticky;top:0;z-index:40;height:64px;background:#fff;border-bottom:1px solid #E7E7EA;display:flex;align-items:center;justify-content:space-between;padding:0 16px">
+        <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onClick="{{ goLot }}">
+          <div style="width:30px;height:30px;border-radius:9px;background:#008FFF;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700">P</div>
+          <div style="font-size:18px;font-weight:700;letter-spacing:-0.01em">Let’s Park</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:360px;background:#E2F2FF;color:#008FFF;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">Admin</div>
+          </sc-if>
+          <div style="position:relative">
+            <button onClick="{{ toggleMenu }}" style="display:flex;align-items:center;gap:10px;border:1px solid #E7E7EA;background:#fff;border-radius:360px;padding:5px 12px 5px 5px;cursor:pointer;transition:box-shadow 120ms cubic-bezier(0.22,1,0.36,1)" style-hover="box-shadow:0 2px 6px rgba(35,34,31,0.06)">
+              <span style="width:32px;height:32px;border-radius:50%;background:#23221F;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">KZ</span>
+              <span style="font-size:14px;font-weight:500">Karel Zíbar</span>
+              <span style="color:#A1A1AA;font-size:11px">▾</span>
+            </button>
+            <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;right:0;top:52px;width:246px;background:#fff;border:1px solid #E7E7EA;border-radius:16px;box-shadow:0 20px 48px rgba(35,34,31,0.12);padding:8px;display:flex;flex-direction:column;gap:2px">
+                <div style="padding:10px 12px 12px">
+                  <div style="font-size:14px;font-weight:700">Karel Zíbar</div>
+                  <div style="font-size:12px;color:#71717A">karel.zibar@firma.cz</div>
+                </div>
+                <div style="height:1px;background:#F4F4F5;margin:0 4px 6px"></div>
+                <button onClick="{{ openProfile }}" style="text-align:left;border:none;background:transparent;padding:10px 12px;border-radius:12px;font-size:14px;cursor:pointer;color:#15181E" style-hover="background:#F4F4F5">Nastavení (SPZ auta)</button>
+                <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ goAdmin }}" style="text-align:left;border:none;background:transparent;padding:10px 12px;border-radius:12px;font-size:14px;cursor:pointer;color:#15181E;display:flex;justify-content:space-between;align-items:center" style-hover="background:#F4F4F5">Správa<span style="color:#A1A1AA">→</span></button>
+                </sc-if>
+                <div style="height:1px;background:#F4F4F5;margin:6px 4px"></div>
+                <button onClick="{{ logout }}" style="text-align:left;border:none;background:transparent;padding:10px 12px;border-radius:12px;font-size:14px;cursor:pointer;color:#E5484D" style-hover="background:#FCE5E5">Odhlásit se</button>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isLot }}" hint-placeholder-val="{{ true }}">
+        <div style="max-width:1200px;margin:0 auto;padding:28px 16px 24px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:28px;flex-wrap:wrap">
+            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px">
+              <div style="display:inline-flex;align-items:center;gap:2px;height:44px;border-radius:360px;background:#fff;border:1px solid #E7E7EA;padding:4px">
+                <button onClick="{{ prevDay }}" style="width:36px;height:36px;border-radius:50%;border:none;background:transparent;font-size:15px;cursor:pointer;color:#15181E" style-hover="background:#F4F4F5" style-active="transform:scale(0.97)">‹</button>
+                <button onClick="{{ openDatePicker }}" style="height:36px;padding:0 16px;border-radius:360px;border:none;background:transparent;font-size:16px;font-weight:700;letter-spacing:-0.01em;cursor:pointer;color:#15181E;white-space:nowrap" style-hover="background:#F4F4F5">{{ dateLong }}</button>
+                <button onClick="{{ nextDay }}" style="width:36px;height:36px;border-radius:50%;border:none;background:transparent;font-size:15px;cursor:pointer;color:#15181E" style-hover="background:#F4F4F5" style-active="transform:scale(0.97)">›</button>
+              </div>
+              <div style="margin-top:8px;padding-left:4px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:{{ holidayColor }}">{{ dayNote }}</div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button onClick="{{ today }}" style="height:36px;padding:0 16px;border-radius:360px;border:1px solid #23221F;background:transparent;color:#23221F;font-size:14px;font-weight:700;cursor:pointer;transition:background 200ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:#23221F;color:#fff" style-active="transform:scale(0.97)">Dnes</button><div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:360px;background:#fff;border:1px solid #E7E7EA;font-size:14px">{{ takenCount }} z {{ totalCount }} obsazeno</div>
+              
+              <sc-if value="{{ batchAllowed }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ openBatch }}" style="height:36px;padding:0 18px;border-radius:360px;border:none;background:#008FFF;color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:background 200ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:#0070D6;box-shadow:0 12px 28px rgba(0,143,255,0.35)" style-active="transform:scale(0.97)">Hromadná rezervace</button>
+              </sc-if>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:16px;background:{{ bannerBg }};border:1px solid {{ bannerBorder }};margin-bottom:18px">
+            <span style="width:26px;height:26px;border-radius:8px;background:{{ bannerIconBg }};color:{{ bannerIconFg }};display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">{{ bannerIcon }}</span>
+            <div style="font-size:14px;line-height:1.4;color:#15181E">{{ bannerText }}</div>
+          </div>
+
+          <div style="background:#57575A;border-radius:24px;padding:16px;box-shadow:0 20px 48px rgba(35,34,31,0.12);background-image:radial-gradient(rgba(255,255,255,0.045) 1px,transparent 1px),radial-gradient(rgba(0,0,0,0.06) 1px,transparent 1px);background-size:7px 7px,11px 11px;background-position:0 0,4px 6px">
+            <sc-for list="{{ groups }}" as="group" hint-placeholder-count="2">
+              <div style="margin-bottom:20px;border:1px solid rgba(255,255,255,0.14);border-radius:16px;padding:16px 14px 18px;background:rgba(0,0,0,0.08)">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                  <div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.92)">{{ group.name }}</div>
+                  <div style="flex:1;height:1px;background:rgba(255,255,255,0.16)"></div>
+                  <div style="font-size:12px;color:rgba(255,255,255,0.5)">{{ group.meta }}</div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;border-left:3px solid rgba(255,255,255,0.5)">
+                  <sc-for list="{{ group.spots }}" as="spot" hint-placeholder-count="4">
+                    <div onClick="{{ spot.onClick }}" style="position:relative;flex:1 0 116px;max-width:152px;height:236px;border-right:3px solid rgba(255,255,255,0.5);border-top:4px solid rgba(255,255,255,0.5);padding:12px 10px;display:flex;flex-direction:column;align-items:center;cursor:pointer;background:{{ spot.cellBg }};transition:background 200ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:rgba(255,255,255,0.06)">
+                      <div style="font-size:13px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.8);margin-bottom:10px">{{ spot.label }}</div>
+
+                      <sc-if value="{{ spot.isFree }}" hint-placeholder-val="{{ true }}">
+                        <div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:2px dashed rgba(255,255,255,0.32);border-radius:12px;color:rgba(255,255,255,0.72)">
+                          <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.16);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;line-height:1">+</div>
+                          <div style="font-size:13px;font-weight:500">Volné</div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ spot.isTaken }}" hint-placeholder-val="{{ false }}">
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px">
+                          <div style="position:relative;width:58px;height:104px;border-radius:16px 16px 13px 13px;background:{{ spot.color }};box-shadow:0 8px 18px rgba(0,0,0,0.35)">
+                            <div style="position:absolute;top:10px;left:8px;right:8px;height:20px;border-radius:9px 9px 4px 4px;background:rgba(21,24,30,0.45)"></div>
+                            <div style="position:absolute;top:36px;left:5px;right:5px;height:34px;border-radius:6px;background:rgba(255,255,255,0.14)"></div>
+                            <div style="position:absolute;bottom:12px;left:8px;right:8px;height:16px;border-radius:4px 4px 8px 8px;background:rgba(21,24,30,0.35)"></div>
+                            <div style="position:absolute;top:32px;left:-4px;width:5px;height:9px;border-radius:2px;background:rgba(21,24,30,0.4)"></div>
+                            <div style="position:absolute;top:32px;right:-4px;width:5px;height:9px;border-radius:2px;background:rgba(21,24,30,0.4)"></div>
+                          </div>
+                          <div style="text-align:center">
+                            <div style="font-size:13px;font-weight:700;color:#fff">{{ spot.name }}</div>
+                            <div style="font-size:11px;color:rgba(255,255,255,0.6);letter-spacing:0.04em">{{ spot.plate }}</div>
+                          </div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ spot.isRuleLocked }}" hint-placeholder-val="{{ false }}">
+                        <div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:2px solid rgba(255,255,255,0.22);border-radius:12px;background:rgba(0,0,0,0.16);color:rgba(255,255,255,0.6)">
+                          <div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-size:15px">⊘</div>
+                          <div style="font-size:11px;line-height:1.35;text-align:center;padding:0 8px">rezervace<br>uzamčeny</div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ spot.isLocked }}" hint-placeholder-val="{{ false }}">
+                        <div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:2px solid rgba(255,190,14,0.65);border-radius:12px;background-image:repeating-linear-gradient(45deg,rgba(255,190,14,0.22) 0px,rgba(255,190,14,0.22) 7px,transparent 7px,transparent 15px)">
+                          <div style="width:30px;height:30px;border-radius:50%;background:#FFBE0E;color:#23221F;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700">✎</div>
+                          <div style="font-size:11px;line-height:1.35;text-align:center;color:#fff;padding:0 6px">právě upravuje<br><strong style="font-weight:700">{{ spot.lockedBy }}</strong></div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ spot.hasWait }}" hint-placeholder-val="{{ false }}">
+                        <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:360px;background:#FFBE0E;color:#23221F;font-size:11px;font-weight:700;white-space:nowrap">{{ spot.waitCount }} ve frontě</div>
+                      </sc-if>
+
+                      <sc-if value="{{ spot.adminMenu }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ spot.onAdmin }}" style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;border:none;background:rgba(255,255,255,0.18);color:#fff;font-size:13px;font-weight:700;line-height:1;cursor:pointer" style-hover="background:#fff;color:#23221F">⋯</button>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,0.72);padding:0 4px">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:12px;height:12px;border-radius:3px;background:#fcaf00"></span>obsazeno</div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:12px;height:12px;border-radius:3px;border:2px dashed rgba(255,255,255,0.5)"></span>volné</div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:12px;height:12px;border-radius:3px;background:#FFBE0E"></span>waitlist / editace</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isAdminPage }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border-bottom:1px solid #E7E7EA">
+          <div style="max-width:1200px;margin:0 auto;padding:24px 16px 0">
+            <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:6px">Administrace</div>
+            <div style="font-size:32px;font-weight:700;letter-spacing:-0.02em;margin-bottom:20px">Správa</div>
+            <div style="display:flex;gap:4px;overflow-x:auto">
+              <sc-for list="{{ tabs }}" as="tab" hint-placeholder-count="3">
+                <button onClick="{{ tab.onClick }}" style="border:none;background:transparent;padding:12px 16px;font-size:15px;font-weight:{{ tab.weight }};color:{{ tab.color }};border-bottom:3px solid {{ tab.line }};cursor:pointer" style-hover="color:#15181E">{{ tab.name }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="max-width:1200px;margin:0 auto;padding:24px 16px">
+          <sc-if value="{{ tabUsers }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#fff;border:1px solid #E7E7EA;border-radius:24px;overflow-x:auto">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:20px 24px;border-bottom:1px solid #F4F4F5">
+                <div>
+                  <div style="font-size:20px;font-weight:700">Uživatelé</div>
+                  <div style="font-size:14px;color:#71717A">{{ userCount }} účtů ze SSO · admin roli lze kdykoliv přidat i odebrat</div>
+                </div>
+                <input placeholder="Hledat jméno nebo e‑mail" style="height:40px;width:280px;padding:0 14px;border:1px solid #E7E7EA;border-radius:16px;font-size:14px;color:#15181E;outline:none" style-focus="border-color:#008FFF">
+              </div>
+              <div style="display:grid;grid-template-columns:1.5fr 1.8fr 96px;min-width:560px;gap:0;padding:6px 24px;background:#FAFAFA">
+                <sc-for list="{{ userCols }}" as="col" hint-placeholder-count="3">
+                  <button onClick="{{ col.onClick }}" style="display:flex;align-items:center;gap:6px;justify-content:{{ col.align }};border:none;background:transparent;padding:10px 0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:{{ col.color }};cursor:pointer" style-hover="color:#15181E">{{ col.name }}<span style="font-size:10px">{{ col.arrow }}</span></button>
+                </sc-for>
+              </div>
+              <sc-for list="{{ users }}" as="u" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:1.5fr 1.8fr 96px;min-width:560px;align-items:center;gap:0;padding:14px 24px;border-top:1px solid #F4F4F5">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <span style="width:34px;height:34px;border-radius:50%;background:#E2F2FF;color:#008FFF;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">{{ u.initials }}</span>
+                    <span style="font-size:15px;font-weight:500">{{ u.name }}</span>
+                  </div>
+                  <div style="font-size:14px;color:#52525B">{{ u.email }}</div>
+                  <div style="display:flex;justify-content:flex-end">
+                    <button onClick="{{ u.onToggle }}" title="{{ u.action }}" style="width:46px;height:26px;border-radius:360px;border:none;padding:3px;cursor:pointer;display:flex;align-items:center;background:{{ u.switchBg }};justify-content:{{ u.switchPos }};transition:background 200ms cubic-bezier(0.22,1,0.36,1)" style-active="transform:scale(0.97)">
+                      <span style="width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(35,34,31,0.24)"></span>
+                    </button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ tabSpots }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff;border:1px solid #E7E7EA;border-radius:24px;overflow-x:auto">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:20px 24px;border-bottom:1px solid #F4F4F5">
+                <div>
+                  <div style="font-size:20px;font-weight:700">Parkovací místa</div>
+                  <div style="font-size:14px;color:#71717A">Štítek, kategorie a dostupnost míst</div>
+                </div>
+                <button onClick="{{ addSpot }}" style="height:44px;padding:0 22px;border-radius:360px;border:none;background:#008FFF;color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:background 200ms cubic-bezier(0.22,1,0.36,1),box-shadow 120ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:#0070D6;box-shadow:0 12px 28px rgba(0,143,255,0.35)" style-active="transform:scale(0.97)">Přidat místo</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid #F4F4F5;min-width:560px">
+                <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-right:4px">Kategorie</div>
+                <sc-for list="{{ categoryChips }}" as="c" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 6px 0 12px;border-radius:360px;background:#F4F4F5;font-size:13px;font-weight:500">
+                    {{ c.name }}<span style="font-size:11px;color:#A1A1AA">{{ c.count }}</span>
+                    <button onClick="{{ c.onRemove }}" title="{{ c.removeTitle }}" style="width:20px;height:20px;border-radius:50%;border:none;background:#fff;color:{{ c.removeColor }};font-size:12px;line-height:1;cursor:{{ c.cursor }}" style-hover="background:#E5484D;color:#fff">×</button>
+                  </div>
+                </sc-for>
+                <input value="{{ newCategory }}" onChange="{{ setNewCategory }}" placeholder="Nová kategorie" style="height:32px;width:150px;padding:0 12px;border:1px solid #E7E7EA;border-radius:360px;font-size:13px;color:#15181E;outline:none" style-focus="border-color:#008FFF">
+                <button onClick="{{ addCategory }}" style="height:32px;padding:0 14px;border-radius:360px;border:1px solid #23221F;background:transparent;color:#23221F;font-size:13px;font-weight:700;cursor:pointer" style-hover="background:#23221F;color:#fff" style-active="transform:scale(0.97)">Přidat kategorii</button>
+              </div>
+              <div style="display:grid;grid-template-columns:0.8fr 1fr 1.1fr 0.8fr auto;min-width:760px;padding:12px 24px;background:#FAFAFA;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B">
+                <div>Štítek</div><div>Kategorie</div><div>Stav dnes</div><div>Aktivní</div><div></div>
+              </div>
+              <sc-for list="{{ adminSpots }}" as="s" hint-placeholder-count="9">
+                <div style="display:grid;grid-template-columns:0.8fr 1fr 1.1fr 0.8fr auto;min-width:760px;align-items:center;padding:12px 24px;border-top:1px solid #F4F4F5">
+                  <div style="font-size:15px;font-weight:700;letter-spacing:0.04em">{{ s.label }}</div>
+                  <div>
+                    <select value="{{ s.group }}" onChange="{{ s.onGroup }}" style="height:38px;padding:0 12px;border:1px solid #E7E7EA;border-radius:12px;font-size:14px;background:#fff;color:#15181E;outline:none" style-focus="border-color:#008FFF">
+                      <sc-for list="{{ categoryOptions }}" as="o" hint-placeholder-count="2">
+                        <option value="{{ o.value }}">{{ o.name }}</option>
+                      </sc-for>
+                    </select>
+                  </div>
+                  <div style="font-size:14px;color:#52525B">{{ s.status }}</div>
+                  <div>
+                    <button onClick="{{ s.onActive }}" style="width:46px;height:26px;border-radius:360px;border:none;padding:3px;cursor:pointer;display:flex;align-items:center;background:{{ s.switchBg }};justify-content:{{ s.switchPos }};transition:background 200ms cubic-bezier(0.22,1,0.36,1)">
+                      <span style="width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(35,34,31,0.24)"></span>
+                    </button>
+                  </div>
+                  <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button style="height:36px;padding:0 14px;border-radius:360px;border:1px solid #E7E7EA;background:#fff;font-size:14px;font-weight:500;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">Upravit</button>
+                    <button style="height:36px;padding:0 14px;border-radius:360px;border:1px solid #FCE5E5;background:#FCE5E5;color:#E5484D;font-size:14px;font-weight:700;cursor:pointer" style-hover="background:#E5484D;color:#fff;border-color:#E5484D">Smazat</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ tabRules }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+              <div style="background:#fff;border:1px solid #E7E7EA;border-radius:24px;padding:24px">
+                <div style="font-size:20px;font-weight:700;margin-bottom:6px">Otevření nového měsíce</div>
+                <div style="font-size:14px;color:#71717A;line-height:1.6;margin-bottom:20px">Kolik dní před začátkem měsíce se otevřou rezervace na ten měsíc. Po začátku měsíce se rezervace uzamknou — upravovat je pak může jen admin, uživatel může svoji rezervaci kdykoliv zrušit.</div>
+                <label style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">Otevřít X dní předem</label>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+                  <button onClick="{{ decOpenDays }}" style="width:44px;height:48px;border-radius:16px;border:1px solid #E7E7EA;background:#fff;font-size:18px;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">−</button>
+                  <div style="min-width:110px;height:48px;border:1px solid #E7E7EA;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700">{{ openDaysLabel }}</div>
+                  <button onClick="{{ incOpenDays }}" style="width:44px;height:48px;border-radius:16px;border:1px solid #E7E7EA;background:#fff;font-size:18px;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">+</button>
+                </div>
+                <label style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">Režim zámku</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ lockModes }}" as="m" hint-placeholder-count="3">
+                    <button onClick="{{ m.onClick }}" style="height:40px;padding:0 16px;border-radius:360px;border:1px solid {{ m.border }};background:{{ m.bg }};color:{{ m.fg }};font-size:14px;font-weight:700;cursor:pointer" style-active="transform:scale(0.97)">{{ m.name }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background:#fff;border:1px solid #E7E7EA;border-radius:24px;overflow:hidden">
+                <div style="padding:24px 24px 16px">
+                  <div style="font-size:20px;font-weight:700;margin-bottom:6px">Stav měsíců</div>
+                  <div style="font-size:14px;color:#71717A">Podle nastavení vlevo · dnes je {{ todayLabel }}</div>
+                </div>
+                <sc-for list="{{ monthStates }}" as="m" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;border-top:1px solid #F4F4F5">
+                    <div>
+                      <div style="font-size:15px;font-weight:700">{{ m.name }}</div>
+                      <div style="font-size:13px;color:#71717A">{{ m.window }}</div>
+                    </div>
+                    <span style="display:inline-flex;height:26px;align-items:center;padding:0 11px;border-radius:360px;font-size:12px;font-weight:700;background:{{ m.badgeBg }};color:{{ m.badgeFg }};white-space:nowrap">{{ m.state }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ datePickerOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeDatePicker }}" style="position:fixed;inset:0;z-index:60;background:rgba(10,10,10,0.6);display:flex;align-items:center;justify-content:center;padding:24px">
+          <div onClick="{{ stop }}" style="width:min(420px,100%);background:#fff;border-radius:24px;box-shadow:0 20px 48px rgba(35,34,31,0.12);padding:28px">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;margin-bottom:20px">Vybrat datum</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+              <button onClick="{{ prevPickerMonth }}" style="width:36px;height:36px;border-radius:50%;border:1px solid #E7E7EA;background:#fff;font-size:15px;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">‹</button>
+              <select value="{{ pickerMonthValue }}" onChange="{{ setPickerMonth }}" style="flex:1;height:40px;padding:0 12px;border:1px solid #E7E7EA;border-radius:12px;background:#fff;font-size:14px;color:#15181E;outline:none" style-focus="border-color:#008FFF">
+                <sc-for list="{{ monthOptions }}" as="o" hint-placeholder-count="12">
+                  <option value="{{ o.value }}">{{ o.name }}</option>
+                </sc-for>
+              </select>
+              <select value="{{ pickerYearValue }}" onChange="{{ setPickerYear }}" style="height:40px;padding:0 12px;border:1px solid #E7E7EA;border-radius:12px;background:#fff;font-size:14px;color:#15181E;outline:none" style-focus="border-color:#008FFF">
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+              </select>
+              <button onClick="{{ nextPickerMonth }}" style="width:36px;height:36px;border-radius:50%;border:1px solid #E7E7EA;background:#fff;font-size:15px;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">›</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px">
+              <sc-for list="{{ dowHeads }}" as="h" hint-placeholder-count="7">
+                <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:{{ h.color }}">{{ h.name }}</div>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+              <sc-for list="{{ pickerCells }}" as="c" hint-placeholder-count="35">
+                <div>
+                  <sc-if value="{{ c.isDay }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ c.onClick }}" style="width:100%;height:40px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.fg }};font-size:14px;font-weight:{{ c.weight }};cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1" style-hover="border-color:#23221F" style-active="transform:scale(0.97)">{{ c.day }}</button>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ profileOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:60;background:rgba(10,10,10,0.6);display:flex;align-items:center;justify-content:center;padding:24px">
+          <div onClick="{{ stop }}" style="width:min(460px,100%);background:#fff;border-radius:24px;box-shadow:0 20px 48px rgba(35,34,31,0.12);padding:28px">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px">Nastavení</div>
+            <div style="font-size:15px;color:#71717A;line-height:1.6;margin-bottom:22px">SPZ se předplní při každé rezervaci místa. Preferované místo použijeme přednostně u hromadné rezervace.</div>
+            <label style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">SPZ auta</label>
+            <input value="{{ plate }}" onChange="{{ setPlate }}" style="width:100%;height:52px;padding:0 16px;border:1px solid #E7E7EA;border-radius:16px;font-size:18px;font-weight:700;letter-spacing:0.06em;color:#15181E;outline:none;margin-bottom:20px" style-focus="border-color:#008FFF">
+            <label style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">Preferované parkovací místo</label>
+            <select value="{{ preferred }}" onChange="{{ setPreferred }}" style="width:100%;height:52px;padding:0 14px;border:1px solid #E7E7EA;border-radius:16px;font-size:16px;background:#fff;color:#15181E;outline:none;margin-bottom:24px" style-focus="border-color:#008FFF">
+              <option value="">Bez preference</option>
+              <sc-for list="{{ spotOptions }}" as="o" hint-placeholder-count="8">
+                <option value="{{ o.value }}">{{ o.name }}</option>
+              </sc-for>
+            </select>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+              <button onClick="{{ closeModal }}" style="height:48px;padding:0 22px;border-radius:360px;border:1px solid #E7E7EA;background:#fff;font-size:15px;font-weight:500;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">Zrušit</button>
+              <button onClick="{{ closeModal }}" style="height:48px;padding:0 26px;border-radius:360px;border:none;background:#008FFF;color:#fff;font-size:15px;font-weight:700;cursor:pointer" style-hover="background:#0070D6;box-shadow:0 12px 28px rgba(0,143,255,0.35)" style-active="transform:scale(0.97)">Uložit</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ reserveOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:60;background:rgba(10,10,10,0.6);display:flex;align-items:center;justify-content:center;padding:24px">
+          <div onClick="{{ stop }}" style="width:min(460px,100%);background:#fff;border-radius:24px;box-shadow:0 20px 48px rgba(35,34,31,0.12);padding:28px">
+            <div style="display:inline-flex;height:26px;align-items:center;padding:0 11px;border-radius:360px;background:#E2F2FF;color:#008FFF;font-size:12px;font-weight:700;letter-spacing:0.08em;margin-bottom:14px">{{ modalLabel }}</div>
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px">{{ modalTitle }}</div>
+            <div style="font-size:15px;color:#71717A;line-height:1.6;margin-bottom:22px">{{ modalSub }}</div>
+
+            <sc-if value="{{ modalForm }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">Jméno</label>
+                <input value="{{ resName }}" onChange="{{ setResName }}" style="width:100%;height:48px;padding:0 16px;border:1px solid #E7E7EA;border-radius:16px;font-size:16px;color:#15181E;outline:none;margin-bottom:16px" style-focus="border-color:#008FFF">
+                <label style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">SPZ</label>
+                <input value="{{ resPlate }}" onChange="{{ setResPlate }}" style="width:100%;height:48px;padding:0 16px;border:1px solid #E7E7EA;border-radius:16px;font-size:16px;font-weight:700;letter-spacing:0.06em;color:#15181E;outline:none;margin-bottom:24px" style-focus="border-color:#008FFF">
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ modalQueue }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-bottom:24px">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid #E7E7EA;border-radius:16px;margin-bottom:12px">
+                  <span style="width:34px;height:34px;border-radius:50%;background:#F4F4F5;color:#52525B;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">{{ holderInitials }}</span>
+                  <div>
+                    <div style="font-size:15px;font-weight:700">{{ holderName }}</div>
+                    <div style="font-size:13px;color:#71717A">obsazeno · {{ holderPlate }}</div>
+                  </div>
+                </div>
+                <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B;margin-bottom:8px">Fronta</div>
+                <sc-if value="{{ queueEmpty }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:14px;color:#71717A;padding:8px 0 4px">Nikdo nečeká — budete první v řadě.</div>
+                </sc-if>
+                <sc-for list="{{ queueList }}" as="q" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F4F4F5">
+                    <span style="width:22px;height:22px;border-radius:50%;background:#FFF4D2;color:#23221F;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">{{ q.pos }}</span>
+                    <span style="font-size:14px">{{ q.name }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ modalLocked }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:16px;background:#FFF4D2;border:1px solid #FFBE0E;margin-bottom:20px">
+                <span style="width:22px;height:22px;border-radius:7px;background:#FFBE0E;color:#23221F;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:0 0 auto">⊘</span>
+                <div style="font-size:13px;line-height:1.5;color:#15181E">{{ modalLockNote }}</div>
+              </div>
+            </sc-if>
+
+            <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+              <sc-if value="{{ modalCancel }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ cancelReservation }}" style="height:48px;padding:0 20px;border-radius:360px;border:1px solid #FCE5E5;background:#FCE5E5;color:#E5484D;font-size:15px;font-weight:700;cursor:pointer;margin-right:auto" style-hover="background:#E5484D;color:#fff;border-color:#E5484D">Zrušit rezervaci</button>
+              </sc-if>
+              <button onClick="{{ closeModal }}" style="height:48px;padding:0 22px;border-radius:360px;border:1px solid #E7E7EA;background:#fff;font-size:15px;font-weight:500;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">Zavřít</button>
+            <sc-if value="{{ modalPrimaryShow }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ modalPrimary }}" style="height:48px;padding:0 26px;border-radius:360px;border:none;background:#008FFF;color:#fff;font-size:15px;font-weight:700;cursor:pointer" style-hover="background:#0070D6;box-shadow:0 12px 28px rgba(0,143,255,0.35)" style-active="transform:scale(0.97)">{{ modalCta }}</button>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ batchOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeBatch }}" style="position:fixed;inset:0;z-index:60;background:rgba(10,10,10,0.6);display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto">
+          <div onClick="{{ stop }}" style="width:min(620px,100%);background:#fff;border-radius:24px;box-shadow:0 20px 48px rgba(35,34,31,0.12);padding:28px">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px">Hromadná rezervace</div>
+            <div style="font-size:15px;color:#71717A;line-height:1.6;margin-bottom:22px">{{ batchSub }}</div>
+
+            <sc-if value="{{ batchPick }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px">
+                  <sc-for list="{{ dowHeads }}" as="h" hint-placeholder-count="7">
+                    <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:{{ h.color }}">{{ h.name }}</div>
+                  </sc-for>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:18px">
+                  <sc-for list="{{ batchCells }}" as="c" hint-placeholder-count="35">
+                    <div>
+                      <sc-if value="{{ c.isDay }}" hint-placeholder-val="{{ true }}">
+                        <button onClick="{{ c.onClick }}" style="width:100%;height:44px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.fg }};font-size:14px;font-weight:{{ c.weight }};cursor:{{ c.cursor }};display:flex;align-items:center;justify-content:center;line-height:1" style-active="transform:scale(0.97)">{{ c.day }}</button>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13px;color:#71717A;margin-bottom:22px">
+                  <span>Víkendy a svátky nelze vybrat.</span>
+                  <span style="font-weight:700;color:#15181E">Preferované místo: {{ preferredLabel }}</span>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ batchDone }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="border:1px solid #E7E7EA;border-radius:16px;overflow:hidden;margin-bottom:18px">
+                  <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;padding:10px 16px;background:#FAFAFA;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#52525B">
+                    <div>Datum</div><div>Místo</div><div>Stav</div>
+                  </div>
+                  <sc-for list="{{ batchRows }}" as="r" hint-placeholder-count="5">
+                    <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;align-items:center;padding:11px 16px;border-top:1px solid #F4F4F5">
+                      <div style="font-size:14px">{{ r.date }}</div>
+                      <div style="font-size:14px;font-weight:700;letter-spacing:0.04em">{{ r.spot }}</div>
+                      <div><span style="display:inline-flex;height:24px;align-items:center;padding:0 10px;border-radius:360px;font-size:12px;font-weight:700;background:{{ r.badgeBg }};color:{{ r.badgeFg }}">{{ r.status }}</span></div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size:13px;color:#71717A;line-height:1.6;margin-bottom:22px">{{ batchSummary }}</div>
+              </div>
+            </sc-if>
+
+            <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+              <sc-if value="{{ batchDone }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ backToBatchPick }}" style="height:48px;padding:0 20px;border-radius:360px;border:1px solid #E7E7EA;background:#fff;font-size:15px;font-weight:500;cursor:pointer;color:#15181E;margin-right:auto" style-hover="border-color:#23221F">Změnit dny</button>
+              </sc-if>
+              <button onClick="{{ closeBatch }}" style="height:48px;padding:0 22px;border-radius:360px;border:1px solid #E7E7EA;background:#fff;font-size:15px;font-weight:500;cursor:pointer;color:#15181E" style-hover="border-color:#23221F">Zavřít</button>
+              <button onClick="{{ batchPrimary }}" style="height:48px;padding:0 26px;border-radius:360px;border:none;background:#008FFF;color:#fff;font-size:15px;font-weight:700;cursor:pointer" style-hover="background:#0070D6;box-shadow:0 12px 28px rgba(0,143,255,0.35)" style-active="transform:scale(0.97)">{{ batchCta }}</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;user&quot;,&quot;admin&quot;],&quot;default&quot;:&quot;admin&quot;,&quot;tsType&quot;:&quot;'user'|'admin'&quot;,&quot;section&quot;:&quot;Prototyp&quot;},&quot;showLockState&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototyp&quot;}}">
+const PALETTE = ["#fcaf00", "#00e25a", "#3b88ff"];
+const MONTHS = ["leden","únor","březen","duben","květen","červen","červenec","srpen","září","říjen","listopad","prosinec"];
+const MONTHS_GEN = ["ledna","února","března","dubna","května","června","července","srpna","září","října","listopadu","prosince"];
+const DAYS = ["nedělí","pondělí","úterý","středa","čtvrtek","pátek","sobota"];
+const DAYS_NOM = ["nedĕle","pondělí","úterý","středa","čtvrtek","pátek","sobota"];
+const HOLIDAYS = {
+  "0-1":"Nový rok","3-3":"Velký pátek","3-6":"Velikonoční pondělí","4-1":"Svátek práce",
+  "4-8":"Den vítězství","6-5":"Den slovanských věrozvěstů","6-6":"Den upálení mistra Jana Husa",
+  "8-28":"Den české státnosti","9-28":"Den vzniku samostatného státu","10-17":"Den boje za svobodu",
+  "11-24":"Štědrý den","11-25":"1. svátek vánoční","11-26":"2. svátek vánoční"
+};
+
+class Component extends DCLogic {
+  state = {
+    view: "login",
+    page: "lot",
+    adminTab: "users",
+    menuOpen: false,
+    modal: null,
+    date: new Date(2026, 8, 28),
+    plate: "4AB 1234",
+    preferred: "E2.92",
+    categories: ["IT", "Shared"],
+    newCategory: "",
+    sortKey: "name",
+    sortDir: 1,
+    batchOpen: false,
+    datePickerOpen: false,
+    pickerMonth: null,
+    openDays: 7,
+    lockMode: "auto",
+    batchDays: [],
+    batchResult: null,
+    resName: "Karel Zíbar",
+    resPlate: "4AB 1234",
+    spots: [
+      { label: "E2.92", group: "IT", active: true, name: "Karel Zíbar", plate: "4AB 1234", color: PALETTE[2], queue: [] },
+      { label: "E2.93", group: "IT", active: true, name: null, queue: [] },
+      { label: "E2.94", group: "IT", active: true, name: "Petr Novák", plate: "8SC 9012", color: PALETTE[1], queue: ["Jana Dvořáková", "Tomáš Beran"] },
+      { label: "E2.95", group: "IT", active: true, name: null, queue: [], lockedBy: "Jana Dvořáková" },
+      { label: "E2.96", group: "Shared", active: true, name: "Lucie Marková", plate: "2AZ 4471", color: PALETTE[0], queue: [] },
+      { label: "E2.65", group: "Shared", active: true, name: null, queue: [] },
+      { label: "E2.66", group: "Shared", active: true, name: "Tomáš Beran", plate: "6BT 3390", color: PALETTE[2], queue: ["Adéla Horáková"] },
+      { label: "E2.61", group: "Shared", active: true, name: null, queue: [] },
+      { label: "E2.62", group: "Shared", active: true, name: "Adéla Horáková", plate: "1CD 7788", color: PALETTE[0], queue: [] }
+    ],
+    users: [
+      { name: "Karel Zíbar", email: "karel.zibar@firma.cz", admin: true },
+      { name: "Jana Dvořáková", email: "jana.dvorakova@firma.cz", admin: false },
+      { name: "Petr Novák", email: "petr.novak@firma.cz", admin: false },
+      { name: "Lucie Marková", email: "lucie.markova@firma.cz", admin: true },
+      { name: "Tomáš Beran", email: "tomas.beran@firma.cz", admin: false },
+      { name: "Adéla Horáková", email: "adela.horakova@firma.cz", admin: false }
+    ]
+  };
+
+  isAdmin() { return (this.props.role ?? "admin") === "admin"; }
+
+  holiday(d) { return HOLIDAYS[d.getMonth() + "-" + d.getDate()] || null; }
+
+  shiftDay(n) {
+    this.setState(s => {
+      const d = new Date(s.date);
+      d.setDate(d.getDate() + n);
+      return { date: d };
+    });
+  }
+
+  patchSpot(label, patch) {
+    this.setState(s => ({ spots: s.spots.map(sp => sp.label === label ? { ...sp, ...patch } : sp) }));
+  }
+
+  renderVals() {
+    const st = this.state;
+    const admin = this.isAdmin();
+    const d = st.date;
+    const holiday = this.holiday(d);
+    const showLock = this.props.showLockState ?? true;
+
+    const today = new Date(2026, 7, 28);
+    const monthOpen = (dt, days, mode) => {
+      if (mode === "open") return true;
+      if (mode === "locked") return false;
+      const first = new Date(dt.getFullYear(), dt.getMonth(), 1);
+      const from = new Date(first);
+      from.setDate(from.getDate() - days);
+      return today >= from && today < first;
+    };
+    const windowOpen = monthOpen(d, st.openDays, st.lockMode);
+    const ruleLocked = !windowOpen && !admin;
+    const me = "Karel Zíbar";
+
+    const spotView = sp => {
+      const locked = !!sp.lockedBy && showLock;
+      const taken = !!sp.name && !locked;
+      return {
+        label: sp.label,
+        name: sp.name,
+        plate: sp.plate,
+        color: sp.color,
+        isFree: !taken && !locked && !ruleLocked,
+        isRuleLocked: !taken && !locked && ruleLocked,
+        isTaken: taken,
+        isLocked: locked,
+        lockedBy: sp.lockedBy,
+        hasWait: (sp.queue || []).length > 0,
+        waitCount: (sp.queue || []).length,
+        cellBg: locked ? "rgba(255,190,14,0.06)" : "transparent",
+        adminMenu: admin && taken,
+        onAdmin: e => { e.stopPropagation(); this.setState({ modal: { label: sp.label, admin: true } }); },
+        onClick: () => {
+          if (locked) return;
+          if (ruleLocked && !taken) { this.setState({ modal: { label: sp.label, info: true } }); return; }
+          const mine = taken && sp.name === me;
+          this.setState({ modal: { label: sp.label, queue: taken && !mine, mine: mine }, resName: taken ? sp.name : me, resPlate: taken ? sp.plate : st.plate });
+        }
+      };
+    };
+
+    const active = st.spots.filter(s => s.active);
+    const it = active.filter(s => s.group === "IT");
+    const shared = active.filter(s => s.group === "Shared");
+    const other = active.filter(s => s.group !== "IT" && s.group !== "Shared");
+    const mkGroup = (name, list) => ({
+      name,
+      meta: list.filter(s => !s.name && !s.lockedBy).length + " z " + list.length + " volných",
+      spots: list.map(spotView)
+    });
+    const groups = [mkGroup("IT", it), mkGroup("Shared", shared)];
+    if (other.length) groups.push(mkGroup(other[0].group, other));
+
+    const modal = st.modal;
+    const mSpot = modal ? st.spots.find(s => s.label === modal.label) : null;
+    const mTaken = !!(mSpot && mSpot.name);
+
+    const tabDefs = [
+      { key: "lot", name: "Přehled parkoviště" },
+      { key: "users", name: "Uživatelé" },
+      { key: "spots", name: "Parkovací místa" },
+      { key: "rules", name: "Rezervační okno" }
+    ];
+
+    return {
+      isLogin: st.view === "login",
+      isApp: st.view === "app",
+      isLot: st.view === "app" && st.page === "lot",
+      isAdminPage: st.view === "app" && st.page === "admin",
+      isAdmin: admin,
+      menuOpen: st.menuOpen,
+      login: () => this.setState({ view: "app" }),
+      logout: () => this.setState({ view: "login", menuOpen: false, page: "lot" }),
+      toggleMenu: () => this.setState(s => ({ menuOpen: !s.menuOpen })),
+      openProfile: () => this.setState({ modal: { profile: true }, menuOpen: false }),
+      goAdmin: () => this.setState({ page: "admin", adminTab: "users", menuOpen: false }),
+      goLot: () => this.setState({ page: "lot", menuOpen: false }),
+
+      groups,
+      freeCount: active.filter(s => !s.name).length,
+      takenCount: active.filter(s => !!s.name).length,
+      totalCount: active.length,
+
+      dateLong: DAYS_NOM[d.getDay()] + " " + d.getDate() + ". " + MONTHS_GEN[d.getMonth()] + " " + d.getFullYear(),
+      dayNote: holiday ? "Státní svátek · " + holiday : "Pracovní den",
+      holidayColor: holiday ? "#23221F" : "#A1A1AA",
+      barBg: holiday ? "#FFF4D2" : "#FFFFFF",
+      barBorder: holiday ? "#FFBE0E" : "#E7E7EA",
+      prevDay: () => this.shiftDay(-1),
+      nextDay: () => this.shiftDay(1),
+      today: () => this.setState({ date: new Date(2026, 7, 28) }),
+      month: String(d.getMonth()),
+      year: String(d.getFullYear()),
+      monthOptions: MONTHS.map((name, i) => ({ name, value: String(i) })),
+      setMonth: e => { const v = +e.target.value; this.setState(s => { const nd = new Date(s.date); nd.setMonth(v); return { date: nd }; }); },
+      setYear: e => { const v = +e.target.value; this.setState(s => { const nd = new Date(s.date); nd.setFullYear(v); return { date: nd }; }); },
+
+      datePickerOpen: st.datePickerOpen,
+      openDatePicker: () => this.setState({ datePickerOpen: true, pickerMonth: new Date(d.getFullYear(), d.getMonth(), 1) }),
+      closeDatePicker: () => this.setState({ datePickerOpen: false }),
+      pickerMonthValue: String((st.pickerMonth || d).getMonth()),
+      pickerYearValue: String((st.pickerMonth || d).getFullYear()),
+      setPickerMonth: e => { const v = +e.target.value; this.setState(s => { const pm = new Date(s.pickerMonth || s.date); pm.setMonth(v); return { pickerMonth: pm }; }); },
+      setPickerYear: e => { const v = +e.target.value; this.setState(s => { const pm = new Date(s.pickerMonth || s.date); pm.setFullYear(v); return { pickerMonth: pm }; }); },
+      prevPickerMonth: () => this.setState(s => { const pm = new Date(s.pickerMonth || s.date); pm.setMonth(pm.getMonth() - 1); return { pickerMonth: pm }; }),
+      nextPickerMonth: () => this.setState(s => { const pm = new Date(s.pickerMonth || s.date); pm.setMonth(pm.getMonth() + 1); return { pickerMonth: pm }; }),
+      pickerCells: (() => {
+        const pm = st.pickerMonth || d;
+        const last = new Date(pm.getFullYear(), pm.getMonth() + 1, 0).getDate();
+        const first = new Date(pm.getFullYear(), pm.getMonth(), 1).getDay();
+        const lead = (first + 6) % 7;
+        const cells = [];
+        for (let i = 0; i < lead; i++) cells.push({ isDay: false });
+        for (let day = 1; day <= last; day++) {
+          const dd = new Date(pm.getFullYear(), pm.getMonth(), day);
+          const isSelected = dd.getFullYear() === d.getFullYear() && dd.getMonth() === d.getMonth() && dd.getDate() === d.getDate();
+          const isToday = dd.getFullYear() === today.getFullYear() && dd.getMonth() === today.getMonth() && dd.getDate() === today.getDate();
+          const off = dd.getDay() === 0 || dd.getDay() === 6 || !!this.holiday(dd);
+          cells.push({
+            isDay: true,
+            day,
+            bg: isSelected ? "#008FFF" : "#fff",
+            fg: isSelected ? "#fff" : (off ? "#A1A1AA" : "#15181E"),
+            border: isSelected ? "#008FFF" : (isToday ? "#23221F" : "#E7E7EA"),
+            weight: isSelected ? 700 : 500,
+            onClick: () => this.setState({ date: dd, datePickerOpen: false })
+          });
+        }
+        return cells;
+      })(),
+
+      tabs: tabDefs.map(t => ({
+        name: t.name,
+        weight: st.adminTab === t.key && t.key !== "lot" ? 700 : 500,
+        color: st.adminTab === t.key && t.key !== "lot" ? "#15181E" : "#71717A",
+        line: st.adminTab === t.key && t.key !== "lot" ? "#008FFF" : "transparent",
+        onClick: () => t.key === "lot" ? this.setState({ page: "lot" }) : this.setState({ adminTab: t.key })
+      })),
+      tabUsers: st.adminTab === "users",
+      tabSpots: st.adminTab === "spots",
+      tabRules: st.adminTab === "rules",
+      openDaysLabel: st.openDays + (st.openDays === 1 ? " den" : (st.openDays < 5 ? " dny" : " dní")),
+      incOpenDays: () => this.setState(s => ({ openDays: Math.min(31, s.openDays + 1) })),
+      decOpenDays: () => this.setState(s => ({ openDays: Math.max(1, s.openDays - 1) })),
+      lockModes: [
+        { key: "auto", name: "Automaticky" },
+        { key: "open", name: "Vynutit otevřeno" },
+        { key: "locked", name: "Vynutit uzamčeno" }
+      ].map(m => ({
+        name: m.name,
+        bg: st.lockMode === m.key ? "#008FFF" : "#fff",
+        fg: st.lockMode === m.key ? "#fff" : "#15181E",
+        border: st.lockMode === m.key ? "#008FFF" : "#E7E7EA",
+        onClick: () => this.setState({ lockMode: m.key })
+      })),
+      todayLabel: today.getDate() + ". " + MONTHS_GEN[today.getMonth()] + " " + today.getFullYear(),
+      monthStates: [0, 1, 2, 3].map(k => {
+        const m = new Date(today.getFullYear(), today.getMonth() + k, 1);
+        const from = new Date(m);
+        from.setDate(from.getDate() - st.openDays);
+        const open = monthOpen(m, st.openDays, st.lockMode);
+        const future = from > today;
+        return {
+          name: MONTHS[m.getMonth()] + " " + m.getFullYear(),
+          window: (() => {
+            const to = new Date(m.getFullYear(), m.getMonth(), 0);
+            return "otevřeno " + from.getDate() + ". " + MONTHS_GEN[from.getMonth()] + " – " + to.getDate() + ". " + MONTHS_GEN[to.getMonth()];
+          })(),
+          state: open ? "Otevřeno" : (future ? "Zatím neotevřeno" : "Uzamčeno"),
+          badgeBg: open ? "#D2F8DC" : (future ? "#F4F4F5" : "#FFF4D2"),
+          badgeFg: open ? "#00B82A" : (future ? "#52525B" : "#23221F")
+        };
+      }),
+
+      bannerText: windowOpen
+        ? (() => {
+            const lastDay = new Date(d.getFullYear(), d.getMonth(), 0);
+            return "Rezervace na " + MONTHS[d.getMonth()] + " jsou otevřené — zapisovat lze do " + lastDay.getDate() + ". " + MONTHS_GEN[lastDay.getMonth()] + ".";
+          })()
+        : (admin
+          ? "Rezervace na " + MONTHS[d.getMonth()] + " jsou uzamčené. Jako admin je můžete dál upravovat i rušit."
+          : "Rezervace na " + MONTHS[d.getMonth()] + " jsou uzamčené. Novou rezervaci už nezaložíte, svoji můžete kdykoliv zrušit."),
+      bannerBg: windowOpen ? "#D2F8DC" : "#FFF4D2",
+      bannerBorder: windowOpen ? "#00DB33" : "#FFBE0E",
+      bannerIcon: windowOpen ? "✓" : "⊘",
+      bannerIconBg: windowOpen ? "#00DB33" : "#FFBE0E",
+      bannerIconFg: windowOpen ? "#fff" : "#23221F",
+      userCount: st.users.length,
+      userCols: [
+        { key: "name", name: "Jméno", align: "flex-start" },
+        { key: "email", name: "E‑mail", align: "flex-start" },
+        { key: "admin", name: "Admin", align: "flex-end" }
+      ].map(c => ({
+        name: c.name,
+        align: c.align,
+        color: st.sortKey === c.key ? "#15181E" : "#52525B",
+        arrow: st.sortKey === c.key ? (st.sortDir === 1 ? "▲" : "▼") : "",
+        onClick: () => this.setState(s => ({ sortKey: c.key, sortDir: s.sortKey === c.key ? -s.sortDir : 1 }))
+      })),
+      users: st.users.slice().sort((a, b) => {
+        const k = st.sortKey;
+        const va = k === "admin" ? (a.admin ? 1 : 0) : String(a[k]).toLowerCase();
+        const vb = k === "admin" ? (b.admin ? 1 : 0) : String(b[k]).toLowerCase();
+        if (va < vb) return -st.sortDir;
+        if (va > vb) return st.sortDir;
+        return 0;
+      }).map(u => ({
+        name: u.name,
+        email: u.email,
+        initials: u.name.split(" ").map(p => p[0]).join(""),
+        action: u.admin ? "Odebrat admin roli" : "Nastavit jako admina",
+        switchBg: u.admin ? "#008FFF" : "#D1D1D6",
+        switchPos: u.admin ? "flex-end" : "flex-start",
+        onToggle: () => this.setState(s => ({ users: s.users.map(x => x.email === u.email ? { ...x, admin: !x.admin } : x) }))
+      })),
+      adminSpots: st.spots.map(sp => ({
+        label: sp.label,
+        group: sp.group,
+        status: sp.lockedBy ? "Upravuje " + sp.lockedBy : (sp.name ? "Obsazeno — " + sp.name : "Volné"),
+        switchBg: sp.active ? "#00DB33" : "#D1D1D6",
+        switchPos: sp.active ? "flex-end" : "flex-start",
+        onActive: () => this.patchSpot(sp.label, { active: !sp.active }),
+        onGroup: e => this.patchSpot(sp.label, { group: e.target.value })
+      })),
+      addSpot: () => this.setState(s => ({
+        spots: [...s.spots, { label: "E2." + (60 + s.spots.length), group: s.categories[0] || "Shared", active: true, name: null, queue: [] }]
+      })),
+
+      profileOpen: !!(modal && modal.profile),
+      reserveOpen: !!(modal && modal.label),
+      modalLabel: modal && modal.label ? "Místo " + modal.label : "",
+      modalTitle: modal && modal.info ? "Rezervace uzamčeny" : (modal && modal.queue ? "Přidat se do fronty" : (modal && modal.mine ? "Vaše rezervace" : (mTaken ? "Upravit rezervaci" : "Rezervovat místo"))),
+      modalSub: modal && modal.info
+        ? "Tohle místo je volné, ale měsíc už je pro rezervace zavřený. Obraťte se na admina, který může místo přiřadit i po uzamčení."
+        : (modal && modal.mine
+        ? (ruleLocked && !admin
+          ? "Měsíc je uzamčený — úpravy už uložit nelze, rezervaci ale můžete kdykoliv zrušit."
+          : "Změňte SPZ, nebo rezervaci zrušte — místo se tím uvolní prvnímu ve frontě.")
+        : (modal && modal.queue
+        ? "Místo je na tento den obsazené. Zařadíme vás do fronty — pokud se uvolní, místo dostane první v řadě."
+        : (mTaken
+          ? (modal && modal.admin ? "Jako admin můžete rezervaci kdykoliv změnit nebo zrušit." : "Změňte jméno nebo SPZ u této rezervace.")
+          : "Zapište se na " + d.getDate() + ". " + MONTHS_GEN[d.getMonth()] + "."))),
+      modalCta: modal && modal.queue ? "Přidat se do fronty" : (mTaken ? "Uložit změny" : "Rezervovat"),
+      modalCancel: mTaken && (admin || (mSpot && mSpot.name === me)),
+      modalPrimaryShow: !(ruleLocked && !admin),
+      modalLocked: ruleLocked && !admin,
+      batchAllowed: windowOpen || admin,
+      modalLockNote: "Rezervace na " + MONTHS[d.getMonth()] + " jsou uzamčené — nové zápisy ani frontu už nelze měnit.",
+      resName: st.resName,
+      resPlate: st.resPlate,
+      setResName: e => this.setState({ resName: e.target.value }),
+      setResPlate: e => this.setState({ resPlate: e.target.value }),
+      saveReservation: () => {
+        if (modal && modal.label) {
+          this.patchSpot(modal.label, {
+            name: st.resName,
+            plate: st.resPlate,
+            color: mSpot && mSpot.color ? mSpot.color : PALETTE[Math.floor(Math.random() * 3)]
+          });
+        }
+        this.setState({ modal: null });
+      },
+      cancelReservation: () => {
+        if (modal && modal.label) this.patchSpot(modal.label, { name: null, plate: null, color: null, queue: [] });
+        this.setState({ modal: null });
+      },
+      categoryOptions: st.categories.map(c => ({ name: c, value: c })),
+      categoryChips: st.categories.map(c => {
+        const used = st.spots.filter(s => s.group === c).length;
+        return {
+          name: c,
+          count: used,
+          removeTitle: used ? "Nejdřív přesuňte místa jinam" : "Smazat kategorii",
+          removeColor: used ? "#D1D1D6" : "#E5484D",
+          cursor: used ? "not-allowed" : "pointer",
+          onRemove: () => { if (!used) this.setState(s => ({ categories: s.categories.filter(x => x !== c) })); }
+        };
+      }),
+      newCategory: st.newCategory,
+      setNewCategory: e => this.setState({ newCategory: e.target.value }),
+      addCategory: () => this.setState(s => {
+        const v = s.newCategory.trim();
+        if (!v || s.categories.includes(v)) return { newCategory: "" };
+        return { categories: [...s.categories, v], newCategory: "" };
+      }),
+      preferred: st.preferred,
+      preferredLabel: st.preferred || "bez preference",
+      spotOptions: st.spots.filter(s => s.active).map(s => ({ name: s.label + " · " + s.group, value: s.label })),
+      setPreferred: e => this.setState({ preferred: e.target.value }),
+
+      batchOpen: st.batchOpen,
+      batchPick: st.batchOpen && !st.batchResult,
+      batchDone: st.batchOpen && !!st.batchResult,
+      batchSub: st.batchResult
+        ? "Rozvrh na " + MONTHS_GEN[d.getMonth()] + " " + d.getFullYear() + ". Místa jsou přiřazena automaticky, přednost má vaše preferované místo."
+        : "Vyberte dny v " + MONTHS_GEN[d.getMonth()] + ". Místo přiřadíme automaticky — kde nebude volno, zařadíme vás do fronty.",
+      dowHeads: ["po", "út", "st", "čt", "pá", "so", "ne"].map((n, i) => ({ name: n, color: i > 4 ? "#A1A1AA" : "#52525B" })),
+      batchCells: (() => {
+        const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        const first = new Date(d.getFullYear(), d.getMonth(), 1).getDay();
+        const lead = (first + 6) % 7;
+        const cells = [];
+        for (let i = 0; i < lead; i++) cells.push({ isDay: false });
+        for (let day = 1; day <= last; day++) {
+          const dd = new Date(d.getFullYear(), d.getMonth(), day);
+          const dow = dd.getDay();
+          const off = dow === 0 || dow === 6 || !!this.holiday(dd);
+          const sel = st.batchDays.includes(day);
+          cells.push({
+            isDay: true,
+            day,
+            bg: off ? "#FAFAFA" : (sel ? "#008FFF" : "#fff"),
+            fg: off ? "#D1D1D6" : (sel ? "#fff" : "#15181E"),
+            border: sel ? "#008FFF" : "#E7E7EA",
+            weight: sel ? 700 : 500,
+            cursor: off ? "not-allowed" : "pointer",
+            onClick: () => { if (!off) this.setState(s => ({ batchDays: s.batchDays.includes(day) ? s.batchDays.filter(x => x !== day) : [...s.batchDays, day] })); }
+          });
+        }
+        return cells;
+      })(),
+      batchRows: (st.batchResult || []).map(r => ({
+        date: r.day + ". " + MONTHS_GEN[d.getMonth()] + " · " + ["ne", "po", "út", "st", "čt", "pá", "so"][new Date(d.getFullYear(), d.getMonth(), r.day).getDay()],
+        spot: r.spot || "—",
+        status: r.spot ? (r.preferred ? "Rezervováno · preferované" : "Rezervováno") : (r.queuePos + ". ve frontě"),
+        badgeBg: r.spot ? (r.preferred ? "#D2F8DC" : "#E2F2FF") : "#FFF4D2",
+        badgeFg: r.spot ? (r.preferred ? "#00B82A" : "#008FFF") : "#23221F"
+      })),
+      batchSummary: (() => {
+        const rows = st.batchResult || [];
+        const ok = rows.filter(r => r.spot).length;
+        const q = rows.length - ok;
+        return ok + " dní s místem, " + q + " dní ve frontě. O uvolnění místa vás upozorníme e‑mailem.";
+      })(),
+      batchCta: st.batchResult ? "Potvrdit rozvrh" : (st.batchDays.length ? "Vygenerovat rozvrh (" + st.batchDays.length + " dní)" : "Vyberte dny"),
+      openBatch: () => { if (!windowOpen && !admin) return; this.setState({ batchOpen: true, batchDays: [], batchResult: null, menuOpen: false }); },
+      closeBatch: () => this.setState({ batchOpen: false, batchResult: null }),
+      backToBatchPick: () => this.setState({ batchResult: null }),
+      batchPrimary: () => {
+        if (!windowOpen && !admin) { this.setState({ batchOpen: false, batchResult: null }); return; }
+        if (st.batchResult) { this.setState({ batchOpen: false, batchResult: null, batchDays: [] }); return; }
+        if (!st.batchDays.length) return;
+        const pool = st.spots.filter(s => s.active && !s.lockedBy);
+        const rows = st.batchDays.slice().sort((a, b) => a - b).map(day => {
+          const full = day % 5 === 0;
+          if (full) return { day, spot: null, queuePos: (day % 3) + 1, preferred: false };
+          const prefFree = !!st.preferred && day % 3 === 0;
+          const pick = prefFree ? st.preferred : pool[(day * 3) % pool.length].label;
+          return { day, spot: pick, queuePos: 0, preferred: prefFree };
+        });
+        this.setState({ batchResult: rows });
+      },
+
+      modalForm: !!(modal && modal.label && !modal.queue && !modal.info),
+      modalQueue: !!(modal && modal.queue),
+      holderName: mSpot && mSpot.name ? mSpot.name : "",
+      holderPlate: mSpot && mSpot.plate ? mSpot.plate : "",
+      holderInitials: mSpot && mSpot.name ? mSpot.name.split(" ").map(p => p[0]).join("") : "",
+      queueList: mSpot ? (mSpot.queue || []).map((n, i) => ({ name: n, pos: i + 1 })) : [],
+      queueEmpty: !!(mSpot && (mSpot.queue || []).length === 0),
+      modalPrimary: () => {
+        if (modal && modal.queue) {
+          this.patchSpot(modal.label, { queue: [...(mSpot.queue || []), "Karel Zíbar"] });
+          this.setState({ modal: null });
+          return;
+        }
+        if (modal && modal.label) {
+          this.patchSpot(modal.label, {
+            name: st.resName,
+            plate: st.resPlate,
+            color: mSpot && mSpot.color ? mSpot.color : PALETTE[Math.floor(Math.random() * 3)]
+          });
+        }
+        this.setState({ modal: null });
+      },
+      plate: st.plate,
+      setPlate: e => this.setState({ plate: e.target.value }),
+      closeModal: () => this.setState({ modal: null }),
+      stop: e => e.stopPropagation()
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "bundler",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2022",
+    "module": "esnext",
+    "lib": ["es2020", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@lets-park/contract": ["./libs/contract/src/index.ts"],
+      "@lets-park/contract/realtime": ["./libs/contract/src/realtime/index.ts"],
+      "@lets-park/design-system/compounds": ["./libs/design-system/compounds/src/index.ts"],
+      "@lets-park/design-system/primitives": ["./libs/design-system/primitives/src/index.ts"],
+      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"],
+      "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"],
+      "@lets-park/calendar-export": ["./libs/calendar-export/src/index.ts"],
+      "@lets-park/database": ["./libs/database/src/index.ts"],
+      "@lets-park/i18n": ["./libs/i18n/src/index.ts"],
+      "@lets-park/form": ["./libs/form/src/index.ts"],
+      "@lets-park/api-client": ["./libs/api-client/src/index.ts"],
+      "@lets-park/query": ["./libs/query/src/index.ts"],
+      "@lets-park/auth": ["./libs/auth/src/index.ts"],
+      "@lets-park/auth/client": ["./libs/auth/src/client/index.ts"],
+      "@lets-park/realtime-client": ["./libs/realtime-client/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

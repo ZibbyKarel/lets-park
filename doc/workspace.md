@@ -1,0 +1,329 @@
+# Workspace – structure, scripts, boundaries
+
+Nx 23 monorepo for Let's Park. This document describes **how the repo is put
+together**, **how the checks are run**, and **how to add a new lib so that it
+gets watched by the same boundaries as everything else**.
+
+The binding specification is `plan.md`, broken down into tasks in
+`doc/implementation-plan.md`. Decisions that deviate from `plan.md` or refine
+it live in `doc/decision/`.
+
+---
+
+## Repo structure
+
+```
+apps/
+  web/          Next.js 16 (App Router, React 19)   tags: type:app,  scope:web
+  web-e2e/      Playwright e2e for web              tags: type:app,  scope:web
+  api/          NestJS 11 (API + Socket.io gateway) tags: type:app,  scope:api
+  api-e2e/      Jest integration tests against the API tags: type:app,  scope:api
+libs/
+  shared-types/ domain constants + Europe/Prague date logic
+                                      tags: type:util,     scope:shared
+  contract/     Zod schemas + oRPC contract + realtime events
+                (two entry points: @lets-park/contract and @lets-park/contract/realtime)
+                                      tags: type:contract, scope:shared
+  database/     Prisma 7 schema, migrations, seed + generated client
+                                      tags: type:data,     scope:api
+  design-system/
+    tokens/     design tokens + Tailwind v4 bridge   tags: type:ui, scope:web, ds:tokens
+    primitives/ primitives + Storybook 10             tags: type:ui, scope:web, ds:primitives
+  form/         react-hook-form wrapper              tags: type:util, scope:web
+  i18n/         next-intl wrapper + Czech messages   tags: type:util, scope:web
+  api-client/   oRPC client typed from the contract  tags: type:util, scope:web
+  query/        TanStack Query wrapper + query utils tags: type:util, scope:web
+  auth/         next-auth v5 (Auth.js) wrapper
+                (two entry points: @lets-park/auth and @lets-park/auth/client)
+                                      tags: type:util, scope:web
+  realtime-client/
+                socket.io-client wrapper typed from the contract
+                                      tags: type:util, scope:web
+  calendar-export/
+                ical-generator wrapper – the personal ICS feed
+                                      tags: type:util, scope:api
+  (the rest is created in later tasks – planned tags below)
+doc/            documentation, decisions, visual design export
+prisma.config.ts  Prisma CLI configuration (schema in libs/database, `.env` from the root)
+```
+
+Configuration that applies to the whole workspace:
+
+| file | what it's for |
+| --- | --- |
+| `nx.json` | plugins, cache, `targetDefaults`, generator defaults |
+| `tsconfig.base.json` | shared `compilerOptions` + `@lets-park/*` path aliases |
+| `eslint.config.mjs` | flat config: module boundaries, wrapper layers, `no-console` |
+| `.prettierrc`, `.editorconfig` | formatting for TS/TSX/JSON/MD |
+| `jest.preset.js`, `jest.config.ts` | shared Jest preset and project aggregation |
+
+A lib can have more than one entry point: `libs/contract` has
+`@lets-park/contract/realtime` alongside `@lets-park/contract`, so the
+Socket.io half of the contract doesn't pull in `@orpc/contract`;
+`libs/auth` has `@lets-park/auth/client`, so a browser component doesn't pull
+in Auth.js's server runtime. A second entry point means a second entry in
+`paths` in `tsconfig.base.json`, plus **a test that proves the isolation**
+(`libs/contract/src/realtime/no-orpc.spec.ts`,
+`libs/auth/src/lib/client-boundary.spec.ts`) — see `doc/decision/0023-*` and
+`doc/decision/0046-*`.
+
+Packages are named `@lets-park/<lib>` (see
+`doc/decision/0005-npm-scope-lets-park.md`). The scope is derived from the
+root `package.json`'s name (`@lets-park/source`), so Nx generators fill it in
+automatically.
+
+---
+
+## Scripts
+
+Everything runs from the repo root via npm:
+
+| command | what it does |
+| --- | --- |
+| `npm run lint` | ESLint across every project (`nx run-many -t lint`), **`--max-warnings=0`** |
+| `npm run typecheck` | `tsc --noEmit` against every project's tsconfigs |
+| `npm run test` | Jest unit tests (`nx run-many -t test`) |
+| `npm run build` | production build of both `web` and `api` |
+| `npm run affected` | `nx affected -t lint,test,build` – only what changed (for CI) |
+| `npm run format` | Prettier write |
+| `npm run format:check` | Prettier check (fails if anything is unformatted) |
+
+E2e tests aren't part of `npm run test`; they run on demand:
+
+```bash
+npx nx run web-e2e:e2e      # Playwright; starts the dev server itself
+npx nx run api-e2e:e2e      # Jest; starts api:serve itself
+```
+
+**Storybook is part of `npm run build`** (`nx run-many -t build,build-storybook`)
+and of `npm run affected`, so a broken story is caught in CI rather than only by
+hand. The individual targets for working on the design system:
+
+```bash
+npx nx run design-system-primitives:storybook         # dev server, port 4400
+npx nx run design-system-primitives:build-storybook   # static build
+```
+
+Useful individual targets:
+
+```bash
+npx nx run web:dev          # Next.js dev server
+npx nx run api:serve        # NestJS in watch mode
+npx nx run-many -t lint --skip-nx-cache   # bypass the cache
+npx nx graph                # dependency graph
+```
+
+CI has no pipeline file yet – deliberately. The scripts above are designed so
+a pipeline just has to call them (`npm ci && npm run affected`).
+
+---
+
+## TypeScript
+
+`tsconfig.base.json` enables, workspace-wide:
+
+- `strict: true`
+- `noUncheckedIndexedAccess: true`
+- `noImplicitOverride: true`
+- `exactOptionalPropertyTypes: true`
+- `forceConsistentCasingInFileNames: true`
+
+No project may turn any of these off. When new code hits
+`exactOptionalPropertyTypes`, the fix is to adjust the type
+(`prop?: T | undefined`), not to disable the check.
+
+Every project has its own `typecheck` target (`nx:run-commands` +
+`tsc --noEmit`). **A new lib must add one too** – otherwise it never becomes
+part of `npm run typecheck`.
+
+---
+
+## Nx tags and module boundaries
+
+Tags are written into `project.json` (`"tags": [...]`) and enforced by the
+ESLint rule `@nx/enforce-module-boundaries`. Four independent dimensions are
+used; **rules from every dimension must hold simultaneously** (Nx ANDs them —
+see `doc/decision/0017-*`).
+
+### The `type:` dimension – what role a lib plays
+
+This dimension **partitions the workspace without remainder** (every project
+carries exactly one `type:` tag), which is why the npm allow-list
+(`allowedExternalImports`) hangs off it too.
+
+| tag | meaning | may depend on | may use from npm |
+| --- | --- | --- | --- |
+| `type:app` | an application (`apps/*`) | anything; nothing may depend on an app | `*` |
+| `type:feature` | domain composition | `feature`, `ui`, `util`, `contract`, `data` | `tslib` |
+| `type:ui` | the design system, domain-free | `ui`, `util` | React, `clsx`, `tailwind-merge`, `class-variance-authority`, TanStack Table, Storybook |
+| `type:util` | wrapper layers and helpers | `util`, `contract` | React/Next + the union of packages from `WRAPPED_LIBRARIES` |
+| `type:contract` | `libs/contract` – Zod + oRPC | `layer:foundation` | `zod`, `@orpc/contract`, `tslib` |
+| `type:data` | data access (`libs/database`) | `data`, `util`, `contract` | Prisma |
+
+### The `layer:` dimension – the bottom of the graph
+
+| tag | may depend on | may use from npm |
+| --- | --- | --- |
+| `layer:foundation` | **nothing** | **nothing** |
+
+Only one project carries it, `libs/shared-types`. It separates it from the
+wrappers, which share the same `type:util` tag but sit **above** the contract,
+whereas `shared-types` sits **below** it. Without this, `type:util →
+type:contract` and `type:contract → type:util` would form a cycle. The
+resulting layering is acyclic: `app → feature → ui → util → contract →
+foundation`.
+
+> **Watch the difference between "missing" and "empty":**
+> `allowedExternalImports` **left out entirely** restricts nothing (any
+> package passes), whereas `allowedExternalImports: []` bans everything. That's
+> exactly why every `type:` tag has a list, even if it's just `['tslib']`.
+> Details and probe evidence: `doc/decision/0017-*`.
+
+### The `scope:` dimension – which side a lib lives on
+
+| tag | may depend on |
+| --- | --- |
+| `scope:web` | `scope:web`, `scope:shared` |
+| `scope:api` | `scope:api`, `scope:shared` |
+| `scope:shared` | `scope:shared` |
+
+This dimension enforces decision `0003`: `apps/api` (`scope:api`) may depend
+on `libs/shared-types` (`scope:shared`), but **not** on `libs/i18n`
+(`scope:web`), so `next-intl` never reaches the backend.
+
+### The `ds:` dimension – design-system layers
+
+| tag | may depend on (workspace libs) |
+| --- | --- |
+| `ds:tokens` | `type:util` |
+| `ds:primitives` | `ds:tokens`, `type:util` |
+| `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` |
+
+This dimension enforces the direction tokens → primitives → compounds.
+`type:ui` alone isn't enough for it, since all three layers carry that tag –
+details in `doc/decision/0007-*`.
+
+These entries carry **no** `allowedExternalImports`, and that is deliberate.
+Task 8's branch put a tighter npm list on `ds:tokens` and `ds:primitives`, on
+the theory that because Nx ANDs the dimensions a second list must be an
+intersection and could only narrow. **That theory was probed at merge and it is
+false.** With `clsx` on `type:ui`'s list and absent from a `ds:primitives` list,
+an `import clsx from 'clsx'` inside `libs/design-system/primitives` produced no
+error at all: one matching constraint that permits a package is enough, so the
+second list never narrows anything. Shipping it would have been a rule that
+reads as enforcement and enforces nothing – which is the failure mode
+`eslint.config.mjs` has already been caught in four times, and the reason this
+document tells you to probe a boundary rule rather than read it.
+
+The npm surface therefore stays on the `type:` dimension
+(`doc/decision/0017-*`). The design system's genuinely tighter surface – it is
+meant to be a closed layer with a near-zero runtime dependency footprint, and
+`cx.ts` exists precisely so that no class-name helper has to be installed – is
+enforced by `no-restricted-imports` in `libs/design-system/primitives/eslint.config.mjs`
+and `libs/design-system/tokens/eslint.config.mjs`, where it does fire. Each of
+those files carries the probe that proves it, and each spreads the wrapper-ban
+patterns back in: `no-restricted-imports` is a single rule, so a lib-local block
+that sets it replaces the root's copy outright, and a lib adding its own bans
+without spreading those in would silently switch the wrapper ban off for itself.
+
+---
+
+## Wrapper layers (`no-restricted-imports`)
+
+Application and library code must not import these packages directly. The
+only allowed place is the wrapper lib that owns them:
+
+| forbidden package | use instead | only allowed directory |
+| --- | --- | --- |
+| `react-hook-form` | `@lets-park/form` | `libs/form` (done) |
+| `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/design-system/compounds` |
+| `@tanstack/react-query` | `@lets-park/query` | `libs/query` (done) |
+| `@orpc/client` | `@lets-park/api-client` | `libs/api-client` (done) |
+| `socket.io-client` | `@lets-park/realtime-client` | `libs/realtime-client` (done) |
+| `next-auth` | `@lets-park/auth` / `@lets-park/auth/client` | `libs/auth` (done) |
+| `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` (done) |
+| `next-intl` | `@lets-park/i18n` | `libs/i18n` |
+
+The list lives in `eslint.config.mjs` in a single map, `WRAPPED_LIBRARIES`;
+the global ban and the per-wrapper exceptions are both generated from it, so
+they can't drift apart. The error message always states which wrapper lib the
+developer should use instead.
+
+`no-console: error` also applies in `apps/api/**` and `libs/**` – the backend
+logs through `nestjs-pino`. Console is allowed only in `tools/**`,
+`scripts/**`, `**/scripts/**`, and in configuration files.
+
+`libs/shared-types` is handled specially: it has its own
+`no-restricted-imports` block that additionally bans **`zod`** there. The Nx
+`type:util` dimension can't express this – the wrapper libs, which must
+depend on third parties, share the same tag. Without this block, nothing
+would stop `apps/api` from pulling in Zod through `shared-types` (see
+`doc/decision/0003-*`).
+
+> **Trap when editing `eslint.config.mjs`:** Nx runs `eslint .` with **cwd set
+> to the project's directory**, not the repo root. A config object whose
+> `files` are root-relative paths (`apps/**`, `libs/form/**`) must therefore
+> set `basePath: workspaceRoot` – otherwise the glob is matched against a
+> project-relative path, never matches, and the rule **silently does
+> nothing**. After every change to a path-scoped rule, verify it with a
+> temporary file, not just by lint passing.
+
+---
+
+## How to add a new lib
+
+1. **Generate it.** The `@lets-park/<name>` alias is added to
+   `tsconfig.base.json` automatically.
+
+   ```bash
+   # a pure TypeScript lib (contract, util, backend service)
+   npx nx g @nx/js:lib libs/shared-types --name=shared-types \
+     --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
+
+   # a React lib (design system, frontend wrappers)
+   npx nx g @nx/react:lib libs/design-system/primitives --name=design-system-primitives \
+     --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
+   ```
+
+2. **Set the tags** in `libs/<name>/project.json`. Planned split:
+
+   | lib | tags |
+   | --- | --- |
+   | `libs/contract` | `type:contract`, `scope:shared` |
+   | `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` |
+   | `libs/design-system/tokens` | `type:ui`, `scope:web`, `ds:tokens` |
+   | `libs/design-system/primitives` | `type:ui`, `scope:web`, `ds:primitives` |
+   | `libs/design-system/compounds` | `type:ui`, `scope:web`, `ds:compounds` |
+   | `libs/form`, `libs/query`, `libs/api-client`, `libs/realtime-client`, `libs/auth`, `libs/i18n` | `type:util`, `scope:web` |
+   | `libs/calendar-export` | `type:util`, `scope:api` |
+   | `libs/database` | `type:data`, `scope:api` |
+
+   A project with no tags is restricted by nothing – **an untagged lib is a
+   hole in the boundaries.** When a lib needs an npm package that isn't in the
+   `NPM_ALLOWLIST` for its `type:` tag, lint fails naming it; add it there in
+   one line, so the change is visible in review.
+
+3. **Add a `typecheck` target** to `project.json`:
+
+   ```json
+   "typecheck": {
+     "executor": "nx:run-commands",
+     "options": { "command": "tsc --noEmit -p libs/<name>/tsconfig.lib.json" }
+   }
+   ```
+
+4. **Verify**: `npm run lint && npm run typecheck && npm run test`.
+
+> **Lint fails on warnings too.** `nx.json` adds `--max-warnings=0` to every
+> `lint` target. Without it, `nx run-many` exits 0 even if ESLint printed
+> warnings, and the summary line "Successfully ran targets" hides them —
+> exactly how Task 4 let a warning slip into main. Global constraint 11 wants
+> clean output, so let the build enforce it, not a reviewer's attention.
+
+---
+
+## Formatting notes
+
+`npm run format` runs over the source code, not over `doc/` – hand-written
+documents and the design export are in `.prettierignore`, so Prettier doesn't
+reflow tables and text that aren't its to format.
