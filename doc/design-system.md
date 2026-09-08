@@ -1,14 +1,15 @@
 # Design system – tokens, primitives and compounds
 
-Tasks 6, 7 and 8 from `doc/implementation-plan.md`. This document describes the
-two bottom layers of the design system:
+Tasks 6, 7, 8 and 22 from `doc/implementation-plan.md`. This document describes
+all three layers of the design system:
 
 1. **tokens** (`libs/design-system/src/tokens`) – values,
 2. **primitives** (`libs/design-system/src/primitives`) – the smallest
-   components, built exclusively from those values.
+   components, built exclusively from those values,
+3. **compounds** (`libs/design-system/src/compounds`) – compositions of
+   primitives, e.g. DataTable; documented at the end of this file.
 
-The third layer (`compounds`, e.g. DataTable) is documented at the end of this
-file. All three are directories of the single Nx project `design-system`, not
+All three are directories of the single Nx project `design-system`, not
 separate projects — see
 `doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
 The dependency direction `tokens → primitives → compounds` is enforced by

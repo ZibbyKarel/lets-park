@@ -26,9 +26,11 @@ at all** — proved by diffing the workspace-wide grep for that string before an
 after, filtered to exclude the package's own files.
 
 Six targets survive on the one project: `typecheck`, `test`, `lint`,
-`generate-css`, `storybook`, `build-storybook`. Three `project.json`, three
-`jest.config.cts` and twelve `tsconfig*.json` became one of each — `nx show
-projects` lists `design-system` and none of the old three.
+`generate-css`, `storybook`, `build-storybook`. Three `project.json` became one
+and three `jest.config.cts` became one; the twelve `tsconfig*.json` became
+five — `tsconfig.json` plus the four the `typecheck` target compiles (`lib`,
+`spec`, `storybook`, `scripts`). `nx show projects` lists `design-system` and
+none of the old three.
 
 ## Why one package
 

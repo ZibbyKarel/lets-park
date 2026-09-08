@@ -608,8 +608,9 @@ both the global ban and this lib's exemption were generated before the lib exist
 was added to `NPM_ALLOWLIST`, and `libs/realtime-client/eslint.config.mjs` is the generator's
 default — it sets **no** `no-restricted-imports` of its own, so the root's copy is not
 replaced. (That rule is a single rule: a lib-local config that sets it wins outright and
-silently switches the wrapper ban off for that lib. `libs/design-system/{primitives,tokens}`
-spread `restrictWrappedLibraries().patterns` back in for exactly that reason.)
+silently switches the wrapper ban off for that lib. Every block in
+`libs/design-system/eslint.config.mjs` spreads `restrictWrappedLibraries().patterns`
+back in for exactly that reason.)
 
 `socket.io-parser` was **not** allow-listed either, although the test fixture needs
 Socket.io's numeric packet type codes to feed an inbound packet — CONNECT_ERROR included, and

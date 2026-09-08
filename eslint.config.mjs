@@ -186,7 +186,7 @@ const NPM_ALLOWLIST = {
   feature: ['tslib'],
 
   /**
-   * Design system (`libs/design-system/*`). React plus styling helpers and
+   * Design system (`libs/design-system`). React plus styling helpers and
    * Storybook; TanStack Table is here because the design system's compounds
    * layer owns the DataTable wrapper. Never a backend package.
    */
