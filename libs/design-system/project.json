@@ -29,6 +29,22 @@
           "TS_NODE_PROJECT": "tsconfig.scripts.json"
         }
       }
+    },
+    "storybook": {
+      "continuous": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "storybook dev --port 4400 --no-open",
+        "cwd": "libs/design-system"
+      }
+    },
+    "build-storybook": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/storybook/design-system"],
+      "options": {
+        "command": "storybook build --output-dir ../../dist/storybook/design-system",
+        "cwd": "libs/design-system"
+      }
     }
   }
 }
