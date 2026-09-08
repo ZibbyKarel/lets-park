@@ -8,7 +8,7 @@
  * are not listed because `@tailwindcss/postcss` already does both.
  *
  * The primitives' Storybook does the equivalent through `@tailwindcss/vite`
- * (`libs/design-system/primitives/.storybook/main.ts`). Two bundlers, one
+ * (`libs/design-system/.storybook/main.ts`). Two bundlers, one
  * stylesheet, no second source of theme values.
  */
 export default {

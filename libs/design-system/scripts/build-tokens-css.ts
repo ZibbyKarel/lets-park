@@ -9,8 +9,8 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { generateTokensCss } from '../src/lib/generate-css';
-import { DESIGN_TOKENS } from '../src/lib/tokens';
+import { generateTokensCss } from '../src/tokens/lib/generate-css';
+import { DESIGN_TOKENS } from '../src/tokens/lib/tokens';
 
 const outputPath = join(__dirname, '../assets/tokens.css');
 const css = generateTokensCss(DESIGN_TOKENS);

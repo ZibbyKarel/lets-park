@@ -8,7 +8,7 @@
  * `./lot-view`. That split is what lets the interesting logic be tested
  * without a DOM, and lets this file be checked for what it draws.
  *
- * It lives in `apps/web` rather than in `libs/design-system/compounds`
+ * It lives in `apps/web` rather than in `libs/design-system/src/compounds`
  * because it is domain UI: a "parking bay" is not a design-system concept,
  * and a compound that knew about reservations and waitlists would stop being
  * presentation-only. Composing tokens, primitives and compounds into domain

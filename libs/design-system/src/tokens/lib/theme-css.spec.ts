@@ -26,7 +26,7 @@ import { SPACING } from './spacing';
  * was false in both halves and nothing could tell.
  */
 
-const ASSETS = join(__dirname, '../../assets');
+const ASSETS = join(__dirname, '../../../assets');
 const THEME_CSS_PATH = join(ASSETS, 'theme.css');
 const tokensCss = readFileSync(join(ASSETS, 'tokens.css'), 'utf-8');
 const themeCss = readFileSync(THEME_CSS_PATH, 'utf-8');

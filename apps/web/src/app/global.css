@@ -19,18 +19,19 @@
  * files is unverified (`doc/decision/0012-otf-fonts-committed-*`).
  */
 
-@import '../../../../libs/design-system/tokens/assets/theme.css';
+@import '../../../../libs/design-system/assets/theme.css';
 
 /*
  * Tailwind v4 detects sources from the directory of the file that holds
- * `@import "tailwindcss"` — which is the tokens lib, not this app. Nothing
- * would point it at the markup that actually spends the utilities, so all
- * three source trees are named explicitly: this app, and the two design-system
- * layers whose components ship their class names as string literals.
+ * `@import "tailwindcss"` — which is the design system's tokens layer, not
+ * this app. Nothing would point it at the markup that actually spends the
+ * utilities, so all three source trees are named explicitly: this app, and the
+ * two design-system layers whose components ship their class names as string
+ * literals.
  */
 @source '../../src';
-@source '../../../../libs/design-system/primitives/src';
-@source '../../../../libs/design-system/compounds/src';
+@source '../../../../libs/design-system/src/primitives';
+@source '../../../../libs/design-system/src/compounds';
 
 /*
  * Light theme only: the design defines one appearance and the token set has no

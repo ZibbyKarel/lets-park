@@ -19,7 +19,7 @@ import { DESIGN_TOKENS, type DesignTokens } from './tokens';
  */
 describe('generateTokensCss', () => {
   it('matches the committed assets/tokens.css byte-for-byte', () => {
-    const committed = readFileSync(join(__dirname, '../../assets/tokens.css'), 'utf-8');
+    const committed = readFileSync(join(__dirname, '../../../assets/tokens.css'), 'utf-8');
     const generated = generateTokensCss(DESIGN_TOKENS);
 
     expect(generated).toBe(committed);
@@ -92,7 +92,7 @@ describe('generateTokensCss', () => {
 
   it('every declared font face file actually exists in assets/fonts', () => {
     for (const face of DESIGN_TOKENS.typography.faces) {
-      const fontPath = join(__dirname, '../../assets/fonts', face.file);
+      const fontPath = join(__dirname, '../../../assets/fonts', face.file);
       expect(existsSync(fontPath)).toBe(true);
     }
   });

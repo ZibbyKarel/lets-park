@@ -21,9 +21,9 @@
     "paths": {
       "@lets-park/contract": ["./libs/contract/src/index.ts"],
       "@lets-park/contract/realtime": ["./libs/contract/src/realtime/index.ts"],
-      "@lets-park/design-system/compounds": ["./libs/design-system/compounds/src/index.ts"],
-      "@lets-park/design-system/primitives": ["./libs/design-system/primitives/src/index.ts"],
-      "@lets-park/design-system/tokens": ["./libs/design-system/tokens/src/index.ts"],
+      "@lets-park/design-system/compounds": ["./libs/design-system/src/compounds/index.ts"],
+      "@lets-park/design-system/primitives": ["./libs/design-system/src/primitives/index.ts"],
+      "@lets-park/design-system/tokens": ["./libs/design-system/src/tokens/index.ts"],
       "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"],
       "@lets-park/calendar-export": ["./libs/calendar-export/src/index.ts"],
       "@lets-park/database": ["./libs/database/src/index.ts"],
