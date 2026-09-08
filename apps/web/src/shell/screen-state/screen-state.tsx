@@ -9,7 +9,7 @@
  * composed, not invented: the empty and error states are the design system's
  * `EmptyState` compound, and the retry control is its `Button` primitive.
  *
- * They live in app code rather than in `libs/design-system/compounds` because
+ * They live in app code rather than in `libs/design-system/src/compounds` because
  * they carry domain knowledge the design system must not: `ScreenError` reads
  * a **contract** error and translates a member of the contract's closed error
  * enum. `EmptyState` itself stays domain-free, which is why it is imported

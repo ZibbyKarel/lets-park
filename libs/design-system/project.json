@@ -1,0 +1,50 @@
+{
+  "name": "design-system",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/design-system/src",
+  "projectType": "library",
+  "tags": ["type:ui", "scope:web"],
+  "// tags": "The three `ds:*` tags are gone with the three projects. They existed to give `@nx/enforce-module-boundaries` a per-project handle on the tokens -> primitives -> compounds direction; inside one project there is no project boundary to hang them on, and the same rule is now enforced by path-scoped `no-restricted-imports` in this project's own `eslint.config.mjs`. `type:ui` is what still carries the npm allow-list (`NPM_ALLOWLIST.ui` in the root config).",
+  "// implicit deps": "Both former project.json files declared `implicitDependencies: [\"design-system-tokens\"]`, because primitives and compounds consume tokens through CSS custom properties (.storybook/preview.css) with no TS import, and `nx affected` would otherwise not re-run them after a token change. That edge is internal to this project now and needs no declaration — but the fact behind it still holds: a change under `src/tokens` can break the stories and specs of the other two layers without any TS import connecting them.",
+  "// targets": "to see all targets run: nx show project design-system --web",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p libs/design-system/tsconfig.lib.json",
+          "tsc --noEmit -p libs/design-system/tsconfig.spec.json",
+          "tsc --noEmit -p libs/design-system/tsconfig.storybook.json",
+          "tsc --noEmit -p libs/design-system/tsconfig.scripts.json"
+        ],
+        "parallel": false
+      }
+    },
+    "generate-css": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node -r ts-node/register/transpile-only scripts/build-tokens-css.ts",
+        "cwd": "libs/design-system",
+        "env": {
+          "TS_NODE_PROJECT": "tsconfig.scripts.json"
+        }
+      }
+    },
+    "storybook": {
+      "continuous": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "storybook dev --port 4400 --no-open",
+        "cwd": "libs/design-system"
+      }
+    },
+    "build-storybook": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/storybook/design-system"],
+      "options": {
+        "command": "storybook build --output-dir ../../dist/storybook/design-system",
+        "cwd": "libs/design-system"
+      }
+    }
+  }
+}

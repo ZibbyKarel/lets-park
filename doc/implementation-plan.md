@@ -16,6 +16,16 @@ dispatchable pieces. Where they disagree, `plan.md` wins.
 > wherever `plan.md` writes `@myorg/…`, read `@lets-park/…`). Read both before
 > starting.
 
+> **This file predates the design-system merge.** Tasks 6, 8 and 22 built
+> `libs/design-system` as three Nx projects (`design-system-tokens`,
+> `-primitives`, `-compounds`); it is one project now, with the layers as
+> directories under `libs/design-system/src/`. Their task headings and steps
+> below are left as written, because they record how the work was done. The
+> two places that state a **rule** rather than a task — points 5/6 of the
+> project-wide rules and Task 2's boundary list — are repointed, because a rule
+> that names a directory nobody can open enforces nothing. See
+> `doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
+
 ### Execution order
 
 Task numbers are not the order. The actual order and parallel branches:
@@ -52,7 +62,7 @@ Apply to **every** task; the reviewer receives them with every dispatch.
    the tokens are forbidden.
 6. **Wrapper layers are mandatory.** Application/feature code never imports
    directly: `react-hook-form` (→ `libs/form`), `@tanstack/react-table`
-   (→ `libs/design-system/compounds`), `@tanstack/react-query`
+   (→ `@lets-park/design-system/compounds`), `@tanstack/react-query`
    (→ `libs/query`), `@orpc/client` (→ `libs/api-client`), `socket.io-client`
    (→ `libs/realtime-client`), `next-auth` (→ `libs/auth`), `ical-generator`
    (→ `libs/calendar-export`), `next-intl` (→ `libs/i18n`). Enforced by ESLint
@@ -119,8 +129,10 @@ repository already contains `plan.md` (gitignored), `CLAUDE.md`, `README.md`,
      `scope:shared`.
      Rules: `type:app` may depend on anything; `type:ui` (the design system)
      may not depend on `type:feature` or `type:app`;
-     `libs/design-system/primitives` must not import
-     `libs/design-system/compounds`; `type:contract` must not import
+     `libs/design-system/src/primitives` must not import
+     `libs/design-system/src/compounds` (path-scoped `no-restricted-imports`
+     in the lib's own config since `0301`, formerly the `ds:*` tags);
+     `type:contract` must not import
      anything besides `zod` and `type:util`.
    - `no-restricted-imports` forbidding direct imports in `apps/**` and in
      feature code of: `react-hook-form`, `@tanstack/react-table`,

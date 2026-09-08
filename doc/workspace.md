@@ -27,8 +27,9 @@ libs/
   database/     Prisma 7 schema, migrations, seed + generated client
                                       tags: type:data,     scope:api
   design-system/
-    tokens/     design tokens + Tailwind v4 bridge   tags: type:ui, scope:web, ds:tokens
-    primitives/ primitives + Storybook 10             tags: type:ui, scope:web, ds:primitives
+                one project, three layers under src/ (tokens, primitives,
+                compounds) + Storybook 10
+                                      tags: type:ui,   scope:web
   form/         react-hook-form wrapper              tags: type:util, scope:web
   i18n/         next-intl wrapper + Czech messages   tags: type:util, scope:web
   api-client/   oRPC client typed from the contract  tags: type:util, scope:web
@@ -100,8 +101,8 @@ and of `npm run affected`, so a broken story is caught in CI rather than only by
 hand. The individual targets for working on the design system:
 
 ```bash
-npx nx run design-system-primitives:storybook         # dev server, port 4400
-npx nx run design-system-primitives:build-storybook   # static build
+npx nx run design-system:storybook         # dev server, port 4400
+npx nx run design-system:build-storybook   # static build
 ```
 
 Useful individual targets:
@@ -191,24 +192,26 @@ This dimension enforces decision `0003`: `apps/api` (`scope:api`) may depend
 on `libs/shared-types` (`scope:shared`), but **not** on `libs/i18n`
 (`scope:web`), so `next-intl` never reaches the backend.
 
-### The `ds:` dimension – design-system layers
+### The `ds:` dimension – gone, and what replaced it
 
-| tag | may depend on (workspace libs) |
-| --- | --- |
-| `ds:tokens` | `type:util` |
-| `ds:primitives` | `ds:tokens`, `type:util` |
-| `ds:compounds` | `ds:tokens`, `ds:primitives`, `type:util` |
+`ds:tokens` / `ds:primitives` / `ds:compounds` tagged three Nx projects and gave
+`@nx/enforce-module-boundaries` a handle on the direction tokens → primitives →
+compounds (`doc/decision/0007-*`). The three layers are now three directories of
+one project, so there is no project boundary left for the constraints to match
+and they were removed rather than left to never fire.
 
-This dimension enforces the direction tokens → primitives → compounds.
-`type:ui` alone isn't enough for it, since all three layers carry that tag –
-details in `doc/decision/0007-*`.
+The rule is unchanged and still machine-enforced: path-scoped
+`no-restricted-imports` groups in `libs/design-system/eslint.config.mjs`, one
+per layer, catching both the workspace alias and a relative escape. See
+`doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
 
 These entries carry **no** `allowedExternalImports`, and that is deliberate.
-Task 8's branch put a tighter npm list on `ds:tokens` and `ds:primitives`, on
+Task 8's branch put a tighter npm list on the then-existing `ds:tokens` and
+`ds:primitives` tags, on
 the theory that because Nx ANDs the dimensions a second list must be an
 intersection and could only narrow. **That theory was probed at merge and it is
 false.** With `clsx` on `type:ui`'s list and absent from a `ds:primitives` list,
-an `import clsx from 'clsx'` inside `libs/design-system/primitives` produced no
+an `import clsx from 'clsx'` inside the primitives layer produced no
 error at all: one matching constraint that permits a package is enough, so the
 second list never narrows anything. Shipping it would have been a rule that
 reads as enforcement and enforces nothing – which is the failure mode
@@ -219,10 +222,9 @@ The npm surface therefore stays on the `type:` dimension
 (`doc/decision/0017-*`). The design system's genuinely tighter surface – it is
 meant to be a closed layer with a near-zero runtime dependency footprint, and
 `cx.ts` exists precisely so that no class-name helper has to be installed – is
-enforced by `no-restricted-imports` in `libs/design-system/primitives/eslint.config.mjs`
-and `libs/design-system/tokens/eslint.config.mjs`, where it does fire. Each of
-those files carries the probe that proves it, and each spreads the wrapper-ban
-patterns back in: `no-restricted-imports` is a single rule, so a lib-local block
+enforced by `no-restricted-imports` in `libs/design-system/eslint.config.mjs`,
+where it does fire. That one file carries the probe that proves it, and every
+block in it spreads the wrapper-ban patterns back in: `no-restricted-imports` is a single rule, so a lib-local block
 that sets it replaces the root's copy outright, and a lib adding its own bans
 without spreading those in would silently switch the wrapper ban off for itself.
 
@@ -236,7 +238,7 @@ only allowed place is the wrapper lib that owns them:
 | forbidden package | use instead | only allowed directory |
 | --- | --- | --- |
 | `react-hook-form` | `@lets-park/form` | `libs/form` (done) |
-| `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/design-system/compounds` |
+| `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/design-system/src/compounds` |
 | `@tanstack/react-query` | `@lets-park/query` | `libs/query` (done) |
 | `@orpc/client` | `@lets-park/api-client` | `libs/api-client` (done) |
 | `socket.io-client` | `@lets-park/realtime-client` | `libs/realtime-client` (done) |
@@ -285,15 +287,21 @@ would stop `apps/api` from pulling in Zod through `shared-types` (see
      --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
    ```
 
+   The design-system command above is **history**, kept because it records how
+   the workspace was scaffolded. The three design-system libs it produced were
+   later merged into one project, `design-system`, with the layers as
+   directories under `libs/design-system/src/` and the `ds:*` tags removed —
+   `doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
+   Generating a new design-system layer is not a thing you do any more; you add
+   a directory.
+
 2. **Set the tags** in `libs/<name>/project.json`. Planned split:
 
    | lib | tags |
    | --- | --- |
    | `libs/contract` | `type:contract`, `scope:shared` |
    | `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` |
-   | `libs/design-system/tokens` | `type:ui`, `scope:web`, `ds:tokens` |
-   | `libs/design-system/primitives` | `type:ui`, `scope:web`, `ds:primitives` |
-   | `libs/design-system/compounds` | `type:ui`, `scope:web`, `ds:compounds` |
+   | `libs/design-system` | `type:ui`, `scope:web` |
    | `libs/form`, `libs/query`, `libs/api-client`, `libs/realtime-client`, `libs/auth`, `libs/i18n` | `type:util`, `scope:web` |
    | `libs/calendar-export` | `type:util`, `scope:api` |
    | `libs/database` | `type:data`, `scope:api` |

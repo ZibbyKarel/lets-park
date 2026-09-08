@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 22 topic documents, 186 decision records, and `doc/design/`.
+`doc/`: 22 topic documents, 187 decision records, and `doc/design/`.
 
 ---
 
@@ -31,7 +31,7 @@ This index is generated from the filesystem and accounts for every file under
 | [`bulk-reservation-modal.md`](bulk-reservation-modal.md) | The front end of that allocator — the `Hromadná rezervace` modal in `apps/web/src/lot/`. |
 | [`contract.md`](contract.md) | `libs/contract`, the single source of truth for every FE↔BE shape, and how to add a schema, a procedure or an error to it. |
 | [`database.md`](database.md) | The PostgreSQL schema, Prisma 7 setup, migrations, the development seed, and backups. |
-| [`design-system.md`](design-system.md) | The tokens and primitives layers: what a token is, how the CSS is generated, and what a primitive may and may not know. |
+| [`design-system.md`](design-system.md) | All three layers of the one `design-system` package: what a token is, how the CSS is generated, and what a primitive and a compound may and may not know. |
 | [`environment.md`](environment.md) | Every environment variable the two apps need, how the local Docker stack is started, and how dev, e2e and production differ (values only, never code). |
 | [`frontend.md`](frontend.md) | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow, the screen states and the `ScreenData<T>` union that selects one, and the `*-view.ts` split between what a screen decides and what it draws. |
 | [`i18n.md`](i18n.md) | `libs/i18n` — the only place allowed to import `next-intl` — and how Czech UI copy is organised. |
@@ -253,3 +253,4 @@ for why, and take the next number from the end of this list.
 - [`0298-urls-are-english-because-a-url-is-an-identifier`](decision/0298-urls-are-english-because-a-url-is-an-identifier.md) — 0298 – URLs are English, because a URL is an identifier
 - [`0299-a-component-and-its-companions-live-in-one-folder`](decision/0299-a-component-and-its-companions-live-in-one-folder.md) — 0299 – A component and its companions live in one folder
 - [`0300-the-czech-holiday-calendar-stays-hand-rolled`](decision/0300-the-czech-holiday-calendar-stays-hand-rolled.md) — 0300 – The Czech holiday calendar stays hand-rolled
+- [`0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths`](decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md) — 0301 – The design system is one package, and the layer rule moved to lint paths

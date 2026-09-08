@@ -1,0 +1,37 @@
+/*
+ * The one stylesheet Storybook loads, for every layer that has stories.
+ *
+ * It imports `assets/theme.css` rather than `assets/tokens.css` directly:
+ * `theme.css` is the documented consumer entry point (see
+ * `doc/design-system.md`) and it pulls in both `tailwindcss` and `tokens.css`,
+ * so importing it is how an app would wire this up too. Importing `tokens.css`
+ * on its own would give the stories the custom properties but no Tailwind
+ * utilities to spend them through.
+ */
+@import '../assets/theme.css';
+
+/*
+ * Tailwind v4 discovers source files by scanning from the CSS file's own
+ * directory. `theme.css` lives under `assets/`, so nothing would point Tailwind
+ * at the components that actually use the utilities — say so explicitly.
+ *
+ * One line covers both layers now that they share a `src/`. The compounds
+ * Storybook needed two, and the reason it gave still holds and is the reason
+ * this line must not be narrowed to a single layer: a compound renders
+ * primitives, so the utilities the primitives ask for have to be generated
+ * here too, or every Button inside a ConfirmDialog would render unstyled.
+ */
+@source '../src';
+
+/*
+ * Light theme only. The design (`doc/design/lets-park-design.dc.html`) defines
+ * a single light appearance; there is no dark palette in the token set to
+ * switch to, so the story canvas states the design's page background rather
+ * than inheriting the browser's.
+ */
+html,
+body {
+  background: var(--bg-soft);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}

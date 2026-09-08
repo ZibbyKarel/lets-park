@@ -16,7 +16,7 @@ export interface FormFieldRenderArgs<
    * This field's Zod issue message, or `undefined` while valid. Pass straight
    * to a primitive's `error` prop — that single prop already drives the red
    * border, `aria-invalid` and the announced message (`FieldOwnProps`,
-   * `libs/design-system/primitives`), so this is the only wiring needed.
+   * `libs/design-system/src/primitives`), so this is the only wiring needed.
    */
   readonly error: string | undefined;
 }
