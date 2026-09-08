@@ -27,7 +27,18 @@ import { SlackClient, SlackWebClientFactory } from './slack-client.service';
 import type { SlackEnv } from './slack.config';
 import { SlackConfig } from './slack.config';
 
-/** A token with the real `xoxb-` shape, so the redaction is exercised honestly. */
+/**
+ * Keeps the `xoxb-` prefix, because that is what the redactor's shape-based
+ * branch matches (`slack-token-redaction.ts`) and what the
+ * `not.toContain('xoxb-')` assertion below is worth anything against — a
+ * fixture without it would make that assertion pass vacuously.
+ *
+ * It deliberately does **not** carry the rest of a real bot token's shape
+ * (`xoxb-<digits>-<digits>-<24 alphanumerics>`). One that did was committed
+ * here and tripped GitHub's push protection on every push of this repo, so the
+ * history was rewritten to this value. Do not "restore" a realistic-looking
+ * one: the tests do not need it, and the push will be rejected again.
+ */
 const BOT_TOKEN = 'xoxb-fake-slack-token';
 const CHANNEL = 'C0PARKING';
 

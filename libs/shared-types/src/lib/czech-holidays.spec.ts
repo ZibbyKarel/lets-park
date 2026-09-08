@@ -8,6 +8,7 @@ import {
   isBusinessDay,
   isCzechPublicHoliday,
 } from './czech-holidays';
+import type { CzechHoliday } from './czech-holidays';
 import { dayOfWeek } from './date-only';
 
 /**
@@ -116,6 +117,14 @@ describe('czechPublicHolidays', () => {
   it('does not make Easter Sunday itself a holiday', () => {
     expect(isCzechPublicHoliday(easterSunday(2026))).toBe(false);
   });
+
+  it('covers every declared holiday id and no others, in every year', () => {
+    for (const year of [2016, 2024, 2026, 2030]) {
+      const ids = czechPublicHolidays(year).map((holiday) => holiday.id);
+      expect([...ids].sort()).toEqual([...CZECH_HOLIDAY_IDS].sort());
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
 });
 
 describe('czechPublicHolidayOn / isCzechPublicHoliday', () => {
@@ -152,5 +161,47 @@ describe('isBusinessDay', () => {
     expect(dayOfWeek('2026-09-28')).toBe(1); // Monday
     expect(isBusinessDay('2026-09-28')).toBe(false);
     expect(isBusinessDay('2026-04-03')).toBe(false); // Good Friday
+  });
+});
+
+describe('czechPublicHolidays caching', () => {
+  it('returns equal values for a repeated year', () => {
+    expect(czechPublicHolidays(2026)).toEqual(czechPublicHolidays(2026));
+    expect(czechPublicHolidays(2026)).toHaveLength(CZECH_HOLIDAY_IDS.length);
+  });
+
+  it('keeps distinct years distinct', () => {
+    expect(czechPublicHolidays(2026)[0]?.date.startsWith('2026-')).toBe(true);
+    expect(czechPublicHolidays(2027)[0]?.date.startsWith('2027-')).toBe(true);
+  });
+
+  it('hands out a list one caller cannot corrupt for the next', () => {
+    // The list is shared between callers, so a mutation that got through would
+    // not stay local — it would rewrite what every later caller reads. Both
+    // the array's shape and each entry's fields have to be sealed. How the
+    // seal reports a rejected write (throw, or silent no-op) is not the
+    // behaviour under test; that the next caller sees the original is.
+    const snapshot = czechPublicHolidays(2030).map((holiday) => ({ ...holiday }));
+    const holidays = czechPublicHolidays(2030);
+
+    try {
+      (holidays as CzechHoliday[]).push({ ...snapshot[0] } as CzechHoliday);
+    } catch {
+      // A sealed array rejects the push; either way the assertion below decides.
+    }
+    try {
+      (holidays[0] as { name: string }).name = 'mutated';
+    } catch {
+      // As above.
+    }
+
+    expect(czechPublicHolidays(2030)).toEqual(snapshot);
+    expect(czechPublicHolidays(2030)).toHaveLength(CZECH_HOLIDAY_IDS.length);
+  });
+
+  it('still validates the date before consulting the cache', () => {
+    // parseDateOnly is the validator; a memo lookup must not front-run it.
+    expect(() => czechPublicHolidayOn('2026-02-30')).toThrow(TypeError);
+    expect(() => czechPublicHolidayOn('not-a-date')).toThrow(TypeError);
   });
 });
