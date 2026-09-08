@@ -186,7 +186,10 @@ export default [
     // disk. It has no runtime dependencies at all, and nothing here should
     // acquire one — React least of all, since a token is a string and not a
     // component.
-    files: ['src/tokens/**/*.ts', 'src/tokens/**/*.tsx'],
+    // `scripts/**/*.ts` is in this block because `scripts/build-tokens-css.ts`
+    // is the tokens layer's build entry point — it lived under `tokens/` and
+    // inherited these bans until the merge moved it up to the project root.
+    files: ['src/tokens/**/*.ts', 'src/tokens/**/*.tsx', 'scripts/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

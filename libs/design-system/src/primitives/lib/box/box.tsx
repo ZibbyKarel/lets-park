@@ -21,7 +21,7 @@ const BACKGROUND_CLASSES: Record<BoxBackground, string> = {
 
 /**
  * `rounded-{step}` utility literals for the subset of `RADIUS`
- * (`libs/design-system/tokens/src/lib/radius.ts`) exposed here. The "Radius"
+ * (`libs/design-system/src/tokens/lib/radius.ts`) exposed here. The "Radius"
  * section of `theme.css` maps `--radius-sm`/`--radius-md`/`--radius-lg` into
  * `@theme`, so each of these resolves to its token value, not Tailwind's
  * stock scale.

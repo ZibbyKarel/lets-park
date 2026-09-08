@@ -65,7 +65,7 @@ body {
  * `--control-h-*`, `--modal-w-*` and `--z-*` are spent (see the note at the
  * bottom of `theme.css` for why those have no Tailwind namespace either).
  *
- * They are deliberately NOT in `libs/design-system/tokens`: a parking bay is
+ * They are deliberately NOT in `libs/design-system/src/tokens`: a parking bay is
  * domain geometry, and the design system must stay domain-free.
  */
 :root {

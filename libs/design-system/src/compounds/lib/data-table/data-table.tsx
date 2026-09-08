@@ -16,7 +16,7 @@ import { compareSortValues } from './compare-sort-values';
 /**
  * The only `@tanstack/react-table` feature this table turns on.
  *
- * `libs/design-system/compounds` is the package's owner in `WRAPPED_LIBRARIES`
+ * `libs/design-system/src/compounds` is the package's owner in `WRAPPED_LIBRARIES`
  * (`eslint.config.mjs`), so this file is the single place in the workspace
  * allowed to import it — and every TanStack type stays behind the props below.
  * Nothing a caller passes in or gets back out is a TanStack type: sorting

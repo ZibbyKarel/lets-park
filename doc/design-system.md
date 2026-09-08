@@ -3,14 +3,19 @@
 Tasks 6, 7 and 8 from `doc/implementation-plan.md`. This document describes the
 two bottom layers of the design system:
 
-1. **tokens** (`libs/design-system/tokens`) – values,
-2. **primitives** (`libs/design-system/primitives`) – the smallest components,
-   built exclusively from those values.
+1. **tokens** (`libs/design-system/src/tokens`) – values,
+2. **primitives** (`libs/design-system/src/primitives`) – the smallest
+   components, built exclusively from those values.
 
 The third layer (`compounds`, e.g. DataTable) is documented at the end of this
-file. The dependency direction `tokens → primitives → compounds` is enforced by ESLint
-(see `doc/workspace.md`, the `ds:*` dimension); **compounds may import
-primitives, never the other way around**.
+file. All three are directories of the single Nx project `design-system`, not
+separate projects — see
+`doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
+The dependency direction `tokens → primitives → compounds` is enforced by
+path-scoped `no-restricted-imports` rules in
+`libs/design-system/eslint.config.mjs`, which catch both the alias and a
+relative escape; **compounds may import primitives, never the other way
+around**.
 
 The design system is **domain-free**: nothing in `libs/design-system/**` may
 know about `ParkingSpot`/`Reservation`/users – not in prop names, not in
@@ -41,9 +46,10 @@ was invented – neither the tooltip nor the toast appears in the design at all.
 ## How the tokens are put together
 
 ```
-libs/design-system/tokens/
+libs/design-system/
   src/
-    lib/
+    tokens/
+      lib/
       colors.ts          – brand, neutrals, semantic surface/fg/line/status
       car-palette.ts      – CAR_COLOR_PALETTE (car color only, a separate namespace)
       typography.ts        – font families, @font-face metadata, type scale, lh, tracking
@@ -98,7 +104,7 @@ The **drift test** (`generate-css.spec.ts`) guards against the TS source and
 the committed file drifting apart: it reads `assets/tokens.css` from disk and
 compares it with `toBe()` against what `generateTokensCss(DESIGN_TOKENS)`
 would generate right now. Change a token in TS without running
-`nx run design-system-tokens:generate-css`, and the test fails in CI.
+`nx run design-system:generate-css`, and the test fails in CI.
 
 ## How to add a new token
 
@@ -107,7 +113,7 @@ would generate right now. Change a token in TS without running
 2. Add the corresponding line to `generateTokensCss` in `generate-css.ts` (the
    same `--custom-property` name it should have in `colors_and_type.css` /
    the design).
-3. Run `npx nx run design-system-tokens:generate-css` and commit the changed
+3. Run `npx nx run design-system:generate-css` and commit the changed
    `assets/tokens.css`.
 4. If the token makes sense as a Tailwind utility (color, spacing, radius,
    shadow, font, tracking/leading, ease/duration), add a mapping line to
@@ -196,22 +202,20 @@ which is why `FONT_FAMILIES.sans` always has a working fallback (`Neue Haas Grot
 
 ---
 
-# Primitives (`libs/design-system/primitives`)
+# Primitives (`libs/design-system/src/primitives`)
 
-The package `@lets-park/design-system/primitives`, tags `type:ui`,
-`scope:web`, `ds:primitives`. **Fourteen components** in two batches – nine
+The entry point `@lets-park/design-system/primitives`, in the `design-system`
+project (tags `type:ui`, `scope:web`). **Fourteen components** in two batches – nine
 form controls (Task 7) and five overlay/navigation ones (Task 8) – each with a
 **story alongside the component** and a Jest + Testing Library test (187 tests
 across 17 suites).
 
 ```
-libs/design-system/primitives/
-  .storybook/
-    main.ts         – Storybook 10 + @storybook/react-vite, viteFinal → @tailwindcss/vite
-    preview.ts      – parameters, backgrounds
-    preview.css     – @import theme.css from the tokens lib + @source '../src'
+libs/design-system/
+  .storybook/           – one Storybook for all layers (see below)
   src/
-    lib/
+    primitives/
+      lib/
       cx.ts               – a class-name joiner (no clsx, three lines)
       control-size.ts     – the shared sm|md|lg|xl scale + FOCUS_RING, INSET_FOCUS_RING, PRESS_FEEDBACK
       field.tsx           – useFieldIds() + <Field> (label / hint / error around an element)
@@ -548,8 +552,8 @@ will not be: that is application state, not design-system state
 ## Storybook
 
 ```bash
-npx nx run design-system-primitives:storybook         # dev server, port 4400
-npx nx run design-system-primitives:build-storybook   # static build into dist/
+npx nx run design-system:storybook         # dev server, port 4400
+npx nx run design-system:build-storybook   # static build into dist/
 ```
 
 The configuration is written by hand, without `@nx/storybook` and without
@@ -559,10 +563,12 @@ addons – why, is covered in
 (`nx run-many -t build,build-storybook`) and of `npm run affected`, so a broken
 story fails in CI rather than only on a manual run.
 
-`preview.css` imports `theme.css` (not `tokens.css` – that alone gives
-variables but no Tailwind utilities) and adds `@source '../src'` so Tailwind
-scans the components; it looks starting from the directory of the CSS file
-that contains `@import "tailwindcss"`, which lives in the tokens lib.
+One Storybook serves all three layers, on port 4400. `.storybook/preview.css`
+imports `assets/theme.css` (not `tokens.css` – that alone gives variables but no
+Tailwind utilities) and adds `@source '../src'` so Tailwind scans the
+components; it looks starting from the directory of the CSS file that contains
+`@import "tailwindcss"`, which is `assets/theme.css`. One `@source` line now
+covers both component layers, because they share a `src/`.
 
 ## How to add a primitive
 
@@ -575,7 +581,7 @@ that contains `@import "tailwindcss"`, which lives in the tokens lib.
    name, Tab reachability, keyboard, and interaction; not appearance.
 4. Export it from `src/index.ts`.
 5. `npm run lint && npm run typecheck && npm run test` and
-   `npx nx run design-system-primitives:build-storybook`.
+   `npx nx run design-system:build-storybook`.
 
 An overlay that has to be dismissable by Escape has one extra step: register it
 with the layer tree (`useDismissableLayer`, passing `active` and its outermost
@@ -586,23 +592,22 @@ prevent.
 
 ---
 
-# Compounds (`libs/design-system/compounds`)
+# Compounds (`libs/design-system/src/compounds`)
 
-The package `@lets-park/design-system/compounds`, tags `type:ui`, `scope:web`,
-`ds:compounds`. **Three components** (Task 22), each with a story and a Jest +
+The entry point `@lets-park/design-system/compounds`, in the `design-system`
+project (tags `type:ui`, `scope:web`). **Three components** (Task 22), each with a story and a Jest +
 Testing Library spec alongside it (47 tests across 3 suites).
 
 This is the third layer: it composes primitives into larger, still
 **domain-free** pieces. Compounds may import primitives; primitives must never
-import compounds. The `ds:compounds` entry in `DEP_CONSTRAINTS`
-(`eslint.config.mjs`) enforces the direction.
+import compounds. The path-scoped `no-restricted-imports` blocks in
+`libs/design-system/eslint.config.mjs` enforce the direction.
 
 ```
-libs/design-system/compounds/
-  .storybook/           – Storybook 10, port 4401; same shape as the primitives'
-    preview.css           – @source both ../src and ../../primitives/src (see below)
+libs/design-system/
   src/
-    lib/
+    compounds/
+      lib/
       data-table.tsx      – the admin table; the workspace's only @tanstack/react-table importer
       empty-state.tsx     – "there is nothing here"
       confirm-dialog.tsx  – Modal narrowed to one question and two answers
@@ -729,16 +734,17 @@ from its language; what was invented and what was not is recorded in
 ## Storybook
 
 ```bash
-npx nx run design-system-compounds:storybook         # dev server, port 4401
-npx nx run design-system-compounds:build-storybook   # static build into dist/
+npx nx run design-system:storybook         # dev server, port 4400
+npx nx run design-system:build-storybook   # static build into dist/
 ```
 
-Same hand-written configuration as the primitives', and for the same reasons
-(`doc/decision/0013-storybook-10-without-nx-storybook-and-without-addons.md`).
-A second Storybook rather than more stories in the first one: the two libs are
-separate Nx projects with separate `lint`, `typecheck` and `build-storybook`
-targets, and a shared instance would have to reach across the project boundary
-the `ds:*` tags exist to draw.
+The same single Storybook the primitives use — there is one, and it is the
+project's, not a layer's. It was two, on ports 4400 and 4401, while the layers
+were two Nx projects with separate `lint`, `typecheck` and `build-storybook`
+targets; merging the projects removed the boundary that argument rested on, and
+port 4401 is free again. Hand-written configuration, without `@nx/storybook`
+and without addons, for the reasons in
+`doc/decision/0013-storybook-10-without-nx-storybook-and-without-addons.md`.
 
 ## How to add a compound
 
@@ -748,9 +754,9 @@ the `ds:*` tags exist to draw.
 2. `src/lib/<name>.stories.tsx` and `src/lib/<name>.spec.tsx` – **at the same
    time**, not afterward. Fixtures stay domain-free.
 3. Export it from `src/index.ts`.
-4. `npx nx run-many -t lint,typecheck,test -p design-system-compounds` and
-   `npx nx run design-system-compounds:build-storybook`.
+4. `npx nx run-many -t lint,typecheck,test -p design-system` and
+   `npx nx run design-system:build-storybook`.
 
 If the compound needs a primitive that does not exist, that primitive belongs in
-`libs/design-system/primitives` — not built locally here and left. Building it
+`libs/design-system/src/primitives` — not built locally here and left. Building it
 here is acceptable only as a deliberate, recorded step, with promotion flagged.

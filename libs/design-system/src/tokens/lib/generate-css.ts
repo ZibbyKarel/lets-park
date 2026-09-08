@@ -251,8 +251,8 @@ export function generateTokensCss(tokens: DesignTokens): string {
 
   return `/* ============================================================
    GENERATED FILE — do not hand-edit.
-   Source: libs/design-system/tokens/src/lib/*.ts (DESIGN_TOKENS).
-   Regenerate with: npx nx run design-system-tokens:generate-css
+   Source: libs/design-system/src/tokens/lib/*.ts (DESIGN_TOKENS).
+   Regenerate with: npx nx run design-system:generate-css
    ============================================================ */
 
 /* ---------- Web fonts (Neue Haas Grotesk Display Pro) ---------- */

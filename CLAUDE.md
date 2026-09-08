@@ -15,12 +15,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The workspace is scaffolded and all of Fáze 0–7 is written: `apps/api`
 (NestJS 11), `apps/web` (Next.js 16), `apps/api-e2e`, `apps/web-e2e`, and
-thirteen libs under `libs/`. `npm ci` first — several agents have skipped it in
+eleven libs under `libs/`. `npm ci` first — several agents have skipped it in
 a fresh worktree and spent the next hour on spurious `Module not found` errors
 in `api:build`.
 
 **The documentation map is `doc/README.md`**; it indexes every topic document
-and all 185 decision records. `README.md` is the operational runbook.
+and all 187 decision records. `README.md` is the operational runbook.
 
 ### Commands
 
@@ -146,7 +146,7 @@ suite, which several config comments had been assuming for a while.
 Non-negotiable architectural rules from `plan.md` that apply to every phase (see the file for full detail):
 
 - **Contract-first**: all FE↔BE data shapes are defined once as Zod schemas in the single `libs/contract` lib — shared entity schemas plus two entry points: `@lets-park/contract` (API, via oRPC) and `@lets-park/contract/realtime` (Socket.io events — Zod payload schemas, validated server-side). TS types are always derived (`z.infer`), never hand-duplicated. No endpoint/DTO/event may exist in code before it exists in the contract. Errors are typed contract errors; reservation dates are date-only (`YYYY-MM-DD`) in Europe/Prague.
-- **Design-system-first**: tokens (`libs/design-system/tokens`) → primitives (`libs/design-system/primitives`) → compounds (`libs/design-system/compounds`, e.g. DataTable) → domain-specific composition, which lives only in app feature code. Primitives and compounds each get a Storybook story written alongside them and must stay presentation-only with no domain data; compounds may import primitives, never the reverse.
+- **Design-system-first**: tokens (`libs/design-system/src/tokens`) → primitives (`libs/design-system/src/primitives`) → compounds (`libs/design-system/src/compounds`, e.g. DataTable) → domain-specific composition, which lives only in app feature code. The three layers are directories of one Nx project, `design-system`, with one entry point each. Primitives and compounds each get a Storybook story written alongside them and must stay presentation-only with no domain data; compounds may import primitives, never the reverse — enforced by path-scoped `no-restricted-imports` rules in `libs/design-system/eslint.config.mjs` (`doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`).
 - **Mandatory wrapper layers**: app/feature code must never import react-hook-form, TanStack Query/Table, socket.io-client, next-auth, next-intl, or ical-generator directly — always through the corresponding `libs/*` wrapper (table in `plan.md`). ESLint (Nx module boundaries / `no-restricted-imports`) must enforce this. A one-off, non-recurring third-party import elsewhere in app code is acceptable only with a comment explaining why no wrapper was created — but this exception does not apply to the libraries listed above.
 - Validation is Zod-only; `class-validator`/`class-transformer` are not used in NestJS.
 - No Sentry/metrics/APM/alerting (next phase), no Slack slash commands or interactive Block Kit — Slack integration is outbound `chat.postMessage` notifications only. Note: structured logging (nestjs-pino), health endpoints and graceful shutdown are baseline hygiene required by `plan.md` (§"Provozní základ") and are **not** covered by the no-monitoring rule.

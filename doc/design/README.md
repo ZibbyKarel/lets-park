@@ -8,7 +8,7 @@ access can read it too.
 | File | What it is |
 | --- | --- |
 | `lets-park-design.dc.html` | The complete design source (Claude Design `.dc.html`). **The binding source of truth for the visuals.** Contains every screen, state, and modal as inline-styled markup + a `DCLogic` class with sample data. |
-| `ds/colors_and_type.css` | "Shoptet Design System — Foundations": colors, typography, spacing, radius, shadows, motion, layout as CSS custom properties. **This is the source of truth for `libs/design-system/tokens`.** |
+| `ds/colors_and_type.css` | "Shoptet Design System — Foundations": colors, typography, spacing, radius, shadows, motion, layout as CSS custom properties. **This is the source of truth for `libs/design-system/src/tokens`.** |
 | `ds/fonts/*.otf` | Neue Haas Grotesk Display Pro (8 weights) used by the design. |
 | `ds/support.js` | The Claude Design runtime (for reference only, not copied into the product). |
 | `screens/*.png` | Screenshots of individual screens and states (see the table below). |
@@ -55,5 +55,5 @@ randomly — otherwise a car's color would change on every render).
 
 The `.otf` files are downloaded for design fidelity. Verify the Neue Haas
 Grotesk Display Pro license before deploying to production.
-`libs/design-system/tokens` must have a working fallback stack, so the
+`libs/design-system/src/tokens` must have a working fallback stack, so the
 application still looks reasonable without these files.

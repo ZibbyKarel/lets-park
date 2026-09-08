@@ -6,7 +6,7 @@
  * copy of it. The values below are read off the finished visual design
  * (`doc/design/lets-park-design.dc.html`), which sizes its buttons, inputs and
  * selects with literal pixel heights. Keeping them here — rather than inline in
- * the primitives — is what lets `libs/design-system/primitives` stay free of
+ * the primitives — is what lets `libs/design-system/src/primitives` stay free of
  * hand-written pixel values.
  *
  * They are their own token group rather than aliases onto `--space-*` because

@@ -1,7 +1,7 @@
 /**
  * Regenerates `assets/tokens.css` from the TS token source.
  *
- * Run via `npx nx run design-system-tokens:generate-css`. The output is
+ * Run via `npx nx run design-system:generate-css`. The output is
  * committed (see `doc/design-system.md` for why), so run this and commit the
  * diff whenever a token value changes — `generate-css.spec.ts` fails CI if
  * you forget.

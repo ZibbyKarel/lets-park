@@ -501,10 +501,10 @@ an `@theme inline` block), then declares the three source trees Tailwind should
 scan for class names:
 
 ```css
-@import '../../../../libs/design-system/tokens/assets/theme.css';
+@import '../../../../libs/design-system/assets/theme.css';
 @source '../../src';
-@source '../../../../libs/design-system/primitives/src';
-@source '../../../../libs/design-system/compounds/src';
+@source '../../../../libs/design-system/src/primitives';
+@source '../../../../libs/design-system/src/compounds';
 ```
 
 The `@source` lines are required: Tailwind v4 scans the importing project by

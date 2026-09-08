@@ -8,7 +8,7 @@
  * at all, and invented where it does not. Which is which is marked per entry.
  *
  * Keeping them here — rather than inline in the primitives — is what lets
- * `libs/design-system/primitives` stay free of hand-written pixel and rgba
+ * `libs/design-system/src/primitives` stay free of hand-written pixel and rgba
  * values.
  *
  * See `doc/decision/0052-overlay-tokens-and-one-layering-scale.md`.

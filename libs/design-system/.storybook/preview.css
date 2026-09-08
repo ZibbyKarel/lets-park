@@ -1,5 +1,5 @@
 /*
- * The one stylesheet Storybook loads, for all three layers.
+ * The one stylesheet Storybook loads, for every layer that has stories.
  *
  * It imports `assets/theme.css` rather than `assets/tokens.css` directly:
  * `theme.css` is the documented consumer entry point (see
