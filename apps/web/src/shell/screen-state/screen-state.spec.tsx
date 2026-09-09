@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { ScreenDataGuard, ScreenError, ScreenLoading, screenDataOf } from './screen-state';
 
 /**
@@ -60,7 +61,11 @@ async function failureFrom(fetchImpl: () => Promise<Response>): Promise<unknown>
 }
 
 function renderWithIntl(node: ReactNode) {
-  render(<IntlProvider>{node}</IntlProvider>);
+  render(
+    <IntlProvider locale="cs" messages={cs}>
+      {node}
+    </IntlProvider>
+  );
 }
 
 describe('ScreenLoading', () => {
@@ -159,7 +164,7 @@ describe('ScreenError', () => {
 
   it('renders the title as a heading only when the page asks for one', () => {
     const { unmount } = render(
-      <IntlProvider>
+      <IntlProvider locale="cs" messages={cs}>
         <ScreenError error={new Error('boom')} />
       </IntlProvider>
     );

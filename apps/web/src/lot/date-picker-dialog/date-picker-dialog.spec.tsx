@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider, formatFullDate } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { DatePickerDialog } from './date-picker-dialog';
 
 /**
@@ -19,7 +20,7 @@ function renderDialog(overrides: { open?: boolean; selectedDate?: string } = {})
   const onSelect = jest.fn();
 
   const utils = render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <DatePickerDialog
         open={overrides.open ?? true}
         onClose={onClose}

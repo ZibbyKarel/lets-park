@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import type { UserRole } from '@lets-park/contract';
 import { ADMIN_ROUTE, SETTINGS_ROUTE } from '../../routes';
 import { TopBar } from './top-bar';
@@ -22,7 +23,7 @@ function renderTopBar(
   const onSignOut = jest.fn();
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <TopBar
         name={overrides.name ?? 'Karel Zíbar'}
         email={overrides.email ?? 'karel.zibar@firma.cz'}

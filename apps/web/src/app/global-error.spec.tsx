@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import GlobalError from './global-error';
 
 /**
- * The Czech-UI rule at the one moment nothing else is working.
+ * The translated UI at the one moment nothing else is working.
  *
  * A throw from `RootLayout` — `await auth()` on a cookie encrypted with a
  * rotated `AUTH_SECRET` is the realistic one — is caught by nothing but
@@ -15,7 +15,23 @@ import GlobalError from './global-error';
  * about the nesting when it is mounted inside jsdom's existing document; the
  * warning is an artefact of the harness, not of the component, and the
  * assertions below are about what the visitor reads either way.
+ *
+ * Because it replaces the root layout, no server-resolved locale reaches it:
+ * it negotiates from `navigator.language` (`libs/i18n`'s `negotiateLocale`).
+ * jsdom reports `en-US`, so every spec about the Czech copy has to say which
+ * browser it is pretending to be — {@link setBrowserLanguage}.
  */
+
+/**
+ * What the browser claims to prefer, for one test.
+ *
+ * `navigator.language` is a prototype getter in jsdom, so it is replaced
+ * rather than assigned; `configurable` keeps `beforeEach` able to put the next
+ * value in place.
+ */
+function setBrowserLanguage(language: string) {
+  Object.defineProperty(window.navigator, 'language', { value: language, configurable: true });
+}
 
 const originalError = console.error;
 
@@ -38,13 +54,18 @@ function boom() {
 }
 
 describe('global-error', () => {
+  beforeEach(() => {
+    setBrowserLanguage('cs-CZ');
+  });
+
   it('speaks Czech, from the catalogue, with no provider above it', () => {
     render(<GlobalError error={boom()} reset={jest.fn()} />);
 
     // Both strings are `shell.errorTitle` / `shell.errorUnknown` in
-    // `libs/i18n`. Finding them proves the one provider this screen can
-    // re-establish — `IntlProvider`, which carries its own messages — really is
-    // re-established, rather than the file having hard-coded the sentences.
+    // `messages/cs.json`. Finding them proves the one provider this screen can
+    // re-establish — `IntlProvider`, handed the catalog the file imports
+    // statically — really is re-established, rather than the file having
+    // hard-coded the sentences.
     expect(screen.getByText('Něco se nepovedlo')).toBeInTheDocument();
     expect(screen.getByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
   });
@@ -74,5 +95,16 @@ describe('global-error', () => {
     render(<GlobalError error={boom()} reset={jest.fn()} />);
 
     expect(document.documentElement).toHaveAttribute('lang', 'cs');
+  });
+
+  it('negotiates that language in the browser, because no server resolved one', () => {
+    // The rule itself is `negotiateLocale`'s and is tested in `libs/i18n`;
+    // what this asserts is that this screen — the one place in the app that
+    // has to ask the browser — actually asks it.
+    setBrowserLanguage('de-DE');
+
+    render(<GlobalError error={boom()} reset={jest.fn()} />);
+
+    expect(document.documentElement).toHaveAttribute('lang', 'en');
   });
 });

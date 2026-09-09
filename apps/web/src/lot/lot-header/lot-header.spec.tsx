@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider, formatFullDate } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { LotHeader } from './lot-header';
 import type { DayNoteView } from '../lot-view';
 
@@ -42,7 +43,7 @@ function renderHeader(
   const onOpenDatePicker = jest.fn();
 
   const utils = render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <LotHeader
         date={overrides.date ?? DATE}
         note={overrides.note ?? workdayNote()}
