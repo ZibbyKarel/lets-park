@@ -86,10 +86,10 @@ describe('toAdminWindowBannerView', () => {
   });
 
   it('formats the banner in the locale it is handed', () => {
-    const window = aWindow({ state: 'OPEN' });
+    const monthWindow = aWindow({ state: 'OPEN' });
 
-    const czech = toAdminWindowBannerView(window, createDateFormatters('cs'));
-    const english = toAdminWindowBannerView(window, createDateFormatters('en'));
+    const czech = toAdminWindowBannerView(monthWindow, createDateFormatters('cs'));
+    const english = toAdminWindowBannerView(monthWindow, createDateFormatters('en'));
 
     expect(czech.values.month).toBe('září 2026');
     expect(english.values.month).toBe('September 2026');

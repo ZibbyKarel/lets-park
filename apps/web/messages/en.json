@@ -19,7 +19,7 @@
   "nav": {
     "userMenu": "User menu",
     "adminBadge": "Admin",
-    "settings": "Settings (car licence plate)",
+    "settings": "Settings (car license plate)",
     "administration": "Administration",
     "language": "Language",
     "signOut": "Sign out"
@@ -31,8 +31,8 @@
   },
   "settings": {
     "title": "Settings",
-    "description": "Your licence plate is prefilled every time you reserve a spot. We use your preferred spot first in a bulk reservation.",
-    "licensePlateLabel": "Car licence plate",
+    "description": "Your license plate is prefilled every time you reserve a spot. We use your preferred spot first in a bulk reservation.",
+    "licensePlateLabel": "Car license plate",
     "licensePlateTooLong": "16 characters at most.",
     "preferredSpotLabel": "Preferred parking spot",
     "preferredSpotNone": "No preference",
@@ -51,7 +51,7 @@
     "icsRegenerateConfirmDescription": "The old link stops working and the calendars that use it stop updating. You’ll have to replace it with the new one everywhere.",
     "icsRegenerateConfirmButton": "Generate",
     "icsUnavailable": "The calendar link isn’t available right now. Please try again in a moment.",
-    "preferredSpotUnavailable": "Your preferred spot is no longer available. Please pick another one, or No preference."
+    "preferredSpotUnavailable": "Your preferred spot is no longer available. Please pick another one, or the No preference option."
   },
   "lot": {
     "occupiedCount": "{taken} of {total} taken",
@@ -65,7 +65,7 @@
     "tileEditing": "being edited",
     "waiting": "{count} in the queue",
     "spotMenu": "Options for spot {label}",
-    "noPlate": "No licence plate",
+    "noPlate": "No license plate",
     "legendTaken": "taken",
     "legendFree": "free",
     "legendWaitlist": "waitlist / editing",
@@ -202,7 +202,7 @@
     "spotsInactive": "Inactive",
     "spotsTodayUnknown": "—",
     "windowOpenTitle": "Opening a new month",
-    "windowOpenDescription": "How many days before the month starts the reservations for that month open. Once the month starts the reservations lock — only an admin can edit them then, and a user can cancel their own reservation at any time.",
+    "windowOpenDescription": "How many days before a month starts its reservations open. Once the month starts the reservations lock — only an admin can edit them then, and a user can cancel their own reservation at any time.",
     "windowDaysLabel": "Open this many days in advance",
     "windowDaysValue": "{count, plural, one {# day} other {# days}}",
     "windowDaysDecrement": "One day less",
@@ -214,7 +214,7 @@
     "windowMonthsTitle": "Month status",
     "windowMonthsDescription": "Based on the settings on the left · today is {today}",
     "windowMonthRangeAuto": "open {from} – {to}",
-    "windowMonthRangeForced": "automatically it would be open {from} – {to}",
+    "windowMonthRangeForced": "it would automatically be open {from} – {to}",
     "windowStateOPEN": "Open",
     "windowStateLOCKED": "Locked",
     "windowStateNOT_YET_OPEN": "Not open yet",
@@ -222,7 +222,7 @@
     "errForbidden": "You don’t have permission for this action.",
     "errUserConflict": "The last active admin can’t lose the role or be deactivated.",
     "errUserNotFound": "This account no longer exists. Please refresh the page.",
-    "errUserValidation": "This change to the role or to the account’s activity can’t be made.",
+    "errUserValidation": "This change to the role or to the account’s active status can’t be made.",
     "errFallbackUser": "The account change couldn’t be saved. Please try again.",
     "errSpotNotFound": "This spot no longer exists. Please refresh the page.",
     "errSpotValidation": "The spot’s label or category isn’t valid.",
@@ -247,7 +247,7 @@
   },
   "bulk": {
     "title": "Bulk reservation",
-    "description": "Select days in {month}. We assign the spot automatically — where nothing is free, we put you in the queue.",
+    "description": "Select days in {month}. We’ll assign a spot automatically — where nothing is free, we put you in the queue.",
     "weekdayMon": "MON",
     "weekdayTue": "TUE",
     "weekdayWed": "WED",
@@ -284,7 +284,7 @@
     "resultUnchanged": "We signed you up exactly as proposed.",
     "resultChangedTitle": "The schedule differs from the proposal",
     "resultChangedDescription": "The state of the parking lot changed before you confirmed the schedule. On these days we signed you up differently than the proposal promised:",
-    "resultChangedProposed": "Proposal",
+    "resultChangedProposed": "Proposed",
     "resultChangedActual": "Actual",
     "resultChangedMissing": "nothing",
     "lockedTitle": "Reservations are locked",

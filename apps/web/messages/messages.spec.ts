@@ -70,10 +70,6 @@ describe.each(LOCALES.filter((locale) => locale !== 'cs'))('%s vs cs', (locale) 
     expect([...other.keys()].filter((key) => !czech.has(key))).toEqual([]);
   });
 
-  it('has no empty message', () => {
-    expect([...other].filter(([, value]) => value.trim() === '').map(([key]) => key)).toEqual([]);
-  });
-
   it('uses the same ICU arguments as Czech in every message', () => {
     const mismatched = [...czech]
       .filter(([key, value]) => {
@@ -91,6 +87,10 @@ describe.each(LOCALES.filter((locale) => locale !== 'cs'))('%s vs cs', (locale) 
 
 describe.each(LOCALES)('%s', (locale) => {
   const entries = catalogLeaves.get(locale) ?? [];
+
+  it('has no empty message', () => {
+    expect(entries.filter(([, value]) => value.trim() === '').map(([key]) => key)).toEqual([]);
+  });
 
   it('uses typographic apostrophes only — a straight one is an ICU escape', () => {
     expect(entries.filter(([, value]) => value.includes("'")).map(([key]) => key)).toEqual([]);

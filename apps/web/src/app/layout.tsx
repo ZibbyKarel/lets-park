@@ -5,6 +5,7 @@ import { apiOriginOrEmpty } from '../api-url';
 import { loadMessages } from '../i18n/load-messages';
 import { resolveRequestLocale } from '../i18n/resolve-locale';
 import { Providers } from './providers';
+import type csMessages from '../../messages/cs.json';
 import './global.css';
 
 /**
@@ -24,9 +25,7 @@ import './global.css';
  */
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await resolveRequestLocale();
-  const messages = (await loadMessages(locale)) as {
-    readonly shell: { readonly brand: string; readonly metaDescription: string };
-  };
+  const messages = (await loadMessages(locale)) as typeof csMessages;
 
   return {
     title: messages.shell.brand,

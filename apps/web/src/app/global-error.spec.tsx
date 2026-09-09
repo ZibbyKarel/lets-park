@@ -33,6 +33,8 @@ function setBrowserLanguage(language: string) {
   Object.defineProperty(window.navigator, 'language', { value: language, configurable: true });
 }
 
+const originalLanguage = Object.getOwnPropertyDescriptor(window.navigator, 'language');
+
 const originalError = console.error;
 
 beforeAll(() => {
@@ -45,6 +47,9 @@ beforeAll(() => {
 
 afterAll(() => {
   console.error = originalError;
+  if (originalLanguage) {
+    Object.defineProperty(window.navigator, 'language', originalLanguage);
+  }
 });
 
 function boom() {

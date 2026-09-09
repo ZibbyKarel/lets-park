@@ -2,7 +2,7 @@ import { createDateFormatters } from './date-formatters';
 
 const cs = createDateFormatters('cs');
 
-describe('formatFullDate', () => {
+describe('cs.fullDate', () => {
   it('matches the design exactly: weekday, day with an ordinal dot, genitive month, year', () => {
     // doc/design/screens/07-lot.png
     expect(cs.fullDate('2026-09-28')).toBe('pondělí 28. září 2026');
@@ -20,7 +20,7 @@ describe('formatFullDate', () => {
   });
 });
 
-describe('formatDayAndMonth', () => {
+describe('cs.dayAndMonth', () => {
   it('formats day and genitive month without a year', () => {
     // doc/design/screens/05-admin-window.png — "otevřeno 25. srpna – 31. srpna"
     expect(cs.dayAndMonth('2026-08-25')).toBe('25. srpna');
@@ -36,7 +36,7 @@ describe('formatDayAndMonth', () => {
   });
 });
 
-describe('formatDayMonthAndYear', () => {
+describe('cs.dayMonthAndYear', () => {
   it('matches the design exactly: day, genitive month, year, and no weekday', () => {
     // doc/design/screens/05-admin-window.png — "dnes je 28. srpna 2026"
     expect(cs.dayMonthAndYear('2026-08-28')).toBe('28. srpna 2026');
@@ -60,7 +60,7 @@ describe('formatDayMonthAndYear', () => {
   });
 });
 
-describe('formatMonthAndYear', () => {
+describe('cs.monthAndYear', () => {
   it('formats the nominative month with the year — the month-status heading', () => {
     // doc/design/screens/05-admin-window.png — "srpen 2026", "září 2026", …
     expect(cs.monthAndYear('2026-08-01')).toBe('srpen 2026');
@@ -69,7 +69,7 @@ describe('formatMonthAndYear', () => {
   });
 });
 
-describe('formatMonthName', () => {
+describe('cs.monthName', () => {
   it('returns the standalone nominative month name for every month of the year', () => {
     const expected = [
       'leden',
@@ -91,13 +91,13 @@ describe('formatMonthName', () => {
   });
 });
 
-describe('formatYear', () => {
+describe('cs.year', () => {
   it('renders a plain four-digit year with no thousands separator', () => {
     expect(cs.year(2026)).toBe('2026');
   });
 });
 
-describe('formatMonthLocative', () => {
+describe('cs.monthLocative', () => {
   it('names all twelve months in the locative, the case that follows “v”', () => {
     const expected = [
       'lednu',
