@@ -7,7 +7,7 @@ first eligible person queued for it, **inside the same transaction**.
 
 This document is about the concurrency, because that is where the difficulty is.
 The business rules are in `doc/api-modules.md` and in `plan.md`
-§Byznys pravidla; the rules that decide *who may write which day* are in
+§Byznys pravidla; the rules that decide _who may write which day_ are in
 `ReservationPolicy` and summarised under [Who the window applies to](#who-the-window-applies-to).
 
 **Bulk booking is the other half of this module and has its own document:**
@@ -80,11 +80,11 @@ so two cancellations of the same cell cannot be in flight at once.
 
 It is there for the race against `waitlist.leave`:
 
-| | T1 — cancel + promote | T2 — W1 leaves the queue |
-| --- | --- | --- |
-| 1 | reads queue → `[W1, W2]` | |
-| 2 | | `DELETE` W1's entry, `COMMIT` |
-| 3 | `INSERT` reservation for **W1** | |
+|     | T1 — cancel + promote           | T2 — W1 leaves the queue      |
+| --- | ------------------------------- | ----------------------------- |
+| 1   | reads queue → `[W1, W2]`        |                               |
+| 2   |                                 | `DELETE` W1's entry, `COMMIT` |
+| 3   | `INSERT` reservation for **W1** |                               |
 
 W1 asked to be taken out of the queue and was given a parking spot anyway.
 With the lock, step 2 blocks until T1 commits and then deletes nothing, so the
@@ -100,7 +100,7 @@ makes it fail with the departed waiter holding the spot.
 reservation row — so that "you may only queue for an occupied spot" cannot be
 decided from a row another transaction is in the middle of deleting. `FOR SHARE`
 rather than `FOR UPDATE` because several people may legitimately join one queue
-at once and only need to be serialised against the *deleter*.
+at once and only need to be serialised against the _deleter_.
 
 ---
 
@@ -111,19 +111,19 @@ read-then-write check cannot be made safe against a concurrent writer, so every
 check in this table exists to produce a better error message than the index
 would — never to enforce the rule.
 
-| rule | enforced by | the loser is told |
-| --- | --- | --- |
-| one reservation per spot per day | unique index `Reservation (parkingSpotId, date)` | `SPOT_ALREADY_RESERVED` |
-| one reservation per user per day | unique index `Reservation (userId, date)` | `RESERVATION_LIMIT_REACHED` |
-| one queue entry per person per cell | unique index `WaitlistEntry (parkingSpotId, userId, date)` | `ALREADY_IN_WAITLIST` |
-| the queue is served in order, once | `SELECT … FOR UPDATE` on the queue | blocks, then sees the truth |
+| rule                                | enforced by                                                | the loser is told           |
+| ----------------------------------- | ---------------------------------------------------------- | --------------------------- |
+| one reservation per spot per day    | unique index `Reservation (parkingSpotId, date)`           | `SPOT_ALREADY_RESERVED`     |
+| one reservation per user per day    | unique index `Reservation (userId, date)`                  | `RESERVATION_LIMIT_REACHED` |
+| one queue entry per person per cell | unique index `WaitlistEntry (parkingSpotId, userId, date)` | `ALREADY_IN_WAITLIST`       |
+| the queue is served in order, once  | `SELECT … FOR UPDATE` on the queue                         | blocks, then sees the truth |
 
 The mapping from a violated index to a contract code lives in
 `mapUniqueConstraintViolation` (`apps/api/src/common/errors/prisma-error-mapping.ts`) and reads the
 constraint out of `meta.driverAdapterError.cause.constraint.index`, because
 `@prisma/adapter-pg` does not populate Prisma's documented `meta.target` at all.
 
-**One exception:** `waitlist.join` *also* throws `RESERVATION_LIMIT_REACHED`
+**One exception:** `waitlist.join` _also_ throws `RESERVATION_LIMIT_REACHED`
 up front when the caller already holds a reservation that day
 (`WaitlistService.joinOnce`), and that check has no index behind it — joining a
 queue never touches the `Reservation` table's unique index, so there is nothing
@@ -161,11 +161,11 @@ DELETE W's queue entries for the day
 ```
 
 A cycle. PostgreSQL detects it and kills one side. This was **found by the test
-suite, not by reasoning**, and no ordering of the locks *this design* takes
+suite, not by reasoning**, and no ordering of the locks _this design_ takes
 removes it: a transaction cannot know which other cells it will have to reach
 into until it has read its own queue, and the cross-cell `DELETE` is required by
 the rule ("their other waitlist entries for that day are deleted"). An ordering
-that *would* remove it exists — locking the whole day's queue rows in canonical
+that _would_ remove it exists — locking the whole day's queue rows in canonical
 order before writing — but that is the `pg_advisory_xact_lock` upgrade path
 documented in `doc/decision/0065-*`, not a variant of the current locking; see
 that record for the full analysis.
@@ -180,7 +180,7 @@ on an argument about somebody else's code is not a bound.
 **When the retry itself loses**, the caller gets `CONFLICT` — declared on
 `reservation.cancel`, a 409, and the honest thing to say: they lost a race and
 may try again. Reporting the underlying `RESERVATION_LIMIT_REACHED` would tell
-them *they* have a reservation-limit problem, when in fact somebody they have
+them _they_ have a reservation-limit problem, when in fact somebody they have
 never heard of does. What the service will not do is cancel without promoting: a
 half-applied outcome is precisely what one transaction exists to rule out.
 
@@ -190,7 +190,24 @@ That serialises all promotions for one day, removes the cycle entirely, and cost
 nothing at this scale — but it also serialises cancellations that have nothing to
 do with each other, so it is not the default.
 
-### What is deliberately *not* protected
+**The primitive is now in use elsewhere, for something narrower.** The per-user,
+per-calendar-month reservation cap
+(`apps/api/src/reservations/monthly-reservation-cap.ts`) takes
+`pg_advisory_xact_lock` on a `(userId, month)` key, because the cap is computed
+rather than stored and therefore has no unique index to act as the final
+arbiter — the lock plus a recount inside it _is_ the authoritative check. That is
+a different key shape and a different purpose from either upgrade path described
+above: it serialises one user against themselves for one month, not a day's
+promotions against each other, and it does not order this file's cell locks. Both
+upgrade paths above therefore remain unused.
+
+It is not free, either. A month-scoped resource cannot be ordered against
+date-scoped row locks, and the cap opened a new `confirmBulk` × `cancel` +
+`promote` cycle that is resolved the same way this one is — by retrying and
+reporting `CONFLICT`. See `doc/decision/0307-*` and the deadlock table in
+`doc/bulk-reservation.md`.
+
+### What is deliberately _not_ protected
 
 A cancellation racing a `create` for the same cell needs no extra machinery. The
 old reservation is still committed while the cancellation runs, so the
@@ -242,12 +259,12 @@ as the DI token. It was bound in `ReservationsModule` to
 Which events a committed transaction produces is the contract's decision, not
 this module's:
 
-| outcome | events |
-| --- | --- |
-| created | `reservation:created` |
-| cancelled, queue empty or all blocked | `reservation:cancelled` |
-| cancelled, somebody promoted | `reservation:reassigned` **and** `waitlist:updated` |
-| joined / left a queue | `waitlist:updated` |
+| outcome                               | events                                              |
+| ------------------------------------- | --------------------------------------------------- |
+| created                               | `reservation:created`                               |
+| cancelled, queue empty or all blocked | `reservation:cancelled`                             |
+| cancelled, somebody promoted          | `reservation:reassigned` **and** `waitlist:updated` |
+| joined / left a queue                 | `waitlist:updated`                                  |
 
 `reservation:reassigned` **instead of** `cancelled` + `created`, never both: a
 client that saw both would flash the cell empty before repainting it, and
@@ -262,16 +279,16 @@ the schema comments in `libs/contract/src/realtime/events.ts`.
 re-derived, since `isMonthOpen` / `monthLockState` in `@lets-park/shared-types`
 are the only implementation of the rule.
 
-| action | window applies? |
-| --- | --- |
-| create a reservation | yes, for a normal user |
-| join the waitlist | yes, for a normal user |
-| leave the waitlist | yes — leaving reshuffles everybody behind you |
-| **cancel your own reservation** | **never** |
-| anything, as an admin | never |
-| auto-promotion | never — it is a system action |
+| action                          | window applies?                               |
+| ------------------------------- | --------------------------------------------- |
+| create a reservation            | yes, for a normal user                        |
+| join the waitlist               | yes, for a normal user                        |
+| leave the waitlist              | yes — leaving reshuffles everybody behind you |
+| **cancel your own reservation** | **never**                                     |
+| anything, as an admin           | never                                         |
+| auto-promotion                  | never — it is a system action                 |
 
-Two rules apply to *everyone*, admin included, because they are facts about the
+Two rules apply to _everyone_, admin included, because they are facts about the
 day rather than about the window: a day in the past (`PAST_DATE`), and a weekend
 or Czech public holiday (`VALIDATION_FAILED` — see `doc/decision/0064-*`).
 
@@ -288,13 +305,13 @@ on promotion or cancellation, so the log is what is left of who asked for what.
 
 ## Testing
 
-| what | where | how it runs |
-| --- | --- | --- |
-| day eligibility (pure) | `reservation-policy.spec.ts` | `nx run api:test` |
-| create / cancel / promote / window | `reservations.db.spec.ts` | `nx run api:test-db` |
-| join / leave | `waitlist.db.spec.ts` | `nx run api:test-db` |
-| the races | `waitlist-concurrency.db.spec.ts` | `nx run api:test-db` |
-| bulk booking | `bulk-*.spec.ts` — see `doc/bulk-reservation.md` §Testing | both |
+| what                               | where                                                     | how it runs          |
+| ---------------------------------- | --------------------------------------------------------- | -------------------- |
+| day eligibility (pure)             | `reservation-policy.spec.ts`                              | `nx run api:test`    |
+| create / cancel / promote / window | `reservations.db.spec.ts`                                 | `nx run api:test-db` |
+| join / leave                       | `waitlist.db.spec.ts`                                     | `nx run api:test-db` |
+| the races                          | `waitlist-concurrency.db.spec.ts`                         | `nx run api:test-db` |
+| bulk booking                       | `bulk-*.spec.ts` — see `doc/bulk-reservation.md` §Testing | both                 |
 
 `api:test-db` needs `docker compose --profile dev up -d` and **does not skip**
 when `DATABASE_URL` is absent — it exits 1 from `globalSetup`.
@@ -315,7 +332,7 @@ one defect from trusting a double about the last of those.
 
 The two mechanisms that carry the correctness were verified by removing them:
 
-| removed | result |
-| --- | --- |
-| `FOR UPDATE` on the queue read | "the row lock on the queue" fails — the waiter who left is promoted |
-| the retry in `cancel` | "retries and promotes the next eligible person" fails with `Unique constraint failed on the constraint: Reservation_userId_date_key`, and the parallel case fails with a deadlock |
+| removed                        | result                                                                                                                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FOR UPDATE` on the queue read | "the row lock on the queue" fails — the waiter who left is promoted                                                                                                               |
+| the retry in `cancel`          | "retries and promotes the next eligible person" fails with `Unique constraint failed on the constraint: Reservation_userId_date_key`, and the parallel case fails with a deadlock |

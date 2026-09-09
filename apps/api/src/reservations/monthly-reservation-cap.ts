@@ -7,11 +7,24 @@
  * `assertWithinMonthlyReservationCap` as the very last check before the
  * insert, inside the same transaction that will do the insert.
  *
- * The `pg_advisory_xact_lock` this takes is a new, disjoint lock resource: it
- * is never taken alongside, or before, any of the `FOR UPDATE`/`FOR SHARE` row
- * locks the reservation/waitlist services already use, and nothing that holds
- * it goes on to request one of those locks in the same transaction — so it
- * cannot form a new cycle with the deadlock `doc/decision/0065` documents.
+ * The `pg_advisory_xact_lock` this takes is a new lock resource, but it is not
+ * a disjoint one, and an earlier version of this comment claiming it could not
+ * form a new cycle was wrong. Two holders go on to want row locks in the same
+ * transaction: `WaitlistPromotionService.promote` takes it once per skipped
+ * over-cap candidate while already holding a queue row `FOR UPDATE`, and
+ * `BulkReservationService.confirmOnce` takes it and then has
+ * `releaseOwnQueues` `DELETE` the caller's `WaitlistEntry` rows, which can
+ * block on a queue row a concurrent `cancel` + `promote` holds `FOR UPDATE`
+ * while that transaction blocks here. That is a real cycle, and PostgreSQL
+ * resolves it by killing one side with `40P01`.
+ *
+ * The mitigation is a retry, not an ordering — no ordering is available,
+ * because the key is month-scoped and the row locks are date-scoped:
+ * `BulkReservationService.committedConfirm` re-runs the transaction on any
+ * `isWriteConflict` and reports `CONFLICT` when the attempts run out, exactly
+ * as `ReservationsService.cancel` does for the cycle in
+ * `doc/decision/0065-*`. `doc/decision/0307-*` has the full analysis.
+ *
  * Unlike the per-day rule (a real unique index, so an optimistic pre-check is
  * safe and `P2002` is the final arbiter), there is no constraint that could
  * reject an over-cap insert — the lock + recount inside it *is* the
