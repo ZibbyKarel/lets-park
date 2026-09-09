@@ -325,6 +325,11 @@ describe('the waitlist against a real PostgreSQL', () => {
             select: { actorUserId: true },
           })
         ).resolves.toEqual({ actorUserId: admin.id });
+        await expect(
+          client.auditLog.findFirst({
+            where: { action: 'WAITLIST_JOINED_BY_ADMIN', entityId: result.entry.id },
+          })
+        ).resolves.toBeNull();
       });
     });
 

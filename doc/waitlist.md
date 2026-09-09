@@ -297,9 +297,14 @@ checked **once for the whole target month** (which is why a batch may not span
 two), and a weekend inside the selection is reported per day rather than
 refusing the request (`doc/decision/0090-*`).
 
-Joining a queue — by either path — writes a `WAITLIST_JOINED` audit row in the
-same transaction as the entry (`doc/decision/0091-*`). Entries are hard-deleted
-on promotion or cancellation, so the log is what is left of who asked for what.
+Joining a queue writes an audit row in the same transaction as the entry
+(`doc/decision/0091-*`). `WAITLIST_JOINED` still means "the queued person
+joined for themselves," admin-as-actor or not; an admin naming somebody else
+writes `WAITLIST_JOINED_BY_ADMIN` instead, whose payload carries
+`targetUserId` — mirroring the `RESERVATION_CREATED` /
+`RESERVATION_CREATED_BY_ADMIN` split (`doc/decision/0306-*`). Entries are
+hard-deleted on promotion or cancellation, so the log is what is left of who
+asked for what.
 
 ---
 
