@@ -241,6 +241,7 @@
   "errors": {
     "SPOT_ALREADY_RESERVED": "Toto parkovací místo je na daný den už rezervované.",
     "RESERVATION_LIMIT_REACHED": "Na tento den už máte rezervaci — na den je povolená jen jedna.",
+    "MONTHLY_RESERVATION_LIMIT_REACHED": "V tomto měsíci už máte 5 rezervovaných míst — víc jich v jednom měsíci mít nemůžete.",
     "PAST_DATE": "Na tento den už nelze rezervovat, protože je v minulosti.",
     "OUT_OF_HORIZON": "Rezervace na tento měsíc se ještě neotevřely.",
     "RESERVATIONS_LOCKED": "Rezervační okno pro tento měsíc je už uzamčené.",
