@@ -11,13 +11,46 @@ import { dateOnlySchema, idSchema } from '../schemas/primitives';
 import { authed, contractErrors } from './builder';
 
 /**
- * Derived from the entity, not written out again: the server owns `id`,
- * `userId` (the caller) and `createdAt`.
+ * Who the reservation is for, when the caller is not booking for themselves.
+ *
+ * A discriminated union for the same reason as `reservationHolderSchema`: a
+ * guest has no user id, and the type says so rather than carrying a `null` one.
+ *
+ * `licensePlate` overrides the holder's stored `User.licensePlate` **for this
+ * reservation only** — `null` means "use whatever they have on their profile",
+ * and this flow never writes the profile (`doc/decision/0304-*`). For a guest it
+ * is the only plate there is.
+ *
+ * **Only an admin may name a holder other than themselves.** That is not
+ * expressible in a schema — a schema cannot see who is calling — so it is
+ * `ReservationPolicy.assertMayNameHolder`, and the refusal is the `FORBIDDEN`
+ * the base builder already declares.
  */
-export const createReservationInputSchema = reservationSchema.pick({
-  parkingSpotId: true,
-  date: true,
-});
+export const reservationHolderInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('USER'),
+    userId: idSchema,
+    licensePlate: z.string().min(1).nullable(),
+  }),
+  z.object({
+    kind: z.literal('GUEST'),
+    name: z.string().min(1).max(120),
+    licensePlate: z.string().min(1).nullable(),
+  }),
+]);
+export type ReservationHolderInput = z.infer<typeof reservationHolderInputSchema>;
+
+/**
+ * Derived from the entity, not written out again: the server owns `id` and
+ * `createdAt`.
+ *
+ * **`holder` is optional, and its absence is the whole compatibility story**:
+ * omitted means "the caller, for themselves", which is what this procedure has
+ * always done and what every existing client still sends.
+ */
+export const createReservationInputSchema = reservationSchema
+  .pick({ parkingSpotId: true, date: true })
+  .extend({ holder: reservationHolderInputSchema.optional() });
 export type CreateReservationInput = z.infer<typeof createReservationInputSchema>;
 
 export const createReservationOutputSchema = reservationSchema;
@@ -36,6 +69,14 @@ export type CreateReservationOutput = z.infer<typeof createReservationOutputSche
  * `CONFLICT` is the narrower case of losing a race between the availability
  * check and the insert, which the unique constraint on (spot, day) turns into a
  * failure rather than a double booking.
+ *
+ * **An admin may name a holder** (`holder` on the input): another user, or a
+ * guest. The admin is the actor, so the admin's own window exemption applies —
+ * booking *on behalf of* a user does not inherit that user's restriction, and
+ * `OUT_OF_HORIZON` / `RESERVATIONS_LOCKED` stay unreachable for an admin.
+ * `PAST_DATE` still binds them: the exemption is about which future months are
+ * open, not about rewriting the past. A non-admin naming anyone but themselves
+ * gets `FORBIDDEN`, which the base builder already declares.
  */
 export const createReservationContract = authed
   .input(createReservationInputSchema)
