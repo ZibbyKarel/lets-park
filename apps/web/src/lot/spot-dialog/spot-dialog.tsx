@@ -284,6 +284,7 @@ export function SpotDialog({
               ) : (
                 <Button
                   loading={pending}
+                  disabled={holderPending}
                   onClick={showQueueTargetForm ? submitQueueTarget : () => onJoinWaitlist()}
                 >
                   {t('ctaQueue')}
