@@ -414,6 +414,36 @@ describe('reservations against a real PostgreSQL', () => {
         )
       ).resolves.toBe('NOT_FOUND');
     });
+
+    it('refuses an admin naming a deactivated user, with NOT_FOUND', async () => {
+      const [admin, target, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      await client.user.update({ where: { id: target.id }, data: { active: false } });
+      // The filter this test pins is `active: true` — assert the row is
+      // actually inactive, or a passing test below proves nothing.
+      expect((await client.user.findUniqueOrThrow({ where: { id: target.id } })).active).toBe(
+        false
+      );
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: spot.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: { kind: 'USER', userId: target.id, licensePlate: null },
+            },
+            actorFor(admin, 'ADMIN'),
+            TODAY
+          )
+        )
+      ).resolves.toBe('NOT_FOUND');
+
+      expect(await client.reservation.count({ where: { parkingSpotId: spot.id } })).toBe(0);
+    });
   });
 
   describe('cancelling', () => {
