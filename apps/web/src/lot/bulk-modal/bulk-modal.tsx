@@ -17,8 +17,8 @@
  * saw. See `doc/decision/0170-*`.
  *
  * Everything this file decides lives in `./bulk-view.ts`; everything it fetches
- * goes through `@lets-park/query` and `@lets-park/api-client`. Nothing here
- * names a wrapped package (`doc/wrappers.md`).
+ * goes through `@tanstack/react-query` and `@lets-park/api-client`. Nothing
+ * here names a wrapped package (`doc/wrappers.md`).
  */
 
 import { useCallback, useState } from 'react';
@@ -29,7 +29,7 @@ import {
   useTranslations,
   type DateOnly,
 } from '@lets-park/i18n';
-import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Box, Button, Modal, cx } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
 import { useApi } from '../../shell/api-provider/api-provider';

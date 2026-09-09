@@ -146,7 +146,7 @@ export type ScreenData<T> =
  * Written out here rather than imported as `UseQueryResult` so that the seam
  * does not name the transport at all: a screen fed from `useQueries`, from a
  * Storybook story or from a parent's own state can be adapted with the same
- * function, and `@lets-park/query` stays the thin wrapper it is meant to be.
+ * function.
  */
 export interface ScreenQueryLike<T> {
   readonly isPending: boolean;

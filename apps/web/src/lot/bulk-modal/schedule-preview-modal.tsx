@@ -13,8 +13,8 @@ import { CalendarTable } from './calendar-table';
  * Every identifier this reads was in `BulkReservationModalContent`'s
  * closure, arriving here as a prop in the order the parent already computed
  * them. `confirmPending` and `onConfirm` stand in for the `confirmBulk`
- * mutation object itself, which app code may not import the type of
- * directly (`@tanstack/react-query` is wrapped by `@lets-park/query`).
+ * mutation object itself, deliberately — this component is presentation-only
+ * and stays testable without a `QueryClient` in scope.
  */
 export interface SchedulePreviewModalProps {
   readonly open: boolean;
