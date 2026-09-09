@@ -232,7 +232,13 @@ const DAY_OVERVIEW = {
       spot: SPOT,
       reservation: {
         id: 'r1',
-        user: { id: OTHER_USER.id, name: OTHER_USER.name, licensePlate: '4AB 1234' },
+        createdAt: TIMESTAMP,
+        holder: {
+          kind: 'USER',
+          userId: OTHER_USER.id,
+          name: OTHER_USER.name,
+          licensePlate: '4AB 1234',
+        },
       },
       waitlistCount: 0,
     },

@@ -166,7 +166,7 @@ function takenSpot(overrides: Partial<DaySpotOverview> = {}): DaySpotOverview {
     reservation: {
       id: 'res-other',
       createdAt: T0,
-      user: { id: OTHER_USER, name: 'Petr Novák', licensePlate: '8SC 9012' },
+      holder: { kind: 'USER', userId: OTHER_USER, name: 'Petr Novák', licensePlate: '8SC 9012' },
     },
     waitlistCount: 0,
     viewerWaitlistEntryId: null,
@@ -188,7 +188,7 @@ function mineSpot(overrides: Partial<DaySpotOverview> = {}): DaySpotOverview {
     reservation: {
       id: 'res-mine',
       createdAt: T0,
-      user: { id: VIEWER, name: 'Karel Zíbar', licensePlate: '4AB 1234' },
+      holder: { kind: 'USER', userId: VIEWER, name: 'Karel Zíbar', licensePlate: '4AB 1234' },
     },
     waitlistCount: 0,
     viewerWaitlistEntryId: null,

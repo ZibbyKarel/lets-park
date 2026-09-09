@@ -43,7 +43,7 @@ function publicReservation(id: string, userId: string) {
   return {
     id,
     createdAt: '2026-09-01T08:00:00.000Z',
-    user: { id: userId, name: 'Petr Novák', licensePlate: '8SC 9012' },
+    holder: { kind: 'USER' as const, userId, name: 'Petr Novák', licensePlate: '8SC 9012' },
   };
 }
 
@@ -155,7 +155,7 @@ describe('applyReservationReassigned', () => {
     // (`doc/decision/0022-*`), so the cell must never be observed empty.
     const next = applyReservationReassigned(held, event);
     expect(next.spots[0]?.reservation?.id).toBe('res-2');
-    expect(next.spots[0]?.reservation?.user.id).toBe(VIEWER);
+    expect(next.spots[0]?.reservation?.holder).toMatchObject({ kind: 'USER', userId: VIEWER });
   });
 
   it('ignores an event for a different day, by reference', () => {

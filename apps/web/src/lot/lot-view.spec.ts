@@ -1,6 +1,8 @@
 import type { DaySpotOverview, MonthWindowOverview } from '@lets-park/contract';
 import { CAR_COLOR_PALETTE } from '@lets-park/design-system/tokens';
 import {
+  CAR_COLOR_CLASSES,
+  GUEST_CAR_COLOR_CLASS,
   carColorClass,
   carColorIndex,
   toBannerView,
@@ -34,11 +36,21 @@ function spotRow(overrides: Partial<DaySpotOverview> = {}): DaySpotOverview {
   };
 }
 
+/** A user-held reservation, the common case every existing case here wants. */
 function reservation(userId: string, name = 'Petr Novák', plate: string | null = '8SC 9012') {
   return {
     id: `res-${userId}`,
     createdAt: '2026-08-02T09:00:00.000Z',
-    user: { id: userId, name, licensePlate: plate },
+    holder: { kind: 'USER' as const, userId, name, licensePlate: plate },
+  };
+}
+
+/** A guest-held reservation. No `userId` exists on this member of the union. */
+function guestReservation(name = 'Jan Host', plate: string | null = null) {
+  return {
+    id: 'res-guest',
+    createdAt: '2026-08-02T09:00:00.000Z',
+    holder: { kind: 'GUEST' as const, name, licensePlate: plate },
   };
 }
 
@@ -362,5 +374,44 @@ describe('toRealtimeNoticeView', () => {
     // start — there is no later state that would correct it.
     expect(toRealtimeNoticeView('rejected', false)).toBe('rejected');
     expect(toRealtimeNoticeView('rejected', true)).toBe('rejected');
+  });
+});
+
+describe('toSpotView — who holds the bay', () => {
+  it('is mine when the user holder is the viewer', () => {
+    const view = toSpotView(
+      spotRow({ reservation: reservation(VIEWER, 'Karel Zíbar', '4AB 1234') }),
+      context({ viewerUserId: VIEWER })
+    );
+
+    expect(view.isMine).toBe(true);
+    expect(view.holderIsGuest).toBe(false);
+    expect(view.holderName).toBe('Karel Zíbar');
+    expect(view.holderPlate).toBe('4AB 1234');
+  });
+
+  it('is never mine when a guest holds it, whoever is looking', () => {
+    const view = toSpotView(
+      spotRow({ reservation: guestReservation() }),
+      context({ viewerUserId: VIEWER })
+    );
+
+    expect(view.isMine).toBe(false);
+    expect(view.holderIsGuest).toBe(true);
+    expect(view.holderName).toBe('Jan Host');
+    expect(view.holderPlate).toBeNull();
+  });
+
+  it('gives a guest the neutral car colour, not a per-user one', () => {
+    // `carColorClass` is a hash of a user id and is stable for the life of that
+    // user. A guest has no id to hash, and falling through to index 0 would
+    // silently claim the first user's colour.
+    const view = toSpotView(
+      spotRow({ reservation: guestReservation() }),
+      context({ viewerUserId: VIEWER })
+    );
+
+    expect(view.carColorClass).toBe(GUEST_CAR_COLOR_CLASS);
+    expect(CAR_COLOR_CLASSES).not.toContain(view.carColorClass);
   });
 });

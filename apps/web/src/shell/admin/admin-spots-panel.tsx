@@ -80,7 +80,7 @@ export function AdminSpotsPanel() {
   const todayBySpotId = useMemo(() => {
     const map = new Map<string, SpotToday>();
     for (const row of dayQuery.data?.spots ?? []) {
-      map.set(row.spot.id, { holderName: row.reservation?.user.name ?? null });
+      map.set(row.spot.id, { holderName: row.reservation?.holder.name ?? null });
     }
     return map;
   }, [dayQuery.data]);

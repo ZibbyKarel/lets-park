@@ -35,7 +35,7 @@ const TAKEN = aSpotRow({
   reservation: {
     id: 'r1',
     createdAt: TIMESTAMP,
-    user: { id: 'u1', name: 'Karel Zíbar', licensePlate: '4AB 1234' },
+    holder: { kind: 'USER', userId: 'u1', name: 'Karel Zíbar', licensePlate: '4AB 1234' },
   },
 });
 const QUEUED = aSpotRow({
@@ -44,7 +44,7 @@ const QUEUED = aSpotRow({
   reservation: {
     id: 'r2',
     createdAt: TIMESTAMP,
-    user: { id: 'u2', name: 'Petr Novák', licensePlate: '8SC 9012' },
+    holder: { kind: 'USER', userId: 'u2', name: 'Petr Novák', licensePlate: '8SC 9012' },
   },
   waitlistCount: 2,
 });
