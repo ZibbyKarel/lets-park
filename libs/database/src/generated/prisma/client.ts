@@ -54,12 +54,18 @@ export type User = Prisma.UserModel
 export type ParkingSpot = Prisma.ParkingSpotModel
 /**
  * Model Reservation
- * One spot booked by one user for one day.
+ * One spot booked for one day, by exactly one holder: a user, or a guest.
  * 
  * The two unique constraints are the concurrency guarantee of the whole
  * reservation flow: `(parkingSpotId, date)` is what makes double-booking
  * impossible under concurrent requests, and Task 10 maps its `P2002` violation
  * onto the contract error `SPOT_ALREADY_RESERVED`.
+ * 
+ * `userId` is nullable so that an admin can book for a guest, who has no `User`
+ * row. `Reservation_holder_check` is what keeps that from admitting a row with
+ * no holder at all — see `doc/decision/0305-a-reservation-holder-is-a-user-or-a-guest-never-neither`. Because `NULL`s do not collide
+ * in a Postgres unique index, `(userId, date)` still means "one reservation per
+ * user per day" and deliberately does not limit guests.
  */
 export type Reservation = Prisma.ReservationModel
 /**

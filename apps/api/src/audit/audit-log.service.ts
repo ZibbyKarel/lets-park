@@ -79,6 +79,7 @@ type AuditEntityTypeFor = {
   USER_UPDATED: 'User';
   SPOT_UPDATED: 'ParkingSpot';
   RESERVATION_WINDOW_UPDATED: 'ReservationWindowSettings';
+  RESERVATION_CREATED_BY_ADMIN: 'Reservation';
 } & Record<AuditLogAction, AuditEntityType>;
 
 /**

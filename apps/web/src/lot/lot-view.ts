@@ -73,7 +73,14 @@ export function carColorIndex(userId: string): number {
  * `fill="currentColor"`, so one utility colours the shape and anything else
  * the glyph wants to tint with it.
  */
-const CAR_COLOR_CLASSES = ['text-car-1', 'text-car-2', 'text-car-3'] as const;
+export const CAR_COLOR_CLASSES = ['text-car-1', 'text-car-2', 'text-car-3'] as const;
+
+/**
+ * A guest's car glyph. Deliberately outside {@link CAR_COLOR_CLASSES}: those
+ * are a stable hash of a user id, and a guest has no id — falling through to
+ * index 0 would hand every guest the first user's colour.
+ */
+export const GUEST_CAR_COLOR_CLASS = 'text-fg-3';
 
 /** The car glyph's fill for one holder. Stable for the life of that user. */
 export function carColorClass(userId: string): string {
@@ -139,6 +146,11 @@ export interface SpotView {
   readonly viewerWaitlistPosition: number | null;
   /** The `⋯` button: `admin && taken`, exactly as the design has it. */
   readonly showAdminMenu: boolean;
+  /**
+   * The holder is a guest an admin booked the bay for. There is no user behind
+   * the name, so it is never `isMine` and never carries a per-user car colour.
+   */
+  readonly holderIsGuest: boolean;
 }
 
 /**
@@ -157,16 +169,20 @@ export function toSpotView(row: DaySpotOverview, context: LotViewContext): SpotV
 
   const reservation = row.reservation;
   const isTaken = reservation !== null && lock === null;
+  const holder = reservation?.holder ?? null;
   // `context.viewerUserId !== null` is **redundant, and knowingly so** — the
   // same shape as `reservationCreatedTouchesViewer` in `day-overview-cache.ts`,
-  // for the same reason: `reservation.user.id` is `idSchema` (a UUID string),
-  // so `id === null` is unrepresentable and the comparison alone already
+  // for the same reason: `holder.userId` is `idSchema` (a UUID string), so
+  // `userId === null` is unrepresentable and the comparison alone already
   // answers `false` for an unknown viewer. Kept because it states the intent
   // ("an unknown viewer is never the holder") at the one place a reader looks
   // for it. It is not load-bearing; do not add a test for it.
+  //
+  // A guest is never `isMine`: the `GUEST` member of the union has no `userId`
+  // to compare, which is the whole point of it being a discriminated union.
   const isMine =
-    reservation !== null && context.viewerUserId !== null
-      ? reservation.user.id === context.viewerUserId
+    holder !== null && holder.kind === 'USER' && context.viewerUserId !== null
+      ? holder.userId === context.viewerUserId
       : false;
 
   const appearance: SpotAppearance =
@@ -188,15 +204,21 @@ export function toSpotView(row: DaySpotOverview, context: LotViewContext): SpotV
     label: row.spot.label,
     appearance,
     action,
-    holderName: isTaken && reservation !== null ? reservation.user.name : null,
-    holderPlate: isTaken && reservation !== null ? reservation.user.licensePlate : null,
-    carColorClass: isTaken && reservation !== null ? carColorClass(reservation.user.id) : null,
+    holderName: isTaken && holder !== null ? holder.name : null,
+    holderPlate: isTaken && holder !== null ? holder.licensePlate : null,
+    carColorClass:
+      isTaken && holder !== null
+        ? holder.kind === 'USER'
+          ? carColorClass(holder.userId)
+          : GUEST_CAR_COLOR_CLASS
+        : null,
     editorName: lock?.holderName ?? null,
     waitlistCount: row.waitlistCount,
     isMine,
     viewerWaitlistEntryId: row.viewerWaitlistEntryId,
     viewerWaitlistPosition: row.viewerWaitlistPosition,
     showAdminMenu: context.isAdmin && isTaken,
+    holderIsGuest: holder !== null && holder.kind === 'GUEST',
   };
 }
 

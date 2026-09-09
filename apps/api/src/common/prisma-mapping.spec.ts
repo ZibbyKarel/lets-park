@@ -15,6 +15,7 @@ import {
   toContractUser,
   toDateColumn,
   toDateOnly,
+  toPublicReservation,
   toTimestamp,
   toUserSummary,
 } from './prisma-mapping';
@@ -120,5 +121,57 @@ describe('entity mapping', () => {
       name: 'Alice',
       licensePlate: '1AB 2345',
     });
+  });
+});
+
+describe('toPublicReservation', () => {
+  const row = {
+    id: '11111111-1111-4111-8111-111111111111',
+    parkingSpotId: '22222222-2222-4222-8222-222222222222',
+    userId: '33333333-3333-4333-8333-333333333333',
+    guestName: null,
+    licensePlate: null,
+    date: new Date('2099-01-05T00:00:00.000Z'),
+    createdAt: new Date('2026-09-01T08:00:00.000Z'),
+  };
+  const holder = { id: row.userId as string, name: 'Jana Nováková', licensePlate: '1AB 2345' };
+
+  it('projects a user holder, falling back to their stored plate', () => {
+    expect(toPublicReservation(row, holder)).toEqual({
+      id: row.id,
+      createdAt: '2026-09-01T08:00:00.000Z',
+      holder: { kind: 'USER', userId: holder.id, name: 'Jana Nováková', licensePlate: '1AB 2345' },
+    });
+  });
+
+  it('prefers the per-reservation plate over the holder’s stored one', () => {
+    const overridden = { ...row, licensePlate: '9XY 8765' };
+    expect(toPublicReservation(overridden, holder).holder.licensePlate).toBe('9XY 8765');
+  });
+
+  it('projects a guest holder with no userId', () => {
+    const guest = { ...row, userId: null, guestName: 'Jan Host', licensePlate: '9XY 8765' };
+    const projected = toPublicReservation(guest, null);
+    expect(projected.holder).toEqual({
+      kind: 'GUEST',
+      name: 'Jan Host',
+      licensePlate: '9XY 8765',
+    });
+  });
+
+  it('throws on a row with no holder at all, rather than inventing one', () => {
+    // Unreachable through the database — `Reservation_holder_check` refuses the
+    // row — so this pins the mapper's own behaviour if it ever is reached.
+    const orphan = { ...row, userId: null, guestName: null };
+    expect(() => toPublicReservation(orphan, null)).toThrow(/neither a user nor a guest/i);
+  });
+
+  it('throws when the holder does not belong to the row, rather than naming the wrong person', () => {
+    // No call site does this today (Task 24's sweep checked all four); this
+    // pins the hardening so a future one fails loudly instead of silently.
+    const mismatched = { id: 'someone-else', name: 'Petr Novák', licensePlate: null };
+    expect(() => toPublicReservation(row, mismatched)).toThrow(
+      /has userId .+, but was mapped with holder/i
+    );
   });
 });

@@ -20,7 +20,16 @@ import {
 } from './events';
 
 const cell = { date: DATE_A, parkingSpotId: UUID_B };
-const publicReservation = { id: UUID_C, createdAt: TIMESTAMP, user: userSummaryFixture };
+const publicReservation = {
+  id: UUID_C,
+  createdAt: TIMESTAMP,
+  holder: {
+    kind: 'USER' as const,
+    userId: userSummaryFixture.id,
+    name: userSummaryFixture.name,
+    licensePlate: userSummaryFixture.licensePlate,
+  },
+};
 
 describe('cellRefSchema', () => {
   it('accepts a day and a spot', () => {

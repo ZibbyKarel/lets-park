@@ -136,6 +136,49 @@ describe('what PostgreSQL actually does', () => {
     });
   });
 
+  describe('a reservation has exactly one holder', () => {
+    it('rejects a row with neither a userId nor a guest name', async () => {
+      const error = await rejectedBy(prisma, async (tx) => {
+        const spot = await seedSpot(tx);
+        return tx.$executeRaw`
+          INSERT INTO "Reservation" ("id", "parkingSpotId", "userId", "guestName", "date")
+          VALUES (gen_random_uuid(), ${spot.id}::uuid, NULL, NULL, ${DATE})
+        `;
+      });
+
+      expect(String(error)).toContain('Reservation_holder_check');
+    });
+
+    it('rejects a row that is both a user and a guest', async () => {
+      const error = await rejectedBy(prisma, async (tx) => {
+        const [spot, user] = [await seedSpot(tx), await seedUser(tx)];
+        return tx.$executeRaw`
+          INSERT INTO "Reservation" ("id", "parkingSpotId", "userId", "guestName", "date")
+          VALUES (gen_random_uuid(), ${spot.id}::uuid, ${user.id}::uuid, 'Jan Host', ${DATE})
+        `;
+      });
+
+      expect(String(error)).toContain('Reservation_holder_check');
+    });
+
+    it('accepts a guest row, and lets two guests share a day', async () => {
+      // Both inserts are inside one rolled-back transaction, so nothing is left
+      // behind. `(userId, date)` cannot stop these: NULLs do not collide.
+      const rolledBack = prisma.$transaction(async (tx) => {
+        const [one, two] = [await seedSpot(tx), await seedSpot(tx)];
+        await tx.reservation.create({
+          data: { parkingSpotId: one.id, guestName: 'Jan Host', date: DATE },
+        });
+        await tx.reservation.create({
+          data: { parkingSpotId: two.id, guestName: 'Eva Hostová', date: DATE },
+        });
+        throw new Error('rollback');
+      });
+
+      await expect(rolledBack).rejects.toThrow('rollback');
+    });
+  });
+
   describe('every unique constraint maps to the contract error it means', () => {
     it('Reservation(parkingSpotId, date) is SPOT_ALREADY_RESERVED', async () => {
       const error = await rejectedBy(prisma, async (tx) => {

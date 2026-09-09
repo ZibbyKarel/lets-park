@@ -125,6 +125,40 @@ export async function reserveSpot(page: Page, label: string): Promise<void> {
   await expect(dialog).toBeHidden();
 }
 
+/**
+ * Reserves `label` for somebody else, as an admin: picks the holder in the
+ * dialog's selector, then submits.
+ *
+ * `holder` is a user's display name, or `'Hosta'` for a guest — the visible
+ * option text, so this reads like the thing a person does.
+ *
+ * A holder with a plate on file now has it appended to the option's label
+ * (`holder-fields.tsx`, "Jana Nováková — 1AB 2345"), so `selectOption({
+ * label })`'s exact match no longer finds it. This finds the `<option>` whose
+ * label is `holder` on its own, or `holder` followed by " — <plate>" — a
+ * plain substring match on `holder` alone is not enough, since "Dev User" is
+ * also a prefix of the seeded "Dev User Two" — and selects it by value.
+ */
+export async function reserveSpotFor(
+  page: Page,
+  label: string,
+  holder: string,
+  guestName?: string
+): Promise<void> {
+  const dialog = await openSpot(page, label);
+  const select = dialog.getByLabel('Rezervovat pro');
+  const escaped = holder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const value = await select
+    .locator('option', { hasText: new RegExp(`^${escaped}( — .*)?$`) })
+    .getAttribute('value');
+  await select.selectOption(value ?? holder);
+  if (guestName !== undefined) {
+    await dialog.getByLabel('Jméno hosta').fill(guestName);
+  }
+  await dialog.getByRole('button', { name: 'Rezervovat', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
 /** Cancels the reservation on `label` — as its holder, or as an admin. */
 export async function cancelReservation(page: Page, label: string): Promise<void> {
   const dialog = await openSpot(page, label);

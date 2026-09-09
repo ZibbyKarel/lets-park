@@ -30,6 +30,7 @@ function spot(overrides: Partial<SpotView> = {}): SpotView {
     viewerWaitlistEntryId: null,
     viewerWaitlistPosition: null,
     showAdminMenu: false,
+    holderIsGuest: false,
     ...overrides,
   };
 }
@@ -51,14 +52,18 @@ const mine = spot({
   carColorClass: 'text-car-3',
 });
 
-function renderDialog(
-  overrides: {
-    spot?: SpotView | null;
-    canReserve?: boolean;
-    isAdmin?: boolean;
-    error?: unknown;
-  } = {}
-) {
+interface DialogOverrides {
+  spot?: SpotView | null;
+  canReserve?: boolean;
+  isAdmin?: boolean;
+  error?: unknown;
+  errorMessage?: string;
+  viewerUserId?: string | null;
+  holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
+  holderPending?: boolean;
+}
+
+function renderDialog(overrides: DialogOverrides = {}) {
   const callbacks = {
     onClose: jest.fn(),
     onReserve: jest.fn(),
@@ -67,22 +72,40 @@ function renderDialog(
     onCancelReservation: jest.fn(),
   };
 
-  render(
-    <IntlProvider locale="cs" messages={cs}>
-      <SpotDialog
-        spot={overrides.spot === undefined ? spot() : overrides.spot}
-        date="2026-09-28"
-        canReserve={overrides.canReserve ?? true}
-        isAdmin={overrides.isAdmin ?? false}
-        monthName="září"
-        error={overrides.error ?? null}
-        pending={false}
-        {...callbacks}
-      />
-    </IntlProvider>
-  );
+  function tree(props: DialogOverrides) {
+    return (
+      <IntlProvider locale="cs" messages={cs}>
+        <SpotDialog
+          spot={props.spot === undefined ? spot() : props.spot}
+          date="2026-09-28"
+          canReserve={props.canReserve ?? true}
+          isAdmin={props.isAdmin ?? false}
+          monthName="září"
+          error={props.error ?? null}
+          {...(props.errorMessage === undefined ? {} : { errorMessage: props.errorMessage })}
+          pending={false}
+          viewerUserId={props.viewerUserId ?? null}
+          holderOptions={props.holderOptions ?? []}
+          holderPending={props.holderPending ?? false}
+          {...callbacks}
+        />
+      </IntlProvider>
+    );
+  }
 
-  return { ...callbacks, user: userEvent.setup() };
+  const { rerender } = render(tree(overrides));
+
+  return {
+    ...callbacks,
+    user: userEvent.setup(),
+    /**
+     * Re-renders with `next` merged over the props this call was made with —
+     * the same component instance, which is the point: it is how a prop that
+     * arrives *after* mount (a profile query resolving, a second bay opening)
+     * gets exercised at all.
+     */
+    rerender: (next: DialogOverrides) => rerender(tree({ ...overrides, ...next })),
+  };
 }
 
 describe('SpotDialog', () => {
@@ -288,6 +311,23 @@ describe('SpotDialog — failures', () => {
     expect(screen.getByText('Rezervační okno pro tento měsíc je už uzamčené.')).toBeInTheDocument();
   });
 
+  it('renders `errorMessage` instead of the code-mapped copy when the caller supplies one', async () => {
+    const error = await failureWithCode('RESERVATION_LIMIT_REACHED');
+    renderDialog({
+      error,
+      errorMessage: 'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.',
+    });
+
+    expect(
+      screen.getByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).not.toBeInTheDocument();
+  });
+
   it('falls back to one generic sentence for a failure that is not in the contract', () => {
     renderDialog({ error: new TypeError('Failed to fetch') });
 
@@ -298,5 +338,168 @@ describe('SpotDialog — failures', () => {
   it('shows no failure block when there is no failure', () => {
     renderDialog();
     expect(screen.queryByText('Něco se nepovedlo')).not.toBeInTheDocument();
+  });
+});
+
+const OPTIONS = [
+  { userId: 'admin-1', name: 'Dev Admin', licensePlate: '1AA 1111' },
+  { userId: 'user-2', name: 'Jana Nováková', licensePlate: null },
+];
+
+describe('SpotDialog — an admin reserving a free bay', () => {
+  function renderAdmin(overrides: Parameters<typeof renderDialog>[0] = {}) {
+    return renderDialog({
+      isAdmin: true,
+      viewerUserId: 'admin-1',
+      holderOptions: OPTIONS,
+      ...overrides,
+    });
+  }
+
+  it('offers the holder selector, with the admin themselves preselected', async () => {
+    renderAdmin();
+
+    const select = screen.getByLabelText('Rezervovat pro');
+    expect(select).toHaveValue('admin-1');
+    expect(screen.getByRole('option', { name: 'Hosta' })).toBeInTheDocument();
+    // With a plate on file, the option label carries it too — the whole point
+    // of a selector that was meant to show "jméno i spz". Without one (Jana
+    // Nováková, below), the label is the bare name.
+    expect(screen.getByRole('option', { name: 'Dev Admin — 1AA 1111' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Jana Nováková' })).toBeInTheDocument();
+  });
+
+  it('reserves for the admin themselves on a single click, with no plate override', async () => {
+    // The browser suite's `reserveSpot` does exactly this — opens the dialog
+    // and clicks once (`apps/web-e2e/src/support/lot-page.ts:122-125`) — so a
+    // form that needed a selection first would take that journey red.
+    const { onReserve, user } = renderAdmin();
+
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).toHaveBeenCalledTimes(1);
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'USER',
+      userId: 'admin-1',
+      licensePlate: null,
+    });
+  });
+
+  it('reserves for another user, with the plate the admin typed', async () => {
+    const { onReserve, user } = renderAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'user-2');
+    await user.type(screen.getByLabelText('SPZ'), '9XY 8765');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'USER',
+      userId: 'user-2',
+      licensePlate: '9XY 8765',
+    });
+  });
+
+  it('hints the chosen holder’s stored plate, so blank is not a blank plate', async () => {
+    const { user } = renderAdmin();
+    const plate = screen.getByLabelText('SPZ');
+
+    expect(plate).toHaveAttribute('placeholder', '1AA 1111');
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'user-2');
+    expect(plate).toHaveAttribute('placeholder', 'SPZ neuvedena');
+  });
+
+  it('asks for a guest’s name, and refuses to submit without one', async () => {
+    const { onReserve, user } = renderAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'GUEST');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).not.toHaveBeenCalled();
+    expect(await screen.findByText('Zadejte jméno hosta.')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Jméno hosta'), 'Jan Host');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'GUEST',
+      name: 'Jan Host',
+      licensePlate: null,
+    });
+  });
+
+  /**
+   * These two are the only tests that exercise the `form.reset` effect
+   * (`spot-dialog.tsx:133-139`). Measured: with the `form.reset(...)` call
+   * deleted, the rest of this file's 671 tests still pass and only these two
+   * fail — which is what a test of a defensive branch is for.
+   */
+  it('seeds the holder once the viewer id arrives after the dialog was opened', async () => {
+    const { onReserve, user, rerender } = renderAdmin({ viewerUserId: null });
+
+    // No `viewerUserId` yet, so the plain self-book path is on screen.
+    expect(screen.queryByLabelText('Rezervovat pro')).not.toBeInTheDocument();
+
+    rerender({ viewerUserId: 'admin-1' });
+
+    expect(screen.getByLabelText('Rezervovat pro')).toHaveValue('admin-1');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'USER',
+      userId: 'admin-1',
+      licensePlate: null,
+    });
+  });
+
+  it('does not carry a guest name from one bay into the next', async () => {
+    const { user, rerender } = renderAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'GUEST');
+    await user.type(screen.getByLabelText('Jméno hosta'), 'Jan Host');
+
+    rerender({ spot: spot({ spotId: 'spot-b', label: 'E2.93' }) });
+
+    expect(screen.getByLabelText('Rezervovat pro')).toHaveValue('admin-1');
+    expect(screen.queryByLabelText('Jméno hosta')).not.toBeInTheDocument();
+  });
+
+  it('disables Rezervovat while the holder list is still loading, instead of silently booking for the admin', () => {
+    // While `admin.user.list` is in flight, `holderOptions` is empty and
+    // `showHolderForm` is false — the same shape as a normal user's dialog.
+    // Without `holderPending`, one click here would call `onReserve()` with no
+    // argument and book the bay for the admin, with no selector ever shown.
+    renderAdmin({ holderOptions: [], holderPending: true });
+
+    expect(screen.getByRole('button', { name: 'Rezervovat' })).toBeDisabled();
+  });
+});
+
+describe('SpotDialog — a normal user reserving a free bay', () => {
+  it('sees no holder selector and reserves for themselves', async () => {
+    const { onReserve, user } = renderDialog({ viewerUserId: 'user-2', holderOptions: [] });
+
+    expect(screen.queryByLabelText('Rezervovat pro')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    // No argument at all: an omitted holder is "the caller", which is what the
+    // contract's optional `holder` was shaped for.
+    expect(onReserve).toHaveBeenCalledWith();
+  });
+});
+
+describe('SpotDialog — a bay a guest holds', () => {
+  it('says so beside the name', () => {
+    renderDialog({
+      spot: spot({
+        appearance: 'taken',
+        action: 'queue',
+        holderName: 'Jan Novotný',
+        holderPlate: null,
+        holderIsGuest: true,
+        carColorClass: 'text-fg-3',
+      }),
+    });
+
+    expect(screen.getByText('Jan Novotný')).toBeInTheDocument();
+    expect(screen.getByText('Host')).toBeInTheDocument();
   });
 });

@@ -154,4 +154,48 @@ describe('ReservationPolicy', () => {
       );
     });
   });
+
+  describe('assertMayNameHolder', () => {
+    it('allows an omitted holder for anybody — booking for yourself', () => {
+      expect(() => policy.assertMayNameHolder(undefined, USER)).not.toThrow();
+      expect(() => policy.assertMayNameHolder(undefined, ADMIN)).not.toThrow();
+    });
+
+    it('allows a user to name themselves, plate override included', () => {
+      expect(() =>
+        policy.assertMayNameHolder(
+          { kind: 'USER', userId: USER.id, licensePlate: '9XY 8765' },
+          USER
+        )
+      ).not.toThrow();
+    });
+
+    it('refuses a non-admin naming another user', () => {
+      expect(
+        codeOf(() =>
+          policy.assertMayNameHolder({ kind: 'USER', userId: ADMIN.id, licensePlate: null }, USER)
+        )
+      ).toBe('FORBIDDEN');
+    });
+
+    it('refuses a non-admin naming a guest', () => {
+      expect(
+        codeOf(() =>
+          policy.assertMayNameHolder({ kind: 'GUEST', name: 'Jan Host', licensePlate: null }, USER)
+        )
+      ).toBe('FORBIDDEN');
+    });
+
+    it('allows an admin to name another user, a guest, and themselves', () => {
+      expect(() =>
+        policy.assertMayNameHolder({ kind: 'USER', userId: USER.id, licensePlate: null }, ADMIN)
+      ).not.toThrow();
+      expect(() =>
+        policy.assertMayNameHolder({ kind: 'GUEST', name: 'Jan Host', licensePlate: null }, ADMIN)
+      ).not.toThrow();
+      expect(() =>
+        policy.assertMayNameHolder({ kind: 'USER', userId: ADMIN.id, licensePlate: null }, ADMIN)
+      ).not.toThrow();
+    });
+  });
 });

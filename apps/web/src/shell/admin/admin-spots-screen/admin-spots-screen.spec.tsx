@@ -28,9 +28,9 @@ const SHARED = aSpot({ id: 's3', label: 'E2.96', group: 'SHARED' });
 const RETIRED = aSpot({ id: 's4', label: 'E2.99', active: false });
 
 const TODAY: ReadonlyMap<string, SpotToday> = new Map([
-  [TAKEN.id, { holderName: 'Karel Zíbar' }],
-  [FREE.id, { holderName: null }],
-  [SHARED.id, { holderName: 'Lucie Marková' }],
+  [TAKEN.id, { holderName: 'Karel Zíbar', holderIsGuest: false }],
+  [FREE.id, { holderName: null, holderIsGuest: false }],
+  [SHARED.id, { holderName: 'Lucie Marková', holderIsGuest: false }],
 ]);
 
 /**
@@ -174,6 +174,19 @@ describe('AdminSpotsScreen', () => {
 
       expect(within(rowOf(RETIRED)).getByText('—')).toBeInTheDocument();
       expect(within(rowOf(RETIRED)).queryByText('Volné')).not.toBeInTheDocument();
+    });
+
+    it('badges a guest holder, so this table can tell one from an employee', () => {
+      renderScreen({
+        todayBySpotId: new Map([
+          ...TODAY,
+          [TAKEN.id, { holderName: 'Jan Novotný', holderIsGuest: true }],
+        ]),
+      });
+
+      expect(within(rowOf(TAKEN)).getByText('Obsazeno — Jan Novotný')).toBeInTheDocument();
+      expect(within(rowOf(TAKEN)).getByText('Host')).toBeInTheDocument();
+      expect(within(rowOf(FREE)).queryByText('Host')).not.toBeInTheDocument();
     });
   });
 

@@ -938,6 +938,8 @@ export const ReservationScalarFieldEnum = {
   id: 'id',
   parkingSpotId: 'parkingSpotId',
   userId: 'userId',
+  guestName: 'guestName',
+  licensePlate: 'licensePlate',
   date: 'date',
   createdAt: 'createdAt'
 } as const

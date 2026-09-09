@@ -92,7 +92,7 @@ describe('reservations against a real PostgreSQL', () => {
             reservation: {
               id: reservation.id,
               createdAt: reservation.createdAt,
-              user: { id: user.id, name: user.name, licensePlate: null },
+              holder: { kind: 'USER', userId: user.id, name: user.name, licensePlate: null },
             },
           },
         },
@@ -223,6 +223,257 @@ describe('reservations against a real PostgreSQL', () => {
         expect(reservation.parkingSpotId).toBe(spot.id);
       });
     });
+
+    it('lets an admin book for another user, with an overriding plate', async () => {
+      const [admin, target, spot] = [
+        await seedUser(client),
+        await seedUser(client, { name: 'Jana Nováková', licensePlate: '1AB 2345' }),
+        await seedSpot(client),
+      ];
+
+      const reservation = await harness.reservations.create(
+        {
+          parkingSpotId: spot.id,
+          date: FUTURE_BUSINESS_DAY,
+          holder: { kind: 'USER', userId: target.id, licensePlate: '9XY 8765' },
+        },
+        // `actorFor(admin)` would be a USER and would get FORBIDDEN — the
+        // second argument is what makes this an admin.
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+
+      expect(reservation).toMatchObject({
+        userId: target.id,
+        guestName: null,
+        licensePlate: '9XY 8765',
+      });
+
+      // The plate override reaches the broadcast; the target's stored plate does not.
+      expect(harness.publisher.ofKind('reservation:created')[0]?.payload).toMatchObject({
+        reservation: {
+          holder: {
+            kind: 'USER',
+            userId: target.id,
+            name: 'Jana Nováková',
+            licensePlate: '9XY 8765',
+          },
+        },
+      });
+
+      // The trail says who did it and for whom — not `RESERVATION_CREATED`.
+      const entries = await client.auditLog.findMany({ where: { entityId: reservation.id } });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        action: 'RESERVATION_CREATED_BY_ADMIN',
+        actorUserId: admin.id,
+      });
+      expect(entries[0]?.payload).toMatchObject({ holderUserId: target.id, guestName: null });
+    });
+
+    it('lets an admin book for a guest, who has no user row', async () => {
+      const [admin, spot] = [await seedUser(client), await seedSpot(client)];
+
+      const reservation = await harness.reservations.create(
+        {
+          parkingSpotId: spot.id,
+          date: FUTURE_BUSINESS_DAY,
+          holder: { kind: 'GUEST', name: 'Jan Host', licensePlate: '9XY 8765' },
+        },
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+
+      expect(reservation).toMatchObject({
+        userId: null,
+        guestName: 'Jan Host',
+        licensePlate: '9XY 8765',
+      });
+      expect(harness.publisher.ofKind('reservation:created')[0]?.payload).toMatchObject({
+        reservation: { holder: { kind: 'GUEST', name: 'Jan Host', licensePlate: '9XY 8765' } },
+      });
+      expect(
+        (await client.auditLog.findMany({ where: { entityId: reservation.id } }))[0]?.payload
+      ).toMatchObject({ holderUserId: null, guestName: 'Jan Host' });
+    });
+
+    it('lets several guests park on the same day, on different bays', async () => {
+      // `(userId, date)` is one reservation per *user* per day; NULLs do not
+      // collide, so it deliberately does not limit guests (`decision 0303`).
+      const [admin, one, two] = [
+        await seedUser(client),
+        await seedSpot(client),
+        await seedSpot(client),
+      ];
+      const actor = actorFor(admin, 'ADMIN');
+
+      await harness.reservations.create(
+        {
+          parkingSpotId: one.id,
+          date: FUTURE_BUSINESS_DAY,
+          holder: { kind: 'GUEST', name: 'Jan Host', licensePlate: null },
+        },
+        actor,
+        TODAY
+      );
+      await expect(
+        harness.reservations.create(
+          {
+            parkingSpotId: two.id,
+            date: FUTURE_BUSINESS_DAY,
+            holder: { kind: 'GUEST', name: 'Eva Hostová', licensePlate: null },
+          },
+          actor,
+          TODAY
+        )
+      ).resolves.toMatchObject({ guestName: 'Eva Hostová' });
+    });
+
+    it('audits an admin booking for THEMSELVES as an ordinary creation', async () => {
+      const [admin, spot] = [await seedUser(client), await seedSpot(client)];
+
+      const reservation = await harness.reservations.create(
+        {
+          parkingSpotId: spot.id,
+          date: FUTURE_BUSINESS_DAY,
+          holder: { kind: 'USER', userId: admin.id, licensePlate: null },
+        },
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+
+      expect(
+        (await client.auditLog.findMany({ where: { entityId: reservation.id } }))[0]
+      ).toMatchObject({ action: 'RESERVATION_CREATED' });
+    });
+
+    it('A NON-ADMIN CANNOT book for another user', async () => {
+      const [alice, bob, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: spot.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: { kind: 'USER', userId: bob.id, licensePlate: null },
+            },
+            // No second argument, deliberately: `actorFor` defaults to `'USER'`,
+            // and that default is what this case is testing.
+            actorFor(alice),
+            TODAY
+          )
+        )
+      ).resolves.toBe('FORBIDDEN');
+
+      expect(await client.reservation.count({ where: { parkingSpotId: spot.id } })).toBe(0);
+    });
+
+    it('A NON-ADMIN CANNOT book for a guest', async () => {
+      const [alice, spot] = [await seedUser(client), await seedSpot(client)];
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: spot.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: { kind: 'GUEST', name: 'Jan Host', licensePlate: null },
+            },
+            actorFor(alice),
+            TODAY
+          )
+        )
+      ).resolves.toBe('FORBIDDEN');
+
+      expect(await client.reservation.count({ where: { parkingSpotId: spot.id } })).toBe(0);
+    });
+
+    it('refuses an admin naming a user who does not exist, with NOT_FOUND', async () => {
+      const [admin, spot] = [await seedUser(client), await seedSpot(client)];
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: spot.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: {
+                kind: 'USER',
+                userId: '99999999-9999-4999-8999-999999999999',
+                licensePlate: null,
+              },
+            },
+            actorFor(admin, 'ADMIN'),
+            TODAY
+          )
+        )
+      ).resolves.toBe('NOT_FOUND');
+    });
+
+    it('refuses an admin naming a deactivated user, with NOT_FOUND', async () => {
+      const [admin, target, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      await client.user.update({ where: { id: target.id }, data: { active: false } });
+      // The filter this test pins is `active: true` — assert the row is
+      // actually inactive, or a passing test below proves nothing.
+      expect((await client.user.findUniqueOrThrow({ where: { id: target.id } })).active).toBe(
+        false
+      );
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: spot.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: { kind: 'USER', userId: target.id, licensePlate: null },
+            },
+            actorFor(admin, 'ADMIN'),
+            TODAY
+          )
+        )
+      ).resolves.toBe('NOT_FOUND');
+
+      expect(await client.reservation.count({ where: { parkingSpotId: spot.id } })).toBe(0);
+    });
+
+    it('refuses an admin naming a user who already holds a bay that day, with RESERVATION_LIMIT_REACHED', async () => {
+      const [admin, target, first, second] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+        await seedSpot(client),
+      ];
+      await harness.reservations.create(
+        { parkingSpotId: first.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(target),
+        TODAY
+      );
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: second.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: { kind: 'USER', userId: target.id, licensePlate: null },
+            },
+            actorFor(admin, 'ADMIN'),
+            TODAY
+          )
+        )
+      ).resolves.toBe('RESERVATION_LIMIT_REACHED');
+
+      expect(await client.reservation.count({ where: { parkingSpotId: second.id } })).toBe(0);
+    });
   });
 
   describe('cancelling', () => {
@@ -316,6 +567,34 @@ describe('reservations against a real PostgreSQL', () => {
           )
         )
       ).resolves.toBe('NOT_FOUND');
+    });
+
+    it('lets an admin cancel a guest reservation, and nobody else', async () => {
+      const [admin, alice, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      const adminActor = actorFor(admin, 'ADMIN');
+      const reservation = await harness.reservations.create(
+        {
+          parkingSpotId: spot.id,
+          date: FUTURE_BUSINESS_DAY,
+          holder: { kind: 'GUEST', name: 'Jan Host', licensePlate: null },
+        },
+        adminActor,
+        TODAY
+      );
+
+      // A guest reservation has no holder user, so `userId === actor.id` is
+      // false for everybody: only the admin branch can cancel it.
+      await expect(
+        codeOf(harness.reservations.cancel({ reservationId: reservation.id }, actorFor(alice)))
+      ).resolves.toBe('FORBIDDEN');
+
+      await expect(
+        harness.reservations.cancel({ reservationId: reservation.id }, adminActor)
+      ).resolves.toMatchObject({ promoted: false });
     });
   });
 
@@ -449,7 +728,7 @@ describe('reservations against a real PostgreSQL', () => {
         cause: 'WAITLIST_PROMOTION',
         previousReservationId: reservation.id,
         fromWaitlistEntryId: firstEntry.entry.id,
-        reservation: { id: promoted.id, user: { id: first.id } },
+        reservation: { id: promoted.id, holder: { kind: 'USER', userId: first.id } },
       });
       expect(harness.publisher.ofKind('waitlist:updated').map((event) => event.payload)).toEqual([
         { date: FUTURE_BUSINESS_DAY, parkingSpotId: spot.id, waitlistCount: 1 },

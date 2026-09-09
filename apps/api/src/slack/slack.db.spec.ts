@@ -443,4 +443,57 @@ describe('Slack over a real database', () => {
     // would turn these into vacuous passes.
     expect(FUTURE_BUSINESS_DAY > TODAY).toBe(true);
   });
+
+  describe('a guest reservation is cancelled', () => {
+    it('still DMs the promoted waiter, and never names the guest', async () => {
+      // The DM names the person being *given* the spot (`notice.userId`), never
+      // the previous holder, so a guest having no user row changes nothing about
+      // it. Asserted because "it happens to work" and "it is guaranteed to work"
+      // are different states.
+      const [admin, waiter] = [await seedUser(client), await seedUser(client)];
+      const spot = await seedSpot(client, { labelPrefix: 'GUEST' });
+      const adminActor = actorFor(admin, 'ADMIN');
+
+      const reservation = await reservations.create(
+        {
+          parkingSpotId: spot.id,
+          date: FUTURE_BUSINESS_DAY,
+          holder: { kind: 'GUEST', name: 'Jan Host', licensePlate: null },
+        },
+        adminActor,
+        TODAY
+      );
+      await client.waitlistEntry.create({
+        data: {
+          parkingSpotId: spot.id,
+          userId: waiter.id,
+          date: toDateColumn(FUTURE_BUSINESS_DAY),
+        },
+      });
+      // Request 0 is `users.lookupByEmail`, request 1 the DM — same two-step
+      // shape as the existing end-to-end case, which is why the assertions read
+      // index 1.
+      server.respondWith((attempt) =>
+        attempt === 1 ? { status: 200, body: { ok: true, user: { id: 'U0WAITER' } } } : SLACK_OK
+      );
+
+      await expect(
+        reservations.cancel({ reservationId: reservation.id }, adminActor)
+      ).resolves.toMatchObject({ promoted: true });
+      await flush();
+
+      expect(server.requests).toHaveLength(2);
+      expect(new URLSearchParams(server.requests[0]?.body).get('email')).toBe(waiter.email);
+      expect(sentChannel(1)).toBe('U0WAITER');
+      expect(sentText(1)).toContain(spot.label);
+      // The guest's name is not the promoted person's business, and was never
+      // read to build this message.
+      expect(sentText(1)).not.toContain('Jan Host');
+
+      // The waiter now holds what the guest gave up — and it is a user row again.
+      await expect(
+        observer.reservation.findFirst({ where: { parkingSpotId: spot.id, userId: waiter.id } })
+      ).resolves.not.toBeNull();
+    });
+  });
 });

@@ -31,7 +31,7 @@
  * message arrived through — costs one comparison and no re-render.
  */
 
-import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
+import type { DayOverviewOutput, DaySpotOverview, ReservationHolder } from '@lets-park/contract';
 // The realtime half of the contract is a **separate** entry point, on purpose:
 // it must stay free of `@orpc/contract` (`libs/contract/src/realtime/index.ts`).
 // Importing these from `@lets-park/contract` would not even compile.
@@ -176,6 +176,14 @@ function rowFor(day: DayOverviewOutput, event: CellRef): DaySpotOverview | null 
 }
 
 /**
+ * Whether a `reservation:created` / `reservation:reassigned` payload's holder is
+ * this viewer. A guest holder never is — the `GUEST` member has no `userId`.
+ */
+function holderIsViewer(holder: ReservationHolder, viewerUserId: string | null): boolean {
+  return holder.kind === 'USER' && viewerUserId !== null && holder.userId === viewerUserId;
+}
+
+/**
  * Does this `reservation:created` change something only a refetch can tell us?
  *
  * Yes when the caller is the new holder: `viewerReservationId` gains a value,
@@ -188,15 +196,7 @@ export function reservationCreatedTouchesViewer(
   event: ReservationCreatedEvent,
   viewerUserId: string | null
 ): boolean {
-  // The `!== null` half is **redundant, and knowingly so**: `user.id` is
-  // `idSchema` (a UUID string) and the payload has already been through
-  // `reservationCreatedEventSchema` by the time a handler sees it, so
-  // `id === null` is unrepresentable and the comparison alone would answer
-  // `false` for an unknown viewer anyway. Removing it is an equivalent
-  // mutation — no input distinguishes the two — and it is kept because it
-  // states the intent ("an unknown viewer matches nobody") at the one place a
-  // reader looks for it. It is not load-bearing; do not add a test for it.
-  return viewerUserId !== null && event.reservation.user.id === viewerUserId;
+  return holderIsViewer(event.reservation.holder, viewerUserId);
 }
 
 /**
@@ -234,7 +234,7 @@ export function reservationReassignedTouchesViewer(
   event: ReservationReassignedEvent,
   viewerUserId: string | null
 ): boolean {
-  if (viewerUserId !== null && event.reservation.user.id === viewerUserId) return true;
+  if (holderIsViewer(event.reservation.holder, viewerUserId)) return true;
   if (day.viewerReservationId !== null && day.viewerReservationId === event.previousReservationId) {
     return true;
   }

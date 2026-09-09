@@ -46,7 +46,7 @@ describe('DayOverviewService', () => {
     const result = await overview.getDay({ date: TODAY }, authenticated('viewer'), TODAY);
 
     expect(result.spots[0]?.reservation).toMatchObject({
-      user: { id: holder.id, name: 'Alice', licensePlate: '1AB 2345' },
+      holder: { kind: 'USER', userId: holder.id, name: 'Alice', licensePlate: '1AB 2345' },
     });
     // Everything else about the holder — above all the ICS token — stays here.
     expect(JSON.stringify(result)).not.toContain(holder.icsToken);

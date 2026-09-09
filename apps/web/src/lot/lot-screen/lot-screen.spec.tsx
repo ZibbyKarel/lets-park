@@ -2,8 +2,9 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import { createDateFormatters } from '@lets-park/i18n';
-import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
+import type { AdminUser, DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
 import { profile, T0 } from '../../testing/fixtures';
+import { failureWithCode } from '../../testing/contract-failure';
 import { createProviderWrapper } from '../../testing/providers';
 import { LotScreen } from './lot-screen';
 
@@ -101,6 +102,7 @@ const apiMocks = {
   spotList: jest.fn(),
   previewBulk: jest.fn(),
   confirmBulk: jest.fn(),
+  adminUserList: jest.fn(),
 };
 
 function buildClient() {
@@ -115,6 +117,7 @@ function buildClient() {
     waitlist: { join: apiMocks.waitlistJoin, leave: apiMocks.waitlistLeave },
     me: { get: apiMocks.meGet },
     spot: { list: apiMocks.spotList },
+    admin: { user: { list: apiMocks.adminUserList } },
   };
 }
 
@@ -168,7 +171,7 @@ function takenSpot(overrides: Partial<DaySpotOverview> = {}): DaySpotOverview {
     reservation: {
       id: 'res-other',
       createdAt: T0,
-      user: { id: OTHER_USER, name: 'Petr Novák', licensePlate: '8SC 9012' },
+      holder: { kind: 'USER', userId: OTHER_USER, name: 'Petr Novák', licensePlate: '8SC 9012' },
     },
     waitlistCount: 0,
     viewerWaitlistEntryId: null,
@@ -190,7 +193,7 @@ function mineSpot(overrides: Partial<DaySpotOverview> = {}): DaySpotOverview {
     reservation: {
       id: 'res-mine',
       createdAt: T0,
-      user: { id: VIEWER, name: 'Karel Zíbar', licensePlate: '4AB 1234' },
+      holder: { kind: 'USER', userId: VIEWER, name: 'Karel Zíbar', licensePlate: '4AB 1234' },
     },
     waitlistCount: 0,
     viewerWaitlistEntryId: null,
@@ -225,6 +228,10 @@ function setup(
     seedDay?: boolean;
     dayImpl?: () => Promise<DayOverviewOutput>;
     realtimeStatus?: MockRealtimeStatus;
+    /** Only fetched by an admin; overrides the empty-list default. */
+    adminUsers?: readonly AdminUser[];
+    /** Overrides the resolved default, for pending/error states. */
+    adminUsersImpl?: () => Promise<{ users: readonly AdminUser[] }>;
   } = {}
 ) {
   Object.values(apiMocks).forEach((fn) => {
@@ -242,6 +249,13 @@ function setup(
   // The bulk modal reads the spot list for its preferred-spot label. Its own
   // behaviour is `bulk-modal.spec.tsx`'s; here it only has to not fail.
   apiMocks.spotList.mockResolvedValue({ spots: [] });
+  // Only fetched by an admin (`holderQuery`'s `enabled`), but harmless to seed
+  // unconditionally — a case that cares about its contents passes `adminUsers`.
+  if (options.adminUsersImpl) {
+    apiMocks.adminUserList.mockImplementation(options.adminUsersImpl);
+  } else {
+    apiMocks.adminUserList.mockResolvedValue({ users: options.adminUsers ?? [] });
+  }
 
   sessionStatusValue = options.sessionStatus ?? 'authenticated';
 
@@ -501,6 +515,108 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
     expect(invalidate).not.toHaveBeenCalled();
   });
 
+  it('shows the plain self-facing copy — never the holder-scoped one — when a self-booking create hits RESERVATION_LIMIT_REACHED', async () => {
+    const { user } = setup();
+    apiMocks.reservationCreate.mockRejectedValue(
+      await failureWithCode('RESERVATION_LIMIT_REACHED')
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
+    await user.click(await screen.findByRole('button', { name: 'Rezervovat' }));
+
+    expect(
+      await screen.findByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the plain self-facing copy — never the holder-scoped one — when waitlist.join hits RESERVATION_LIMIT_REACHED', async () => {
+    // The regression this fix exists for: the caller themselves is the one
+    // already holding a bay that day, so the sweep's "this user already has a
+    // reservation" phrasing would read as being about the spot's holder, not
+    // about the reader — the reader would never realise *they* must cancel
+    // their own reservation first. This must render byte-identical to what a
+    // normal user has always seen.
+    const { user } = setup();
+    apiMocks.waitlistJoin.mockRejectedValue(await failureWithCode('RESERVATION_LIMIT_REACHED'));
+
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.92,/u }));
+    await user.click(await screen.findByRole('button', { name: 'Přidat se do fronty' }));
+
+    expect(
+      await screen.findByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not carry a holder-scoped message over from an earlier failed create into a later waitlist.join failure', async () => {
+    // Not the byte-identical assertion above — this one carries state across
+    // two dialogs. An admin first fails a named-holder create (which *does*
+    // set the holder-scoped message), closes that dialog, then opens a
+    // different spot and fails to join its waitlist: `holderLimitMessage`
+    // must not have survived the trip.
+    //
+    // What this pins, measured rather than assumed: the clears in
+    // `closeDialog` and `openDialog`. Removing the one in `onWriteError`
+    // instead leaves all 686 tests green, and that is not a gap in this test —
+    // a single dialog is either a free bay offering Rezervovat or a taken one
+    // offering the queue, never both, so a create failure followed by a
+    // waitlist failure *without* closing is unreachable. That clear is
+    // defence-in-depth against a future dialog that offers both, and there is
+    // deliberately no test asserting it.
+    const other: AdminUser = {
+      id: OTHER_USER,
+      email: 'jana@firma.cz',
+      name: 'Jana Nováková',
+      licensePlate: null,
+      role: 'USER',
+      oktaId: 'okta-2',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      adminUsers: [other],
+    });
+    apiMocks.reservationCreate.mockRejectedValue(
+      await failureWithCode('RESERVATION_LIMIT_REACHED')
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
+    await user.selectOptions(await screen.findByLabelText('Rezervovat pro'), OTHER_USER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+    expect(
+      await screen.findByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Zavřít' }));
+    apiMocks.waitlistJoin.mockRejectedValue(await failureWithCode('RESERVATION_LIMIT_REACHED'));
+
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.92,/u }));
+    await user.click(await screen.findByRole('button', { name: 'Přidat se do fronty' }));
+
+    expect(
+      await screen.findByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it('invalidates the day now on screen, not the one it left, after a day change', async () => {
     const NEXT_DATE = '2026-02-01';
     const { user, invalidate } = setup();
@@ -688,5 +804,181 @@ describe('LotScreen — telling the user the board has stopped updating', () => 
     setup({ realtimeStatus: 'rejected' });
     expect(screen.getByText(NOTICE)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: RECONNECT })).toBeInTheDocument();
+  });
+});
+
+describe('LotScreen — an admin naming a holder', () => {
+  it('reserves a free bay for another user, and asks only for active ones', async () => {
+    const other: AdminUser = {
+      id: OTHER_USER,
+      email: 'jana@firma.cz',
+      name: 'Jana Nováková',
+      licensePlate: null,
+      role: 'USER',
+      oktaId: 'okta-2',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+    const admin: AdminUser = {
+      id: VIEWER,
+      email: 'karel.zibar@firma.cz',
+      name: 'Karel Zíbar',
+      licensePlate: '4AB 1234',
+      role: 'ADMIN',
+      oktaId: 'okta-1',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsers: [admin, other],
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+    await user.selectOptions(await screen.findByLabelText('Rezervovat pro'), OTHER_USER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    await waitFor(() =>
+      expect(apiMocks.reservationCreate.mock.calls[0]?.[0]).toEqual({
+        parkingSpotId: 'spot-free',
+        date: DATE,
+        holder: { kind: 'USER', userId: OTHER_USER, licensePlate: null },
+      })
+    );
+    // `active: true`, not a client-side filter: `adminListUsersInputSchema`
+    // carries the flag (`libs/contract/src/api/users.ts:64-66`).
+    expect(apiMocks.adminUserList.mock.calls[0]?.[0]).toEqual({ active: true });
+  });
+
+  it('shows the holder-scoped copy — never the plain self-facing one — when naming a colleague who already holds a bay hits RESERVATION_LIMIT_REACHED', async () => {
+    const other: AdminUser = {
+      id: OTHER_USER,
+      email: 'jana@firma.cz',
+      name: 'Jana Nováková',
+      licensePlate: null,
+      role: 'USER',
+      oktaId: 'okta-2',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsers: [other],
+    });
+    apiMocks.reservationCreate.mockRejectedValue(
+      await failureWithCode('RESERVATION_LIMIT_REACHED')
+    );
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+    await user.selectOptions(await screen.findByLabelText('Rezervovat pro'), OTHER_USER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(
+      await screen.findByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('switches back to the plain copy on a retry that renames the holder to the admin themselves', async () => {
+    // The failure-mode a stale substitution would be most visible in: the
+    // holder-scoped message is set by the first attempt, the admin corrects
+    // the form to book for themselves instead, and the retry fails with the
+    // same code. `createReservation`'s `onError` recomputes `namedOther` from
+    // that retry's own `variables` every time, so this must self-correct
+    // rather than keep showing a sentence about a "user" who is now the admin.
+    const other: AdminUser = {
+      id: OTHER_USER,
+      email: 'jana@firma.cz',
+      name: 'Jana Nováková',
+      licensePlate: null,
+      role: 'USER',
+      oktaId: 'okta-2',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+    const admin: AdminUser = {
+      id: VIEWER,
+      email: 'karel.zibar@firma.cz',
+      name: 'Karel Zíbar',
+      licensePlate: '4AB 1234',
+      role: 'ADMIN',
+      oktaId: 'okta-1',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsers: [admin, other],
+    });
+    apiMocks.reservationCreate.mockRejectedValue(
+      await failureWithCode('RESERVATION_LIMIT_REACHED')
+    );
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+    await user.selectOptions(await screen.findByLabelText('Rezervovat pro'), OTHER_USER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+    expect(
+      await screen.findByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), VIEWER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(
+      await screen.findByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('disables the reserve button while admin.user.list is still in flight, instead of letting one click book for the admin unnoticed', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      // Never resolves — `holderQuery.isPending` stays true for the life of
+      // the test, the same shape `holderPending` is meant to catch.
+      adminUsersImpl: () => new Promise(() => undefined),
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+
+    expect(screen.getByRole('button', { name: 'Rezervovat' })).toBeDisabled();
+  });
+
+  it('shows why the holder selector is missing when admin.user.list fails', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsersImpl: () => Promise.reject(new Error('boom')),
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+
+    expect(await screen.findByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
   });
 });

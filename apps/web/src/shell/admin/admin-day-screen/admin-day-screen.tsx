@@ -51,6 +51,11 @@ export interface AdminDayScreenProps {
 export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreenProps) {
   const t = useTranslations('admin');
   const f = useDateFormatters();
+  // `guestHolder` lives in the `lot` catalogue — the same badge the spot
+  // dialog renders — because that is where the guest concept was introduced;
+  // this table reuses the key rather than duplicating the copy under a second
+  // one, in both catalogues.
+  const tLot = useTranslations('lot');
 
   const columns: DataTableColumn<DaySpotOverview>[] = [
     {
@@ -71,13 +76,20 @@ export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreen
       // Free sorts before taken, and taken rows sort by holder — a plain
       // boolean would put every occupied spot in one undifferentiated block.
       sortValue: (row) =>
-        row.reservation === null ? '' : `1 ${row.reservation.user.name.toLocaleLowerCase('cs-CZ')}`,
+        row.reservation === null
+          ? ''
+          : `1 ${row.reservation.holder.name.toLocaleLowerCase('cs-CZ')}`,
       cell: (row) =>
         row.reservation === null ? (
           <span className="text-fg-3">{t('dayStatusFree')}</span>
         ) : (
           <span className="text-fg">
-            {t('dayStatusTaken', { name: row.reservation.user.name })}
+            {t('dayStatusTaken', { name: row.reservation.holder.name })}
+            {row.reservation.holder.kind === 'GUEST' ? (
+              <span className="ml-2 rounded-xs bg-brand-yellow-100 px-2 py-0.5 text-xs font-bold uppercase tracking-caps text-fg">
+                {tLot('guestHolder')}
+              </span>
+            ) : null}
           </span>
         ),
     },

@@ -21,7 +21,12 @@ const publicReservation = {
   id: RESERVATION_ID,
   date: DATE,
   parkingSpotId: SPOT_ID,
-  user: USER_SUMMARY,
+  holder: {
+    kind: 'USER',
+    userId: USER_SUMMARY.id,
+    name: USER_SUMMARY.name,
+    licensePlate: USER_SUMMARY.licensePlate,
+  },
   createdAt: TIMESTAMP,
 };
 

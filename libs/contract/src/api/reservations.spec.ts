@@ -51,6 +51,8 @@ describe('createReservationOutputSchema', () => {
       id: UUID_A,
       parkingSpotId: UUID_B,
       userId: UUID_A,
+      guestName: null,
+      licensePlate: null,
       date: DATE_A,
       createdAt: TIMESTAMP,
     };
@@ -64,6 +66,8 @@ describe('createReservationOutputSchema', () => {
         id: UUID_A,
         parkingSpotId: UUID_B,
         userId: UUID_A,
+        guestName: null,
+        licensePlate: null,
         date: DATE_A,
         createdAt: new Date(TIMESTAMP),
       }).success
@@ -83,6 +87,69 @@ describe('cancelReservationInputSchema', () => {
       false
     );
     expect(cancelReservationInputSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('createReservationInputSchema — the holder', () => {
+  const cell = { parkingSpotId: UUID_A, date: DATE_A };
+
+  it('accepts no holder at all — the caller books for themselves', () => {
+    const parsed = createReservationInputSchema.parse(cell);
+    expect(parsed).toEqual(cell);
+    expect('holder' in parsed).toBe(false);
+  });
+
+  it('accepts a named user holder with an overriding plate', () => {
+    const input = {
+      ...cell,
+      holder: { kind: 'USER' as const, userId: UUID_B, licensePlate: '9XY 8765' },
+    };
+    expect(createReservationInputSchema.parse(input)).toEqual(input);
+  });
+
+  it('accepts a named user holder with no plate override', () => {
+    const input = {
+      ...cell,
+      holder: { kind: 'USER' as const, userId: UUID_B, licensePlate: null },
+    };
+    expect(createReservationInputSchema.parse(input)).toEqual(input);
+  });
+
+  it('accepts a guest holder, and gives it no userId', () => {
+    const input = {
+      ...cell,
+      holder: { kind: 'GUEST' as const, name: 'Jan Host', licensePlate: null },
+    };
+    const parsed = createReservationInputSchema.parse(input);
+    expect(parsed.holder).toEqual(input.holder);
+    expect(parsed.holder !== undefined && 'userId' in parsed.holder).toBe(false);
+  });
+
+  it('rejects a guest with an empty name', () => {
+    expect(
+      createReservationInputSchema.safeParse({
+        ...cell,
+        holder: { kind: 'GUEST', name: '', licensePlate: null },
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects a user holder with no userId', () => {
+    expect(
+      createReservationInputSchema.safeParse({
+        ...cell,
+        holder: { kind: 'USER', licensePlate: null },
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects an unknown kind', () => {
+    expect(
+      createReservationInputSchema.safeParse({
+        ...cell,
+        holder: { kind: 'ROBOT', name: 'x', licensePlate: null },
+      }).success
+    ).toBe(false);
   });
 });
 

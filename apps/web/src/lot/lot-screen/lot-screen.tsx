@@ -28,6 +28,7 @@ import { useSession } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
 import { useCellLock, useRealtime } from '@lets-park/realtime-client';
 import { EmptyState } from '@lets-park/design-system/compounds';
+import { toContractError } from '@lets-park/api-client';
 import { useApi } from '../../shell/api-provider/api-provider';
 import { useCurrentUser } from '../../shell/use-current-user';
 import { ScreenError, ScreenLoading } from '../../shell/screen-state/screen-state';
@@ -36,6 +37,7 @@ import { DatePickerDialog } from '../date-picker-dialog/date-picker-dialog';
 import { LotGrid } from '../lot-grid/lot-grid';
 import { BulkReservationModal } from '../bulk-modal/bulk-modal';
 import { SpotDialog } from '../spot-dialog/spot-dialog';
+import type { HolderOption } from '../spot-dialog/holder-input';
 import { useCellLocks } from './use-cell-locks';
 import { useLotRealtime } from './use-lot-realtime';
 import {
@@ -70,6 +72,14 @@ export function LotScreen() {
   const [date, setDate] = useState<DateOnly>(() => todayInPrague());
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
+  /**
+   * The one substitution for `actionError`'s code-mapped copy — see
+   * `SpotDialog`'s `errorMessage` doc comment. `null` for every failure
+   * except a named-holder `reservation.create` naming someone other than the
+   * viewer, so a self-booking create and every `waitlist`/`cancel` failure
+   * keep the plain catalogue string untouched.
+   */
+  const [holderLimitMessage, setHolderLimitMessage] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
@@ -96,6 +106,31 @@ export function LotScreen() {
     enabled: sessionStatus === 'authenticated',
   });
   const day = dayQuery.data ?? null;
+
+  // Only an admin may name a holder, so only an admin fetches the list. Filtered
+  // server-side: `adminListUsersInputSchema` carries `active`, and a deactivated
+  // colleague is not somebody to book a bay for.
+  const holderQuery = useQuery({
+    ...api.admin.user.list.queryOptions({ input: { active: true } }),
+    enabled: sessionStatus === 'authenticated' && isAdmin,
+  });
+
+  // Both gated on `isAdmin`: `holderQuery` stays `enabled: false` for a normal
+  // user, and a disabled TanStack query reports `isPending: true` forever
+  // (`status` never leaves `'pending'`) — reading either flag unguarded would
+  // disable a normal user's button and show them an error that never resolves.
+  const holderPending = isAdmin && holderQuery.isPending;
+  const holderError = isAdmin && holderQuery.isError ? holderQuery.error : null;
+
+  const holderOptions = useMemo<readonly HolderOption[]>(
+    () =>
+      (holderQuery.data?.users ?? []).map((row) => ({
+        userId: row.id,
+        name: row.name,
+        licensePlate: row.licensePlate,
+      })),
+    [holderQuery.data]
+  );
 
   useLotRealtime({ date, viewerUserId });
   const locks = useCellLocks(date);
@@ -155,28 +190,78 @@ export function LotScreen() {
   const onMutationSuccess = useCallback(() => {
     setOpenSpotId(null);
     setActionError(null);
+    setHolderLimitMessage(null);
     invalidateDay();
   }, [invalidateDay]);
+
+  /**
+   * `waitlist.join`/`waitlist.leave`/`reservation.cancel` all report a
+   * failure the same plain way — `holderLimitMessage` is `createReservation`'s
+   * substitution alone, so every other write clears it rather than risking a
+   * stale message surviving from an earlier `reservation.create` failure in
+   * the same dialog session (`waitlist.join` sharing this code with
+   * `reservation.create` is exactly the regression this guards).
+   *
+   * Defence-in-depth, and measured to be exactly that: deleting this clear
+   * leaves the whole web suite green, because one dialog is either a free bay
+   * offering Rezervovat or a taken one offering the queue — never both — so
+   * the two failures cannot follow each other without `closeDialog` or
+   * `openDialog` (which clear it too) running in between. It stays for the
+   * dialog that offers both one day; see `lot-screen.spec.tsx`'s
+   * carry-over test, which pins those two clears rather than this one.
+   */
+  const onWriteError = useCallback((error: unknown) => {
+    setHolderLimitMessage(null);
+    setActionError(error);
+  }, []);
 
   const createReservation = useMutation({
     ...api.reservation.create.mutationOptions(),
     onSuccess: onMutationSuccess,
-    onError: setActionError,
+    /**
+     * The one place that can tell the `RESERVATION_LIMIT_REACHED` this call
+     * got back apart from every other caller of the same code: `variables`
+     * is what *this* call actually submitted. A named holder other than the
+     * viewer — a `GUEST`, or a `USER` whose id isn't the viewer's — reads the
+     * catalogue's "you already have a reservation" as false, so it renders
+     * `lot.errHolderLimitReached` instead; an admin naming *themselves*, a
+     * plain self-booking create, and every other code all fall through to the
+     * plain catalogue string via `holderLimitMessage` staying `null`.
+     *
+     * The `GUEST` branch of `namedOther` cannot actually fire today — a guest
+     * holder is written with `userId: null`
+     * (`apps/api/src/reservations/reservations.service.ts`), which is exempt
+     * from the `Reservation(userId, date)` constraint this code comes from
+     * (`doc/decision/0303-*`), so `reservation.create` never returns
+     * `RESERVATION_LIMIT_REACHED` for a guest. Left in because it is the
+     * correct answer if that ever changes, not because it is reachable now.
+     */
+    onError: (error, variables) => {
+      const holder = variables.holder;
+      const namedOther =
+        holder !== undefined && (holder.kind === 'GUEST' || holder.userId !== viewerUserId);
+      setHolderLimitMessage(
+        namedOther && toContractError(error)?.code === 'RESERVATION_LIMIT_REACHED'
+          ? t('errHolderLimitReached')
+          : null
+      );
+      setActionError(error);
+    },
   });
   const cancelReservation = useMutation({
     ...api.reservation.cancel.mutationOptions(),
     onSuccess: onMutationSuccess,
-    onError: setActionError,
+    onError: onWriteError,
   });
   const joinWaitlist = useMutation({
     ...api.waitlist.join.mutationOptions(),
     onSuccess: onMutationSuccess,
-    onError: setActionError,
+    onError: onWriteError,
   });
   const leaveWaitlist = useMutation({
     ...api.waitlist.leave.mutationOptions(),
     onSuccess: onMutationSuccess,
-    onError: setActionError,
+    onError: onWriteError,
   });
 
   const counts = useMemo(() => toLotCounts(day?.spots ?? []), [day?.spots]);
@@ -190,10 +275,12 @@ export function LotScreen() {
   const closeDialog = useCallback(() => {
     setOpenSpotId(null);
     setActionError(null);
+    setHolderLimitMessage(null);
   }, []);
 
   const openDialog = useCallback((spotId: string) => {
     setActionError(null);
+    setHolderLimitMessage(null);
     setOpenSpotId(spotId);
   }, []);
 
@@ -304,12 +391,20 @@ export function LotScreen() {
         canReserve={day.canReserve}
         isAdmin={isAdmin}
         monthName={f.monthName(parts.month)}
-        error={actionError}
+        error={actionError ?? holderError}
+        {...(holderLimitMessage === null ? {} : { errorMessage: holderLimitMessage })}
         pending={pending}
+        viewerUserId={viewerUserId}
+        holderOptions={holderOptions}
+        holderPending={holderPending}
         onClose={closeDialog}
-        onReserve={() => {
+        onReserve={(holder) => {
           if (openSpot === null) return;
-          createReservation.mutate({ parkingSpotId: openSpot.spotId, date });
+          createReservation.mutate({
+            parkingSpotId: openSpot.spotId,
+            date,
+            ...(holder === undefined ? {} : { holder }),
+          });
         }}
         onJoinWaitlist={() => {
           if (openSpot === null) return;

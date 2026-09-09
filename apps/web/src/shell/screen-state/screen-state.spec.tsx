@@ -122,6 +122,37 @@ describe('ScreenError', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders `message` instead of the code-mapped catalogue string when supplied', async () => {
+    const error = await failureFrom(
+      transportAnswering(
+        409,
+        rpcPayload(
+          contractErrorBody(
+            'RESERVATION_LIMIT_REACHED',
+            409,
+            ERROR_DEFINITIONS.RESERVATION_LIMIT_REACHED.message
+          )
+        )
+      )
+    );
+
+    renderWithIntl(
+      <ScreenError
+        error={error}
+        message="Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna."
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).not.toBeInTheDocument();
+  });
+
   it('falls back to one generic sentence for a transport failure', async () => {
     const error = await failureFrom(() => {
       throw new TypeError('Failed to fetch');

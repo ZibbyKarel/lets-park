@@ -27,6 +27,8 @@ import type { PrismaClient } from '@lets-park/database';
 import { createPrismaClient } from '@lets-park/database';
 import { toDateColumn, toDateOnly } from '../common/prisma-mapping';
 import { requireDatabaseUrl, unique } from '../testing/database/test-database';
+import { CalendarService } from './calendar.service';
+import type { PrismaService } from '../database/prisma.service';
 
 /** Runs `work` in a transaction that is always rolled back, returning its value. */
 async function inRolledBackTransaction<T>(
@@ -204,6 +206,41 @@ describe('the ICS feed against a real PostgreSQL', () => {
       // And the value really is UTC midnight, which is the convention the rest
       // of the mapping is built on.
       expect(stored.toISOString()).toBe(`${date}T00:00:00.000Z`);
+    });
+  });
+
+  describe('a guest reservation', () => {
+    it('is absent from feedEntriesForToken, because the feed filters on userId', async () => {
+      // Drives `CalendarService.feedEntriesForToken` itself rather than a
+      // second copy of its `where` clause: a duplicated filter here would stay
+      // green even if `calendar.service.ts`'s own query widened, which is
+      // exactly the trap this test exists to avoid. The service is built over
+      // `tx` — not the root `prisma` — because a service built over the root
+      // client cannot see rows written inside this uncommitted transaction,
+      // and would return an (also empty) feed for the wrong reason.
+      const { entries, mineLabel } = await inRolledBackTransaction(prisma, async (tx) => {
+        const token = unique('ics');
+        const user = await seedUser(tx, token);
+        const [mine, theirs] = [
+          await tx.parkingSpot.create({ data: { label: unique('SPOT'), group: 'SHARED' } }),
+          await tx.parkingSpot.create({ data: { label: unique('SPOT'), group: 'SHARED' } }),
+        ];
+        const day = toDateColumn('2099-01-05');
+
+        await tx.reservation.create({
+          data: { parkingSpotId: mine.id, userId: user.id, date: day },
+        });
+        await tx.reservation.create({
+          data: { parkingSpotId: theirs.id, guestName: 'Jan Host', date: day },
+        });
+
+        const service = new CalendarService({ client: tx } as unknown as PrismaService);
+        const found = await service.feedEntriesForToken(token, day);
+        return { entries: found, mineLabel: mine.label };
+      });
+
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.spotLabel).toBe(mineLabel);
     });
   });
 });

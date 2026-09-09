@@ -139,7 +139,7 @@ function publicReservation(id: string, userId: string) {
   return {
     id,
     createdAt: '2026-09-01T08:00:00.000Z',
-    user: { id: userId, name: 'Petr Novák', licensePlate: '8SC 9012' },
+    holder: { kind: 'USER' as const, userId, name: 'Petr Novák', licensePlate: '8SC 9012' },
   };
 }
 

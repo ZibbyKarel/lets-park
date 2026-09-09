@@ -126,6 +126,12 @@ export class ReservationsService {
    * one-per-day rules are not: they are left to the unique indexes, which is
    * what makes two simultaneous requests for the last free spot produce one
    * reservation and one `SPOT_ALREADY_RESERVED` rather than two reservations.
+   *
+   * **The holder may be somebody else**, if the caller is an admin: another
+   * user, or a guest. `assertMayNameHolder` is the boundary; the target user's
+   * existence is a real check (a foreign key would only say `CONFLICT`), and the
+   * two one-per-day rules stay the unique indexes' job. A guest has no `userId`,
+   * so `(userId, date)` does not apply to one — see `doc/decision/0303-*`.
    */
   async create(
     input: CreateReservationInput,
@@ -133,6 +139,12 @@ export class ReservationsService {
     today: DateOnly = todayInPrague()
   ): Promise<CreateReservationOutput> {
     const settings = await this.window.getSettings();
+    // Authorization before the day's own state: a non-admin naming somebody
+    // else is refused as `FORBIDDEN` even in a locked month, because that is
+    // the more specific and more durable fact about the request — the same
+    // argument `ReservationPolicy`'s class comment makes for reporting a
+    // Saturday ahead of a lock.
+    this.policy.assertMayNameHolder(input.holder, actor);
     this.policy.assertMayTakeDay(input.date, actor, settings, today);
 
     const spot = await this.prisma.client.parkingSpot.findUnique({
@@ -143,6 +155,24 @@ export class ReservationsService {
       throw new DomainError('NOT_FOUND', { message: 'No such active parking spot.' });
     }
 
+    // Which row the reservation belongs to, and which plate it freezes.
+    // An omitted holder is the caller, unchanged behaviour and no plate override.
+    const holder = input.holder ?? { kind: 'USER' as const, userId: actor.id, licensePlate: null };
+
+    if (holder.kind === 'USER' && holder.userId !== actor.id) {
+      // A real check, not a constraint's job: the foreign key would only say
+      // `CONFLICT`, and an admin who mistyped an id deserves `NOT_FOUND`. Read
+      // outside the transaction for the same reason the spot is — it is a
+      // lookup, not an invariant.
+      const target = await this.prisma.client.user.findFirst({
+        where: { id: holder.userId, active: true },
+        select: { id: true },
+      });
+      if (target === null) {
+        throw new DomainError('NOT_FOUND', { message: 'No such active user.' });
+      }
+    }
+
     // The reservation and the audit entry that records it share a transaction:
     // a reservation nobody can account for is exactly what the audit log exists
     // to prevent. No locks are taken and no queue is read, so this is short.
@@ -150,23 +180,43 @@ export class ReservationsService {
       // `include` rather than a second read: the broadcast needs the holder's
       // plate, and `AuthenticatedUser` deliberately does not carry one (it is a
       // token claim short of the row). One statement, one consistent answer.
+      // For a guest the relation is simply absent.
       const row = await tx.reservation.create({
         data: {
           parkingSpotId: input.parkingSpotId,
-          userId: actor.id,
+          userId: holder.kind === 'USER' ? holder.userId : null,
+          guestName: holder.kind === 'GUEST' ? holder.name : null,
+          licensePlate: holder.licensePlate,
           date: toDateColumn(input.date),
         },
         include: { user: { select: { id: true, name: true, licensePlate: true } } },
       });
+      // `RESERVATION_CREATED` still means "the holder took it for themselves",
+      // admin or not; naming somebody else is a different action, because the
+      // trail has to say who acted and on whose behalf.
+      const bookedForSomebodyElse = !(holder.kind === 'USER' && holder.userId === actor.id);
       // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
       await this.audit.record(
-        {
-          actorUserId: actor.id,
-          action: 'RESERVATION_CREATED',
-          entityType: 'Reservation',
-          entityId: row.id,
-          payload: { parkingSpotId: row.parkingSpotId, date: input.date },
-        },
+        bookedForSomebodyElse
+          ? {
+              actorUserId: actor.id,
+              action: 'RESERVATION_CREATED_BY_ADMIN',
+              entityType: 'Reservation',
+              entityId: row.id,
+              payload: {
+                parkingSpotId: row.parkingSpotId,
+                date: input.date,
+                holderUserId: row.userId,
+                guestName: row.guestName,
+              },
+            }
+          : {
+              actorUserId: actor.id,
+              action: 'RESERVATION_CREATED',
+              entityType: 'Reservation',
+              entityId: row.id,
+              payload: { parkingSpotId: row.parkingSpotId, date: input.date },
+            },
         tx
       );
       return row;
@@ -241,7 +291,7 @@ export class ReservationsService {
     // Locked, not merely read: two requests cancelling the same reservation must
     // not both go on to promote. The loser blocks here, then finds the row gone.
     const [reservation] = await tx.$queryRaw<
-      { id: string; parkingSpotId: string; userId: string; date: Date }[]
+      { id: string; parkingSpotId: string; userId: string | null; date: Date }[]
     >`
       SELECT "id", "parkingSpotId", "userId", "date"
       FROM "Reservation"

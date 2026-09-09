@@ -639,7 +639,7 @@ describe('the realtime gateway', () => {
             reservation: {
               id: randomUUID(),
               createdAt: new Date().toISOString(),
-              user: { id: alice.id, name: 'Alice', licensePlate: '1AB 2345' },
+              holder: { kind: 'USER', userId: alice.id, name: 'Alice', licensePlate: '1AB 2345' },
             },
           },
         },

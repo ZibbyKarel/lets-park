@@ -25,7 +25,7 @@ a fresh worktree and spent the next hour on spurious `Module not found` errors
 in `api:build`.
 
 **The documentation map is `doc/README.md`**; it indexes every topic document
-and all 189 decision records. `README.md` is the operational runbook.
+and all 192 decision records. `README.md` is the operational runbook.
 
 ### Commands
 
@@ -80,7 +80,7 @@ DATABASE_URL=$(grep '^DATABASE_URL=' /path/to/lets-park/.env | sed 's/^DATABASE_
   npx nx run api:test-db
 ```
 
-`web-e2e:e2e` is **21 passed, exit 0** — the eight spec files, the three
+`web-e2e:e2e` is **27 passed, exit 0** — the nine spec files, the three
 persona sign-ins in `support/auth.setup.ts`, and `support/build-identity.setup.ts`.
 In a worktree it needs the whole `.env` copied in, not just `DATABASE_URL`;
 without it the API exits on its own env schema before a test runs. Three things

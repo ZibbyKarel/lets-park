@@ -118,7 +118,7 @@ export class WaitlistService {
       throw new DomainError('NOT_FOUND', { message: 'No such active parking spot.' });
     }
 
-    const [holder] = await tx.$queryRaw<{ id: string; userId: string }[]>`
+    const [holder] = await tx.$queryRaw<{ id: string; userId: string | null }[]>`
       SELECT "id", "userId"
       FROM "Reservation"
       WHERE "parkingSpotId" = ${input.parkingSpotId}::uuid

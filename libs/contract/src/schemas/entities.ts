@@ -73,34 +73,86 @@ export const parkingSpotSchema = z.object({
 export type ParkingSpot = z.infer<typeof parkingSpotSchema>;
 
 /**
- * One spot booked by one user for one day. Two unique constraints back this up
- * in the database: one reservation per spot and day, and one reservation per
- * user and day.
+ * One spot booked for one day, by exactly one holder: a user, or a guest an
+ * admin booked it for.
+ *
+ * **`userId` is nullable and `guestName` is nullable, but never both, and never
+ * neither** — a `CHECK` constraint enforces that in the database
+ * (`doc/decision/0305-a-reservation-holder-is-a-user-or-a-guest-never-neither`). Two unique constraints back the rest up:
+ * `(parkingSpotId, date)` — one reservation per spot per day, the double-booking
+ * guarantee — and `(userId, date)`, one reservation per user per day. `NULL`s do
+ * not collide in a Postgres unique index, so the second one deliberately does
+ * not limit guests: several guests may visit on the same day.
  */
 export const reservationSchema = z.object({
   id: idSchema,
   parkingSpotId: idSchema,
-  userId: idSchema,
+  /** `null` for a guest reservation; then `guestName` is set. */
+  userId: idSchema.nullable(),
+  /** Set only for a guest. A guest has no `User` row to read a name off. */
+  guestName: z.string().min(1).nullable(),
+  /**
+   * Overrides the holder's stored `User.licensePlate` for this day only, and is
+   * the *only* plate a guest can have. `null` means "use the holder's stored
+   * one" — this flow never writes `User.licensePlate`.
+   */
+  licensePlate: z.string().min(1).nullable(),
   date: dateOnlySchema,
   createdAt: timestampSchema,
 });
 export type Reservation = z.infer<typeof reservationSchema>;
 
 /**
+ * Who holds a reservation, as everybody who can see the day sees them.
+ *
+ * A discriminated union rather than a widened user summary, because a guest has
+ * no `User` row and the type has to say so: `kind: 'GUEST'` has **no `userId`
+ * member at all**, so `holder.userId` on a guest is a compile error rather than
+ * a `null` every reader has to remember to check. That is the property
+ * `doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union` was written to keep.
+ *
+ * `name` and `licensePlate` are the **effective** values — the server has
+ * already applied `Reservation.licensePlate` over the holder's stored one — so a
+ * consumer renders them without knowing the override exists.
+ *
+ * Only `userId` may be compared against the viewer's own id; `name` is not an
+ * identity. `email`, `oktaId` and above all `icsToken` (the secret in a personal
+ * feed URL) are absent by construction, the same reason `userSummarySchema` is a
+ * `pick`.
+ */
+export const reservationHolderSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('USER'),
+    userId: idSchema,
+    name: z.string().min(1),
+    licensePlate: z.string().min(1).nullable(),
+  }),
+  z.object({
+    kind: z.literal('GUEST'),
+    name: z.string().min(1),
+    licensePlate: z.string().min(1).nullable(),
+  }),
+]);
+export type ReservationHolder = z.infer<typeof reservationHolderSchema>;
+
+/**
  * A reservation as it is shown to everybody who can see the day: which
  * reservation it is, when it was made, and who holds it.
  *
- * `parkingSpotId`, `userId` and `date` are deliberately absent — every consumer
- * already knows all three from its surrounding context (the spot row of the day
- * overview, the event payload of a realtime broadcast), and `user` carries the
- * only part of the holder that may be shown to others.
+ * `parkingSpotId`, the holder's row and `date` are deliberately absent — every
+ * consumer already knows all three from its surrounding context (the spot row of
+ * the day overview, the event payload of a realtime broadcast).
+ *
+ * The field is `holder`, not `user`: a field called `user` cannot carry a guest,
+ * and renaming it is what forced every reader to be revisited rather than
+ * silently reading `undefined` (`doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union`).
  *
  * Shared by `src/api` and `src/realtime`, for the reason given on
  * {@link userSummarySchema}.
  */
 export const publicReservationSchema = reservationSchema
   .pick({ id: true, createdAt: true })
-  .extend({ user: userSummarySchema });
+  .extend({ holder: reservationHolderSchema });
 export type PublicReservation = z.infer<typeof publicReservationSchema>;
 
 /**
@@ -153,6 +205,17 @@ export const AUDIT_LOG_ACTIONS = [
    * trail. See `doc/decision/0091-*`.
    */
   'WAITLIST_JOINED',
+  /**
+   * An admin created a reservation whose holder is not themselves — another
+   * user, or a guest. `RESERVATION_CREATED` stays what it has always been: the
+   * holder took the spot for themselves, admin or not.
+   *
+   * One member rather than two, because "for a guest" is not a different action,
+   * it is a different holder: the payload carries `holderUserId` **or**
+   * `guestName`, and the audit trail reads the same either way
+   * (`doc/decision/0306-an-admin-names-the-holder-and-defaults-to-themselves`).
+   */
+  'RESERVATION_CREATED_BY_ADMIN',
 ] as const;
 
 export const auditLogActionSchema = z.enum(AUDIT_LOG_ACTIONS);

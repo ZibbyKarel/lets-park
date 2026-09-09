@@ -93,38 +93,113 @@ describe('userSummarySchema', () => {
 });
 
 describe('publicReservationSchema', () => {
-  const publicReservation = {
+  const heldByUser = {
     id: ID,
     createdAt: NOW,
-    user: { id: OTHER_ID, name: 'Jana Nováková', licensePlate: null },
+    holder: {
+      kind: 'USER' as const,
+      userId: OTHER_ID,
+      name: 'Jana Nováková',
+      licensePlate: null,
+    },
   };
 
-  it('accepts a reservation with its holder', () => {
-    expect(publicReservationSchema.parse(publicReservation)).toEqual(publicReservation);
+  const heldByGuest = {
+    id: ID,
+    createdAt: NOW,
+    holder: { kind: 'GUEST' as const, name: 'Jan Host', licensePlate: '9XY 8765' },
+  };
+
+  it('accepts a reservation held by a user', () => {
+    expect(publicReservationSchema.parse(heldByUser)).toEqual(heldByUser);
   });
 
-  it('carries no spot, user id or date of its own', () => {
+  it('accepts a reservation held by a guest', () => {
+    expect(publicReservationSchema.parse(heldByGuest)).toEqual(heldByGuest);
+  });
+
+  it('carries no spot, holder row or date of its own', () => {
     // All three come from the context the payload travels in — the spot row of
     // the day overview, or the event payload of a realtime broadcast.
-    expect(Object.keys(publicReservationSchema.parse(publicReservation)).sort()).toEqual([
+    expect(Object.keys(publicReservationSchema.parse(heldByUser)).sort()).toEqual([
       'createdAt',
+      'holder',
       'id',
-      'user',
     ]);
   });
 
-  it('strips a holder that is a full user down to the summary', () => {
-    // The title used to say "rejects", which is the one thing this does not do
-    // and the comment below already said so. Zod strips unknown keys on a
-    // `z.object`; assert the stripping, so a widened `userSchema` can never
-    // smuggle `icsToken` into a broadcast.
-    const parsed = publicReservationSchema.parse({ ...publicReservation, user: validUser });
-    expect('icsToken' in parsed.user).toBe(false);
-    expect('email' in parsed.user).toBe(false);
+  it('gives a guest no userId at all — the guest case is unrepresentable as a user', () => {
+    const parsed = publicReservationSchema.parse({
+      ...heldByGuest,
+      holder: { ...heldByGuest.holder, userId: OTHER_ID },
+    });
+    expect('userId' in parsed.holder).toBe(false);
   });
 
-  it('rejects a missing holder', () => {
+  it('strips a user holder built from a full user down to the four public fields', () => {
+    // Zod strips unknown keys on a `z.object`; assert the stripping, so a
+    // widened `userSchema` can never smuggle `icsToken` into a broadcast.
+    const parsed = publicReservationSchema.parse({
+      ...heldByUser,
+      holder: { kind: 'USER', userId: validUser.id, ...validUser },
+    });
+    expect('icsToken' in parsed.holder).toBe(false);
+    expect('email' in parsed.holder).toBe(false);
+  });
+
+  it('rejects a missing holder, an unknown kind, and an empty holder name', () => {
     expect(publicReservationSchema.safeParse({ id: ID, createdAt: NOW }).success).toBe(false);
+    expect(
+      publicReservationSchema.safeParse({
+        ...heldByUser,
+        holder: { kind: 'ROBOT', name: 'x', licensePlate: null },
+      }).success
+    ).toBe(false);
+    expect(
+      publicReservationSchema.safeParse({
+        ...heldByGuest,
+        holder: { kind: 'GUEST', name: '', licensePlate: null },
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe('reservationSchema — the holder columns', () => {
+  const base = {
+    id: ID,
+    parkingSpotId: OTHER_ID,
+    date: '2099-01-05',
+    createdAt: NOW,
+  };
+
+  it('accepts a reservation held by a user, with no guest name', () => {
+    const row = { ...base, userId: OTHER_ID, guestName: null, licensePlate: null };
+    expect(reservationSchema.parse(row)).toEqual(row);
+  });
+
+  it('accepts a reservation held by a guest, with no userId', () => {
+    const row = { ...base, userId: null, guestName: 'Jan Host', licensePlate: '9XY 8765' };
+    expect(reservationSchema.parse(row)).toEqual(row);
+  });
+
+  it('carries the per-reservation plate that overrides the holder’s stored one', () => {
+    const row = { ...base, userId: OTHER_ID, guestName: null, licensePlate: '1AB 2345' };
+    expect(reservationSchema.parse(row).licensePlate).toBe('1AB 2345');
+  });
+
+  it('rejects an empty guest name and an empty plate — absent is `null`, never `""`', () => {
+    expect(
+      reservationSchema.safeParse({ ...base, userId: null, guestName: '', licensePlate: null })
+        .success
+    ).toBe(false);
+    expect(
+      reservationSchema.safeParse({
+        ...base,
+        userId: OTHER_ID,
+        guestName: null,
+        licensePlate: '',
+      }).success
+    ).toBe(false);
   });
 });
 
@@ -153,34 +228,37 @@ describe('parkingSpotSchema', () => {
 });
 
 describe('reservationSchema / waitlistEntrySchema', () => {
-  const valid = {
+  const validWaitlistEntry = {
     id: ID,
     parkingSpotId: OTHER_ID,
     userId: ID,
     date: '2026-09-15',
     createdAt: NOW,
   };
+  // A reservation carries its holder columns; a waitlist entry does not. The
+  // two schemas were checked against one object while they happened to agree.
+  const validReservation = { ...validWaitlistEntry, guestName: null, licensePlate: null };
 
   it.each([
-    ['reservationSchema', reservationSchema],
-    ['waitlistEntrySchema', waitlistEntrySchema],
-  ] as const)('%s accepts a valid entry', (_name, schema) => {
+    ['reservationSchema', reservationSchema, validReservation],
+    ['waitlistEntrySchema', waitlistEntrySchema, validWaitlistEntry],
+  ] as const)('%s accepts a valid entry', (_name, schema, valid) => {
     expect(schema.safeParse(valid).success).toBe(true);
   });
 
   it.each([
-    ['reservationSchema', reservationSchema],
-    ['waitlistEntrySchema', waitlistEntrySchema],
-  ] as const)('%s keeps the day date-only', (_name, schema) => {
+    ['reservationSchema', reservationSchema, validReservation],
+    ['waitlistEntrySchema', waitlistEntrySchema, validWaitlistEntry],
+  ] as const)('%s keeps the day date-only', (_name, schema, valid) => {
     expect(schema.safeParse({ ...valid, date: '2026-09-15T00:00:00.000Z' }).success).toBe(false);
     expect(schema.safeParse({ ...valid, date: '2026-09-31' }).success).toBe(false);
     expect(schema.safeParse({ ...valid, date: '2028-02-29' }).success).toBe(true);
   });
 
   it.each([
-    ['reservationSchema', reservationSchema],
-    ['waitlistEntrySchema', waitlistEntrySchema],
-  ] as const)('%s does not judge the date against the horizon', (_name, schema) => {
+    ['reservationSchema', reservationSchema, validReservation],
+    ['waitlistEntrySchema', waitlistEntrySchema, validWaitlistEntry],
+  ] as const)('%s does not judge the date against the horizon', (_name, schema, valid) => {
     // Both the "not in the past" and the reservation-window checks live in the
     // service layer (Task 13), on top of monthLockState().
     expect(schema.safeParse({ ...valid, date: '2020-01-01' }).success).toBe(true);
@@ -228,6 +306,7 @@ describe('auditLogSchema', () => {
       'SPOT_UPDATED',
       'RESERVATION_WINDOW_UPDATED',
       'WAITLIST_JOINED',
+      'RESERVATION_CREATED_BY_ADMIN',
     ]);
     for (const action of AUDIT_LOG_ACTIONS) {
       expect(auditLogActionSchema.safeParse(action).success).toBe(true);

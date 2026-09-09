@@ -130,6 +130,8 @@ export function toContractReservation(row: ReservationRow): Reservation {
     id: row.id,
     parkingSpotId: row.parkingSpotId,
     userId: row.userId,
+    guestName: row.guestName,
+    licensePlate: row.licensePlate,
     date: toDateOnly(row.date),
     createdAt: toTimestamp(row.createdAt),
   };
@@ -137,21 +139,58 @@ export function toContractReservation(row: ReservationRow): Reservation {
 
 /**
  * A reservation as everybody who can see the day sees it: the reservation, and
- * the holder as a {@link toUserSummary}.
+ * its holder — a user, or the guest an admin booked it for.
  *
- * The spot, the day and the holder's id are deliberately absent from
- * `publicReservationSchema` — every consumer already knows them from context —
- * so this takes the holder separately rather than joining them back in.
+ * The holder is taken as a **separate argument** rather than joined back in,
+ * because `publicReservationSchema` deliberately carries neither the spot nor
+ * the day and every caller already has the joined row in hand. `null` means
+ * "this is a guest reservation"; the row's own `guestName` supplies the name.
+ *
+ * The plate is the row's override where there is one, and the holder's stored
+ * plate otherwise — a consumer never has to know the override exists
+ * (`doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union`).
  */
 export function toPublicReservation(
   row: ReservationRow,
-  holder: Pick<UserRow, 'id' | 'name' | 'licensePlate'>
+  holder: Pick<UserRow, 'id' | 'name' | 'licensePlate'> | null
 ): PublicReservation {
-  return {
-    id: row.id,
-    createdAt: toTimestamp(row.createdAt),
-    user: toUserSummary(holder),
-  };
+  const createdAt = toTimestamp(row.createdAt);
+
+  if (holder !== null) {
+    if (row.userId !== holder.id) {
+      // Louder than fabricating a holder that does not match the row: a
+      // caller passing a holder alongside a row it does not belong to is a
+      // bug at the call site, and one that would otherwise reach a broadcast
+      // and a screen silently, naming the wrong person.
+      throw new Error(
+        `Reservation ${row.id} has userId ${String(row.userId)}, but was mapped with holder ${holder.id}.`
+      );
+    }
+    return {
+      id: row.id,
+      createdAt,
+      holder: {
+        kind: 'USER',
+        userId: holder.id,
+        name: holder.name,
+        licensePlate: row.licensePlate ?? holder.licensePlate,
+      },
+    };
+  }
+
+  if (row.guestName !== null) {
+    return {
+      id: row.id,
+      createdAt,
+      holder: { kind: 'GUEST', name: row.guestName, licensePlate: row.licensePlate },
+    };
+  }
+
+  // `Reservation_holder_check` makes this unreachable from the database. Louder
+  // than a fabricated holder, which would reach a broadcast and a screen.
+  throw new Error(
+    `Reservation ${row.id} has neither a user nor a guest name; Reservation_holder_check should have refused it.`
+  );
 }
 
 /** A waitlist row, whole. What `waitlist.join` answers with. */

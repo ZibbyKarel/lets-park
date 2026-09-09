@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 22 topic documents, 189 decision records, and `doc/design/`.
+`doc/`: 22 topic documents, 192 decision records, and `doc/design/`.
 
 ---
 
@@ -51,13 +51,13 @@ This index is generated from the filesystem and accounts for every file under
 The finished visual design, downloaded locally so it does not depend on a link
 staying alive (`doc/decision/0002-visual-design-source-of-truth`).
 
-| Path | What it is |
-| --- | --- |
-| [`design/README.md`](design/README.md) | What was exported, from where, and how to read it. |
-| `design/lets-park-design.dc.html` | The design canvas itself. |
-| `design/ds/colors_and_type.css`, `design/ds/support.js` | The source palette and type scale the tokens were derived from. |
-| `design/ds/fonts/*.otf` | Eight Neue Haas Grotesk faces (`doc/decision/0012-otf-fonts-committed-without-verified-license`). |
-| `design/screens/*.png` | 14 numbered screen exports plus two canvas overviews — the reference every screen was built against. |
+| Path                                                    | What it is                                                                                           |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`design/README.md`](design/README.md)                  | What was exported, from where, and how to read it.                                                   |
+| `design/lets-park-design.dc.html`                       | The design canvas itself.                                                                            |
+| `design/ds/colors_and_type.css`, `design/ds/support.js` | The source palette and type scale the tokens were derived from.                                      |
+| `design/ds/fonts/*.otf`                                 | Eight Neue Haas Grotesk faces (`doc/decision/0012-otf-fonts-committed-without-verified-license`).    |
+| `design/screens/*.png`                                  | 14 numbered screen exports plus two canvas overviews — the reference every screen was built against. |
 
 ## Decision records
 
@@ -256,3 +256,6 @@ for why, and take the next number from the end of this list.
 - [`0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths`](decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md) — 0301 – The design system is one package, and the layer rule moved to lint paths
 - [`0302-the-locale-is-a-cookie-not-a-url-segment`](decision/0302-the-locale-is-a-cookie-not-a-url-segment.md) — 0302 – The locale is a cookie, not a URL segment
 - [`0303-message-catalogs-live-in-the-app-not-in-libs-i18n`](decision/0303-message-catalogs-live-in-the-app-not-in-libs-i18n.md) — 0303 – Message catalogs live in the app, not in `libs/i18n`
+- [`0304-the-reservation-holder-projection-is-a-discriminated-union`](decision/0304-the-reservation-holder-projection-is-a-discriminated-union.md) — 0304 – The reservation holder projection is a discriminated union
+- [`0305-a-reservation-holder-is-a-user-or-a-guest-never-neither`](decision/0305-a-reservation-holder-is-a-user-or-a-guest-never-neither.md) — 0305 – A reservation holder is a user or a guest, never neither
+- [`0306-an-admin-names-the-holder-and-defaults-to-themselves`](decision/0306-an-admin-names-the-holder-and-defaults-to-themselves.md) — 0306 – An admin names the holder, and it defaults to themselves
