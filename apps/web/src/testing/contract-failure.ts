@@ -21,11 +21,21 @@
  * build program and reachable only by relative paths *inside* that lib —
  * `@lets-park/api-client` exports `src/index.ts` and nothing else, so no file in
  * `apps/web` can import it without a new entry point.
+ *
+ * **`createApiClient` comes from `jest.requireActual`, not a static import.**
+ * `lot-screen.spec.tsx` mocks `@lets-park/api-client` wholesale, to replace
+ * `createApiClient` with an object of `jest.fn()`s it controls directly — that
+ * mock would otherwise reach this file too, since a `jest.mock` on a module
+ * applies to every importer of it, and the "real transport, only `fetch`
+ * replaced" guarantee above would quietly become "the caller's own client
+ * double" instead.
  */
 
-import { createApiClient } from '@lets-park/api-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import type { ErrorCode } from '@lets-park/contract';
+
+const { createApiClient } =
+  jest.requireActual<typeof import('@lets-park/api-client')>('@lets-park/api-client');
 
 const API_URL = 'https://api.test/rpc';
 

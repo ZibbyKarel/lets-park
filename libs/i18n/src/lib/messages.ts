@@ -302,6 +302,16 @@ export interface CzechLotMessages {
   readonly queuePosition: string;
   readonly leaveQueue: string;
   readonly lockNote: string;
+  /**
+   * `reservation.create` failing with `RESERVATION_LIMIT_REACHED` while an
+   * admin named a holder other than themselves — the colleague, not the
+   * admin, already holds a bay that day. Rendered in `SpotDialog` instead of
+   * `errors.RESERVATION_LIMIT_REACHED`, which is second-person ("you already
+   * have…") and would be false here; this key names the holder instead. Every
+   * other caller of that code — a self-booking create, `waitlist.join` — gets
+   * the plain `errors` string.
+   */
+  readonly errHolderLimitReached: string;
 
   /** The lot has no active spots at all. */
   readonly emptyTitle: string;
@@ -741,6 +751,8 @@ export const csMessages: CzechMessages = {
     queuePosition: 'Ve frontě jste {position}. v pořadí.',
     leaveQueue: 'Odejít z fronty',
     lockNote: 'Rezervace na {month} jsou uzamčené — nové zápisy ani frontu už nelze měnit.',
+    errHolderLimitReached:
+      'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.',
 
     emptyTitle: 'Na parkovišti nejsou žádná aktivní místa.',
     emptyDescription: 'Jakmile admin nějaké místo přidá, objeví se tady.',
@@ -868,8 +880,7 @@ export const csMessages: CzechMessages = {
   },
   errors: {
     SPOT_ALREADY_RESERVED: 'Toto parkovací místo je na daný den už rezervované.',
-    RESERVATION_LIMIT_REACHED:
-      'Uživatel už na tento den rezervaci má — na den je povolená jen jedna.',
+    RESERVATION_LIMIT_REACHED: 'Na tento den už máte rezervaci — na den je povolená jen jedna.',
     PAST_DATE: 'Na tento den už nelze rezervovat, protože je v minulosti.',
     OUT_OF_HORIZON: 'Rezervace na tento měsíc se ještě neotevřely.',
     RESERVATIONS_LOCKED: 'Rezervační okno pro tento měsíc je už uzamčené.',

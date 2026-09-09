@@ -56,6 +56,7 @@ interface DialogOverrides {
   canReserve?: boolean;
   isAdmin?: boolean;
   error?: unknown;
+  errorMessage?: string;
   viewerUserId?: string | null;
   holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
   holderPending?: boolean;
@@ -80,6 +81,7 @@ function renderDialog(overrides: DialogOverrides = {}) {
           isAdmin={props.isAdmin ?? false}
           monthName="září"
           error={props.error ?? null}
+          {...(props.errorMessage === undefined ? {} : { errorMessage: props.errorMessage })}
           pending={false}
           viewerUserId={props.viewerUserId ?? null}
           holderOptions={props.holderOptions ?? []}
@@ -306,6 +308,23 @@ describe('SpotDialog — failures', () => {
     renderDialog({ error: locked });
 
     expect(screen.getByText('Rezervační okno pro tento měsíc je už uzamčené.')).toBeInTheDocument();
+  });
+
+  it('renders `errorMessage` instead of the code-mapped copy when the caller supplies one', async () => {
+    const error = await failureWithCode('RESERVATION_LIMIT_REACHED');
+    renderDialog({
+      error,
+      errorMessage: 'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.',
+    });
+
+    expect(
+      screen.getByText(
+        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+    ).not.toBeInTheDocument();
   });
 
   it('falls back to one generic sentence for a failure that is not in the contract', () => {

@@ -62,6 +62,16 @@ export interface SpotDialogProps {
   readonly monthName: string;
   /** Whatever the last action threw, or `null`. Rendered by code, never by message. */
   readonly error: unknown;
+  /**
+   * Overrides {@link error}'s code-mapped copy — the one case is `onReserve`
+   * naming a holder other than the viewer and getting back
+   * `RESERVATION_LIMIT_REACHED`, where the code-mapped sentence ("you already
+   * have a reservation") is false for the caller. The caller (`LotScreen`)
+   * resolves this, because only it knows who a given submission named;
+   * `undefined` for every other failure, including a self-booking create with
+   * the same code, so those keep the plain catalogue string.
+   */
+  readonly errorMessage?: string;
   readonly pending: boolean;
   /**
    * The signed-in user's id, or `null` while `me.get` is in flight. The admin's
@@ -107,6 +117,7 @@ export function SpotDialog({
   isAdmin,
   monthName,
   error,
+  errorMessage,
   pending,
   viewerUserId,
   holderOptions,
@@ -327,7 +338,13 @@ export function SpotDialog({
         // Keyed off the contract error's **code**, never its message: a
         // contract message is developer-facing English and a transport
         // failure's is stack-adjacent. `ScreenError` already owns that rule.
-        <ScreenError error={error} headingLevel={3} />
+        // `errorMessage` is `undefined` for every failure but the
+        // named-holder `RESERVATION_LIMIT_REACHED` — see its doc comment.
+        <ScreenError
+          error={error}
+          headingLevel={3}
+          {...(errorMessage === undefined ? {} : { message: errorMessage })}
+        />
       )}
     </Modal>
   );
