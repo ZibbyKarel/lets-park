@@ -12,6 +12,7 @@ export * from '@lets-park/shared-types';
 export * from './lib/messages';
 export * from './lib/errors';
 export * from './lib/dates';
+export * from './lib/date-formatters';
 export * from './lib/locale';
 export * from './lib/provider';
 
