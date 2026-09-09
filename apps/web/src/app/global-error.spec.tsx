@@ -97,6 +97,22 @@ describe('global-error', () => {
     expect(document.documentElement).toHaveAttribute('lang', 'cs');
   });
 
+  it('speaks English when the browser asks for it', () => {
+    // The counterpart of the first spec, and the reason the outer `beforeEach`
+    // exists: with an English-speaking browser the same screen renders
+    // `messages/en.json`. Asserting the copy — not only `<html lang>` — is what
+    // proves the second catalog is wired to this file rather than merely
+    // imported by it.
+    setBrowserLanguage('en-US');
+
+    render(<GlobalError error={boom()} reset={jest.fn()} />);
+
+    expect(document.documentElement).toHaveAttribute('lang', 'en');
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.getByText('Please try again in a moment.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
   it('negotiates that language in the browser, because no server resolved one', () => {
     // The rule itself is `negotiateLocale`'s and is tested in `libs/i18n`;
     // what this asserts is that this screen — the one place in the app that
