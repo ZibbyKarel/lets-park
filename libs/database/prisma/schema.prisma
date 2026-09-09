@@ -63,6 +63,7 @@ enum AuditLogAction {
   RESERVATION_WINDOW_UPDATED
   WAITLIST_JOINED
   RESERVATION_CREATED_BY_ADMIN
+  WAITLIST_JOINED_BY_ADMIN
 }
 
 // --- Entities --------------------------------------------------------------

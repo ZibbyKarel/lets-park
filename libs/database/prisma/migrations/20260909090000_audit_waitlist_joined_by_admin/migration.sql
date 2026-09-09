@@ -1,0 +1,17 @@
+-- TODO item 12 adds one member to the audit action enum.
+--
+-- An admin can now add somebody else to a spot's waitlist
+-- (`joinWaitlistInputSchema.holderId`), mirroring TODO item 3's
+-- `RESERVATION_CREATED_BY_ADMIN`. `WAITLIST_JOINED` stays what it has always
+-- meant — the queued person joined for themselves — so a second member is
+-- needed rather than overloading the first, for the same reason
+-- `RESERVATION_CREATED_BY_ADMIN` exists beside `RESERVATION_CREATED`.
+--
+-- `ADD VALUE IF NOT EXISTS` rather than a recreate, for the same reason as
+-- `20260902120000_audit_waitlist_joined`: `AuditLog` is append-only by
+-- trigger (`doc/decision/0027-*`), so rewriting the enum would mean an UPDATE
+-- the database itself rejects.
+--
+-- Postgres 12+ allows ADD VALUE inside a transaction block as long as the new
+-- value is not used in the same transaction; nothing here uses it.
+ALTER TYPE "AuditLogAction" ADD VALUE IF NOT EXISTS 'WAITLIST_JOINED_BY_ADMIN';

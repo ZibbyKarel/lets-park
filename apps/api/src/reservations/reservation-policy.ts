@@ -157,4 +157,34 @@ export class ReservationPolicy {
       details: { holderKind: holder.kind },
     });
   }
+
+  /**
+   * May **this** caller queue somebody else for a spot's waitlist?
+   *
+   * Mirrors `assertMayNameHolder`, minus the guest branch:
+   * `WaitlistEntry.userId` is non-nullable, so there is nobody to queue but an
+   * active user — `holderId` is a bare id, never a union. An omitted
+   * `holderId` is always allowed, and it means "the caller, for themselves".
+   * A caller naming *themselves* by id is allowed too, for the same reason a
+   * normal user naming themselves as a reservation holder is: it is the same
+   * queue entry they would get by omitting `holderId`. Naming anybody else is
+   * `FORBIDDEN` unless the caller is an admin.
+   *
+   * Its own named method rather than a branch inside `assertMayNameHolder`:
+   * the two guard different input shapes (a holder union vs. a bare id) for
+   * different procedures, and a shared method would need to take the union of
+   * both signatures for no callers that exist.
+   */
+  assertMayNameWaitlistTarget(holderId: string | undefined, actor: AuthenticatedUser): void {
+    if (holderId === undefined || holderId === actor.id) {
+      return;
+    }
+    if (actor.role === 'ADMIN') {
+      return;
+    }
+
+    throw new DomainError('FORBIDDEN', {
+      message: 'Only an admin may add somebody else to a queue.',
+    });
+  }
 }

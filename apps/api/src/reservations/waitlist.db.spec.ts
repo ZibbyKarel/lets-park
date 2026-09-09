@@ -208,6 +208,126 @@ describe('the waitlist against a real PostgreSQL', () => {
       ).resolves.toBe('ALREADY_IN_WAITLIST');
     });
 
+    describe('an admin naming somebody else', () => {
+      it('adds another user to the queue and audits it as WAITLIST_JOINED_BY_ADMIN', async () => {
+        const { spot } = await occupiedSpot();
+        const [admin, target] = [await seedUser(client), await seedUser(client)];
+
+        const result = await harness.waitlist.join(
+          { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY, holderId: target.id },
+          actorFor(admin, 'ADMIN'),
+          TODAY
+        );
+
+        expect(result).toMatchObject({
+          position: 1,
+          entry: { parkingSpotId: spot.id, userId: target.id, date: FUTURE_BUSINESS_DAY },
+        });
+        await expect(
+          client.auditLog.findFirst({
+            where: { action: 'WAITLIST_JOINED_BY_ADMIN', entityId: result.entry.id },
+            select: { actorUserId: true, entityType: true, payload: true },
+          })
+        ).resolves.toEqual({
+          actorUserId: admin.id,
+          entityType: 'WaitlistEntry',
+          payload: { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY, targetUserId: target.id },
+        });
+      });
+
+      it('refuses a normal user naming somebody else', async () => {
+        const { spot } = await occupiedSpot();
+        const [user, target] = [await seedUser(client), await seedUser(client)];
+
+        await expect(
+          codeOf(
+            harness.waitlist.join(
+              { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY, holderId: target.id },
+              actorFor(user),
+              TODAY
+            )
+          )
+        ).resolves.toBe('FORBIDDEN');
+      });
+
+      it("checks the target's own spot, not the admin's, for CANNOT_WAITLIST_OWN_SPOT", async () => {
+        const { spot, holder } = await occupiedSpot();
+        const admin = await seedUser(client);
+
+        await expect(
+          codeOf(
+            harness.waitlist.join(
+              { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY, holderId: holder.id },
+              actorFor(admin, 'ADMIN'),
+              TODAY
+            )
+          )
+        ).resolves.toBe('CANNOT_WAITLIST_OWN_SPOT');
+      });
+
+      it("checks the target's reservation limit, not the admin's", async () => {
+        const { spot } = await occupiedSpot();
+        const [admin, target, elsewhere] = [
+          await seedUser(client),
+          await seedUser(client),
+          await seedSpot(client),
+        ];
+        await harness.reservations.create(
+          { parkingSpotId: elsewhere.id, date: FUTURE_BUSINESS_DAY },
+          actorFor(target),
+          TODAY
+        );
+
+        await expect(
+          codeOf(
+            harness.waitlist.join(
+              { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY, holderId: target.id },
+              actorFor(admin, 'ADMIN'),
+              TODAY
+            )
+          )
+        ).resolves.toBe('RESERVATION_LIMIT_REACHED');
+      });
+
+      it('answers NOT_FOUND for an admin naming an unknown user', async () => {
+        const { spot } = await occupiedSpot();
+        const admin = await seedUser(client);
+
+        await expect(
+          codeOf(
+            harness.waitlist.join(
+              {
+                parkingSpotId: spot.id,
+                date: FUTURE_BUSINESS_DAY,
+                holderId: '00000000-0000-7000-8000-000000000000',
+              },
+              actorFor(admin, 'ADMIN'),
+              TODAY
+            )
+          )
+        ).resolves.toBe('NOT_FOUND');
+      });
+
+      it('still lets an admin queue themselves by name, unchanged', async () => {
+        const { spot } = await occupiedSpot();
+        const admin = await seedUser(client);
+
+        const result = await harness.waitlist.join(
+          { parkingSpotId: spot.id, date: FUTURE_BUSINESS_DAY, holderId: admin.id },
+          actorFor(admin, 'ADMIN'),
+          TODAY
+        );
+
+        expect(result.entry.userId).toBe(admin.id);
+        await expect(
+          client.auditLog.findFirst({
+            where: { action: 'WAITLIST_JOINED', entityId: result.entry.id },
+            select: { actorUserId: true },
+          })
+        ).resolves.toEqual({ actorUserId: admin.id });
+      });
+    });
+
     it('refuses an unknown spot and a weekend', async () => {
       const user = await seedUser(client);
       const { spot } = await occupiedSpot();

@@ -86,6 +86,13 @@ export class WaitlistService {
    * re-checks eligibility at promotion time and skips such a candidate then,
    * so the worst case is a queue entry that (correctly) never promotes. See
    * `doc/waitlist.md` §"What happens under concurrency".
+   *
+   * **The target may be somebody else**, if the caller is an admin.
+   * `assertMayNameWaitlistTarget` is the boundary, mirroring
+   * `ReservationsService.create`'s `assertMayNameHolder`: every check below
+   * that used to read `actor.id` — "already holds it", "already reserved that
+   * day" — now reads `targetUserId`, because the question is always about the
+   * person being queued, not the person submitting the form.
    */
   async join(
     input: JoinWaitlistInput,
@@ -93,10 +100,26 @@ export class WaitlistService {
     today: DateOnly = todayInPrague()
   ): Promise<JoinWaitlistOutput> {
     const settings = await this.window.getSettings();
+    this.policy.assertMayNameWaitlistTarget(input.holderId, actor);
     this.policy.assertMayTakeDay(input.date, actor, settings, today);
 
+    const targetUserId = input.holderId ?? actor.id;
+    if (targetUserId !== actor.id) {
+      // A real check, not a constraint's job: the foreign key would only say
+      // `CONFLICT`, and an admin who mistyped an id deserves `NOT_FOUND`. Read
+      // outside the transaction for the same reason `ReservationsService
+      // .create`'s target lookup is — it is a lookup, not an invariant.
+      const target = await this.prisma.client.user.findFirst({
+        where: { id: targetUserId, active: true },
+        select: { id: true },
+      });
+      if (target === null) {
+        throw new DomainError('NOT_FOUND', { message: 'No such active user.' });
+      }
+    }
+
     const outcome = await this.prisma.client.$transaction(
-      (tx) => this.joinOnce(tx, input, actor),
+      (tx) => this.joinOnce(tx, input, actor, targetUserId),
       RESERVATION_TRANSACTION_OPTIONS
     );
 
@@ -108,7 +131,8 @@ export class WaitlistService {
   private async joinOnce(
     tx: Prisma.TransactionClient,
     input: JoinWaitlistInput,
-    actor: AuthenticatedUser
+    actor: AuthenticatedUser,
+    targetUserId: string
   ): Promise<WaitlistOutcome<JoinWaitlistOutput>> {
     const spot = await tx.parkingSpot.findUnique({
       where: { id: input.parkingSpotId },
@@ -130,20 +154,21 @@ export class WaitlistService {
         message: 'That spot is free — reserve it instead of queueing for it.',
       });
     }
-    if (holder.userId === actor.id) {
+    if (holder.userId === targetUserId) {
       throw new DomainError('CANNOT_WAITLIST_OWN_SPOT', {
-        message: 'You already hold that spot for that day.',
+        message: 'That user already holds that spot for that day.',
       });
     }
 
     const dateColumn = toDateColumn(input.date);
     const own = await tx.reservation.findUnique({
-      where: { userId_date: { userId: actor.id, date: dateColumn } },
+      where: { userId_date: { userId: targetUserId, date: dateColumn } },
       select: { id: true },
     });
     if (own !== null) {
       throw new DomainError('RESERVATION_LIMIT_REACHED', {
-        message: 'You already have a reservation on that day, so you could never be promoted.',
+        message:
+          'That user already has a reservation on that day, so they could never be promoted.',
         details: { reservationId: own.id },
       });
     }
@@ -153,7 +178,7 @@ export class WaitlistService {
     // a read-then-write would still lose against a concurrent identical request.
     // `WaitlistEntry (parkingSpotId, userId, date)` maps to `ALREADY_IN_WAITLIST`.
     const entry = await tx.waitlistEntry.create({
-      data: { parkingSpotId: input.parkingSpotId, userId: actor.id, date: dateColumn },
+      data: { parkingSpotId: input.parkingSpotId, userId: targetUserId, date: dateColumn },
     });
 
     // In the transaction, for the same reason the reservation's entry is: a
@@ -161,14 +186,28 @@ export class WaitlistService {
     // prevent, and `reservation.confirmBulk` writes the same action for the
     // rows it creates (`doc/decision/0091-*`). The `payload` shape is fixed per
     // action by `../audit/audit-payloads.ts`.
+    //
+    // `WAITLIST_JOINED` still means "the queued person joined for themselves",
+    // admin or not; naming somebody else is a different action, because the
+    // trail has to say who acted and on whose behalf — mirrors
+    // `ReservationsService.create`'s `bookedForSomebodyElse` split.
+    const queuedForSomebodyElse = targetUserId !== actor.id;
     await this.audit.record(
-      {
-        actorUserId: actor.id,
-        action: 'WAITLIST_JOINED',
-        entityType: 'WaitlistEntry',
-        entityId: entry.id,
-        payload: { parkingSpotId: input.parkingSpotId, date: input.date },
-      },
+      queuedForSomebodyElse
+        ? {
+            actorUserId: actor.id,
+            action: 'WAITLIST_JOINED_BY_ADMIN',
+            entityType: 'WaitlistEntry',
+            entityId: entry.id,
+            payload: { parkingSpotId: input.parkingSpotId, date: input.date, targetUserId },
+          }
+        : {
+            actorUserId: actor.id,
+            action: 'WAITLIST_JOINED',
+            entityType: 'WaitlistEntry',
+            entityId: entry.id,
+            payload: { parkingSpotId: input.parkingSpotId, date: input.date },
+          },
       tx
     );
 

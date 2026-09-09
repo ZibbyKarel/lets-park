@@ -113,6 +113,12 @@ export type AuditPayloads = PayloadMap<{
     readonly queueLength: number;
   };
   WAITLIST_JOINED: AuditCell;
+  /**
+   * An admin queued somebody else. Mirrors `RESERVATION_CREATED_BY_ADMIN`'s
+   * split, minus the guest branch: `WaitlistEntry.userId` is non-nullable, so
+   * the target is always a user and needs no `guestName` alternative.
+   */
+  WAITLIST_JOINED_BY_ADMIN: AuditCell & { readonly targetUserId: string };
   USER_UPDATED: UserUpdatedPayload;
   SPOT_UPDATED: SpotUpdatedPayload;
   RESERVATION_WINDOW_UPDATED: Change<WindowFields>;
