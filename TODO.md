@@ -2,7 +2,7 @@
 
 1. [x] `libs/design-system` should be one package rather than three nested ones. (merged into main as 6ef72d8)
 2. [x] `libs/shared-types` → `czech-holidays`: is there a library for this? The whole file is unsatisfying. (branch todo-2-libs-shared-types-czech-holidays-is-there-a-library-for-this)
-3. [ ] flow rezervování míst pro admin usera se liší od flow rezervace normálního usera - user rezervuje pro sebe ale admin může rezervovat pro ostaní uživatele (včetně sebe) tzn musí tam být selector uživatelů, který vybere jméno i spz (měla by jít změnit), případně rezervovat místo pro hosta.
+3. [x] flow rezervování míst pro admin usera se liší od flow rezervace normálního usera - user rezervuje pro sebe ale admin může rezervovat pro ostaní uživatele (včetně sebe) tzn musí tam být selector uživatelů, který vybere jméno i spz (měla by jít změnit), případně rezervovat místo pro hosta. (8870616)
 4. [ ] Cap registered parking spots at 5 per user per month.
 5. [ ] pokud má uživatel již auto registrované na vybraný den, rezervace ani přidání se do fronty na parkovací místo nesmí být povolena dokud nezruší současnou rezervaci
    - **Backend is done; the gap is the UI.** The rule is already enforced twice: the unique index `Reservation (userId, date)` refuses the second reservation (mapped to `RESERVATION_LIMIT_REACHED`), and `WaitlistService.joinOnce` refuses a queue join by someone holding that day. What remains is that `toSpotView` (`apps/web/src/lot/lot-view.ts`) never reads `viewerReservationId`, so the screen still offers `reserve` on free bays and `queue` on taken ones and the user walks into a server error. Frontend-only change; no contract change needed.
