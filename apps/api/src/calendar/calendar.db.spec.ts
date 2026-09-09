@@ -27,6 +27,8 @@ import type { PrismaClient } from '@lets-park/database';
 import { createPrismaClient } from '@lets-park/database';
 import { toDateColumn, toDateOnly } from '../common/prisma-mapping';
 import { requireDatabaseUrl, unique } from '../testing/database/test-database';
+import { CalendarService } from './calendar.service';
+import type { PrismaService } from '../database/prisma.service';
 
 /** Runs `work` in a transaction that is always rolled back, returning its value. */
 async function inRolledBackTransaction<T>(
@@ -208,13 +210,15 @@ describe('the ICS feed against a real PostgreSQL', () => {
   });
 
   describe('a guest reservation', () => {
-    it('is in nobody’s feed, because the feed filters on userId', async () => {
-      // Not a filter anyone wrote for guests: `feedEntriesForToken` selects
-      // `where: { userId, date: { gte } }` (`calendar.service.ts:79-81`), and a
-      // guest row has no `userId`. Asserted because "nobody can see it" is a
-      // privacy property, not an implementation detail — and because the query
-      // is the thing a later `where` clause could quietly widen.
-      const rows = await inRolledBackTransaction(prisma, async (tx) => {
+    it('is absent from feedEntriesForToken, because the feed filters on userId', async () => {
+      // Drives `CalendarService.feedEntriesForToken` itself rather than a
+      // second copy of its `where` clause: a duplicated filter here would stay
+      // green even if `calendar.service.ts`'s own query widened, which is
+      // exactly the trap this test exists to avoid. The service is built over
+      // `tx` — not the root `prisma` — because a service built over the root
+      // client cannot see rows written inside this uncommitted transaction,
+      // and would return an (also empty) feed for the wrong reason.
+      const { entries, mineLabel } = await inRolledBackTransaction(prisma, async (tx) => {
         const token = unique('ics');
         const user = await seedUser(tx, token);
         const [mine, theirs] = [
@@ -230,15 +234,13 @@ describe('the ICS feed against a real PostgreSQL', () => {
           data: { parkingSpotId: theirs.id, guestName: 'Jan Host', date: day },
         });
 
-        return tx.reservation.findMany({
-          where: { userId: user.id, date: { gte: day } },
-          include: { parkingSpot: { select: { label: true } } },
-        });
+        const service = new CalendarService({ client: tx } as unknown as PrismaService);
+        const found = await service.feedEntriesForToken(token, day);
+        return { entries: found, mineLabel: mine.label };
       });
 
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.guestName).toBeNull();
-      expect(rows[0]?.parkingSpot.label).not.toBe('');
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.spotLabel).toBe(mineLabel);
     });
   });
 });
