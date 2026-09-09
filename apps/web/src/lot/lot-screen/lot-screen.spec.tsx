@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
+import { createApiQueryUtils } from '@lets-park/api-client';
+import { createQueryClient } from '../../shell/query/query-client';
 import { createDateFormatters } from '@lets-park/i18n';
 import type { AdminUser, DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
 import { profile, T0 } from '../../testing/fixtures';
@@ -25,7 +26,7 @@ const cs = createDateFormatters('cs');
  * Doubled at the wrapper boundary, same as `use-lot-realtime.spec.tsx`:
  * `@lets-park/api-client` (so `ApiProvider` needs no live transport) and
  * `@lets-park/auth/client` / `@lets-park/realtime-client` (so no session and
- * no socket are required). `@lets-park/query` is real, for the same reason it
+ * no socket are required). The real `QueryClient` is used, for the same reason it
  * is real there — a stubbed client would let a wrong query key pass unnoticed.
  * `@lets-park/i18n` is real except for `todayInPrague`, pinned so the initial
  * day is deterministic without touching the system clock.

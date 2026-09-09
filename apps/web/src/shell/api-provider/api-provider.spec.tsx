@@ -21,14 +21,11 @@ import { ApiProvider } from './api-provider';
 
 jest.mock('@lets-park/api-client', () => ({
   createApiClient: jest.fn(() => ({ marker: 'client' })),
+  createApiQueryUtils: jest.fn((client: unknown) => ({ marker: 'utils', client })),
 }));
 
 jest.mock('@lets-park/auth/client', () => ({
   useAccessTokenProvider: () => mockGetAccessToken,
-}));
-
-jest.mock('@lets-park/query', () => ({
-  createApiQueryUtils: jest.fn((client: unknown) => ({ marker: 'utils', client })),
 }));
 
 const mockGetAccessToken = async () => 'irrelevant';
