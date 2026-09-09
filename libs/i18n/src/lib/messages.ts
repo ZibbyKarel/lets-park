@@ -212,6 +212,18 @@ export interface CzechLotMessages {
   readonly spotMenu: string;
   /** Spoken form of a plate for assistive technology, and the modal's fallback. */
   readonly noPlate: string;
+  /** Label of the admin's holder `Select` on a free bay. */
+  readonly holderField: string;
+  /** The `Select`'s guest option. */
+  readonly holderGuestOption: string;
+  /** Label of the guest-name `Input`. */
+  readonly guestNameField: string;
+  /** Shown under the guest-name field when it is empty. */
+  readonly guestNameRequired: string;
+  /** Label of the overridable plate `Input`. */
+  readonly plateField: string;
+  /** Badge beside a guest's name in the dialog, and on the tile. */
+  readonly guestHolder: string;
 
   readonly legendTaken: string;
   readonly legendFree: string;
@@ -661,6 +673,12 @@ export const csMessages: CzechMessages = {
     waiting: '{count} ve frontě',
     spotMenu: 'Možnosti místa {label}',
     noPlate: 'SPZ neuvedena',
+    holderField: 'Rezervovat pro',
+    holderGuestOption: 'Hosta',
+    guestNameField: 'Jméno hosta',
+    guestNameRequired: 'Zadejte jméno hosta.',
+    plateField: 'SPZ',
+    guestHolder: 'Host',
 
     legendTaken: 'obsazeno',
     legendFree: 'volné',

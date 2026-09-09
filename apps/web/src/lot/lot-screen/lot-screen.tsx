@@ -36,6 +36,7 @@ import { DatePickerDialog } from '../date-picker-dialog/date-picker-dialog';
 import { LotGrid } from '../lot-grid/lot-grid';
 import { BulkReservationModal } from '../bulk-modal/bulk-modal';
 import { SpotDialog } from '../spot-dialog/spot-dialog';
+import type { HolderOption } from '../spot-dialog/holder-input';
 import { useCellLocks } from './use-cell-locks';
 import { useLotRealtime } from './use-lot-realtime';
 import {
@@ -95,6 +96,24 @@ export function LotScreen() {
     enabled: sessionStatus === 'authenticated',
   });
   const day = dayQuery.data ?? null;
+
+  // Only an admin may name a holder, so only an admin fetches the list. Filtered
+  // server-side: `adminListUsersInputSchema` carries `active`, and a deactivated
+  // colleague is not somebody to book a bay for.
+  const holderQuery = useQuery({
+    ...api.admin.user.list.queryOptions({ input: { active: true } }),
+    enabled: sessionStatus === 'authenticated' && isAdmin,
+  });
+
+  const holderOptions = useMemo<readonly HolderOption[]>(
+    () =>
+      (holderQuery.data?.users ?? []).map((row) => ({
+        userId: row.id,
+        name: row.name,
+        licensePlate: row.licensePlate,
+      })),
+    [holderQuery.data]
+  );
 
   useLotRealtime({ date, viewerUserId });
   const locks = useCellLocks(date);
@@ -305,10 +324,16 @@ export function LotScreen() {
         monthName={formatMonthName(parts.month)}
         error={actionError}
         pending={pending}
+        viewerUserId={viewerUserId}
+        holderOptions={holderOptions}
         onClose={closeDialog}
-        onReserve={() => {
+        onReserve={(holder) => {
           if (openSpot === null) return;
-          createReservation.mutate({ parkingSpotId: openSpot.spotId, date });
+          createReservation.mutate({
+            parkingSpotId: openSpot.spotId,
+            date,
+            ...(holder === undefined ? {} : { holder }),
+          });
         }}
         onJoinWaitlist={() => {
           if (openSpot === null) return;

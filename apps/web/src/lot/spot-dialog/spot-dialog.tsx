@@ -14,14 +14,16 @@
  * gives the design the casting vote on *visuals*, not on what may cross the
  * wire):
  *
- * 1. **No name/SPZ form.** The design's reserve modal has "Jméno" and "SPZ"
- *    inputs bound to `resName`/`resPlate`. `createReservationInputSchema` is
- *    `{ parkingSpotId, date }` and nothing else — the holder is the caller and
- *    the plate is read off their profile, which they edit in Nastavení (Task
- *    26). Rendering the two fields would have meant either inventing request
- *    fields the contract does not have, or drawing inputs that quietly discard
- *    what is typed into them. So the modal is a confirmation, not a form —
- *    which is also why this screen needs no `libs/form`.
+ * 1. **A name/SPZ form, but only for an admin.** The design's reserve modal has
+ *    "Jméno" and "SPZ" inputs bound to `resName`/`resPlate`. For a normal user
+ *    the contract still has nowhere to put them — the holder *is* the caller and
+ *    the plate is read off their profile, which they edit in Nastavení — so
+ *    their modal remains a confirmation. For an **admin**,
+ *    `createReservationInputSchema.holder` now exists (TODO item 3,
+ *    `doc/decision/0304-*`), so the two fields are real: a holder selector over
+ *    the active users plus a guest option, and an overridable plate. The form is
+ *    `libs/form`; the holder defaults to the admin themselves, so the dialog is
+ *    still one click for the common case.
  * 2. **No list of who is queued.** The design lists the queue by name. The
  *    contract exposes `waitlistCount` plus **the caller's own** position and
  *    deliberately nothing else: `waitlistUpdatedEventSchema` states that "who
@@ -30,12 +32,18 @@
  *    own position are shown instead.
  */
 
+import { useEffect } from 'react';
 import { Avatar, Button, Modal, Stack } from '@lets-park/design-system/primitives';
 import { formatDayAndMonth, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
+import { FormProvider, useAppForm } from '@lets-park/form';
+import type { ReservationHolderInput } from '@lets-park/contract';
 import { initialsOf } from '../../shell/initials';
 import { ScreenError } from '../../shell/screen-state/screen-state';
 import type { SpotView } from '../lot-view';
+import { HolderFields } from './holder-fields';
+import { holderFormSchema, toHolderInput } from './holder-input';
+import type { HolderFormValues, HolderOption } from './holder-input';
 
 export interface SpotDialogProps {
   /** `null` closes the dialog. */
@@ -55,8 +63,30 @@ export interface SpotDialogProps {
   /** Whatever the last action threw, or `null`. Rendered by code, never by message. */
   readonly error: unknown;
   readonly pending: boolean;
+  /**
+   * The signed-in user's id, or `null` while `me.get` is in flight. The admin's
+   * holder selector defaults to it — see `onReserve`.
+   */
+  readonly viewerUserId: string | null;
+  /**
+   * The users an admin may book for. Empty for a normal user, and empty for an
+   * admin whose user list has not arrived — in both cases the holder form is not
+   * rendered and `onReserve` is called with no argument.
+   */
+  readonly holderOptions: readonly HolderOption[];
   readonly onClose: () => void;
-  readonly onReserve: () => void;
+  /**
+   * Reserve the bay. **No argument means "for the caller"** — the contract's
+   * `holder` is optional precisely so a normal user's request is byte-for-byte
+   * what it has always been.
+   *
+   * Called with a holder only from the admin form, and it defaults to the admin
+   * themselves: `apps/web-e2e/src/support/lot-page.ts:122-125` opens this dialog
+   * and clicks "Rezervovat" once, as an admin, so a form that required a
+   * selection first would never submit and the journey would hang on a dialog
+   * that never hides.
+   */
+  readonly onReserve: (holder?: ReservationHolderInput) => void;
   readonly onJoinWaitlist: () => void;
   readonly onLeaveWaitlist: () => void;
   readonly onCancelReservation: () => void;
@@ -70,6 +100,8 @@ export function SpotDialog({
   monthName,
   error,
   pending,
+  viewerUserId,
+  holderOptions,
   onClose,
   onReserve,
   onJoinWaitlist,
@@ -77,6 +109,34 @@ export function SpotDialog({
   onCancelReservation,
 }: SpotDialogProps) {
   const t = useTranslations('lot');
+
+  const showHolderForm =
+    isAdmin && holderOptions.length > 0 && viewerUserId !== null && spot?.action === 'reserve';
+
+  const form = useAppForm<HolderFormValues>({
+    schema: holderFormSchema,
+    defaultValues: { holderId: viewerUserId ?? '', guestName: '', licensePlate: '' },
+  });
+  const holderId = form.watch('holderId');
+  const submitHolder = form.handleSubmit((values) => onReserve(toHolderInput(values)));
+
+  // `defaultValues` are captured once, at mount — and this component mounts with
+  // the screen, before `me.get` has necessarily resolved, so `viewerUserId` can
+  // still be `null` then. React Hook Form never re-applies `defaultValues`, so
+  // without this the admin's holder would stay `''`, `holderId: z.string().min(1)`
+  // would refuse the submit, and the one-click journey
+  // (`apps/web-e2e/src/support/lot-page.ts:122-126`) would hang on a dialog that
+  // never hides.
+  //
+  // Resetting on *open* is the right behaviour in its own right: a guest name
+  // typed for one bay must not survive into the next bay's dialog.
+  const openSpotId = spot?.spotId ?? null;
+  useEffect(() => {
+    if (openSpotId === null) return;
+    form.reset({ holderId: viewerUserId ?? '', guestName: '', licensePlate: '' });
+    // `form` is stable across renders; `form.reset` is the documented way to
+    // re-seed, and listing it keeps the exhaustive-deps rule satisfied.
+  }, [openSpotId, viewerUserId, form]);
 
   if (spot === null) return null;
 
@@ -139,8 +199,11 @@ export function SpotDialog({
       // same accessible name, doing the same thing, in the same dialog.
       // Escape and the scrim still close it; `Modal` keeps both regardless.
       hideCloseButton
-      // Nothing here is unsaved input — the dialog holds no form (see the
-      // module docs) — so a stray click on the scrim throws no work away.
+      // For a normal user nothing here is unsaved input — the dialog holds no
+      // form (see the module docs). For an admin reserving for someone else, a
+      // half-typed guest name or plate override is lost on a scrim click too —
+      // the same trade-off the design's own modal makes everywhere else, and
+      // small enough not to warrant a confirm-to-discard step.
       closeOnScrimClick
       footer={
         <>
@@ -169,7 +232,7 @@ export function SpotDialog({
                 </Button>
               )
             ) : (
-              <Button loading={pending} onClick={onReserve}>
+              <Button loading={pending} onClick={showHolderForm ? submitHolder : () => onReserve()}>
                 {t('ctaReserve')}
               </Button>
             )
@@ -177,6 +240,12 @@ export function SpotDialog({
         </>
       }
     >
+      {showHolderForm ? (
+        <FormProvider {...form}>
+          <HolderFields options={holderOptions} holderId={holderId} />
+        </FormProvider>
+      ) : null}
+
       {isTaken && spot.holderName !== null ? (
         <div className="mb-5">
           <Stack
@@ -187,7 +256,14 @@ export function SpotDialog({
           >
             <Avatar initials={initialsOf(spot.holderName)} tone="neutral" size="lg" />
             <div>
-              <p className="text-base font-bold text-fg">{spot.holderName}</p>
+              <p className="text-base font-bold text-fg">
+                {spot.holderName}
+                {spot.holderIsGuest ? (
+                  <span className="ml-2 rounded-xs bg-brand-yellow-100 px-2 py-0.5 text-xs font-bold uppercase tracking-caps text-fg">
+                    {t('guestHolder')}
+                  </span>
+                ) : null}
+              </p>
               <p className="text-sm text-fg-3">
                 {t('occupiedBy', { plate: spot.holderPlate ?? t('noPlate') })}
               </p>

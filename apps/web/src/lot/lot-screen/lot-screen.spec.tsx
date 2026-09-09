@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
 import { formatFullDate } from '@lets-park/i18n';
-import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
+import type { AdminUser, DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
 import { profile, T0 } from '../../testing/fixtures';
 import { createProviderWrapper } from '../../testing/providers';
 import { LotScreen } from './lot-screen';
@@ -99,6 +99,7 @@ const apiMocks = {
   spotList: jest.fn(),
   previewBulk: jest.fn(),
   confirmBulk: jest.fn(),
+  adminUserList: jest.fn(),
 };
 
 function buildClient() {
@@ -113,6 +114,7 @@ function buildClient() {
     waitlist: { join: apiMocks.waitlistJoin, leave: apiMocks.waitlistLeave },
     me: { get: apiMocks.meGet },
     spot: { list: apiMocks.spotList },
+    admin: { user: { list: apiMocks.adminUserList } },
   };
 }
 
@@ -223,6 +225,8 @@ function setup(
     seedDay?: boolean;
     dayImpl?: () => Promise<DayOverviewOutput>;
     realtimeStatus?: MockRealtimeStatus;
+    /** Only fetched by an admin; overrides the empty-list default. */
+    adminUsers?: readonly AdminUser[];
   } = {}
 ) {
   Object.values(apiMocks).forEach((fn) => {
@@ -240,6 +244,9 @@ function setup(
   // The bulk modal reads the spot list for its preferred-spot label. Its own
   // behaviour is `bulk-modal.spec.tsx`'s; here it only has to not fail.
   apiMocks.spotList.mockResolvedValue({ spots: [] });
+  // Only fetched by an admin (`holderQuery`'s `enabled`), but harmless to seed
+  // unconditionally — a case that cares about its contents passes `adminUsers`.
+  apiMocks.adminUserList.mockResolvedValue({ users: options.adminUsers ?? [] });
 
   sessionStatusValue = options.sessionStatus ?? 'authenticated';
 
@@ -686,5 +693,55 @@ describe('LotScreen — telling the user the board has stopped updating', () => 
     setup({ realtimeStatus: 'rejected' });
     expect(screen.getByText(NOTICE)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: RECONNECT })).toBeInTheDocument();
+  });
+});
+
+describe('LotScreen — an admin naming a holder', () => {
+  it('reserves a free bay for another user, and asks only for active ones', async () => {
+    const other: AdminUser = {
+      id: OTHER_USER,
+      email: 'jana@firma.cz',
+      name: 'Jana Nováková',
+      licensePlate: null,
+      role: 'USER',
+      oktaId: 'okta-2',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+    const admin: AdminUser = {
+      id: VIEWER,
+      email: 'karel.zibar@firma.cz',
+      name: 'Karel Zíbar',
+      licensePlate: '4AB 1234',
+      role: 'ADMIN',
+      oktaId: 'okta-1',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsers: [admin, other],
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+    await user.selectOptions(await screen.findByLabelText('Rezervovat pro'), OTHER_USER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    await waitFor(() =>
+      expect(apiMocks.reservationCreate.mock.calls[0]?.[0]).toEqual({
+        parkingSpotId: 'spot-free',
+        date: DATE,
+        holder: { kind: 'USER', userId: OTHER_USER, licensePlate: null },
+      })
+    );
+    // `active: true`, not a client-side filter: `adminListUsersInputSchema`
+    // carries the flag (`libs/contract/src/api/users.ts:64-66`).
+    expect(apiMocks.adminUserList.mock.calls[0]?.[0]).toEqual({ active: true });
   });
 });

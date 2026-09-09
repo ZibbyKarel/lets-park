@@ -57,6 +57,8 @@ function renderDialog(
     canReserve?: boolean;
     isAdmin?: boolean;
     error?: unknown;
+    viewerUserId?: string | null;
+    holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
   } = {}
 ) {
   const callbacks = {
@@ -77,6 +79,8 @@ function renderDialog(
         monthName="září"
         error={overrides.error ?? null}
         pending={false}
+        viewerUserId={overrides.viewerUserId ?? null}
+        holderOptions={overrides.holderOptions ?? []}
         {...callbacks}
       />
     </IntlProvider>
@@ -298,5 +302,119 @@ describe('SpotDialog — failures', () => {
   it('shows no failure block when there is no failure', () => {
     renderDialog();
     expect(screen.queryByText('Něco se nepovedlo')).not.toBeInTheDocument();
+  });
+});
+
+const OPTIONS = [
+  { userId: 'admin-1', name: 'Dev Admin', licensePlate: '1AA 1111' },
+  { userId: 'user-2', name: 'Jana Nováková', licensePlate: null },
+];
+
+describe('SpotDialog — an admin reserving a free bay', () => {
+  function renderAdmin(overrides: Parameters<typeof renderDialog>[0] = {}) {
+    return renderDialog({
+      isAdmin: true,
+      viewerUserId: 'admin-1',
+      holderOptions: OPTIONS,
+      ...overrides,
+    });
+  }
+
+  it('offers the holder selector, with the admin themselves preselected', async () => {
+    renderAdmin();
+
+    const select = screen.getByLabelText('Rezervovat pro');
+    expect(select).toHaveValue('admin-1');
+    expect(screen.getByRole('option', { name: 'Hosta' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Jana Nováková' })).toBeInTheDocument();
+  });
+
+  it('reserves for the admin themselves on a single click, with no plate override', async () => {
+    // The browser suite's `reserveSpot` does exactly this — opens the dialog
+    // and clicks once (`apps/web-e2e/src/support/lot-page.ts:122-125`) — so a
+    // form that needed a selection first would take that journey red.
+    const { onReserve, user } = renderAdmin();
+
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).toHaveBeenCalledTimes(1);
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'USER',
+      userId: 'admin-1',
+      licensePlate: null,
+    });
+  });
+
+  it('reserves for another user, with the plate the admin typed', async () => {
+    const { onReserve, user } = renderAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'user-2');
+    await user.type(screen.getByLabelText('SPZ'), '9XY 8765');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'USER',
+      userId: 'user-2',
+      licensePlate: '9XY 8765',
+    });
+  });
+
+  it('hints the chosen holder’s stored plate, so blank is not a blank plate', async () => {
+    const { user } = renderAdmin();
+    const plate = screen.getByLabelText('SPZ');
+
+    expect(plate).toHaveAttribute('placeholder', '1AA 1111');
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'user-2');
+    expect(plate).toHaveAttribute('placeholder', 'SPZ neuvedena');
+  });
+
+  it('asks for a guest’s name, and refuses to submit without one', async () => {
+    const { onReserve, user } = renderAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'GUEST');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).not.toHaveBeenCalled();
+    expect(await screen.findByText('Zadejte jméno hosta.')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Jméno hosta'), 'Jan Host');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'GUEST',
+      name: 'Jan Host',
+      licensePlate: null,
+    });
+  });
+});
+
+describe('SpotDialog — a normal user reserving a free bay', () => {
+  it('sees no holder selector and reserves for themselves', async () => {
+    const { onReserve, user } = renderDialog({ viewerUserId: 'user-2', holderOptions: [] });
+
+    expect(screen.queryByLabelText('Rezervovat pro')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    // No argument at all: an omitted holder is "the caller", which is what the
+    // contract's optional `holder` was shaped for.
+    expect(onReserve).toHaveBeenCalledWith();
+  });
+});
+
+describe('SpotDialog — a bay a guest holds', () => {
+  it('says so beside the name', () => {
+    renderDialog({
+      spot: spot({
+        appearance: 'taken',
+        action: 'queue',
+        holderName: 'Jan Host',
+        holderPlate: null,
+        holderIsGuest: true,
+        carColorClass: 'text-fg-3',
+      }),
+    });
+
+    expect(screen.getByText('Jan Host')).toBeInTheDocument();
+    expect(screen.getByText('Host')).toBeInTheDocument();
   });
 });
