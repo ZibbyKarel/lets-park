@@ -44,6 +44,9 @@ import type { SpotView } from '../lot-view';
 import { HolderFields } from './holder-fields';
 import { holderFormSchema, toHolderInput } from './holder-input';
 import type { HolderFormValues, HolderOption } from './holder-input';
+import { QueueTargetFields } from './queue-target-fields';
+import { queueTargetFormSchema } from './queue-target-input';
+import type { QueueTargetFormValues } from './queue-target-input';
 
 export interface SpotDialogProps {
   /** `null` closes the dialog. */
@@ -105,7 +108,13 @@ export interface SpotDialogProps {
    * that never hides.
    */
   readonly onReserve: (holder?: ReservationHolderInput) => void;
-  readonly onJoinWaitlist: () => void;
+  /**
+   * Join the queue. **No argument means "for the caller"**, exactly like
+   * `onReserve` — see its doc comment. Called with a `userId` only from the
+   * admin's queue-target selector, which defaults to the admin themselves for
+   * the same one-click reason `onReserve`'s does.
+   */
+  readonly onJoinWaitlist: (holderId?: string) => void;
   readonly onLeaveWaitlist: () => void;
   readonly onCancelReservation: () => void;
 }
@@ -141,6 +150,19 @@ export function SpotDialog({
   const holderId = form.watch('holderId');
   const submitHolder = form.handleSubmit((values) => onReserve(toHolderInput(values)));
 
+  const showQueueTargetForm =
+    isAdmin &&
+    holderOptions.length > 0 &&
+    viewerUserId !== null &&
+    spot?.action === 'queue' &&
+    spot.viewerWaitlistEntryId === null;
+
+  const queueForm = useAppForm<QueueTargetFormValues>({
+    schema: queueTargetFormSchema,
+    defaultValues: { userId: viewerUserId ?? '' },
+  });
+  const submitQueueTarget = queueForm.handleSubmit((values) => onJoinWaitlist(values.userId));
+
   // `defaultValues` are captured once, at mount — and this component mounts with
   // the screen, before `me.get` has necessarily resolved, so `viewerUserId` can
   // still be `null` then. React Hook Form never re-applies `defaultValues`, so
@@ -162,9 +184,10 @@ export function SpotDialog({
   useEffect(() => {
     if (openSpotId === null) return;
     form.reset({ holderId: viewerUserId ?? '', guestName: '', licensePlate: '' });
-    // `form` is stable across renders; `form.reset` is the documented way to
-    // re-seed, and listing it keeps the exhaustive-deps rule satisfied.
-  }, [openSpotId, viewerUserId, form]);
+    queueForm.reset({ userId: viewerUserId ?? '' });
+    // `form`/`queueForm` are stable across renders; `.reset` is the documented
+    // way to re-seed, and listing them keeps the exhaustive-deps rule satisfied.
+  }, [openSpotId, viewerUserId, form, queueForm]);
 
   if (spot === null) return null;
 
@@ -259,7 +282,10 @@ export function SpotDialog({
                   {t('leaveQueue')}
                 </Button>
               ) : (
-                <Button loading={pending} onClick={onJoinWaitlist}>
+                <Button
+                  loading={pending}
+                  onClick={showQueueTargetForm ? submitQueueTarget : () => onJoinWaitlist()}
+                >
                   {t('ctaQueue')}
                 </Button>
               )
@@ -306,18 +332,27 @@ export function SpotDialog({
             </div>
           </Stack>
 
-          <p className="mb-2 text-xs font-bold uppercase tracking-caps text-fg-2">
-            {t('queueHeading')}
-          </p>
-          {spot.waitlistCount === 0 ? (
-            <p className="text-base text-fg-3">{t('queueEmpty')}</p>
-          ) : (
-            <p className="text-base text-fg-3">{t('waiting', { count: spot.waitlistCount })}</p>
-          )}
-          {spot.viewerWaitlistPosition !== null ? (
-            <p className="mt-1 text-base font-bold text-fg">
-              {t('queuePosition', { position: spot.viewerWaitlistPosition })}
-            </p>
+          {isAdmin || spot.waitlistCount > 0 ? (
+            <>
+              <p className="mb-2 text-xs font-bold uppercase tracking-caps text-fg-2">
+                {t('queueHeading')}
+              </p>
+              {spot.waitlistCount === 0 ? (
+                <p className="text-base text-fg-3">{t('queueEmpty')}</p>
+              ) : (
+                <p className="text-base text-fg-3">{t('waiting', { count: spot.waitlistCount })}</p>
+              )}
+              {spot.viewerWaitlistPosition !== null ? (
+                <p className="mt-1 text-base font-bold text-fg">
+                  {t('queuePosition', { position: spot.viewerWaitlistPosition })}
+                </p>
+              ) : null}
+              {showQueueTargetForm ? (
+                <FormProvider {...queueForm}>
+                  <QueueTargetFields options={holderOptions} />
+                </FormProvider>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}

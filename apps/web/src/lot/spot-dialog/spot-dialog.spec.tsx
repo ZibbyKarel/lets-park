@@ -197,9 +197,10 @@ describe('SpotDialog — a bay somebody else holds', () => {
     expect(onJoinWaitlist).toHaveBeenCalledTimes(1);
   });
 
-  it('says the queue is empty rather than showing nothing', () => {
+  it('hides the queue section from a normal user when nobody is waiting', () => {
     renderDialog({ spot: takenByOther });
-    expect(screen.getByText('Nikdo nečeká — budete první v řadě.')).toBeInTheDocument();
+    expect(screen.queryByText('Fronta')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nikdo nečeká — budete první v řadě.')).not.toBeInTheDocument();
   });
 
   it('tells a queued caller where they stand, and offers leaving', async () => {
@@ -517,5 +518,69 @@ describe('SpotDialog — a bay a guest holds', () => {
 
     expect(screen.getByText('Jan Novotný')).toBeInTheDocument();
     expect(screen.getByText('Host')).toBeInTheDocument();
+  });
+});
+
+const QUEUE_OPTIONS = [
+  { userId: 'admin-1', name: 'Dev Admin', licensePlate: '1AA 1111' },
+  { userId: 'user-2', name: 'Jana Nováková', licensePlate: null },
+];
+
+describe('SpotDialog — an admin adding somebody to the queue', () => {
+  function renderAdminQueue(overrides: Parameters<typeof renderDialog>[0] = {}) {
+    return renderDialog({
+      spot: takenByOther,
+      isAdmin: true,
+      viewerUserId: 'admin-1',
+      holderOptions: QUEUE_OPTIONS,
+      ...overrides,
+    });
+  }
+
+  it('still shows the queue heading to an admin when nobody is waiting, with a selector', () => {
+    renderAdminQueue();
+
+    expect(screen.getByText('Fronta')).toBeInTheDocument();
+    expect(screen.getByText('Nikdo nečeká — budete první v řadě.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Přidat do fronty')).toHaveValue('admin-1');
+    expect(screen.getByRole('option', { name: 'Jana Nováková' })).toBeInTheDocument();
+  });
+
+  it('joins the admin themselves on a single click, with no selection required', async () => {
+    const { onJoinWaitlist, user } = renderAdminQueue();
+
+    await user.click(screen.getByRole('button', { name: 'Přidat se do fronty' }));
+
+    expect(onJoinWaitlist).toHaveBeenCalledTimes(1);
+    expect(onJoinWaitlist).toHaveBeenCalledWith('admin-1');
+  });
+
+  it('adds the selected user instead, when the admin picks somebody else', async () => {
+    const { onJoinWaitlist, user } = renderAdminQueue();
+
+    await user.selectOptions(screen.getByLabelText('Přidat do fronty'), 'user-2');
+    await user.click(screen.getByRole('button', { name: 'Přidat se do fronty' }));
+
+    expect(onJoinWaitlist).toHaveBeenCalledWith('user-2');
+  });
+
+  it('does not offer the selector once the admin is already queued', () => {
+    renderAdminQueue({
+      spot: { ...takenByOther, viewerWaitlistEntryId: 'wait-7' },
+    });
+
+    expect(screen.queryByLabelText('Přidat do fronty')).not.toBeInTheDocument();
+  });
+
+  it('offers no selector to a normal user, who still joins for themselves', async () => {
+    const { onJoinWaitlist, user } = renderDialog({
+      spot: takenByOther,
+      viewerUserId: 'user-2',
+      holderOptions: [],
+    });
+
+    expect(screen.queryByLabelText('Přidat do fronty')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Přidat se do fronty' }));
+    expect(onJoinWaitlist).toHaveBeenCalledWith();
   });
 });

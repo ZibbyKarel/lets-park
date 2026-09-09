@@ -213,12 +213,12 @@ export function LotScreen() {
   }, [invalidateDay]);
 
   /**
-   * `waitlist.join`/`waitlist.leave`/`reservation.cancel` all report a
-   * failure the same plain way — `holderLimitMessage` is `createReservation`'s
-   * substitution alone, so every other write clears it rather than risking a
-   * stale message surviving from an earlier `reservation.create` failure in
-   * the same dialog session (`waitlist.join` sharing this code with
-   * `reservation.create` is exactly the regression this guards).
+   * `waitlist.leave`/`reservation.cancel` report a failure the same plain
+   * way — clear whatever `holderLimitMessage` a previous write left behind
+   * and fall back to the code-mapped catalogue string. `createReservation`
+   * and `joinWaitlist` each carry their own `onError` instead, because both
+   * can substitute a named-target message for a code that otherwise reads as
+   * a false statement about the caller — see their own doc comments.
    *
    * Defence-in-depth, and measured to be exactly that: deleting this clear
    * leaves the whole web suite green, because one dialog is either a free bay
@@ -278,7 +278,29 @@ export function LotScreen() {
   const joinWaitlist = useMutation({
     ...api.waitlist.join.mutationOptions(),
     onSuccess: onMutationSuccess,
-    onError: onWriteError,
+    /**
+     * Mirrors `createReservation`'s `onError`, for the same reason: a
+     * `holderId` naming somebody other than the viewer makes three of
+     * `waitlist.join`'s codes read false as the plain catalogue string — "you
+     * already have a reservation", "you are already queued", "you already
+     * hold this spot" — all really about the *target*, not the admin who
+     * submitted the selector. A self-join, and every other code, fall through
+     * to the plain catalogue string via `holderLimitMessage` staying `null`.
+     */
+    onError: (error, variables) => {
+      const namedOther = variables.holderId !== undefined && variables.holderId !== viewerUserId;
+      const code = namedOther ? toContractError(error)?.code : undefined;
+      setHolderLimitMessage(
+        code === 'RESERVATION_LIMIT_REACHED'
+          ? t('errQueueLimitReached')
+          : code === 'ALREADY_IN_WAITLIST'
+            ? t('errQueueAlreadyQueued')
+            : code === 'CANNOT_WAITLIST_OWN_SPOT'
+              ? t('errQueueOwnSpot')
+              : null
+      );
+      setActionError(error);
+    },
   });
   const leaveWaitlist = useMutation({
     ...api.waitlist.leave.mutationOptions(),
@@ -428,9 +450,13 @@ export function LotScreen() {
             ...(holder === undefined ? {} : { holder }),
           });
         }}
-        onJoinWaitlist={() => {
+        onJoinWaitlist={(holderId) => {
           if (openSpot === null) return;
-          joinWaitlist.mutate({ parkingSpotId: openSpot.spotId, date });
+          joinWaitlist.mutate({
+            parkingSpotId: openSpot.spotId,
+            date,
+            ...(holderId === undefined ? {} : { holderId }),
+          });
         }}
         onLeaveWaitlist={() => {
           const entryId = openSpot?.viewerWaitlistEntryId;
