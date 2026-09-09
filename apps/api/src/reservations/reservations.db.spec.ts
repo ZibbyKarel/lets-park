@@ -14,7 +14,7 @@
  */
 
 import type { PrismaClient } from '@lets-park/database';
-import { isBusinessDay } from '@lets-park/shared-types';
+import { addDays, isBusinessDay, type DateOnly } from '@lets-park/shared-types';
 import { toDateColumn } from '../common/prisma-mapping';
 import type { Harness } from '../testing/database/reservation-harness';
 import {
@@ -30,6 +30,24 @@ import {
   seedUser,
   setLockMode,
 } from '../testing/database/reservation-harness';
+
+function businessDaysInMonth(start: DateOnly, count: number): DateOnly[] {
+  const month = start.slice(0, 7);
+  const dates: DateOnly[] = [];
+  let cursor = start;
+  while (dates.length < count) {
+    if (cursor.slice(0, 7) !== month) {
+      throw new Error(
+        `ran out of business days in ${month} — widen the search or pick a later start`
+      );
+    }
+    if (isBusinessDay(cursor)) {
+      dates.push(cursor);
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
 
 describe('reservations against a real PostgreSQL', () => {
   let client: PrismaClient;
@@ -473,6 +491,83 @@ describe('reservations against a real PostgreSQL', () => {
       ).resolves.toBe('RESERVATION_LIMIT_REACHED');
 
       expect(await client.reservation.count({ where: { parkingSpotId: second.id } })).toBe(0);
+    });
+
+    it('rejects the 6th reservation in a calendar month with MONTHLY_RESERVATION_LIMIT_REACHED', async () => {
+      const user = await seedUser(client);
+      const spots = await Promise.all(Array.from({ length: 6 }, () => seedSpot(client)));
+      const dates = businessDaysInMonth(FUTURE_BUSINESS_DAY, 6);
+
+      for (let i = 0; i < 5; i++) {
+        const spot = spots[i];
+        const date = dates[i];
+        if (spot === undefined || date === undefined) {
+          throw new Error('unreachable: fixed-length arrays covered by the loop bound');
+        }
+        await harness.reservations.create({ parkingSpotId: spot.id, date }, actorFor(user), TODAY);
+      }
+
+      const sixthSpot = spots[5];
+      const sixthDate = dates[5];
+      if (sixthSpot === undefined || sixthDate === undefined) {
+        throw new Error('unreachable: both arrays were seeded/generated with length 6');
+      }
+
+      const code = await codeOf(
+        harness.reservations.create(
+          { parkingSpotId: sixthSpot.id, date: sixthDate },
+          actorFor(user),
+          TODAY
+        )
+      );
+      expect(code).toBe('MONTHLY_RESERVATION_LIMIT_REACHED');
+
+      // The 6th spot was not silently reserved.
+      const stillFree = await client.reservation.findFirst({
+        where: { parkingSpotId: sixthSpot.id },
+      });
+      expect(stillFree).toBeNull();
+    });
+
+    it('does not cap a guest reservation, which has no userId', async () => {
+      const admin = await seedUser(client);
+      const spots = await Promise.all(Array.from({ length: 6 }, () => seedSpot(client)));
+      const dates = businessDaysInMonth(FUTURE_BUSINESS_DAY, 6);
+      const adminActor = actorFor(admin, 'ADMIN');
+
+      for (let i = 0; i < 5; i++) {
+        const spot = spots[i];
+        const date = dates[i];
+        if (spot === undefined || date === undefined) {
+          throw new Error('unreachable: fixed-length arrays covered by the loop bound');
+        }
+        await harness.reservations.create(
+          {
+            parkingSpotId: spot.id,
+            date,
+            holder: { kind: 'GUEST', name: 'Guest', licensePlate: null },
+          },
+          adminActor,
+          TODAY
+        );
+      }
+
+      const sixthSpot = spots[5];
+      const sixthDate = dates[5];
+      if (sixthSpot === undefined || sixthDate === undefined) {
+        throw new Error('unreachable: both arrays were seeded/generated with length 6');
+      }
+
+      const reservation = await harness.reservations.create(
+        {
+          parkingSpotId: sixthSpot.id,
+          date: sixthDate,
+          holder: { kind: 'GUEST', name: 'Guest', licensePlate: null },
+        },
+        adminActor,
+        TODAY
+      );
+      expect(reservation.parkingSpotId).toBe(sixthSpot.id);
     });
   });
 
