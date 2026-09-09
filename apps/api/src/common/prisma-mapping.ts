@@ -148,7 +148,7 @@ export function toContractReservation(row: ReservationRow): Reservation {
  *
  * The plate is the row's override where there is one, and the holder's stored
  * plate otherwise — a consumer never has to know the override exists
- * (`doc/decision/0302-the-reservation-holder-projection-is-a-discriminated-union`).
+ * (`doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union`).
  */
 export function toPublicReservation(
   row: ReservationRow,

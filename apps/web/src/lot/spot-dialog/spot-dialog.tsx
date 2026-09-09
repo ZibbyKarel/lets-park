@@ -34,7 +34,7 @@
 
 import { useEffect } from 'react';
 import { Avatar, Button, Modal, Stack } from '@lets-park/design-system/primitives';
-import { formatDayAndMonth, useTranslations } from '@lets-park/i18n';
+import { useDateFormatters, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import { FormProvider, useAppForm } from '@lets-park/form';
 import type { ReservationHolderInput } from '@lets-park/contract';
@@ -129,6 +129,7 @@ export function SpotDialog({
   onCancelReservation,
 }: SpotDialogProps) {
   const t = useTranslations('lot');
+  const f = useDateFormatters();
 
   const showHolderForm =
     isAdmin && holderOptions.length > 0 && viewerUserId !== null && spot?.action === 'reserve';
@@ -212,7 +213,7 @@ export function SpotDialog({
             : canReserve
               ? t('subQueue')
               : t('subTaken')
-        : t('subReserve', { date: formatDayAndMonth(date) });
+        : t('subReserve', { date: f.dayAndMonth(date) });
 
   return (
     <Modal

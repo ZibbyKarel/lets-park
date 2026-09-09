@@ -18,9 +18,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDays,
-  formatMonthName,
   parseDateOnly,
   todayInPrague,
+  useDateFormatters,
   useTranslations,
   type DateOnly,
 } from '@lets-park/i18n';
@@ -54,6 +54,7 @@ const YEAR_PICKER_RADIUS = 1;
 export function LotScreen() {
   const t = useTranslations('lot');
   const sections = useTranslations('sections');
+  const f = useDateFormatters();
   const api = useApi();
   const queryClient = useQueryClient();
   const { status: realtimeStatus, reconnect } = useRealtime();
@@ -297,7 +298,7 @@ export function LotScreen() {
     );
   }
 
-  const banner = toBannerView(day.window, isAdmin);
+  const banner = toBannerView(day.window, isAdmin, f);
   const pending =
     createReservation.isPending ||
     cancelReservation.isPending ||
@@ -389,7 +390,7 @@ export function LotScreen() {
         date={date}
         canReserve={day.canReserve}
         isAdmin={isAdmin}
-        monthName={formatMonthName(parts.month)}
+        monthName={f.monthName(parts.month)}
         error={actionError ?? holderError}
         {...(holderLimitMessage === null ? {} : { errorMessage: holderLimitMessage })}
         pending={pending}

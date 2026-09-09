@@ -23,11 +23,10 @@
 
 import {
   czechPublicHolidayOn,
-  formatDayAndMonth,
-  formatMonthName,
   isWeekend,
   parseDateOnly,
   startOfYearMonth,
+  type DateFormatters,
   type DateOnly,
 } from '@lets-park/i18n';
 import type { DaySpotOverview, MonthWindowOverview, ParkingGroup } from '@lets-park/contract';
@@ -318,13 +317,18 @@ export interface BannerView {
  * have produced and have no bearing on the state, so quoting a date from them
  * would be a false statement — `monthWindowOverviewSchema` says exactly this.
  */
-export function toBannerView(window: MonthWindowOverview, isAdmin: boolean): BannerView {
-  const month = formatMonthName(parseDateOnly(startOfYearMonth(window.month)).month);
+export function toBannerView(
+  window: MonthWindowOverview,
+  isAdmin: boolean,
+  /** Passed in rather than imported: this module is not a component and the locale is not global. */
+  formatters: DateFormatters
+): BannerView {
+  const month = formatters.monthName(parseDateOnly(startOfYearMonth(window.month)).month);
   const isAuto = window.lockMode === 'AUTO';
   const values = {
     month,
-    until: isAuto ? formatDayAndMonth(window.windowTo) : '',
-    from: isAuto ? formatDayAndMonth(window.windowFrom) : '',
+    until: isAuto ? formatters.dayAndMonth(window.windowTo) : '',
+    from: isAuto ? formatters.dayAndMonth(window.windowFrom) : '',
   };
 
   switch (window.state) {

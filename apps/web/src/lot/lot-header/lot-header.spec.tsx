@@ -1,8 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { IntlProvider, formatFullDate } from '@lets-park/i18n';
+import { createDateFormatters, IntlProvider } from '@lets-park/i18n';
+import csMessages from '../../../messages/cs.json';
 import { LotHeader } from './lot-header';
 import type { DayNoteView } from '../lot-view';
+
+const cs = createDateFormatters('cs');
 
 /**
  * `LotHeader` is pure presentation, same as every other piece `./lot-header.tsx`
@@ -42,7 +45,7 @@ function renderHeader(
   const onOpenDatePicker = jest.fn();
 
   const utils = render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={csMessages}>
       <LotHeader
         date={overrides.date ?? DATE}
         note={overrides.note ?? workdayNote()}
@@ -77,7 +80,7 @@ describe('LotHeader — the accessible title and the date pill', () => {
 
   it('shows the date, through the same formatter the old heading used', () => {
     renderHeader();
-    expect(screen.getByRole('button', { name: formatFullDate(DATE) })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: cs.fullDate(DATE) })).toBeInTheDocument();
   });
 });
 
@@ -102,7 +105,7 @@ describe('LotHeader — controls report parsed values, not raw events', () => {
 
   it('opens the date picker from the date pill', async () => {
     const { onOpenDatePicker, user } = renderHeader();
-    await user.click(screen.getByRole('button', { name: formatFullDate(DATE) }));
+    await user.click(screen.getByRole('button', { name: cs.fullDate(DATE) }));
     expect(onOpenDatePicker).toHaveBeenCalledTimes(1);
   });
 });

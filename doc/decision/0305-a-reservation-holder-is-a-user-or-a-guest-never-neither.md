@@ -1,4 +1,4 @@
-# 0303 – A reservation holder is a user or a guest, never neither
+# 0305 – A reservation holder is a user or a guest, never neither
 
 **Date:** 2026-09-08 · **Status:** accepted · **Task:** `TODO.md` item 3, Task 1
 

@@ -1,4 +1,4 @@
-# 0302 – The reservation holder projection is a discriminated union
+# 0304 – The reservation holder projection is a discriminated union
 
 **Date:** 2026-09-09 · **Status:** accepted · **Task:** `TODO.md` item 3, Task 2
 

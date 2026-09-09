@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createApiClient } from '@lets-park/api-client';
 import { IntlProvider } from '@lets-park/i18n';
 import type { MyProfile, ParkingSpot } from '@lets-park/contract';
+import cs from '../../../messages/cs.json';
 import { SettingsScreen } from './settings-screen';
 import type { SettingsScreenProps } from './settings-screen';
 
@@ -137,14 +138,14 @@ function renderScreen(overrides: ScreenOverrides = {}) {
   }
 
   const view = render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <SettingsScreen {...propsFrom({})} />
     </IntlProvider>
   );
 
   function rerenderWith(next: ScreenOverrides) {
     view.rerender(
-      <IntlProvider>
+      <IntlProvider locale="cs" messages={cs}>
         <SettingsScreen {...propsFrom(next)} />
       </IntlProvider>
     );

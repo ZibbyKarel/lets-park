@@ -15,36 +15,36 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 22 topic documents, 190 decision records, and `doc/design/`.
+`doc/`: 22 topic documents, 192 decision records, and `doc/design/`.
 
 ---
 
 ## Topic documents
 
-| Document                                                 | What it is for                                                                                                                                                                                                                         |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`admin.md`](admin.md)                                   | The `/admin` section: the four admin tabs — day lot, users, spots, reservation window — and what each one may change.                                                                                                                  |
-| [`api-modules.md`](api-modules.md)                       | How `apps/api` serves the contract: the oRPC transport, the domain modules behind it, and the rule each module owns.                                                                                                                   |
-| [`api-operations.md`](api-operations.md)                 | The API's operational baseline: startup, structured logging, the `/health/*` probes, graceful shutdown, throttling and input limits.                                                                                                   |
-| [`auth.md`](auth.md)                                     | How a person becomes an identified caller — Okta sign-in in `apps/web`, JWKS validation in `apps/api`, JIT provisioning, refresh, and what is public.                                                                                  |
-| [`bulk-reservation.md`](bulk-reservation.md)             | The bulk allocator: `reservation.previewBulk` / `confirmBulk`, how a month's days are assigned, and the transaction that confirms them.                                                                                                |
-| [`bulk-reservation-modal.md`](bulk-reservation-modal.md) | The front end of that allocator — the `Hromadná rezervace` modal in `apps/web/src/lot/`.                                                                                                                                               |
-| [`contract.md`](contract.md)                             | `libs/contract`, the single source of truth for every FE↔BE shape, and how to add a schema, a procedure or an error to it.                                                                                                            |
-| [`database.md`](database.md)                             | The PostgreSQL schema, Prisma 7 setup, migrations, the development seed, and backups.                                                                                                                                                  |
-| [`design-system.md`](design-system.md)                   | All three layers of the one `design-system` package: what a token is, how the CSS is generated, and what a primitive and a compound may and may not know.                                                                              |
-| [`environment.md`](environment.md)                       | Every environment variable the two apps need, how the local Docker stack is started, and how dev, e2e and production differ (values only, never code).                                                                                 |
-| [`frontend.md`](frontend.md)                             | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow, the screen states and the `ScreenData<T>` union that selects one, and the `*-view.ts` split between what a screen decides and what it draws. |
-| [`i18n.md`](i18n.md)                                     | `libs/i18n` — the only place allowed to import `next-intl` — and how Czech UI copy is organised.                                                                                                                                       |
-| [`open-items.md`](open-items.md)                         | Everything the build deliberately left undone: deferred minors, parked findings, and the two gaps where an enforcement mechanism does not actually enforce.                                                                            |
-| [`ics.md`](ics.md)                                       | The personal calendar subscription: what the feed serves, how its URL is authenticated, and what has been verified about it.                                                                                                           |
-| [`implementation-plan.md`](implementation-plan.md)       | `plan.md` broken into dispatchable tasks. The plan of record for what is built when.                                                                                                                                                   |
-| [`realtime.md`](realtime.md)                             | The Socket.io connection: the rooms, the events, the cell lock, and what the client does with each broadcast.                                                                                                                          |
-| [`rulings.md`](rulings.md)                               | The 103 judgment calls the implementation run made where `plan.md` was silent — what was decided, why, and what each costs if it is wrong.                                                                                             |
-| [`slack.md`](slack.md)                                   | The outbound-only Slack notifications and the scheduled jobs that carry them: what the API tells Slack, when, and what happens when Slack is broken, off, or scaled.                                                                   |
-| [`testing.md`](testing.md)                               | The four test layers, what each is for, how to run it, and what must be running first.                                                                                                                                                 |
-| [`waitlist.md`](waitlist.md)                             | Reservations, the queue, and the auto-promotion that hands a cancelled spot to the next person in the same transaction.                                                                                                                |
-| [`workspace.md`](workspace.md)                           | The Nx monorepo: project layout, the checks, the module boundaries, and how to add a lib that is governed by them.                                                                                                                     |
-| [`wrappers.md`](wrappers.md)                             | The mandatory wrapper libs — form, api-client, query, auth, realtime-client, calendar-export — and why app code may never import their dependencies directly.                                                                          |
+| Document | What it is for |
+| --- | --- |
+| [`admin.md`](admin.md) | The `/admin` section: the four admin tabs — day lot, users, spots, reservation window — and what each one may change. |
+| [`api-modules.md`](api-modules.md) | How `apps/api` serves the contract: the oRPC transport, the domain modules behind it, and the rule each module owns. |
+| [`api-operations.md`](api-operations.md) | The API's operational baseline: startup, structured logging, the `/health/*` probes, graceful shutdown, throttling and input limits. |
+| [`auth.md`](auth.md) | How a person becomes an identified caller — Okta sign-in in `apps/web`, JWKS validation in `apps/api`, JIT provisioning, refresh, and what is public. |
+| [`bulk-reservation.md`](bulk-reservation.md) | The bulk allocator: `reservation.previewBulk` / `confirmBulk`, how a month's days are assigned, and the transaction that confirms them. |
+| [`bulk-reservation-modal.md`](bulk-reservation-modal.md) | The front end of that allocator — the `Hromadná rezervace` modal in `apps/web/src/lot/`. |
+| [`contract.md`](contract.md) | `libs/contract`, the single source of truth for every FE↔BE shape, and how to add a schema, a procedure or an error to it. |
+| [`database.md`](database.md) | The PostgreSQL schema, Prisma 7 setup, migrations, the development seed, and backups. |
+| [`design-system.md`](design-system.md) | All three layers of the one `design-system` package: what a token is, how the CSS is generated, and what a primitive and a compound may and may not know. |
+| [`environment.md`](environment.md) | Every environment variable the two apps need, how the local Docker stack is started, and how dev, e2e and production differ (values only, never code). |
+| [`frontend.md`](frontend.md) | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow, the screen states and the `ScreenData<T>` union that selects one, and the `*-view.ts` split between what a screen decides and what it draws. |
+| [`i18n.md`](i18n.md) | `libs/i18n` — the only place allowed to import `next-intl` — the two message catalogs in `apps/web/messages`, how a request's locale is chosen, and the English glossary. |
+| [`open-items.md`](open-items.md) | Everything the build deliberately left undone: deferred minors, parked findings, and the two gaps where an enforcement mechanism does not actually enforce. |
+| [`ics.md`](ics.md) | The personal calendar subscription: what the feed serves, how its URL is authenticated, and what has been verified about it. |
+| [`implementation-plan.md`](implementation-plan.md) | `plan.md` broken into dispatchable tasks. The plan of record for what is built when. |
+| [`realtime.md`](realtime.md) | The Socket.io connection: the rooms, the events, the cell lock, and what the client does with each broadcast. |
+| [`rulings.md`](rulings.md) | The 103 judgment calls the implementation run made where `plan.md` was silent — what was decided, why, and what each costs if it is wrong. |
+| [`slack.md`](slack.md) | The outbound-only Slack notifications and the scheduled jobs that carry them: what the API tells Slack, when, and what happens when Slack is broken, off, or scaled. |
+| [`testing.md`](testing.md) | The four test layers, what each is for, how to run it, and what must be running first. |
+| [`waitlist.md`](waitlist.md) | Reservations, the queue, and the auto-promotion that hands a cancelled spot to the next person in the same transaction. |
+| [`workspace.md`](workspace.md) | The Nx monorepo: project layout, the checks, the module boundaries, and how to add a lib that is governed by them. |
+| [`wrappers.md`](wrappers.md) | The mandatory wrapper libs — form, api-client, query, auth, realtime-client, calendar-export — and why app code may never import their dependencies directly. |
 
 ## `doc/design/`
 
@@ -254,6 +254,8 @@ for why, and take the next number from the end of this list.
 - [`0299-a-component-and-its-companions-live-in-one-folder`](decision/0299-a-component-and-its-companions-live-in-one-folder.md) — 0299 – A component and its companions live in one folder
 - [`0300-the-czech-holiday-calendar-stays-hand-rolled`](decision/0300-the-czech-holiday-calendar-stays-hand-rolled.md) — 0300 – The Czech holiday calendar stays hand-rolled
 - [`0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths`](decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md) — 0301 – The design system is one package, and the layer rule moved to lint paths
-- [`0302-the-reservation-holder-projection-is-a-discriminated-union`](decision/0302-the-reservation-holder-projection-is-a-discriminated-union.md) — 0302 – The reservation holder projection is a discriminated union
-- [`0303-a-reservation-holder-is-a-user-or-a-guest-never-neither`](decision/0303-a-reservation-holder-is-a-user-or-a-guest-never-neither.md) — 0303 – A reservation holder is a user or a guest, never neither
-- [`0304-an-admin-names-the-holder-and-defaults-to-themselves`](decision/0304-an-admin-names-the-holder-and-defaults-to-themselves.md) — 0304 – An admin names the holder, and it defaults to themselves
+- [`0302-the-locale-is-a-cookie-not-a-url-segment`](decision/0302-the-locale-is-a-cookie-not-a-url-segment.md) — 0302 – The locale is a cookie, not a URL segment
+- [`0303-message-catalogs-live-in-the-app-not-in-libs-i18n`](decision/0303-message-catalogs-live-in-the-app-not-in-libs-i18n.md) — 0303 – Message catalogs live in the app, not in `libs/i18n`
+- [`0304-the-reservation-holder-projection-is-a-discriminated-union`](decision/0304-the-reservation-holder-projection-is-a-discriminated-union.md) — 0304 – The reservation holder projection is a discriminated union
+- [`0305-a-reservation-holder-is-a-user-or-a-guest-never-neither`](decision/0305-a-reservation-holder-is-a-user-or-a-guest-never-neither.md) — 0305 – A reservation holder is a user or a guest, never neither
+- [`0306-an-admin-names-the-holder-and-defaults-to-themselves`](decision/0306-an-admin-names-the-holder-and-defaults-to-themselves.md) — 0306 – An admin names the holder, and it defaults to themselves

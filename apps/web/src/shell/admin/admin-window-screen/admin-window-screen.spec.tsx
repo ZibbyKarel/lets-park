@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MonthWindowOverview, ReservationLockMode } from '@lets-park/contract';
-import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../../messages/cs.json';
 import { failureWithCode } from '../../../testing/contract-failure';
 import { AdminWindowScreen, BADGE_STATE_TONE } from './admin-window-screen';
 import type { AdminWindowScreenProps } from './admin-window-screen';
@@ -80,7 +81,7 @@ function renderScreen({
   };
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <AdminWindowScreen {...props} />
     </IntlProvider>
   );
@@ -188,7 +189,7 @@ describe('AdminWindowScreen', () => {
       renderScreen({ saveError: await failureWithCode('VALIDATION_FAILED') });
 
       expect(screen.getByText('Počet dní musí být mezi 1 a 31.')).toBeInTheDocument();
-      expect(screen.queryByText(csMessages.errors.VALIDATION_FAILED)).not.toBeInTheDocument();
+      expect(screen.queryByText(cs.errors.VALIDATION_FAILED)).not.toBeInTheDocument();
     });
 
     it('does not confirm a save that failed', async () => {

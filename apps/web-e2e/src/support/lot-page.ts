@@ -56,7 +56,7 @@ export function spotDialog(page: Page): Locator {
  * one at a time, the way the sticky footer bar this replaced required.
  *
  * The pill is found by its leading Czech weekday name rather than by the full
- * formatted date: `formatFullDate` lives behind `@lets-park/i18n`'s barrel,
+ * formatted date: `fullDate` lives behind `@lets-park/i18n`'s barrel,
  * which also exports `./lib/provider` (JSX), and this project's
  * `tsconfig.json` has no `jsx` option — the same reason `lot-screen.tsx`'s
  * date arithmetic used to be mirrored here with `@lets-park/shared-types`

@@ -2,7 +2,8 @@ import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { contract, ERROR_CODES } from '@lets-park/contract';
 import type { ErrorCode } from '@lets-park/contract';
-import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { failureWithCode } from '../../testing/contract-failure';
 import { ADMIN_WRITE_MESSAGES, useAdminWriteError, type AdminWrite } from './admin-errors';
 
@@ -14,7 +15,11 @@ import { ADMIN_WRITE_MESSAGES, useAdminWriteError, type AdminWrite } from './adm
  */
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <IntlProvider>{children}</IntlProvider>;
+  return (
+    <IntlProvider locale="cs" messages={cs}>
+      {children}
+    </IntlProvider>
+  );
 }
 
 function describeWith(): (write: AdminWrite, failure: unknown) => string | null {
@@ -23,8 +28,8 @@ function describeWith(): (write: AdminWrite, failure: unknown) => string | null 
 }
 
 /** Reads a key out of the real catalog, so the expectations are not a copy. */
-function copy(key: keyof typeof csMessages.admin): string {
-  return csMessages.admin[key];
+function copy(key: keyof typeof cs.admin): string {
+  return cs.admin[key];
 }
 
 describe('useAdminWriteError', () => {
@@ -79,7 +84,7 @@ describe('useAdminWriteError', () => {
       const failure = await failureWithCode('VALIDATION_FAILED');
 
       for (const write of Object.keys(ADMIN_WRITE_MESSAGES) as AdminWrite[]) {
-        expect(describe_(write, failure)).not.toBe(csMessages.errors.VALIDATION_FAILED);
+        expect(describe_(write, failure)).not.toBe(cs.errors.VALIDATION_FAILED);
       }
 
       expect(describe_('userUpdate', failure)).toBe(copy('errUserValidation'));

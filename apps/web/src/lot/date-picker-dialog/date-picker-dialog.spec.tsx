@@ -1,7 +1,10 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { IntlProvider, formatFullDate } from '@lets-park/i18n';
+import { createDateFormatters, IntlProvider } from '@lets-park/i18n';
+import csMessages from '../../../messages/cs.json';
 import { DatePickerDialog } from './date-picker-dialog';
+
+const cs = createDateFormatters('cs');
 
 /**
  * The dialog's own job, on top of what `./date-picker-view.spec.ts` already
@@ -19,7 +22,7 @@ function renderDialog(overrides: { open?: boolean; selectedDate?: string } = {})
   const onSelect = jest.fn();
 
   const utils = render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={csMessages}>
       <DatePickerDialog
         open={overrides.open ?? true}
         onClose={onClose}
@@ -42,7 +45,7 @@ describe('DatePickerDialog — opening', () => {
   it('opens on the month of selectedDate, with that day marked', () => {
     renderDialog();
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
-    expect(within(dialog).getByRole('button', { name: formatFullDate(SELECTED) })).toHaveAttribute(
+    expect(within(dialog).getByRole('button', { name: cs.fullDate(SELECTED) })).toHaveAttribute(
       'aria-pressed',
       'true'
     );
@@ -57,7 +60,7 @@ describe('DatePickerDialog — browsing does not select', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Následující den' }));
 
     expect(
-      within(dialog).getByRole('button', { name: formatFullDate('2026-10-01') })
+      within(dialog).getByRole('button', { name: cs.fullDate('2026-10-01') })
     ).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -70,7 +73,7 @@ describe('DatePickerDialog — browsing does not select', () => {
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Rok' }), '2027');
 
     expect(
-      within(dialog).getByRole('button', { name: formatFullDate('2027-01-01') })
+      within(dialog).getByRole('button', { name: cs.fullDate('2027-01-01') })
     ).toBeInTheDocument();
   });
 });
@@ -80,7 +83,7 @@ describe('DatePickerDialog — picking a day', () => {
     const { onSelect, user } = renderDialog();
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
 
-    await user.click(within(dialog).getByRole('button', { name: formatFullDate('2026-09-20') }));
+    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2026-09-20') }));
 
     expect(onSelect).toHaveBeenCalledWith('2026-09-20');
   });

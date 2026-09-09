@@ -18,7 +18,7 @@ import { authed, contractErrors } from './builder';
  *
  * `licensePlate` overrides the holder's stored `User.licensePlate` **for this
  * reservation only** — `null` means "use whatever they have on their profile",
- * and this flow never writes the profile (`doc/decision/0304-*`). For a guest it
+ * and this flow never writes the profile (`doc/decision/0306-an-admin-names-the-holder-and-defaults-to-themselves`). For a guest it
  * is the only plate there is.
  *
  * **Only an admin may name a holder other than themselves.** That is not

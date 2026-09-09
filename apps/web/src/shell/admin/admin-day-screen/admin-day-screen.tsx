@@ -28,7 +28,7 @@ import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
 import { Badge, Button, Stack } from '@lets-park/design-system/primitives';
 import { DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
-import { formatFullDate, useTranslations } from '@lets-park/i18n';
+import { useDateFormatters, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import { ScreenDataGuard } from '../../screen-state/screen-state';
 import type { ScreenData } from '../../screen-state/screen-state';
@@ -50,10 +50,11 @@ export interface AdminDayScreenProps {
 
 export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreenProps) {
   const t = useTranslations('admin');
+  const f = useDateFormatters();
   // `guestHolder` lives in the `lot` catalogue — the same badge the spot
-  // dialog renders (`spot-dialog.tsx:268-272`) — because that is where the
-  // guest concept was introduced; this table reuses the key rather than
-  // duplicating the Czech copy under a second one.
+  // dialog renders — because that is where the guest concept was introduced;
+  // this table reuses the key rather than duplicating the copy under a second
+  // one, in both catalogues.
   const tLot = useTranslations('lot');
 
   const columns: DataTableColumn<DaySpotOverview>[] = [
@@ -120,7 +121,7 @@ export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreen
                   {t('dayEyebrow')}
                 </p>
                 <h3 className="mt-1 text-2xl font-bold tracking-tight text-fg">
-                  {formatFullDate(date)}
+                  {f.fullDate(date)}
                 </h3>
               </div>
               <Stack direction="row" wrap align="center" spacing={3}>

@@ -15,7 +15,8 @@
  *    the API client takes its bearer token from it and the socket takes its
  *    handshake token from it.
  * 2. `IntlProvider` next, so that a failure rendered by any screen already has
- *    Czech copy available.
+ *    translated copy available. Its locale and catalog are resolved on the
+ *    server (`layout.tsx`) and passed in — this component chooses neither.
  * 3. `QueryProvider`, then `ApiProvider` — the client is built from the token
  *    provider, so it has to be inside `AuthProvider`, and the query utilities
  *    are built from the client.
@@ -29,6 +30,7 @@ import type { ReactNode } from 'react';
 import { AuthProvider } from '@lets-park/auth/client';
 import type { AuthSession } from '@lets-park/auth/client';
 import { IntlProvider } from '@lets-park/i18n';
+import type { AppMessages, Locale } from '@lets-park/i18n';
 import { QueryProvider, createQueryClient } from '@lets-park/query';
 import { ApiProvider } from '../shell/api-provider/api-provider';
 import { RealtimeBoundary } from '../shell/realtime-boundary/realtime-boundary';
@@ -44,10 +46,21 @@ export interface ProvidersProps {
   readonly apiUrl: string;
   /** Origin of the same deployment, for Socket.io. See `../api-url.ts`. */
   readonly socketUrl: string;
+  /** Resolved on the server for this request. See `../i18n/resolve-locale.ts`. */
+  readonly locale: Locale;
+  /** The catalog for `locale`. See `../i18n/load-messages.ts`. */
+  readonly messages: AppMessages;
   readonly children: ReactNode;
 }
 
-export function Providers({ session, apiUrl, socketUrl, children }: ProvidersProps) {
+export function Providers({
+  session,
+  apiUrl,
+  socketUrl,
+  locale,
+  messages,
+  children,
+}: ProvidersProps) {
   // A client created in the render body would be thrown away on every render,
   // taking the cache with it. `useState`'s initialiser runs once per mount,
   // which for the root boundary means once per browser session — and once per
@@ -60,7 +73,7 @@ export function Providers({ session, apiUrl, socketUrl, children }: ProvidersPro
 
   return (
     <AuthProvider session={session}>
-      <IntlProvider>
+      <IntlProvider locale={locale} messages={messages}>
         <QueryProvider client={queryClient}>
           <ApiProvider url={apiUrl}>
             <RealtimeBoundary url={socketUrl}>{children}</RealtimeBoundary>

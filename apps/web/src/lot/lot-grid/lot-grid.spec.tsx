@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { LotGrid } from './lot-grid';
 import type { SpotGroupView, SpotView } from '../lot-view';
 
@@ -46,7 +47,7 @@ function renderGrid(groups: SpotGroupView[]) {
   const onAdminOpenSpot = jest.fn();
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <LotGrid groups={groups} onOpenSpot={onOpenSpot} onAdminOpenSpot={onAdminOpenSpot} />
     </IntlProvider>
   );

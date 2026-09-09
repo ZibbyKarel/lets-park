@@ -1,4 +1,4 @@
-# 0304 – An admin names the holder, and it defaults to themselves
+# 0306 – An admin names the holder, and it defaults to themselves
 
 **Date:** 2026-09-09 · **Status:** accepted · **Task:** `TODO.md` item 3, Task 6
 
@@ -61,7 +61,7 @@ distinction the payload already carries in its two nullable fields.
 
 `holder.licensePlate` (when present) is written only to
 `Reservation.licensePlate` — a value scoped to that one booking, matching
-`doc/decision/0302-*`. `create` never writes `User.licensePlate`; an admin
+`doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union`. `create` never writes `User.licensePlate`; an admin
 correcting a plate for one day's booking must not silently change what the
 target user's own future self-bookings default to.
 

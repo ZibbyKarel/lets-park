@@ -9,14 +9,15 @@
  */
 export * from '@lets-park/shared-types';
 
-export * from './lib/messages';
 export * from './lib/errors';
 export * from './lib/dates';
+export * from './lib/date-formatters';
+export * from './lib/locale';
 export * from './lib/provider';
 
 /**
  * Re-exported so components already wrapped in `IntlProvider` can read
- * `csMessages`/format dates without a second, direct `next-intl` import —
+ * messages and format values without a second, direct `next-intl` import —
  * this lib stays the only allowed import site for the package itself.
  */
-export { useTranslations, useFormatter } from 'next-intl';
+export { useTranslations, useFormatter, useLocale } from 'next-intl';

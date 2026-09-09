@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ParkingSpot, SpotListOutput } from '@lets-park/contract';
-import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../../messages/cs.json';
 import { failureWithCode } from '../../../testing/contract-failure';
 import type { ScreenData } from '../../screen-state/screen-state';
 import type { AdminWrite } from '../admin-errors';
@@ -75,7 +76,7 @@ function renderScreen(overrides: Overrides = {}) {
   const { props, spies } = makeProps(overrides);
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <AdminSpotsScreen {...props} />
     </IntlProvider>
   );
@@ -116,7 +117,7 @@ function renderFailingWrites(failure: unknown) {
   }
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <Harness />
     </IntlProvider>
   );
@@ -332,7 +333,7 @@ describe('AdminSpotsScreen', () => {
       // the DOM and invisible to the person who just pressed Save.
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
       expect(inDialog().getByText('Místo s tímto štítkem už existuje.')).toBeInTheDocument();
-      expect(screen.queryByText(csMessages.errors.CONFLICT)).not.toBeInTheDocument();
+      expect(screen.queryByText(cs.errors.CONFLICT)).not.toBeInTheDocument();
     });
   });
 
@@ -421,7 +422,7 @@ describe('AdminSpotsScreen', () => {
       ).toBeInTheDocument();
       // Wrong on this procedure — that is the create/rename sentence.
       expect(screen.queryByText('Místo s tímto štítkem už existuje.')).not.toBeInTheDocument();
-      expect(screen.queryByText(csMessages.errors.CONFLICT)).not.toBeInTheDocument();
+      expect(screen.queryByText(cs.errors.CONFLICT)).not.toBeInTheDocument();
     });
 
     it('stays open after a refusal, so the sentence can be read', async () => {
@@ -471,8 +472,8 @@ describe('AdminSpotsScreen', () => {
   });
 
   describe('a failure the admin has walked away from', () => {
-    const RETIRE_REFUSED = csMessages.admin.spotsDeleteConflict;
-    const DUPLICATE_LABEL = csMessages.admin.spotsDuplicateLabel;
+    const RETIRE_REFUSED = cs.admin.spotsDeleteConflict;
+    const DUPLICATE_LABEL = cs.admin.spotsDuplicateLabel;
 
     it('is discarded whenever the dialog changes, so it cannot outlive its own attempt', async () => {
       const { onDiscardFailure, user } = renderScreen();

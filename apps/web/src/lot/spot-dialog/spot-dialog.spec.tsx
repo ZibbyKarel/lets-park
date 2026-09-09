@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { failureWithCode } from '../../testing/contract-failure';
 import { SpotDialog } from './spot-dialog';
 import type { SpotView } from '../lot-view';
@@ -73,7 +74,7 @@ function renderDialog(overrides: DialogOverrides = {}) {
 
   function tree(props: DialogOverrides) {
     return (
-      <IntlProvider>
+      <IntlProvider locale="cs" messages={cs}>
         <SpotDialog
           spot={props.spot === undefined ? spot() : props.spot}
           date="2026-09-28"

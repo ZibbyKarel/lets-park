@@ -355,6 +355,46 @@ describe('Dropdown', () => {
     expect(header).not.toHaveAttribute('tabindex');
   });
 
+  describe('an item with `checked`', () => {
+    // Its own items rather than the shared `ITEMS`: the fixture's three plain
+    // `menuitem`s are what the counting assertions above rely on.
+    const CHOICES: DropdownItem[] = [
+      { id: 'cs', label: 'Čeština', checked: true },
+      { id: 'en', label: 'English', checked: false },
+      { id: 'other', label: 'Něco jiného' },
+    ];
+
+    it('is a radio-style choice carrying its checked state', async () => {
+      const user = userEvent.setup();
+      renderDropdown({ items: CHOICES });
+
+      await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+
+      expect(screen.getByRole('menuitemradio', { name: 'Čeština' })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      expect(screen.getByRole('menuitemradio', { name: 'English' })).toHaveAttribute(
+        'aria-checked',
+        'false'
+      );
+      // `checked` left out means the item is unchanged: a plain `menuitem`
+      // with no state to announce.
+      const plain = screen.getByRole('menuitem', { name: 'Něco jiného' });
+      expect(plain).not.toHaveAttribute('aria-checked');
+    });
+
+    it('reports its id when chosen, checked or not', async () => {
+      const user = userEvent.setup();
+      const { onSelect } = renderDropdown({ items: CHOICES });
+
+      await user.click(screen.getByRole('button', { name: 'Karel Z.' }));
+      await user.click(screen.getByRole('menuitemradio', { name: 'English' }));
+
+      expect(onSelect).toHaveBeenCalledWith('en');
+    });
+  });
+
   it('closes only the menu, not a surrounding open Modal, on Escape', async () => {
     const user = userEvent.setup();
 

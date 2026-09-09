@@ -78,7 +78,7 @@ export type ParkingSpot = z.infer<typeof parkingSpotSchema>;
  *
  * **`userId` is nullable and `guestName` is nullable, but never both, and never
  * neither** — a `CHECK` constraint enforces that in the database
- * (`doc/decision/0303-*`). Two unique constraints back the rest up:
+ * (`doc/decision/0305-a-reservation-holder-is-a-user-or-a-guest-never-neither`). Two unique constraints back the rest up:
  * `(parkingSpotId, date)` — one reservation per spot per day, the double-booking
  * guarantee — and `(userId, date)`, one reservation per user per day. `NULL`s do
  * not collide in a Postgres unique index, so the second one deliberately does
@@ -109,7 +109,7 @@ export type Reservation = z.infer<typeof reservationSchema>;
  * no `User` row and the type has to say so: `kind: 'GUEST'` has **no `userId`
  * member at all**, so `holder.userId` on a guest is a compile error rather than
  * a `null` every reader has to remember to check. That is the property
- * `doc/decision/0302-the-reservation-holder-projection-is-a-discriminated-union` was written to keep.
+ * `doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union` was written to keep.
  *
  * `name` and `licensePlate` are the **effective** values — the server has
  * already applied `Reservation.licensePlate` over the holder's stored one — so a
@@ -145,7 +145,7 @@ export type ReservationHolder = z.infer<typeof reservationHolderSchema>;
  *
  * The field is `holder`, not `user`: a field called `user` cannot carry a guest,
  * and renaming it is what forced every reader to be revisited rather than
- * silently reading `undefined` (`doc/decision/0302-the-reservation-holder-projection-is-a-discriminated-union`).
+ * silently reading `undefined` (`doc/decision/0304-the-reservation-holder-projection-is-a-discriminated-union`).
  *
  * Shared by `src/api` and `src/realtime`, for the reason given on
  * {@link userSummarySchema}.
@@ -213,7 +213,7 @@ export const AUDIT_LOG_ACTIONS = [
    * One member rather than two, because "for a guest" is not a different action,
    * it is a different holder: the payload carries `holderUserId` **or**
    * `guestName`, and the audit trail reads the same either way
-   * (`doc/decision/0304-*`).
+   * (`doc/decision/0306-an-admin-names-the-holder-and-defaults-to-themselves`).
    */
   'RESERVATION_CREATED_BY_ADMIN',
 ] as const;

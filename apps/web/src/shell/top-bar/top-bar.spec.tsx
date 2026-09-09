@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import type { UserRole } from '@lets-park/contract';
+import type { Locale } from '@lets-park/i18n';
 import { ADMIN_ROUTE, SETTINGS_ROUTE } from '../../routes';
 import { TopBar } from './top-bar';
 
@@ -16,24 +18,28 @@ function renderTopBar(
     name?: string;
     email?: string;
     role?: UserRole | undefined;
+    locale?: Locale;
   } = {}
 ) {
   const onNavigate = jest.fn();
   const onSignOut = jest.fn();
+  const onLocaleChange = jest.fn();
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <TopBar
         name={overrides.name ?? 'Karel Zíbar'}
         email={overrides.email ?? 'karel.zibar@firma.cz'}
         role={overrides.role}
         onNavigate={onNavigate}
         onSignOut={onSignOut}
+        locale={overrides.locale ?? 'cs'}
+        onLocaleChange={onLocaleChange}
       />
     </IntlProvider>
   );
 
-  return { onNavigate, onSignOut, user: userEvent.setup() };
+  return { onNavigate, onSignOut, onLocaleChange, user: userEvent.setup() };
 }
 
 async function openMenu(user: ReturnType<typeof userEvent.setup>) {
@@ -123,6 +129,52 @@ describe('TopBar', () => {
 
     expect(onSignOut).toHaveBeenCalledTimes(1);
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  describe('the language switcher', () => {
+    it('offers both languages and marks the active one', async () => {
+      const { user } = renderTopBar({ locale: 'cs' });
+      await openMenu(user);
+
+      expect(screen.getByRole('menuitemradio', { name: /Čeština/ })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      expect(screen.getByRole('menuitemradio', { name: /English/ })).toHaveAttribute(
+        'aria-checked',
+        'false'
+      );
+    });
+
+    it('marks English when English is the active locale', async () => {
+      const { user } = renderTopBar({ locale: 'en' });
+      await openMenu(user);
+
+      expect(screen.getByRole('menuitemradio', { name: /English/ })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      expect(screen.getByRole('menuitemradio', { name: /Čeština/ })).toHaveAttribute(
+        'aria-checked',
+        'false'
+      );
+    });
+
+    it('reports the language the user picked', async () => {
+      const { user, onLocaleChange } = renderTopBar({ locale: 'cs' });
+      await openMenu(user);
+      await user.click(screen.getByRole('menuitemradio', { name: /English/ }));
+
+      expect(onLocaleChange).toHaveBeenCalledWith('en');
+    });
+
+    it('does not report a change when the active language is picked again', async () => {
+      const { user, onLocaleChange } = renderTopBar({ locale: 'cs' });
+      await openMenu(user);
+      await user.click(screen.getByRole('menuitemradio', { name: /Čeština/ }));
+
+      expect(onLocaleChange).not.toHaveBeenCalled();
+    });
   });
 
   it('links the logo to the parking overview', () => {
