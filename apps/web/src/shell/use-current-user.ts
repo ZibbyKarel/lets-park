@@ -20,8 +20,8 @@
  */
 
 import { useSession } from '@lets-park/auth/client';
-import { useQuery } from '@lets-park/query';
-import type { UseQueryResult } from '@lets-park/query';
+import { useQuery } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { MyProfile } from '@lets-park/contract';
 import { useApi } from './api-provider/api-provider';
 

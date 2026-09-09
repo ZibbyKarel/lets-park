@@ -14,7 +14,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '@lets-park/auth/client';
-import { useQuery } from '@lets-park/query';
+import { useQuery } from '@tanstack/react-query';
 import { todayInPrague } from '@lets-park/i18n';
 import { LOT_ROUTE } from '../../routes';
 import { useApi } from '../api-provider/api-provider';
