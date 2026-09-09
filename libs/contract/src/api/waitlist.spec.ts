@@ -24,6 +24,24 @@ describe('joinWaitlistInputSchema', () => {
     expect(joinWaitlistInputSchema.parse({ ...valid, id: UUID_A, userId: UUID_A })).toEqual(valid);
   });
 
+  it('accepts an optional holderId, naming somebody other than the caller', () => {
+    expect(joinWaitlistInputSchema.parse({ ...valid, holderId: UUID_A })).toEqual({
+      ...valid,
+      holderId: UUID_A,
+    });
+  });
+
+  it('omits holderId when absent, rather than defaulting it to null', () => {
+    const parsed = joinWaitlistInputSchema.parse(valid);
+    expect('holderId' in parsed).toBe(false);
+  });
+
+  it('rejects a holderId that is not a uuid', () => {
+    expect(joinWaitlistInputSchema.safeParse({ ...valid, holderId: NOT_A_UUID }).success).toBe(
+      false
+    );
+  });
+
   it.each([
     ['parkingSpotId', NOT_A_UUID],
     ['date', INVALID_DATE],

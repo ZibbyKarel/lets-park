@@ -216,6 +216,14 @@ export const AUDIT_LOG_ACTIONS = [
    * (`doc/decision/0306-an-admin-names-the-holder-and-defaults-to-themselves`).
    */
   'RESERVATION_CREATED_BY_ADMIN',
+  /**
+   * An admin queued somebody else for a spot's waitlist. `WAITLIST_JOINED`
+   * stays what it has always meant: the queued person joined for themselves,
+   * admin or not — mirrors `RESERVATION_CREATED_BY_ADMIN` beside it, and for
+   * the same reason: the audit trail has to say who acted and on whose
+   * behalf.
+   */
+  'WAITLIST_JOINED_BY_ADMIN',
 ] as const;
 
 export const auditLogActionSchema = z.enum(AUDIT_LOG_ACTIONS);

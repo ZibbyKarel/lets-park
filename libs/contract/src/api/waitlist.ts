@@ -10,10 +10,23 @@ import { waitlistEntrySchema } from '../schemas/entities';
 import { dateOnlySchema, idSchema } from '../schemas/primitives';
 import { authed, contractErrors } from './builder';
 
-export const joinWaitlistInputSchema = waitlistEntrySchema.pick({
-  parkingSpotId: true,
-  date: true,
-});
+/**
+ * Who to queue, when the caller is not queueing themselves.
+ *
+ * Unlike `reservationHolderInputSchema`, this is **not** a discriminated
+ * union: `WaitlistEntry.userId` is non-nullable — there is no guest
+ * waitlisting — so a bare user id is the whole shape. Omitted means "the
+ * caller, for themselves", which is what `waitlist.join` has always done.
+ * **Only an admin may name somebody else** — a schema cannot see who is
+ * calling, so that is `ReservationPolicy.assertMayNameWaitlistTarget`, and the
+ * refusal is the `FORBIDDEN` the base builder already declares.
+ */
+export const joinWaitlistInputSchema = waitlistEntrySchema
+  .pick({
+    parkingSpotId: true,
+    date: true,
+  })
+  .extend({ holderId: idSchema.optional() });
 export type JoinWaitlistInput = z.infer<typeof joinWaitlistInputSchema>;
 
 export const joinWaitlistOutputSchema = z.object({

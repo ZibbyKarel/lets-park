@@ -307,6 +307,7 @@ describe('auditLogSchema', () => {
       'RESERVATION_WINDOW_UPDATED',
       'WAITLIST_JOINED',
       'RESERVATION_CREATED_BY_ADMIN',
+      'WAITLIST_JOINED_BY_ADMIN',
     ]);
     for (const action of AUDIT_LOG_ACTIONS) {
       expect(auditLogActionSchema.safeParse(action).success).toBe(true);
