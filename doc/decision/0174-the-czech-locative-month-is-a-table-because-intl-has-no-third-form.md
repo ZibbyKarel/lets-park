@@ -57,3 +57,5 @@ and only ever grows if the calendar does.
 **It is a precedent.** A future sentence needing the accusative or the instrumental will want a
 second table. If that happens, the tables should move together into one `CZECH_MONTHS` record keyed
 by case rather than accumulating as loose arrays.
+
+> **Note (0303):** `CZECH_MONTHS_LOCATIVE` and `formatMonthLocative` in `dates.ts` were renamed to the exported table `MONTH_LOCATIVE_CS` and the method `monthLocative` on `createDateFormatters(locale)` by `doc/decision/0303-*`. The reasoning above is unaffected.

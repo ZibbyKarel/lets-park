@@ -20,8 +20,9 @@
  *
  * What the two surfaces *do* share is the risk of drifting apart on **dates**,
  * and that is solved rather than accepted: this file formats through `Intl`
- * with the `cs` locale, which is the same ICU data `libs/i18n/src/lib/dates.ts`
- * reaches through next-intl's `createFormatter`. The Czech genitive
+ * with the `cs` locale, which is the same ICU data
+ * `libs/i18n/src/lib/date-formatters.ts` reaches through next-intl's
+ * `createFormatter`. The Czech genitive
  * (`25. srpna`, not the nominative `srpen`) falls out of ICU when `day` and
  * `month` are formatted in the same call — see that file's header, which
  * measured it. There is no month table here to fall out of step.

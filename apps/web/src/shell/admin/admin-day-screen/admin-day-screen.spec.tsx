@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../../messages/cs.json';
 import { AdminDayScreen } from './admin-day-screen';
 import type { AdminDayScreenProps } from './admin-day-screen';
 
@@ -84,7 +85,7 @@ function renderScreen(overrides: Partial<AdminDayScreenProps> = {}) {
   };
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <AdminDayScreen {...props} />
     </IntlProvider>
   );

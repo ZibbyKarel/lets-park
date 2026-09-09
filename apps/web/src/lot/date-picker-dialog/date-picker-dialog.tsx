@@ -22,10 +22,9 @@ import { useState } from 'react';
 import { Button, Modal, Select, Stack, cx } from '@lets-park/design-system/primitives';
 import {
   addMonths,
-  formatFullDate,
-  formatMonthName,
   parseDateOnly,
   startOfMonth,
+  useDateFormatters,
   useTranslations,
   type DateOnly,
 } from '@lets-park/i18n';
@@ -63,6 +62,7 @@ function DatePickerDialogContent({
   onSelect,
 }: DatePickerDialogProps) {
   const t = useTranslations('lot');
+  const f = useDateFormatters();
   const [viewAnchor, setViewAnchor] = useState<DateOnly>(() => startOfMonth(selectedDate));
 
   const grid = buildDatePickerGrid(viewAnchor, selectedDate);
@@ -109,7 +109,7 @@ function DatePickerDialogContent({
         >
           {Array.from({ length: MONTHS_IN_YEAR }, (_unused, index) => index + 1).map((month) => (
             <option key={month} value={month}>
-              {formatMonthName(month)}
+              {f.monthName(month)}
             </option>
           ))}
         </Select>
@@ -166,7 +166,7 @@ function DatePickerDialogContent({
                     <button
                       type="button"
                       aria-pressed={day.selected}
-                      aria-label={t('dayCell', { date: formatFullDate(day.date) })}
+                      aria-label={t('dayCell', { date: f.fullDate(day.date) })}
                       onClick={() => {
                         onSelect(day.date);
                       }}

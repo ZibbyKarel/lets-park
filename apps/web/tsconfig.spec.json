@@ -26,6 +26,8 @@
   "exclude": [],
   "include": [
     "index.d.ts",
+    "next-intl.d.ts",
+    "messages/**/*.spec.ts",
     "next-env.d.ts",
     "src/test-setup.ts",
     "jest.config.ts",

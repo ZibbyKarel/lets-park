@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import type { UserRole } from '@lets-park/contract';
 import { AdminScreen } from './admin-screen';
 
@@ -26,7 +27,7 @@ function renderAdminScreen(
   const onRetry = jest.fn();
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <AdminScreen
         role={overrides.role}
         isPending={overrides.isPending ?? false}

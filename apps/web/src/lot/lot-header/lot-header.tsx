@@ -14,7 +14,7 @@
  */
 
 import { Button, Stack, cx } from '@lets-park/design-system/primitives';
-import { formatFullDate, useTranslations } from '@lets-park/i18n';
+import { useDateFormatters, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import type { BannerView, DayNoteView, LotCounts } from '../lot-view';
 
@@ -52,6 +52,7 @@ export function LotHeader({
   onOpenDatePicker,
 }: LotHeaderProps) {
   const t = useTranslations('lot');
+  const f = useDateFormatters();
 
   return (
     <Stack direction="row" wrap align="center" justify="between" spacing={6} className="mb-6">
@@ -70,7 +71,7 @@ export function LotHeader({
             ‹
           </Button>
           <Button variant="ghost" size="sm" onClick={onOpenDatePicker}>
-            {formatFullDate(date)}
+            {f.fullDate(date)}
           </Button>
           <Button variant="ghost" size="sm" aria-label={t('nextDay')} onClick={onNextDay}>
             ›

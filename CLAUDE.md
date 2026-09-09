@@ -5,9 +5,14 @@
 Everything will be written in EN by default — code, identifiers, comments,
 and documentation (`doc/`, this file). The two deliberate exceptions:
 `plan.md` (the binding spec, written in Czech — see below) stays as-is, and
-**UI copy** stays in Czech, because this is a Czech company's internal app
-and the interface language is a product decision, not a documentation one.
-Do not translate UI copy into English.
+**UI copy** is **written** in Czech, because this is a Czech company's internal
+app and the interface language is a product decision, not a documentation one.
+Czech remains the source of truth: `apps/web/messages/cs.json` is where copy
+is written, and its keys define what exists. English is a translation that
+sits alongside it (`en.json`), kept in step by the parity guard at
+`apps/web/messages/messages.spec.ts`. New copy is written in Czech first and
+then translated — never English-first, and never by replacing a Czech string
+with an English one. See `doc/i18n.md` for details.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -20,7 +25,7 @@ a fresh worktree and spent the next hour on spurious `Module not found` errors
 in `api:build`.
 
 **The documentation map is `doc/README.md`**; it indexes every topic document
-and all 187 decision records. `README.md` is the operational runbook.
+and all 189 decision records. `README.md` is the operational runbook.
 
 ### Commands
 

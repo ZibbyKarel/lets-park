@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { MonthWindowOverview } from '@lets-park/contract';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../../messages/cs.json';
 import { WindowBanner } from './window-banner';
 import { BANNER_STATE_TONE, STATE_GLYPH } from './window-view';
 
@@ -32,7 +33,7 @@ function aWindow(overrides: Partial<MonthWindowOverview> = {}): MonthWindowOverv
 
 function renderBanner(overrides: Partial<MonthWindowOverview> = {}) {
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <WindowBanner window={aWindow(overrides)} />
     </IntlProvider>
   );

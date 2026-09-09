@@ -32,13 +32,11 @@ import type {
 import { Badge, Card, Grid, Stack, Stepper, Toast } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
 import {
-  formatDayAndMonth,
-  formatDayMonthAndYear,
-  formatMonthAndYear,
   MAX_OPEN_DAYS_BEFORE,
   MIN_OPEN_DAYS_BEFORE,
   RESERVATION_LOCK_MODES,
   startOfYearMonth,
+  useDateFormatters,
   useTranslations,
 } from '@lets-park/i18n';
 import type { DateOnly, MonthLockState } from '@lets-park/i18n';
@@ -96,6 +94,7 @@ export function AdminWindowScreen({
   isSaved,
 }: AdminWindowScreenProps) {
   const t = useTranslations('admin');
+  const f = useDateFormatters();
   const describeWriteError = useAdminWriteError();
 
   const saveErrorMessage = describeWriteError('windowUpdate', saveError);
@@ -156,7 +155,7 @@ export function AdminWindowScreen({
                 <div className="border-b border-divider px-6 py-5">
                   <h3 className="text-lg font-bold text-fg">{t('windowMonthsTitle')}</h3>
                   <p className="mt-1 text-sm text-fg-3">
-                    {t('windowMonthsDescription', { today: formatDayMonthAndYear(today) })}
+                    {t('windowMonthsDescription', { today: f.dayMonthAndYear(today) })}
                   </p>
                 </div>
                 <ul className="flex flex-col">
@@ -175,16 +174,17 @@ export function AdminWindowScreen({
 
 function MonthRow({ month }: { readonly month: MonthWindowOverview }) {
   const t = useTranslations('admin');
+  const f = useDateFormatters();
 
   const range = {
-    from: formatDayAndMonth(month.windowFrom),
-    to: formatDayAndMonth(month.windowTo),
+    from: f.dayAndMonth(month.windowFrom),
+    to: f.dayAndMonth(month.windowTo),
   };
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 border-b border-divider px-6 py-4 last:border-b-0">
       <div>
-        <p className="font-bold text-fg">{formatMonthAndYear(startOfYearMonth(month.month))}</p>
+        <p className="font-bold text-fg">{f.monthAndYear(startOfYearMonth(month.month))}</p>
         <p className="mt-0.5 text-sm text-fg-3">
           {month.lockMode === 'AUTO'
             ? t('windowMonthRangeAuto', range)

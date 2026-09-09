@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDayAndMonth, formatWeekdayName } from '@lets-park/i18n';
+import { useDateFormatters } from '@lets-park/i18n';
 import type { useTranslations } from '@lets-park/i18n';
 import { Badge } from '@lets-park/design-system/primitives';
 import type { BadgeTone } from '@lets-park/design-system/primitives';
@@ -36,6 +36,7 @@ export interface CalendarTableProps {
 }
 
 export function CalendarTable({ days, t }: CalendarTableProps) {
+  const f = useDateFormatters();
   // No empty-list branch: both procedures answer one entry per requested day
   // and the call to action is disabled at zero selection, so `rows` cannot be
   // empty. A branch that cannot render is copy nobody will ever proof-read
@@ -50,7 +51,7 @@ export function CalendarTable({ days, t }: CalendarTableProps) {
           className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border px-4 py-3"
         >
           <span className="text-base text-fg">
-            {formatDayAndMonth(row.date)} · {formatWeekdayName(row.date)}
+            {f.dayAndMonth(row.date)} · {f.weekdayName(row.date)}
           </span>
           <span className="flex items-center gap-3">
             {row.spotLabel === null ? null : (

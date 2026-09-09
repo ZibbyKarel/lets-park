@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../messages/cs.json';
 import { LoginScreen } from './login-screen';
 
 /**
@@ -15,7 +16,7 @@ import { LoginScreen } from './login-screen';
 function renderLoginScreen() {
   const action = jest.fn<Promise<void>, []>().mockResolvedValue(undefined);
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <LoginScreen action={action} />
     </IntlProvider>
   );

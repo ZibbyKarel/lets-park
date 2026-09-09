@@ -112,3 +112,20 @@ export const AlignStart: Story = {
     align: 'start',
   },
 };
+
+/**
+ * `checked` turns an item into a one-of-N choice: `role="menuitemradio"` with
+ * `aria-checked`, so a screen reader announces which one is active. Items
+ * without `checked` stay plain `menuitem`s and can sit in the same menu.
+ */
+export const WithCheckedItem: Story = {
+  args: {
+    trigger: <span className="px-2 font-medium">Jazyk ▾</span>,
+    label: 'Jazyk',
+    items: [
+      { id: 'header', label: 'Jazyk', disabled: true },
+      { id: 'cs', label: 'Čeština', checked: true },
+      { id: 'en', label: 'English', checked: false },
+    ],
+  },
+};

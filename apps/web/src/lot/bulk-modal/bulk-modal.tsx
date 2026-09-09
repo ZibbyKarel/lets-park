@@ -23,12 +23,9 @@
 
 import { useCallback, useState } from 'react';
 import {
-  formatDayAndMonth,
-  formatFullDate,
-  formatMonthLocative,
-  formatWeekdayName,
   parseDateOnly,
   todayInPrague,
+  useDateFormatters,
   useTranslations,
   type DateOnly,
 } from '@lets-park/i18n';
@@ -122,6 +119,7 @@ function BulkReservationModalContent({
   canReserveMonth,
 }: BulkReservationModalProps) {
   const t = useTranslations('bulk');
+  const f = useDateFormatters();
   const api = useApi();
   const queryClient = useQueryClient();
 
@@ -268,7 +266,7 @@ function BulkReservationModalContent({
               {differences.map((difference) => (
                 <li key={difference.date} className="text-base text-fg">
                   <span className="font-bold">
-                    {formatDayAndMonth(difference.date)} · {formatWeekdayName(difference.date)}
+                    {f.dayAndMonth(difference.date)} · {f.weekdayName(difference.date)}
                   </span>
                   <span className="block text-fg-2">
                     {t('resultChangedProposed')}: {describeOutcome(difference.proposed)}
@@ -358,7 +356,7 @@ function BulkReservationModalContent({
       size="md"
       title={t('title')}
       description={t('description', {
-        month: formatMonthLocative(parseDateOnly(anchorDate).month),
+        month: f.monthLocative(parseDateOnly(anchorDate).month),
       })}
       closeLabel={t('close')}
       closeOnScrimClick={false}
@@ -417,8 +415,8 @@ function BulkReservationModalContent({
                       aria-pressed={day.selectable ? selectedSet.has(day.date) : undefined}
                       aria-label={
                         day.selectable
-                          ? t('dayCell', { date: formatFullDate(day.date) })
-                          : t('dayCellBlocked', { date: formatFullDate(day.date) })
+                          ? t('dayCell', { date: f.fullDate(day.date) })
+                          : t('dayCellBlocked', { date: f.fullDate(day.date) })
                       }
                       onClick={() => {
                         toggleDay(day);
