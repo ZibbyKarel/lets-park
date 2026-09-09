@@ -148,22 +148,22 @@ describe('AdminUsersScreen', () => {
     // somebody else's role is ordinary administration and goes straight
     // through. The viewer's own demotion is the one that asks first, and it
     // has its own tests.
-    // To allow demotion of KAREL, we start with ADELA as an admin too (so KAREL
-    // is not the last admin).
-    const adelaAdmin = { ...ADELA, role: 'ADMIN' as const };
+    // To allow demotion of KAREL, we add Zora as a second active admin (so KAREL
+    // is not the last admin). ADELA stays a USER so we can test promotion.
+    const zoraAdmin = aUser({ id: 'z', name: 'Zora Adminová', role: 'ADMIN' });
     const { onRoleChange, user } = renderScreen({
       viewerId: PETR.id,
-      users: { kind: 'ready', data: { users: [KAREL, adelaAdmin, PETR] } },
+      users: { kind: 'ready', data: { users: [KAREL, ADELA, zoraAdmin, PETR] } },
     });
 
-    // In this scenario, both KAREL and ADELA are already admins, so we test
-    // by demoting ADELA (still allowed since KAREL would remain) and then
-    // demoting KAREL (still allowed since ADELA would remain).
+    // Test a promotion: ADELA is a USER, clicking her switch makes her an admin.
     await user.click(
       within(rowOf(ADELA)).getByRole('switch', { name: 'Admin role — Adéla Horáková' })
     );
-    expect(onRoleChange).toHaveBeenLastCalledWith(ADELA.id, false);
+    expect(onRoleChange).toHaveBeenLastCalledWith(ADELA.id, true);
 
+    // Test a demotion: KAREL is an admin, and with Zora as the second admin,
+    // clicking his switch to demote him is allowed.
     await user.click(
       within(rowOf(KAREL)).getByRole('switch', { name: 'Admin role — Karel Zíbar' })
     );
