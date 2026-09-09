@@ -15,7 +15,7 @@ something new:
 everything here. `doc/implementation-plan.md` is its breakdown into tasks.
 
 This index is generated from the filesystem and accounts for every file under
-`doc/`: 22 topic documents, 187 decision records, and `doc/design/`.
+`doc/`: 22 topic documents, 189 decision records, and `doc/design/`.
 
 ---
 
@@ -34,7 +34,7 @@ This index is generated from the filesystem and accounts for every file under
 | [`design-system.md`](design-system.md) | All three layers of the one `design-system` package: what a token is, how the CSS is generated, and what a primitive and a compound may and may not know. |
 | [`environment.md`](environment.md) | Every environment variable the two apps need, how the local Docker stack is started, and how dev, e2e and production differ (values only, never code). |
 | [`frontend.md`](frontend.md) | `apps/web`: the route tree, the single client boundary, provider order, the sign-in flow, the screen states and the `ScreenData<T>` union that selects one, and the `*-view.ts` split between what a screen decides and what it draws. |
-| [`i18n.md`](i18n.md) | `libs/i18n` — the only place allowed to import `next-intl` — and how Czech UI copy is organised. |
+| [`i18n.md`](i18n.md) | `libs/i18n` — the only place allowed to import `next-intl` — the two message catalogs in `apps/web/messages`, how a request's locale is chosen, and the English glossary. |
 | [`open-items.md`](open-items.md) | Everything the build deliberately left undone: deferred minors, parked findings, and the two gaps where an enforcement mechanism does not actually enforce. |
 | [`ics.md`](ics.md) | The personal calendar subscription: what the feed serves, how its URL is authenticated, and what has been verified about it. |
 | [`implementation-plan.md`](implementation-plan.md) | `plan.md` broken into dispatchable tasks. The plan of record for what is built when. |
@@ -254,3 +254,5 @@ for why, and take the next number from the end of this list.
 - [`0299-a-component-and-its-companions-live-in-one-folder`](decision/0299-a-component-and-its-companions-live-in-one-folder.md) — 0299 – A component and its companions live in one folder
 - [`0300-the-czech-holiday-calendar-stays-hand-rolled`](decision/0300-the-czech-holiday-calendar-stays-hand-rolled.md) — 0300 – The Czech holiday calendar stays hand-rolled
 - [`0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths`](decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md) — 0301 – The design system is one package, and the layer rule moved to lint paths
+- [`0302-the-locale-is-a-cookie-not-a-url-segment`](decision/0302-the-locale-is-a-cookie-not-a-url-segment.md) — 0302 – The locale is a cookie, not a URL segment
+- [`0303-message-catalogs-live-in-the-app-not-in-libs-i18n`](decision/0303-message-catalogs-live-in-the-app-not-in-libs-i18n.md) — 0303 – Message catalogs live in the app, not in `libs/i18n`
