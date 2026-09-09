@@ -42,7 +42,16 @@ describe('daySpotOverviewSchema', () => {
     expect(
       daySpotOverviewSchema.safeParse({
         ...free,
-        reservation: { id: UUID_A, createdAt: TIMESTAMP, user: userSummaryFixture },
+        reservation: {
+          id: UUID_A,
+          createdAt: TIMESTAMP,
+          holder: {
+            kind: 'USER',
+            userId: userSummaryFixture.id,
+            name: userSummaryFixture.name,
+            licensePlate: userSummaryFixture.licensePlate,
+          },
+        },
         waitlistCount: 2,
         viewerWaitlistEntryId: UUID_A,
         viewerWaitlistPosition: 2,

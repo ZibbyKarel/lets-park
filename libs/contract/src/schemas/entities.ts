@@ -103,20 +103,56 @@ export const reservationSchema = z.object({
 export type Reservation = z.infer<typeof reservationSchema>;
 
 /**
+ * Who holds a reservation, as everybody who can see the day sees them.
+ *
+ * A discriminated union rather than a widened user summary, because a guest has
+ * no `User` row and the type has to say so: `kind: 'GUEST'` has **no `userId`
+ * member at all**, so `holder.userId` on a guest is a compile error rather than
+ * a `null` every reader has to remember to check. That is the property
+ * `doc/decision/0302-*` was written to keep.
+ *
+ * `name` and `licensePlate` are the **effective** values — the server has
+ * already applied `Reservation.licensePlate` over the holder's stored one — so a
+ * consumer renders them without knowing the override exists.
+ *
+ * Only `userId` may be compared against the viewer's own id; `name` is not an
+ * identity. `email`, `oktaId` and above all `icsToken` (the secret in a personal
+ * feed URL) are absent by construction, the same reason `userSummarySchema` is a
+ * `pick`.
+ */
+export const reservationHolderSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('USER'),
+    userId: idSchema,
+    name: z.string().min(1),
+    licensePlate: z.string().min(1).nullable(),
+  }),
+  z.object({
+    kind: z.literal('GUEST'),
+    name: z.string().min(1),
+    licensePlate: z.string().min(1).nullable(),
+  }),
+]);
+export type ReservationHolder = z.infer<typeof reservationHolderSchema>;
+
+/**
  * A reservation as it is shown to everybody who can see the day: which
  * reservation it is, when it was made, and who holds it.
  *
- * `parkingSpotId`, `userId` and `date` are deliberately absent — every consumer
- * already knows all three from its surrounding context (the spot row of the day
- * overview, the event payload of a realtime broadcast), and `user` carries the
- * only part of the holder that may be shown to others.
+ * `parkingSpotId`, the holder's row and `date` are deliberately absent — every
+ * consumer already knows all three from its surrounding context (the spot row of
+ * the day overview, the event payload of a realtime broadcast).
+ *
+ * The field is `holder`, not `user`: a field called `user` cannot carry a guest,
+ * and renaming it is what forced every reader to be revisited rather than
+ * silently reading `undefined` (`doc/decision/0302-*`).
  *
  * Shared by `src/api` and `src/realtime`, for the reason given on
  * {@link userSummarySchema}.
  */
 export const publicReservationSchema = reservationSchema
   .pick({ id: true, createdAt: true })
-  .extend({ user: userSummarySchema });
+  .extend({ holder: reservationHolderSchema });
 export type PublicReservation = z.infer<typeof publicReservationSchema>;
 
 /**

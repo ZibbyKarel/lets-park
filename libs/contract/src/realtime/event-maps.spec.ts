@@ -83,7 +83,7 @@ describe('derived event maps', () => {
         emitted.push(`${typed.lockedBy.name}@${roomForDate(typed.date)}`);
       },
       'cell:unlocked': (payload) => emitted.push(roomForDate(payload.date)),
-      'reservation:created': (payload) => emitted.push(payload.reservation.user.name),
+      'reservation:created': (payload) => emitted.push(payload.reservation.holder.name),
       'reservation:cancelled': (payload) => emitted.push(payload.reservationId),
       'reservation:reassigned': (payload) => {
         const typed: ReservationReassignedEvent = payload;
