@@ -188,7 +188,9 @@ export function SpotDialog({
   // a button reading "Odejít z fronty". An admin who is queued sees the queue
   // copy too; their cancel button is governed by `showCancel` and is unaffected.
   const title = isInfo
-    ? t('titleInfo')
+    ? spot.infoReason === 'already-reserved'
+      ? t('titleInfoAlreadyReserved')
+      : t('titleInfo')
     : spot.isMine
       ? t('titleMine')
       : isTaken
@@ -200,7 +202,9 @@ export function SpotDialog({
         : t('titleReserve');
 
   const description = isInfo
-    ? t('subInfo')
+    ? spot.infoReason === 'already-reserved'
+      ? t('subInfoAlreadyReserved')
+      : t('subInfo')
     : spot.isMine
       ? canReserve
         ? t('subMine')

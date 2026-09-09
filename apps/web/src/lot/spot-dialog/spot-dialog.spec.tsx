@@ -31,6 +31,7 @@ function spot(overrides: Partial<SpotView> = {}): SpotView {
     viewerWaitlistPosition: null,
     showAdminMenu: false,
     holderIsGuest: false,
+    infoReason: null,
     ...overrides,
   };
 }
@@ -163,6 +164,21 @@ describe('SpotDialog — a free bay', () => {
     expect(screen.getByRole('heading', { name: 'Rezervace uzamčeny' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Rezervovat' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zavřít' })).toBeInTheDocument();
+  });
+
+  it('explains that the viewer already holds a reservation elsewhere that day, distinctly from a locked month', () => {
+    renderDialog({
+      spot: spot({ appearance: 'free', action: 'info', infoReason: 'already-reserved' }),
+      canReserve: true,
+    });
+
+    expect(screen.getByRole('heading', { name: 'Na tento den už máte místo' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Na tento den už máte rezervované jiné místo. Nejdřív ji zrušte, teprve pak si můžete zapsat nebo se zařadit do fronty na jiné místo.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rezervovat' })).not.toBeInTheDocument();
   });
 });
 

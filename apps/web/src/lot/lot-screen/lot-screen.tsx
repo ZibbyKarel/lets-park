@@ -141,8 +141,9 @@ export function LotScreen() {
       isAdmin,
       viewerUserId,
       locks,
+      viewerReservationId: day?.viewerReservationId ?? null,
     }),
-    [day?.canReserve, isAdmin, viewerUserId, locks]
+    [day?.canReserve, day?.viewerReservationId, isAdmin, viewerUserId, locks]
   );
 
   const groups = useMemo(

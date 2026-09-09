@@ -28,6 +28,7 @@ function spot(overrides: Partial<SpotView> = {}): SpotView {
     viewerWaitlistPosition: null,
     showAdminMenu: false,
     holderIsGuest: false,
+    infoReason: null,
     ...overrides,
   };
 }

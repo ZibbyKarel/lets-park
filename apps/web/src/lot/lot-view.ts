@@ -106,6 +106,15 @@ export interface LotViewContext {
   readonly viewerUserId: string | null;
   /** Live cell locks, keyed by `parkingSpotId`. */
   readonly locks: ReadonlyMap<string, CellLockView>;
+  /**
+   * The caller's own reservation for this day, if any — straight from
+   * `overview.day.viewerReservationId` (`libs/contract/src/api/overview.ts`),
+   * never re-derived. There is at most one, by the "one reservation per user
+   * and day" rule, so its mere presence — regardless of *which* spot it names
+   * — is what `toSpotView` needs to refuse `reserve`/`queue` on every spot
+   * that isn't it.
+   */
+  readonly viewerReservationId: string | null;
 }
 
 /**
@@ -151,6 +160,16 @@ export interface SpotView {
    * the name, so it is never `isMine` and never carries a per-user car colour.
    */
   readonly holderIsGuest: boolean;
+  /**
+   * Which explanation `action === 'info'` is for, or `null` when the action
+   * isn't `'info'`. Both reasons reuse the same dialog mechanics (no primary
+   * button, no cell lock taken — see `lot-screen.tsx`) but need different
+   * copy: `'window-locked'` is "this day/month is closed", `'already-reserved'`
+   * is "you already hold a spot today, cancel it first" — conflating them
+   * would tell a viewer sitting on their own reservation that the *month* is
+   * locked, which is false.
+   */
+  readonly infoReason: 'window-locked' | 'already-reserved' | null;
 }
 
 /**
@@ -188,16 +207,40 @@ export function toSpotView(row: DaySpotOverview, context: LotViewContext): SpotV
   const appearance: SpotAppearance =
     lock !== null ? 'editing' : isTaken ? 'taken' : context.canReserve ? 'free' : 'window-locked';
 
+  // The viewer already holds *some* reservation this day, and it isn't this
+  // row: a *new* reserve or queue-join here would only earn a
+  // `RESERVATION_LIMIT_REACHED` from the backend (`ReservationsService.create`,
+  // `WaitlistService.join`), so neither may be offered — see the module docs'
+  // rule 1, extended to this contract-supplied fact the same way it already
+  // applies to `canReserve`. **Giving something back is never blocked by it**:
+  // a queue entry the viewer already holds on this row is left untouched
+  // (`'queue'`, not `'info'`) precisely so `viewerWaitlistEntryId`'s leave
+  // path stays reachable — this mirrors `'mine'` staying reachable for a
+  // reservation the viewer already holds.
+  const viewerBookedElsewhere = context.viewerReservationId !== null && !isMine;
+  const alreadyQueuedHere = row.viewerWaitlistEntryId !== null;
+
   const action: SpotAction =
     appearance === 'editing'
       ? 'none'
       : appearance === 'taken'
         ? isMine
           ? 'mine'
-          : 'queue'
+          : viewerBookedElsewhere && !alreadyQueuedHere
+            ? 'info'
+            : 'queue'
         : appearance === 'free'
-          ? 'reserve'
+          ? viewerBookedElsewhere
+            ? 'info'
+            : 'reserve'
           : 'info';
+
+  const infoReason: SpotView['infoReason'] =
+    action !== 'info'
+      ? null
+      : appearance === 'window-locked'
+        ? 'window-locked'
+        : 'already-reserved';
 
   return {
     spotId: row.spot.id,
@@ -219,6 +262,7 @@ export function toSpotView(row: DaySpotOverview, context: LotViewContext): SpotV
     viewerWaitlistPosition: row.viewerWaitlistPosition,
     showAdminMenu: context.isAdmin && isTaken,
     holderIsGuest: holder !== null && holder.kind === 'GUEST',
+    infoReason,
   };
 }
 

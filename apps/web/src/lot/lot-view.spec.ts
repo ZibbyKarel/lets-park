@@ -61,6 +61,7 @@ function context(overrides: Partial<LotViewContext> = {}): LotViewContext {
     isAdmin: false,
     viewerUserId: VIEWER,
     locks: new Map<string, CellLockView>(),
+    viewerReservationId: null,
     ...overrides,
   };
 }
@@ -130,6 +131,56 @@ describe('toSpotView', () => {
     const view = toSpotView(spotRow(), context({ canReserve: false }));
     expect(view.appearance).toBe('window-locked');
     expect(view.action).toBe('info');
+    expect(view.infoReason).toBe('window-locked');
+  });
+
+  it('gives every non-`info` spot a null infoReason', () => {
+    expect(toSpotView(spotRow(), context()).infoReason).toBeNull();
+    expect(
+      toSpotView(spotRow({ reservation: reservation(OTHER) }), context()).infoReason
+    ).toBeNull();
+    expect(
+      toSpotView(spotRow({ reservation: reservation(VIEWER) }), context()).infoReason
+    ).toBeNull();
+  });
+
+  it('refuses reserve on a free spot when the viewer already holds a reservation elsewhere that day', () => {
+    const view = toSpotView(spotRow(), context({ viewerReservationId: 'res-elsewhere' }));
+    expect(view.appearance).toBe('free');
+    expect(view.action).toBe('info');
+    expect(view.infoReason).toBe('already-reserved');
+  });
+
+  it('refuses queueing on a taken spot when the viewer already holds a reservation elsewhere that day', () => {
+    const view = toSpotView(
+      spotRow({ reservation: reservation(OTHER) }),
+      context({ viewerReservationId: 'res-elsewhere' })
+    );
+    expect(view.appearance).toBe('taken');
+    expect(view.action).toBe('info');
+    expect(view.infoReason).toBe('already-reserved');
+  });
+
+  it('still offers cancelling the caller’s own spot when viewerReservationId names it', () => {
+    const view = toSpotView(
+      spotRow({ reservation: reservation(VIEWER) }),
+      context({ viewerReservationId: 'res-VIEWER' })
+    );
+    expect(view.isMine).toBe(true);
+    expect(view.action).toBe('mine');
+    expect(view.infoReason).toBeNull();
+  });
+
+  it('reports window-locked, not already-reserved, when both are true', () => {
+    // A locked month is the more fundamental restriction — it applies to
+    // every viewer, not just one already holding a spot — so it wins the
+    // copy even when the viewer also already has a reservation elsewhere.
+    const view = toSpotView(
+      spotRow(),
+      context({ canReserve: false, viewerReservationId: 'res-elsewhere' })
+    );
+    expect(view.appearance).toBe('window-locked');
+    expect(view.infoReason).toBe('window-locked');
   });
 
   it('reads canReserve from the payload rather than re-deriving it from the window', () => {
