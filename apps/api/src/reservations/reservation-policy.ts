@@ -23,6 +23,7 @@
  * | **cancel your own reservation** | **never** — a closed window stops people taking spots, not giving them back |
  * | anything, as an admin | never — admins are not restricted by the window |
  * | auto-promotion | never — a system action, and the one that makes a locked month still work |
+ * | **name a holder other than yourself** | admin only |
  *
  * The last two rows are why this is enforced in the service and not in a schema:
  * a schema cannot see who is calling.
@@ -40,7 +41,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import type { ReservationWindowSettings } from '@lets-park/contract';
+import type { ReservationHolderInput, ReservationWindowSettings } from '@lets-park/contract';
 import type { DateOnly } from '@lets-park/shared-types';
 import { compareDateOnly, isBusinessDay, monthLockState } from '@lets-park/shared-types';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
@@ -121,5 +122,39 @@ export class ReservationPolicy {
         details: { date, state },
       });
     }
+  }
+
+  /**
+   * May **this** caller book on **that** holder's behalf?
+   *
+   * The security boundary of TODO item 3, and the reason the holder is not just
+   * a schema field: a schema cannot see who is calling. An omitted holder is
+   * always allowed — it means "the caller, for themselves", which is what this
+   * procedure has always done.
+   *
+   * A normal user naming *themselves* is allowed, plate override included: it is
+   * the same reservation they would get by omitting the holder. Naming anybody
+   * else, or a guest, is `FORBIDDEN`.
+   *
+   * Deliberately its own named step rather than a branch inside
+   * `ReservationsService.create`: TODO items 4 and 5 each add a rule to that same
+   * path, and a guard that slots in beside this one conflicts textually rather
+   * than semantically.
+   */
+  assertMayNameHolder(holder: ReservationHolderInput | undefined, actor: AuthenticatedUser): void {
+    if (holder === undefined) {
+      return;
+    }
+    if (actor.role === 'ADMIN') {
+      return;
+    }
+    if (holder.kind === 'USER' && holder.userId === actor.id) {
+      return;
+    }
+
+    throw new DomainError('FORBIDDEN', {
+      message: 'Only an admin may reserve on behalf of another user or a guest.',
+      details: { holderKind: holder.kind },
+    });
   }
 }
