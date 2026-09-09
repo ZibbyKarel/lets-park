@@ -175,7 +175,9 @@ export interface UserSeed {
 export interface ReservationSeed {
   id?: string;
   parkingSpotId: string;
-  userId: string;
+  userId: string | null;
+  guestName?: string | null;
+  licensePlate?: string | null;
   /** `YYYY-MM-DD`. */
   date: string;
   createdAt?: Date;
@@ -289,6 +291,10 @@ export class PrismaDouble {
       id: seed.id ?? randomUUID(),
       parkingSpotId: seed.parkingSpotId,
       userId: seed.userId,
+      // A guest seed is `{ userId: null, guestName: '…' }`; the defaults keep
+      // every existing caller seeding exactly what it seeded before.
+      guestName: seed.guestName ?? null,
+      licensePlate: seed.licensePlate ?? null,
       date: new Date(`${seed.date}T00:00:00.000Z`),
       createdAt: seed.createdAt ?? EPOCH,
     };
@@ -529,7 +535,7 @@ export class PrismaDouble {
         const target = args.where.date.getTime();
         return this.reservations
           .filter((row) => row.date.getTime() === target)
-          .map((row) => ({ ...row, user: copy(this.requireUser(row.userId)) }));
+          .map((row) => ({ ...row, user: copy(this.findHolder(row.userId)) }));
       },
       count: async (args: { where: { parkingSpotId: string; date: { gte: Date } } }) => {
         const gte = args.where.date?.gte;
@@ -638,6 +644,15 @@ export class PrismaDouble {
       throw new Error(`PrismaDouble: reservation references an unseeded user ${id}`);
     }
     return user;
+  }
+
+  /**
+   * Mirrors a Prisma `include: { user: true }` on `Reservation.user`, which is
+   * a `User?` relation (`doc/decision/0303-*`): `null` when the reservation is
+   * a guest's, {@link requireUser} otherwise.
+   */
+  private findHolder(userId: string | null): UserRow | null {
+    return userId === null ? null : this.requireUser(userId);
   }
 }
 

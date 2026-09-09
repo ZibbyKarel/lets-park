@@ -124,12 +124,37 @@ export function toUserSummary(row: Pick<UserRow, 'id' | 'name' | 'licensePlate'>
   return { id: row.id, name: row.name, licensePlate: row.licensePlate };
 }
 
+/**
+ * Narrows a fetched `User?` relation (or a projection of one) to non-null for
+ * the callers that build a {@link PublicReservation} today, all of which only
+ * ever see a user-held reservation — no writer can produce a `guestName` row
+ * yet, since the request field a guest reservation needs does not exist until
+ * Task 5.
+ *
+ * Once a guest reservation can reach this code, `null` here means the holder
+ * really is a guest, and the caller's projection has to say so instead of
+ * calling this — that is Task 2's `PublicReservation` extension, not this
+ * function's job. Throwing rather than silently falling back keeps a guest
+ * reservation from rendering as if the spot were free.
+ */
+export function requireHolder<T>(user: T | null): T {
+  if (user === null) {
+    throw new Error(
+      'Reservation has no user holder — this call site assumes a user-held ' +
+        'reservation and has not been updated for guest holders (Task 2).'
+    );
+  }
+  return user;
+}
+
 /** A reservation row, whole. What `reservation.create` answers with. */
 export function toContractReservation(row: ReservationRow): Reservation {
   return {
     id: row.id,
     parkingSpotId: row.parkingSpotId,
     userId: row.userId,
+    guestName: row.guestName,
+    licensePlate: row.licensePlate,
     date: toDateOnly(row.date),
     createdAt: toTimestamp(row.createdAt),
   };

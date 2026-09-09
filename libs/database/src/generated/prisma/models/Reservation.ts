@@ -20,6 +20,12 @@ import type * as Prisma from "../internal/prismaNamespace"
  * reservation flow: `(parkingSpotId, date)` is what makes double-booking
  * impossible under concurrent requests, and Task 10 maps its `P2002` violation
  * onto the contract error `SPOT_ALREADY_RESERVED`.
+ * 
+ * `userId` is nullable so that an admin can book for a guest, who has no `User`
+ * row. `Reservation_holder_check` is what keeps that from admitting a row with
+ * no holder at all — see `doc/decision/0303-*`. Because `NULL`s do not collide
+ * in a Postgres unique index, `(userId, date)` still means "one reservation per
+ * user per day" and deliberately does not limit guests.
  */
 export type ReservationModel = runtime.Types.Result.DefaultSelection<Prisma.$ReservationPayload>
 
@@ -33,6 +39,8 @@ export type ReservationMinAggregateOutputType = {
   id: string | null
   parkingSpotId: string | null
   userId: string | null
+  guestName: string | null
+  licensePlate: string | null
   date: Date | null
   createdAt: Date | null
 }
@@ -41,6 +49,8 @@ export type ReservationMaxAggregateOutputType = {
   id: string | null
   parkingSpotId: string | null
   userId: string | null
+  guestName: string | null
+  licensePlate: string | null
   date: Date | null
   createdAt: Date | null
 }
@@ -49,6 +59,8 @@ export type ReservationCountAggregateOutputType = {
   id: number
   parkingSpotId: number
   userId: number
+  guestName: number
+  licensePlate: number
   date: number
   createdAt: number
   _all: number
@@ -59,6 +71,8 @@ export type ReservationMinAggregateInputType = {
   id?: true
   parkingSpotId?: true
   userId?: true
+  guestName?: true
+  licensePlate?: true
   date?: true
   createdAt?: true
 }
@@ -67,6 +81,8 @@ export type ReservationMaxAggregateInputType = {
   id?: true
   parkingSpotId?: true
   userId?: true
+  guestName?: true
+  licensePlate?: true
   date?: true
   createdAt?: true
 }
@@ -75,6 +91,8 @@ export type ReservationCountAggregateInputType = {
   id?: true
   parkingSpotId?: true
   userId?: true
+  guestName?: true
+  licensePlate?: true
   date?: true
   createdAt?: true
   _all?: true
@@ -155,7 +173,9 @@ export type ReservationGroupByArgs<ExtArgs extends runtime.Types.Extensions.Inte
 export type ReservationGroupByOutputType = {
   id: string
   parkingSpotId: string
-  userId: string
+  userId: string | null
+  guestName: string | null
+  licensePlate: string | null
   date: Date
   createdAt: Date
   _count: ReservationCountAggregateOutputType | null
@@ -184,17 +204,21 @@ export type ReservationWhereInput = {
   NOT?: Prisma.ReservationWhereInput | Prisma.ReservationWhereInput[]
   id?: Prisma.UuidFilter<"Reservation"> | string
   parkingSpotId?: Prisma.UuidFilter<"Reservation"> | string
-  userId?: Prisma.UuidFilter<"Reservation"> | string
+  userId?: Prisma.UuidNullableFilter<"Reservation"> | string | null
+  guestName?: Prisma.StringNullableFilter<"Reservation"> | string | null
+  licensePlate?: Prisma.StringNullableFilter<"Reservation"> | string | null
   date?: Prisma.DateTimeFilter<"Reservation"> | Date | string
   createdAt?: Prisma.DateTimeFilter<"Reservation"> | Date | string
   parkingSpot?: Prisma.XOR<Prisma.ParkingSpotScalarRelationFilter, Prisma.ParkingSpotWhereInput>
-  user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
+  user?: Prisma.XOR<Prisma.UserNullableScalarRelationFilter, Prisma.UserWhereInput> | null
 }
 
 export type ReservationOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   parkingSpotId?: Prisma.SortOrder
-  userId?: Prisma.SortOrder
+  userId?: Prisma.SortOrderInput | Prisma.SortOrder
+  guestName?: Prisma.SortOrderInput | Prisma.SortOrder
+  licensePlate?: Prisma.SortOrderInput | Prisma.SortOrder
   date?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   parkingSpot?: Prisma.ParkingSpotOrderByWithRelationInput
@@ -209,17 +233,21 @@ export type ReservationWhereUniqueInput = Prisma.AtLeast<{
   OR?: Prisma.ReservationWhereInput[]
   NOT?: Prisma.ReservationWhereInput | Prisma.ReservationWhereInput[]
   parkingSpotId?: Prisma.UuidFilter<"Reservation"> | string
-  userId?: Prisma.UuidFilter<"Reservation"> | string
+  userId?: Prisma.UuidNullableFilter<"Reservation"> | string | null
+  guestName?: Prisma.StringNullableFilter<"Reservation"> | string | null
+  licensePlate?: Prisma.StringNullableFilter<"Reservation"> | string | null
   date?: Prisma.DateTimeFilter<"Reservation"> | Date | string
   createdAt?: Prisma.DateTimeFilter<"Reservation"> | Date | string
   parkingSpot?: Prisma.XOR<Prisma.ParkingSpotScalarRelationFilter, Prisma.ParkingSpotWhereInput>
-  user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
+  user?: Prisma.XOR<Prisma.UserNullableScalarRelationFilter, Prisma.UserWhereInput> | null
 }, "id" | "parkingSpotId_date" | "userId_date">
 
 export type ReservationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   parkingSpotId?: Prisma.SortOrder
-  userId?: Prisma.SortOrder
+  userId?: Prisma.SortOrderInput | Prisma.SortOrder
+  guestName?: Prisma.SortOrderInput | Prisma.SortOrder
+  licensePlate?: Prisma.SortOrderInput | Prisma.SortOrder
   date?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.ReservationCountOrderByAggregateInput
@@ -233,39 +261,49 @@ export type ReservationScalarWhereWithAggregatesInput = {
   NOT?: Prisma.ReservationScalarWhereWithAggregatesInput | Prisma.ReservationScalarWhereWithAggregatesInput[]
   id?: Prisma.UuidWithAggregatesFilter<"Reservation"> | string
   parkingSpotId?: Prisma.UuidWithAggregatesFilter<"Reservation"> | string
-  userId?: Prisma.UuidWithAggregatesFilter<"Reservation"> | string
+  userId?: Prisma.UuidNullableWithAggregatesFilter<"Reservation"> | string | null
+  guestName?: Prisma.StringNullableWithAggregatesFilter<"Reservation"> | string | null
+  licensePlate?: Prisma.StringNullableWithAggregatesFilter<"Reservation"> | string | null
   date?: Prisma.DateTimeWithAggregatesFilter<"Reservation"> | Date | string
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Reservation"> | Date | string
 }
 
 export type ReservationCreateInput = {
   id?: string
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
   parkingSpot: Prisma.ParkingSpotCreateNestedOneWithoutReservationsInput
-  user: Prisma.UserCreateNestedOneWithoutReservationsInput
+  user?: Prisma.UserCreateNestedOneWithoutReservationsInput
 }
 
 export type ReservationUncheckedCreateInput = {
   id?: string
   parkingSpotId: string
-  userId: string
+  userId?: string | null
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
 }
 
 export type ReservationUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   parkingSpot?: Prisma.ParkingSpotUpdateOneRequiredWithoutReservationsNestedInput
-  user?: Prisma.UserUpdateOneRequiredWithoutReservationsNestedInput
+  user?: Prisma.UserUpdateOneWithoutReservationsNestedInput
 }
 
 export type ReservationUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parkingSpotId?: Prisma.StringFieldUpdateOperationsInput | string
-  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -273,13 +311,17 @@ export type ReservationUncheckedUpdateInput = {
 export type ReservationCreateManyInput = {
   id?: string
   parkingSpotId: string
-  userId: string
+  userId?: string | null
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
 }
 
 export type ReservationUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -287,7 +329,9 @@ export type ReservationUpdateManyMutationInput = {
 export type ReservationUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parkingSpotId?: Prisma.StringFieldUpdateOperationsInput | string
-  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -316,6 +360,8 @@ export type ReservationCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   parkingSpotId?: Prisma.SortOrder
   userId?: Prisma.SortOrder
+  guestName?: Prisma.SortOrder
+  licensePlate?: Prisma.SortOrder
   date?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -324,6 +370,8 @@ export type ReservationMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   parkingSpotId?: Prisma.SortOrder
   userId?: Prisma.SortOrder
+  guestName?: Prisma.SortOrder
+  licensePlate?: Prisma.SortOrder
   date?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -332,6 +380,8 @@ export type ReservationMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
   parkingSpotId?: Prisma.SortOrder
   userId?: Prisma.SortOrder
+  guestName?: Prisma.SortOrder
+  licensePlate?: Prisma.SortOrder
   date?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -422,6 +472,8 @@ export type ReservationUncheckedUpdateManyWithoutParkingSpotNestedInput = {
 
 export type ReservationCreateWithoutUserInput = {
   id?: string
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
   parkingSpot: Prisma.ParkingSpotCreateNestedOneWithoutReservationsInput
@@ -430,6 +482,8 @@ export type ReservationCreateWithoutUserInput = {
 export type ReservationUncheckedCreateWithoutUserInput = {
   id?: string
   parkingSpotId: string
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
 }
@@ -466,21 +520,27 @@ export type ReservationScalarWhereInput = {
   NOT?: Prisma.ReservationScalarWhereInput | Prisma.ReservationScalarWhereInput[]
   id?: Prisma.UuidFilter<"Reservation"> | string
   parkingSpotId?: Prisma.UuidFilter<"Reservation"> | string
-  userId?: Prisma.UuidFilter<"Reservation"> | string
+  userId?: Prisma.UuidNullableFilter<"Reservation"> | string | null
+  guestName?: Prisma.StringNullableFilter<"Reservation"> | string | null
+  licensePlate?: Prisma.StringNullableFilter<"Reservation"> | string | null
   date?: Prisma.DateTimeFilter<"Reservation"> | Date | string
   createdAt?: Prisma.DateTimeFilter<"Reservation"> | Date | string
 }
 
 export type ReservationCreateWithoutParkingSpotInput = {
   id?: string
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
-  user: Prisma.UserCreateNestedOneWithoutReservationsInput
+  user?: Prisma.UserCreateNestedOneWithoutReservationsInput
 }
 
 export type ReservationUncheckedCreateWithoutParkingSpotInput = {
   id?: string
-  userId: string
+  userId?: string | null
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
 }
@@ -514,12 +574,16 @@ export type ReservationUpdateManyWithWhereWithoutParkingSpotInput = {
 export type ReservationCreateManyUserInput = {
   id?: string
   parkingSpotId: string
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
 }
 
 export type ReservationUpdateWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   parkingSpot?: Prisma.ParkingSpotUpdateOneRequiredWithoutReservationsNestedInput
@@ -528,6 +592,8 @@ export type ReservationUpdateWithoutUserInput = {
 export type ReservationUncheckedUpdateWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parkingSpotId?: Prisma.StringFieldUpdateOperationsInput | string
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -535,34 +601,44 @@ export type ReservationUncheckedUpdateWithoutUserInput = {
 export type ReservationUncheckedUpdateManyWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parkingSpotId?: Prisma.StringFieldUpdateOperationsInput | string
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
 export type ReservationCreateManyParkingSpotInput = {
   id?: string
-  userId: string
+  userId?: string | null
+  guestName?: string | null
+  licensePlate?: string | null
   date: Date | string
   createdAt?: Date | string
 }
 
 export type ReservationUpdateWithoutParkingSpotInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  user?: Prisma.UserUpdateOneRequiredWithoutReservationsNestedInput
+  user?: Prisma.UserUpdateOneWithoutReservationsNestedInput
 }
 
 export type ReservationUncheckedUpdateWithoutParkingSpotInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
-  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
 export type ReservationUncheckedUpdateManyWithoutParkingSpotInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
-  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  guestName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  licensePlate?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -573,64 +649,81 @@ export type ReservationSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   id?: boolean
   parkingSpotId?: boolean
   userId?: boolean
+  guestName?: boolean
+  licensePlate?: boolean
   date?: boolean
   createdAt?: boolean
   parkingSpot?: boolean | Prisma.ParkingSpotDefaultArgs<ExtArgs>
-  user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  user?: boolean | Prisma.Reservation$userArgs<ExtArgs>
 }, ExtArgs["result"]["reservation"]>
 
 export type ReservationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
   parkingSpotId?: boolean
   userId?: boolean
+  guestName?: boolean
+  licensePlate?: boolean
   date?: boolean
   createdAt?: boolean
   parkingSpot?: boolean | Prisma.ParkingSpotDefaultArgs<ExtArgs>
-  user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  user?: boolean | Prisma.Reservation$userArgs<ExtArgs>
 }, ExtArgs["result"]["reservation"]>
 
 export type ReservationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
   parkingSpotId?: boolean
   userId?: boolean
+  guestName?: boolean
+  licensePlate?: boolean
   date?: boolean
   createdAt?: boolean
   parkingSpot?: boolean | Prisma.ParkingSpotDefaultArgs<ExtArgs>
-  user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  user?: boolean | Prisma.Reservation$userArgs<ExtArgs>
 }, ExtArgs["result"]["reservation"]>
 
 export type ReservationSelectScalar = {
   id?: boolean
   parkingSpotId?: boolean
   userId?: boolean
+  guestName?: boolean
+  licensePlate?: boolean
   date?: boolean
   createdAt?: boolean
 }
 
-export type ReservationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "parkingSpotId" | "userId" | "date" | "createdAt", ExtArgs["result"]["reservation"]>
+export type ReservationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "parkingSpotId" | "userId" | "guestName" | "licensePlate" | "date" | "createdAt", ExtArgs["result"]["reservation"]>
 export type ReservationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   parkingSpot?: boolean | Prisma.ParkingSpotDefaultArgs<ExtArgs>
-  user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  user?: boolean | Prisma.Reservation$userArgs<ExtArgs>
 }
 export type ReservationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   parkingSpot?: boolean | Prisma.ParkingSpotDefaultArgs<ExtArgs>
-  user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  user?: boolean | Prisma.Reservation$userArgs<ExtArgs>
 }
 export type ReservationIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   parkingSpot?: boolean | Prisma.ParkingSpotDefaultArgs<ExtArgs>
-  user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  user?: boolean | Prisma.Reservation$userArgs<ExtArgs>
 }
 
 export type $ReservationPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Reservation"
   objects: {
     parkingSpot: Prisma.$ParkingSpotPayload<ExtArgs>
-    user: Prisma.$UserPayload<ExtArgs>
+    user: Prisma.$UserPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
     parkingSpotId: string
-    userId: string
+    userId: string | null
+    /**
+     * Set only for a guest reservation.
+     */
+    guestName: string | null
+    /**
+     * Overrides the holder's stored plate for this day only; the only plate a
+     * guest can have.
+     */
+    licensePlate: string | null
     /**
      * Reservation day in Europe/Prague. `DATE`, never a timestamp.
      */
@@ -1031,7 +1124,7 @@ readonly fields: ReservationFieldRefs;
 export interface Prisma__ReservationClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   parkingSpot<T extends Prisma.ParkingSpotDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ParkingSpotDefaultArgs<ExtArgs>>): Prisma.Prisma__ParkingSpotClient<runtime.Types.Result.GetResult<Prisma.$ParkingSpotPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
-  user<T extends Prisma.UserDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.UserDefaultArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  user<T extends Prisma.Reservation$userArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Reservation$userArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1064,6 +1157,8 @@ export interface ReservationFieldRefs {
   readonly id: Prisma.FieldRef<"Reservation", 'String'>
   readonly parkingSpotId: Prisma.FieldRef<"Reservation", 'String'>
   readonly userId: Prisma.FieldRef<"Reservation", 'String'>
+  readonly guestName: Prisma.FieldRef<"Reservation", 'String'>
+  readonly licensePlate: Prisma.FieldRef<"Reservation", 'String'>
   readonly date: Prisma.FieldRef<"Reservation", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"Reservation", 'DateTime'>
 }
@@ -1464,6 +1559,25 @@ export type ReservationDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.I
    * Limit how many Reservations to delete.
    */
   limit?: number
+}
+
+/**
+ * Reservation.user
+ */
+export type Reservation$userArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the User
+   */
+  select?: Prisma.UserSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the User
+   */
+  omit?: Prisma.UserOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UserInclude<ExtArgs> | null
+  where?: Prisma.UserWhereInput
 }
 
 /**

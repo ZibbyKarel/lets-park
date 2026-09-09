@@ -96,8 +96,16 @@ type PayloadMap<T extends Record<AuditLogAction, object>> = T;
 
 export type AuditPayloads = PayloadMap<{
   RESERVATION_CREATED: AuditCell;
-  RESERVATION_CANCELLED: AuditCell & { readonly holderUserId: string };
-  RESERVATION_CANCELLED_BY_ADMIN: AuditCell & { readonly holderUserId: string };
+  /**
+   * An admin booked for somebody else. Exactly one of the two holder fields is
+   * set, mirroring `Reservation_holder_check`.
+   */
+  RESERVATION_CREATED_BY_ADMIN: AuditCell & {
+    readonly holderUserId: string | null;
+    readonly guestName: string | null;
+  };
+  RESERVATION_CANCELLED: AuditCell & { readonly holderUserId: string | null };
+  RESERVATION_CANCELLED_BY_ADMIN: AuditCell & { readonly holderUserId: string | null };
   WAITLIST_PROMOTED: AuditCell & {
     readonly promotedUserId: string;
     readonly fromWaitlistEntryId: string;

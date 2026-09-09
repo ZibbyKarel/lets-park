@@ -73,14 +73,30 @@ export const parkingSpotSchema = z.object({
 export type ParkingSpot = z.infer<typeof parkingSpotSchema>;
 
 /**
- * One spot booked by one user for one day. Two unique constraints back this up
- * in the database: one reservation per spot and day, and one reservation per
- * user and day.
+ * One spot booked for one day, by exactly one holder: a user, or a guest an
+ * admin booked it for.
+ *
+ * **`userId` is nullable and `guestName` is nullable, but never both, and never
+ * neither** — a `CHECK` constraint enforces that in the database
+ * (`doc/decision/0303-*`). Two unique constraints back the rest up:
+ * `(parkingSpotId, date)` — one reservation per spot per day, the double-booking
+ * guarantee — and `(userId, date)`, one reservation per user per day. `NULL`s do
+ * not collide in a Postgres unique index, so the second one deliberately does
+ * not limit guests: several guests may visit on the same day.
  */
 export const reservationSchema = z.object({
   id: idSchema,
   parkingSpotId: idSchema,
-  userId: idSchema,
+  /** `null` for a guest reservation; then `guestName` is set. */
+  userId: idSchema.nullable(),
+  /** Set only for a guest. A guest has no `User` row to read a name off. */
+  guestName: z.string().min(1).nullable(),
+  /**
+   * Overrides the holder's stored `User.licensePlate` for this day only, and is
+   * the *only* plate a guest can have. `null` means "use the holder's stored
+   * one" — this flow never writes `User.licensePlate`.
+   */
+  licensePlate: z.string().min(1).nullable(),
   date: dateOnlySchema,
   createdAt: timestampSchema,
 });
@@ -153,6 +169,17 @@ export const AUDIT_LOG_ACTIONS = [
    * trail. See `doc/decision/0091-*`.
    */
   'WAITLIST_JOINED',
+  /**
+   * An admin created a reservation whose holder is not themselves — another
+   * user, or a guest. `RESERVATION_CREATED` stays what it has always been: the
+   * holder took the spot for themselves, admin or not.
+   *
+   * One member rather than two, because "for a guest" is not a different action,
+   * it is a different holder: the payload carries `holderUserId` **or**
+   * `guestName`, and the audit trail reads the same either way
+   * (`doc/decision/0304-*`).
+   */
+  'RESERVATION_CREATED_BY_ADMIN',
 ] as const;
 
 export const auditLogActionSchema = z.enum(AUDIT_LOG_ACTIONS);

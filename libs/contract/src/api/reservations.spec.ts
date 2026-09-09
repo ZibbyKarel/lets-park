@@ -51,6 +51,8 @@ describe('createReservationOutputSchema', () => {
       id: UUID_A,
       parkingSpotId: UUID_B,
       userId: UUID_A,
+      guestName: null,
+      licensePlate: null,
       date: DATE_A,
       createdAt: TIMESTAMP,
     };
@@ -64,6 +66,8 @@ describe('createReservationOutputSchema', () => {
         id: UUID_A,
         parkingSpotId: UUID_B,
         userId: UUID_A,
+        guestName: null,
+        licensePlate: null,
         date: DATE_A,
         createdAt: new Date(TIMESTAMP),
       }).success

@@ -121,11 +121,20 @@ import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
 import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
 
-/** The reservation fields a created row has to give back. */
+/**
+ * The reservation fields a created row has to give back.
+ *
+ * `userId`, `guestName` and `licensePlate` mirror the nullable columns
+ * (`doc/decision/0303-*`) even though bulk booking only ever creates a
+ * user-held row today — the request field a guest reservation needs does not
+ * exist until Task 5.
+ */
 interface CreatedReservation {
   id: string;
   parkingSpotId: string;
-  userId: string;
+  userId: string | null;
+  guestName: string | null;
+  licensePlate: string | null;
   date: Date;
   createdAt: Date;
 }
@@ -494,7 +503,15 @@ export class BulkReservationService {
     return tx.reservation.createManyAndReturn({
       data,
       skipDuplicates: true,
-      select: { id: true, parkingSpotId: true, userId: true, date: true, createdAt: true },
+      select: {
+        id: true,
+        parkingSpotId: true,
+        userId: true,
+        guestName: true,
+        licensePlate: true,
+        date: true,
+        createdAt: true,
+      },
     });
   }
 

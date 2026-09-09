@@ -35,7 +35,7 @@ import {
   todayInPrague,
 } from '@lets-park/shared-types';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
-import { toDateColumn, toTimestamp, toUserSummary } from '../common/prisma-mapping';
+import { requireHolder, toDateColumn, toTimestamp, toUserSummary } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
 import { SpotsService } from '../spots/spots.service';
@@ -95,7 +95,7 @@ export class DayOverviewService {
             : {
                 id: reservation.id,
                 createdAt: toTimestamp(reservation.createdAt),
-                user: toUserSummary(reservation.user),
+                user: toUserSummary(requireHolder(reservation.user)),
               },
         waitlistCount: queue.length,
         viewerWaitlistEntryId: viewerEntry?.id ?? null,

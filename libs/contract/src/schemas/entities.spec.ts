@@ -128,6 +128,45 @@ describe('publicReservationSchema', () => {
   });
 });
 
+describe('reservationSchema — the holder columns', () => {
+  const base = {
+    id: ID,
+    parkingSpotId: OTHER_ID,
+    date: '2099-01-05',
+    createdAt: NOW,
+  };
+
+  it('accepts a reservation held by a user, with no guest name', () => {
+    const row = { ...base, userId: OTHER_ID, guestName: null, licensePlate: null };
+    expect(reservationSchema.parse(row)).toEqual(row);
+  });
+
+  it('accepts a reservation held by a guest, with no userId', () => {
+    const row = { ...base, userId: null, guestName: 'Jan Host', licensePlate: '9XY 8765' };
+    expect(reservationSchema.parse(row)).toEqual(row);
+  });
+
+  it('carries the per-reservation plate that overrides the holder’s stored one', () => {
+    const row = { ...base, userId: OTHER_ID, guestName: null, licensePlate: '1AB 2345' };
+    expect(reservationSchema.parse(row).licensePlate).toBe('1AB 2345');
+  });
+
+  it('rejects an empty guest name and an empty plate — absent is `null`, never `""`', () => {
+    expect(
+      reservationSchema.safeParse({ ...base, userId: null, guestName: '', licensePlate: null })
+        .success
+    ).toBe(false);
+    expect(
+      reservationSchema.safeParse({
+        ...base,
+        userId: OTHER_ID,
+        guestName: null,
+        licensePlate: '',
+      }).success
+    ).toBe(false);
+  });
+});
+
 describe('parkingSpotSchema', () => {
   const validSpot = {
     id: ID,
@@ -153,34 +192,37 @@ describe('parkingSpotSchema', () => {
 });
 
 describe('reservationSchema / waitlistEntrySchema', () => {
-  const valid = {
+  const validWaitlistEntry = {
     id: ID,
     parkingSpotId: OTHER_ID,
     userId: ID,
     date: '2026-09-15',
     createdAt: NOW,
   };
+  // A reservation carries its holder columns; a waitlist entry does not. The
+  // two schemas were checked against one object while they happened to agree.
+  const validReservation = { ...validWaitlistEntry, guestName: null, licensePlate: null };
 
   it.each([
-    ['reservationSchema', reservationSchema],
-    ['waitlistEntrySchema', waitlistEntrySchema],
-  ] as const)('%s accepts a valid entry', (_name, schema) => {
+    ['reservationSchema', reservationSchema, validReservation],
+    ['waitlistEntrySchema', waitlistEntrySchema, validWaitlistEntry],
+  ] as const)('%s accepts a valid entry', (_name, schema, valid) => {
     expect(schema.safeParse(valid).success).toBe(true);
   });
 
   it.each([
-    ['reservationSchema', reservationSchema],
-    ['waitlistEntrySchema', waitlistEntrySchema],
-  ] as const)('%s keeps the day date-only', (_name, schema) => {
+    ['reservationSchema', reservationSchema, validReservation],
+    ['waitlistEntrySchema', waitlistEntrySchema, validWaitlistEntry],
+  ] as const)('%s keeps the day date-only', (_name, schema, valid) => {
     expect(schema.safeParse({ ...valid, date: '2026-09-15T00:00:00.000Z' }).success).toBe(false);
     expect(schema.safeParse({ ...valid, date: '2026-09-31' }).success).toBe(false);
     expect(schema.safeParse({ ...valid, date: '2028-02-29' }).success).toBe(true);
   });
 
   it.each([
-    ['reservationSchema', reservationSchema],
-    ['waitlistEntrySchema', waitlistEntrySchema],
-  ] as const)('%s does not judge the date against the horizon', (_name, schema) => {
+    ['reservationSchema', reservationSchema, validReservation],
+    ['waitlistEntrySchema', waitlistEntrySchema, validWaitlistEntry],
+  ] as const)('%s does not judge the date against the horizon', (_name, schema, valid) => {
     // Both the "not in the past" and the reservation-window checks live in the
     // service layer (Task 13), on top of monthLockState().
     expect(schema.safeParse({ ...valid, date: '2020-01-01' }).success).toBe(true);
@@ -228,6 +270,7 @@ describe('auditLogSchema', () => {
       'SPOT_UPDATED',
       'RESERVATION_WINDOW_UPDATED',
       'WAITLIST_JOINED',
+      'RESERVATION_CREATED_BY_ADMIN',
     ]);
     for (const action of AUDIT_LOG_ACTIONS) {
       expect(auditLogActionSchema.safeParse(action).success).toBe(true);

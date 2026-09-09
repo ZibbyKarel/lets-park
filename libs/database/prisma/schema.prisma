@@ -62,6 +62,7 @@ enum AuditLogAction {
   SPOT_UPDATED
   RESERVATION_WINDOW_UPDATED
   WAITLIST_JOINED
+  RESERVATION_CREATED_BY_ADMIN
 }
 
 // --- Entities --------------------------------------------------------------
@@ -119,16 +120,27 @@ model ParkingSpot {
 /// reservation flow: `(parkingSpotId, date)` is what makes double-booking
 /// impossible under concurrent requests, and Task 10 maps its `P2002` violation
 /// onto the contract error `SPOT_ALREADY_RESERVED`.
+///
+/// `userId` is nullable so that an admin can book for a guest, who has no `User`
+/// row. `Reservation_holder_check` is what keeps that from admitting a row with
+/// no holder at all — see `doc/decision/0303-*`. Because `NULL`s do not collide
+/// in a Postgres unique index, `(userId, date)` still means "one reservation per
+/// user per day" and deliberately does not limit guests.
 model Reservation {
   id            String   @id @default(uuid(7)) @db.Uuid
   parkingSpotId String   @db.Uuid
-  userId        String   @db.Uuid
+  userId        String?  @db.Uuid
+  /// Set only for a guest reservation.
+  guestName     String?
+  /// Overrides the holder's stored plate for this day only; the only plate a
+  /// guest can have.
+  licensePlate  String?
   /// Reservation day in Europe/Prague. `DATE`, never a timestamp.
   date          DateTime @db.Date
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
 
   parkingSpot ParkingSpot @relation(fields: [parkingSpotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([parkingSpotId, date])
   @@unique([userId, date])

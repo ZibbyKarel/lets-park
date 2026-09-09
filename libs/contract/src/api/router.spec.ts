@@ -257,6 +257,8 @@ describe('contract router', () => {
       id: UUID_B,
       parkingSpotId: UUID_A,
       userId: UUID_C,
+      guestName: null,
+      licensePlate: null,
       date: DATE_A,
       createdAt: TIMESTAMP,
     };

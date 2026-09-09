@@ -75,6 +75,7 @@ import {
   mapUniqueConstraintViolation,
 } from '../common/errors/prisma-error-mapping';
 import {
+  requireHolder,
   toContractReservation,
   toDateColumn,
   toDateOnly,
@@ -178,7 +179,7 @@ export class ReservationsService {
         payload: {
           date: input.date,
           parkingSpotId: reservation.parkingSpotId,
-          reservation: toPublicReservation(reservation, reservation.user),
+          reservation: toPublicReservation(reservation, requireHolder(reservation.user)),
         },
       },
     ]);
