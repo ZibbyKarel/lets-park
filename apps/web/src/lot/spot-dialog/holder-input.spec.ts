@@ -29,6 +29,15 @@ describe('holderFormSchema', () => {
     ).toBe(true);
   });
 
+  it('rejects an empty holderId', () => {
+    // `holderId: z.string().min(1)` — an empty value means the select was
+    // somehow submitted with nothing chosen, which the form must refuse
+    // rather than send on as an empty-string holder id.
+    expect(
+      holderFormSchema.safeParse({ holderId: '', guestName: '', licensePlate: '' }).success
+    ).toBe(false);
+  });
+
   it('carries a marker message, not Czech copy — the render translates it', () => {
     const failed = holderFormSchema.safeParse({
       holderId: GUEST_HOLDER_VALUE,

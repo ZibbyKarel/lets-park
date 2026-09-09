@@ -74,6 +74,14 @@ export interface SpotDialogProps {
    * rendered and `onReserve` is called with no argument.
    */
   readonly holderOptions: readonly HolderOption[];
+  /**
+   * `true` while an admin's `admin.user.list` is still in flight, `false` for
+   * a normal user always. The holder form (and its selector) is not on screen
+   * yet in that state — see {@link holderOptions} — so this disables the
+   * reserve button rather than let one click silently book the bay for the
+   * admin themselves before the selector has had a chance to appear.
+   */
+  readonly holderPending: boolean;
   readonly onClose: () => void;
   /**
    * Reserve the bay. **No argument means "for the caller"** — the contract's
@@ -102,6 +110,7 @@ export function SpotDialog({
   pending,
   viewerUserId,
   holderOptions,
+  holderPending,
   onClose,
   onReserve,
   onJoinWaitlist,
@@ -239,7 +248,11 @@ export function SpotDialog({
                 </Button>
               )
             ) : (
-              <Button loading={pending} onClick={showHolderForm ? submitHolder : () => onReserve()}>
+              <Button
+                loading={pending}
+                disabled={holderPending}
+                onClick={showHolderForm ? submitHolder : () => onReserve()}
+              >
                 {t('ctaReserve')}
               </Button>
             )

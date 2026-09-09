@@ -165,4 +165,13 @@ describe('toPublicReservation', () => {
     const orphan = { ...row, userId: null, guestName: null };
     expect(() => toPublicReservation(orphan, null)).toThrow(/neither a user nor a guest/i);
   });
+
+  it('throws when the holder does not belong to the row, rather than naming the wrong person', () => {
+    // No call site does this today (Task 24's sweep checked all four); this
+    // pins the hardening so a future one fails loudly instead of silently.
+    const mismatched = { id: 'someone-else', name: 'Petr Novák', licensePlate: null };
+    expect(() => toPublicReservation(row, mismatched)).toThrow(
+      /has userId .+, but was mapped with holder/i
+    );
+  });
 });

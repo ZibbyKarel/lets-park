@@ -54,6 +54,8 @@ import { SpotFormDialog } from './spot-form-dialog';
 export interface SpotToday {
   /** Name of whoever holds the spot today, or `null` when it is free. */
   readonly holderName: string | null;
+  /** Whether that holder is a guest — meaningless when {@link holderName} is `null`. */
+  readonly holderIsGuest: boolean;
 }
 
 export interface AdminSpotsScreenProps {
@@ -112,6 +114,9 @@ export function AdminSpotsScreen({
   onDiscardFailure,
 }: AdminSpotsScreenProps) {
   const t = useTranslations('admin');
+  // Same badge and key the spot dialog and the admin day table render —
+  // `guestHolder` lives in the `lot` catalogue.
+  const tLot = useTranslations('lot');
   const describeWriteError = useAdminWriteError();
   const [dialog, setDialog] = useState<SpotDialog | null>(null);
 
@@ -195,7 +200,14 @@ export function AdminSpotsScreen({
         return today.holderName === null ? (
           <span className="text-fg-3">{t('dayStatusFree')}</span>
         ) : (
-          <span className="text-fg">{t('dayStatusTaken', { name: today.holderName })}</span>
+          <span className="text-fg">
+            {t('dayStatusTaken', { name: today.holderName })}
+            {today.holderIsGuest ? (
+              <span className="ml-2 rounded-xs bg-brand-yellow-100 px-2 py-0.5 text-xs font-bold uppercase tracking-caps text-fg">
+                {tLot('guestHolder')}
+              </span>
+            ) : null}
+          </span>
         );
       },
     },

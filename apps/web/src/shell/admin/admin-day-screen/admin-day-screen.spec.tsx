@@ -48,6 +48,15 @@ const QUEUED = aSpotRow({
   },
   waitlistCount: 2,
 });
+const GUEST_TAKEN = aSpotRow({
+  id: 's4',
+  label: 'E2.95',
+  reservation: {
+    id: 'r3',
+    createdAt: TIMESTAMP,
+    holder: { kind: 'GUEST', name: 'Jan Novotný', licensePlate: null },
+  },
+});
 
 function anOverview(overrides: Partial<DayOverviewOutput> = {}): DayOverviewOutput {
   return {
@@ -135,6 +144,16 @@ describe('AdminDayScreen', () => {
 
     expect(within(rowOf('s2')).getByText('Obsazeno — Karel Zíbar')).toBeInTheDocument();
     expect(within(rowOf('s1')).getByText('Volné')).toBeInTheDocument();
+  });
+
+  it('badges a guest holder, so this table can tell one from an employee', () => {
+    renderScreen({
+      day: { kind: 'ready', data: anOverview({ spots: [FREE, TAKEN, GUEST_TAKEN] }) },
+    });
+
+    expect(within(rowOf('s4')).getByText('Obsazeno — Jan Novotný')).toBeInTheDocument();
+    expect(within(rowOf('s4')).getByText('Host')).toBeInTheDocument();
+    expect(within(rowOf('s2')).queryByText('Host')).not.toBeInTheDocument();
   });
 
   it('shows how many people are queued, and says so when nobody is', () => {

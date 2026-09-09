@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import type { AdminUser, MyProfile, ParkingSpot } from '@lets-park/contract';
+import type { AdminUser, MyProfile, ParkingSpot, ReservationHolder } from '@lets-park/contract';
 import { csMessages, IntlProvider, todayInPrague } from '@lets-park/i18n';
 import { failureWithCode } from '../../testing/contract-failure';
 import { createQueryClient, QueryProvider } from '@lets-park/query';
@@ -238,7 +238,7 @@ const DAY_OVERVIEW = {
           userId: OTHER_USER.id,
           name: OTHER_USER.name,
           licensePlate: '4AB 1234',
-        },
+        } satisfies ReservationHolder,
       },
       waitlistCount: 0,
     },

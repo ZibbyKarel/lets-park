@@ -109,7 +109,7 @@ export type Reservation = z.infer<typeof reservationSchema>;
  * no `User` row and the type has to say so: `kind: 'GUEST'` has **no `userId`
  * member at all**, so `holder.userId` on a guest is a compile error rather than
  * a `null` every reader has to remember to check. That is the property
- * `doc/decision/0302-*` was written to keep.
+ * `doc/decision/0302-the-reservation-holder-projection-is-a-discriminated-union` was written to keep.
  *
  * `name` and `licensePlate` are the **effective** values — the server has
  * already applied `Reservation.licensePlate` over the holder's stored one — so a
@@ -145,7 +145,7 @@ export type ReservationHolder = z.infer<typeof reservationHolderSchema>;
  *
  * The field is `holder`, not `user`: a field called `user` cannot carry a guest,
  * and renaming it is what forced every reader to be revisited rather than
- * silently reading `undefined` (`doc/decision/0302-*`).
+ * silently reading `undefined` (`doc/decision/0302-the-reservation-holder-projection-is-a-discriminated-union`).
  *
  * Shared by `src/api` and `src/realtime`, for the reason given on
  * {@link userSummarySchema}.

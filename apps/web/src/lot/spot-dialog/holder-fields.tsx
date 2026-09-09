@@ -39,6 +39,7 @@ export function HolderFields({ options, holderId }: HolderFieldsProps) {
             {options.map((option) => (
               <option key={option.userId} value={option.userId}>
                 {option.name}
+                {option.licensePlate === null ? '' : ` — ${option.licensePlate}`}
               </option>
             ))}
             <option value={GUEST_HOLDER_VALUE}>{t('holderGuestOption')}</option>

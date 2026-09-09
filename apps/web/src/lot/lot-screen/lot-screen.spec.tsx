@@ -227,6 +227,8 @@ function setup(
     realtimeStatus?: MockRealtimeStatus;
     /** Only fetched by an admin; overrides the empty-list default. */
     adminUsers?: readonly AdminUser[];
+    /** Overrides the resolved default, for pending/error states. */
+    adminUsersImpl?: () => Promise<{ users: readonly AdminUser[] }>;
   } = {}
 ) {
   Object.values(apiMocks).forEach((fn) => {
@@ -246,7 +248,11 @@ function setup(
   apiMocks.spotList.mockResolvedValue({ spots: [] });
   // Only fetched by an admin (`holderQuery`'s `enabled`), but harmless to seed
   // unconditionally — a case that cares about its contents passes `adminUsers`.
-  apiMocks.adminUserList.mockResolvedValue({ users: options.adminUsers ?? [] });
+  if (options.adminUsersImpl) {
+    apiMocks.adminUserList.mockImplementation(options.adminUsersImpl);
+  } else {
+    apiMocks.adminUserList.mockResolvedValue({ users: options.adminUsers ?? [] });
+  }
 
   sessionStatusValue = options.sessionStatus ?? 'authenticated';
 
@@ -743,5 +749,31 @@ describe('LotScreen — an admin naming a holder', () => {
     // `active: true`, not a client-side filter: `adminListUsersInputSchema`
     // carries the flag (`libs/contract/src/api/users.ts:64-66`).
     expect(apiMocks.adminUserList.mock.calls[0]?.[0]).toEqual({ active: true });
+  });
+
+  it('disables the reserve button while admin.user.list is still in flight, instead of letting one click book for the admin unnoticed', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      // Never resolves — `holderQuery.isPending` stays true for the life of
+      // the test, the same shape `holderPending` is meant to catch.
+      adminUsersImpl: () => new Promise(() => undefined),
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+
+    expect(screen.getByRole('button', { name: 'Rezervovat' })).toBeDisabled();
+  });
+
+  it('shows why the holder selector is missing when admin.user.list fails', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsersImpl: () => Promise.reject(new Error('boom')),
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+
+    expect(await screen.findByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
   });
 });

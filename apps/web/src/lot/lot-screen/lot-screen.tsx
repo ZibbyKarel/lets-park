@@ -105,6 +105,13 @@ export function LotScreen() {
     enabled: sessionStatus === 'authenticated' && isAdmin,
   });
 
+  // Both gated on `isAdmin`: `holderQuery` stays `enabled: false` for a normal
+  // user, and a disabled TanStack query reports `isPending: true` forever
+  // (`status` never leaves `'pending'`) — reading either flag unguarded would
+  // disable a normal user's button and show them an error that never resolves.
+  const holderPending = isAdmin && holderQuery.isPending;
+  const holderError = isAdmin && holderQuery.isError ? holderQuery.error : null;
+
   const holderOptions = useMemo<readonly HolderOption[]>(
     () =>
       (holderQuery.data?.users ?? []).map((row) => ({
@@ -322,10 +329,11 @@ export function LotScreen() {
         canReserve={day.canReserve}
         isAdmin={isAdmin}
         monthName={formatMonthName(parts.month)}
-        error={actionError}
+        error={actionError ?? holderError}
         pending={pending}
         viewerUserId={viewerUserId}
         holderOptions={holderOptions}
+        holderPending={holderPending}
         onClose={closeDialog}
         onReserve={(holder) => {
           if (openSpot === null) return;

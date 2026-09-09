@@ -131,6 +131,13 @@ export async function reserveSpot(page: Page, label: string): Promise<void> {
  *
  * `holder` is a user's display name, or `'Hosta'` for a guest — the visible
  * option text, so this reads like the thing a person does.
+ *
+ * A holder with a plate on file now has it appended to the option's label
+ * (`holder-fields.tsx`, "Jana Nováková — 1AB 2345"), so `selectOption({
+ * label })`'s exact match no longer finds it. This finds the `<option>` whose
+ * label is `holder` on its own, or `holder` followed by " — <plate>" — a
+ * plain substring match on `holder` alone is not enough, since "Dev User" is
+ * also a prefix of the seeded "Dev User Two" — and selects it by value.
  */
 export async function reserveSpotFor(
   page: Page,
@@ -139,7 +146,12 @@ export async function reserveSpotFor(
   guestName?: string
 ): Promise<void> {
   const dialog = await openSpot(page, label);
-  await dialog.getByLabel('Rezervovat pro').selectOption({ label: holder });
+  const select = dialog.getByLabel('Rezervovat pro');
+  const escaped = holder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const value = await select
+    .locator('option', { hasText: new RegExp(`^${escaped}( — .*)?$`) })
+    .getAttribute('value');
+  await select.selectOption(value ?? holder);
   if (guestName !== undefined) {
     await dialog.getByLabel('Jméno hosta').fill(guestName);
   }

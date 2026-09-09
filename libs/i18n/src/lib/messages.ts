@@ -222,7 +222,7 @@ export interface CzechLotMessages {
   readonly guestNameRequired: string;
   /** Label of the overridable plate `Input`. */
   readonly plateField: string;
-  /** Badge beside a guest's name in the dialog. */
+  /** Badge beside a guest's name in the spot dialog and the admin day/spots tables. */
   readonly guestHolder: string;
 
   readonly legendTaken: string;
@@ -868,7 +868,8 @@ export const csMessages: CzechMessages = {
   },
   errors: {
     SPOT_ALREADY_RESERVED: 'Toto parkovací místo je na daný den už rezervované.',
-    RESERVATION_LIMIT_REACHED: 'Na tento den už máte rezervaci — na den je povolená jen jedna.',
+    RESERVATION_LIMIT_REACHED:
+      'Uživatel už na tento den rezervaci má — na den je povolená jen jedna.',
     PAST_DATE: 'Na tento den už nelze rezervovat, protože je v minulosti.',
     OUT_OF_HORIZON: 'Rezervace na tento měsíc se ještě neotevřely.',
     RESERVATIONS_LOCKED: 'Rezervační okno pro tento měsíc je už uzamčené.',

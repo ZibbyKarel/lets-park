@@ -482,6 +482,7 @@ describe('Slack over a real database', () => {
       ).resolves.toMatchObject({ promoted: true });
       await flush();
 
+      expect(server.requests).toHaveLength(2);
       expect(new URLSearchParams(server.requests[0]?.body).get('email')).toBe(waiter.email);
       expect(sentChannel(1)).toBe('U0WAITER');
       expect(sentText(1)).toContain(spot.label);

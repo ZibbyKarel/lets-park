@@ -444,6 +444,36 @@ describe('reservations against a real PostgreSQL', () => {
 
       expect(await client.reservation.count({ where: { parkingSpotId: spot.id } })).toBe(0);
     });
+
+    it('refuses an admin naming a user who already holds a bay that day, with RESERVATION_LIMIT_REACHED', async () => {
+      const [admin, target, first, second] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+        await seedSpot(client),
+      ];
+      await harness.reservations.create(
+        { parkingSpotId: first.id, date: FUTURE_BUSINESS_DAY },
+        actorFor(target),
+        TODAY
+      );
+
+      await expect(
+        codeOf(
+          harness.reservations.create(
+            {
+              parkingSpotId: second.id,
+              date: FUTURE_BUSINESS_DAY,
+              holder: { kind: 'USER', userId: target.id, licensePlate: null },
+            },
+            actorFor(admin, 'ADMIN'),
+            TODAY
+          )
+        )
+      ).resolves.toBe('RESERVATION_LIMIT_REACHED');
+
+      expect(await client.reservation.count({ where: { parkingSpotId: second.id } })).toBe(0);
+    });
   });
 
   describe('cancelling', () => {

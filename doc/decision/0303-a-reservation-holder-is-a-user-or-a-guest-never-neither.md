@@ -81,6 +81,13 @@ day — is unaffected: `@@unique([parkingSpotId, date])` does not mention
 `userId` at all, and two guests can never be assigned the same spot on the
 same day regardless of how their `userId` columns compare.
 
+The real consequence is broader than "several guests may visit on the same
+day": a guest has no identity beyond the free-text `guestName` an admin types,
+so nothing stops one guest name from being given **every** bay in the lot on
+one day — `(userId, date)` has nothing to say about it because every one of
+those rows has `userId = NULL`. This is not enforced against, on purpose (see
+above); it is worth stating so that it is not rediscovered later as a bug.
+
 ## What was measured
 
 `apps/api/src/database/database-contract.db.spec.ts` asserts all three cells of

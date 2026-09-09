@@ -50,6 +50,11 @@ export interface AdminDayScreenProps {
 
 export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreenProps) {
   const t = useTranslations('admin');
+  // `guestHolder` lives in the `lot` catalogue — the same badge the spot
+  // dialog renders (`spot-dialog.tsx:268-272`) — because that is where the
+  // guest concept was introduced; this table reuses the key rather than
+  // duplicating the Czech copy under a second one.
+  const tLot = useTranslations('lot');
 
   const columns: DataTableColumn<DaySpotOverview>[] = [
     {
@@ -79,6 +84,11 @@ export function AdminDayScreen({ date, day, onRetry, onOpenLot }: AdminDayScreen
         ) : (
           <span className="text-fg">
             {t('dayStatusTaken', { name: row.reservation.holder.name })}
+            {row.reservation.holder.kind === 'GUEST' ? (
+              <span className="ml-2 rounded-xs bg-brand-yellow-100 px-2 py-0.5 text-xs font-bold uppercase tracking-caps text-fg">
+                {tLot('guestHolder')}
+              </span>
+            ) : null}
           </span>
         ),
     },

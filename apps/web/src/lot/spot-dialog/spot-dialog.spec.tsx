@@ -58,6 +58,7 @@ interface DialogOverrides {
   error?: unknown;
   viewerUserId?: string | null;
   holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
+  holderPending?: boolean;
 }
 
 function renderDialog(overrides: DialogOverrides = {}) {
@@ -82,6 +83,7 @@ function renderDialog(overrides: DialogOverrides = {}) {
           pending={false}
           viewerUserId={props.viewerUserId ?? null}
           holderOptions={props.holderOptions ?? []}
+          holderPending={props.holderPending ?? false}
           {...callbacks}
         />
       </IntlProvider>
@@ -340,6 +342,10 @@ describe('SpotDialog — an admin reserving a free bay', () => {
     const select = screen.getByLabelText('Rezervovat pro');
     expect(select).toHaveValue('admin-1');
     expect(screen.getByRole('option', { name: 'Hosta' })).toBeInTheDocument();
+    // With a plate on file, the option label carries it too — the whole point
+    // of a selector that was meant to show "jméno i spz". Without one (Jana
+    // Nováková, below), the label is the bare name.
+    expect(screen.getByRole('option', { name: 'Dev Admin — 1AA 1111' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Jana Nováková' })).toBeInTheDocument();
   });
 
@@ -434,6 +440,16 @@ describe('SpotDialog — an admin reserving a free bay', () => {
 
     expect(screen.getByLabelText('Rezervovat pro')).toHaveValue('admin-1');
     expect(screen.queryByLabelText('Jméno hosta')).not.toBeInTheDocument();
+  });
+
+  it('disables Rezervovat while the holder list is still loading, instead of silently booking for the admin', () => {
+    // While `admin.user.list` is in flight, `holderOptions` is empty and
+    // `showHolderForm` is false — the same shape as a normal user's dialog.
+    // Without `holderPending`, one click here would call `onReserve()` with no
+    // argument and book the bay for the admin, with no selector ever shown.
+    renderAdmin({ holderOptions: [], holderPending: true });
+
+    expect(screen.getByRole('button', { name: 'Rezervovat' })).toBeDisabled();
   });
 });
 

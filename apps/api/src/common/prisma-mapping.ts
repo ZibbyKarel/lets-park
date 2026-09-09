@@ -148,7 +148,7 @@ export function toContractReservation(row: ReservationRow): Reservation {
  *
  * The plate is the row's override where there is one, and the holder's stored
  * plate otherwise — a consumer never has to know the override exists
- * (`doc/decision/0302-*`).
+ * (`doc/decision/0302-the-reservation-holder-projection-is-a-discriminated-union`).
  */
 export function toPublicReservation(
   row: ReservationRow,
@@ -157,6 +157,15 @@ export function toPublicReservation(
   const createdAt = toTimestamp(row.createdAt);
 
   if (holder !== null) {
+    if (row.userId !== holder.id) {
+      // Louder than fabricating a holder that does not match the row: a
+      // caller passing a holder alongside a row it does not belong to is a
+      // bug at the call site, and one that would otherwise reach a broadcast
+      // and a screen silently, naming the wrong person.
+      throw new Error(
+        `Reservation ${row.id} has userId ${String(row.userId)}, but was mapped with holder ${holder.id}.`
+      );
+    }
     return {
       id: row.id,
       createdAt,

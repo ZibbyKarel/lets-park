@@ -139,8 +139,13 @@ export class ReservationsService {
     today: DateOnly = todayInPrague()
   ): Promise<CreateReservationOutput> {
     const settings = await this.window.getSettings();
-    this.policy.assertMayTakeDay(input.date, actor, settings, today);
+    // Authorization before the day's own state: a non-admin naming somebody
+    // else is refused as `FORBIDDEN` even in a locked month, because that is
+    // the more specific and more durable fact about the request — the same
+    // argument `ReservationPolicy`'s class comment makes for reporting a
+    // Saturday ahead of a lock.
     this.policy.assertMayNameHolder(input.holder, actor);
+    this.policy.assertMayTakeDay(input.date, actor, settings, today);
 
     const spot = await this.prisma.client.parkingSpot.findUnique({
       where: { id: input.parkingSpotId },

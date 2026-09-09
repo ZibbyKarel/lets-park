@@ -113,7 +113,7 @@ describe('ScreenError', () => {
 
     expect(screen.queryByText(developerMessage)).not.toBeInTheDocument();
     expect(
-      screen.getByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
+      screen.getByText('Uživatel už na tento den rezervaci má — na den je povolená jen jedna.')
     ).toBeInTheDocument();
   });
 
