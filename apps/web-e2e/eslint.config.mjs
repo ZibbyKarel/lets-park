@@ -8,13 +8,13 @@ export default [
     files: ['**/*.ts', '**/*.js'],
     rules: {
       /**
-       * `expect-expect` cannot see through a helper, and this suite has three
+       * `expect-expect` cannot see through a helper, and this suite has four
        * that are nothing but assertions: `expectFree` and `expectHeldBy` in
-       * `support/lot-page.ts`, and `waitForDayRoom` in `support/realtime.ts`.
-       * Each wraps one or more `expect` calls against Czech UI copy, and
-       * inlining them so the linter can see the assertion would mean repeating
-       * that copy in every spec — the rule would be satisfied and the suite
-       * would be worse.
+       * `support/lot-page.ts`, `waitForDayRoom` in `support/realtime.ts`, and
+       * `expectLocale` in `src/locale.spec.ts`. Each wraps one or more
+       * `expect` calls against UI copy, and inlining them so the linter can
+       * see the assertion would mean repeating that copy in every spec — the
+       * rule would be satisfied and the suite would be worse.
        *
        * They are listed by name rather than by an `expect*` glob so that adding
        * a helper is a deliberate act: a new one is invisible to the rule until
@@ -28,7 +28,7 @@ export default [
        */
       'playwright/expect-expect': [
         'error',
-        { assertFunctionNames: ['expectFree', 'expectHeldBy', 'waitForDayRoom'] },
+        { assertFunctionNames: ['expectFree', 'expectHeldBy', 'waitForDayRoom', 'expectLocale'] },
       ],
     },
   },
