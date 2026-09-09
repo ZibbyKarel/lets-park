@@ -32,8 +32,10 @@
  * `createManyAndReturn({ skipDuplicates: true })` — `INSERT … ON CONFLICT DO
  * NOTHING RETURNING …` — so a cell somebody took between the preview and the
  * confirmation comes back as a **missing row**, not as an error. The transaction
- * stays alive, that day falls to the waitlist, and the result says so. There is
- * no retry loop here, and there does not need to be one.
+ * stays alive, that day falls to the waitlist, and the result says so. No
+ * statement in this transaction may raise, and the retry loop below is not a
+ * licence for one to start: it catches deadlocks the server itself raises
+ * (see below), never a `P2002` this file could have avoided.
  *
  * ## Deadlock: the ascending-date order is the lock ordering
  *
@@ -55,17 +57,31 @@
  * sort could be deleted with every test still green — measured, not assumed. See
  * `doc/decision/0092-*` §"One authority".
  *
- * The remaining sort is pinned twice: by `bulk-allocator.spec.ts` ("comes back
- * in ascending date order, whatever order it was asked in"), and end to end by
- * `bulk-concurrency.db.spec.ts` › "a forced interleaving inside one multi-row
- * INSERT", which uses a test-only `BEFORE INSERT` trigger to break a multi-row
- * `INSERT` between its rows and deadlocks the moment the sort goes.
+ * The remaining sort is pinned directly by `bulk-allocator.spec.ts` ("comes back
+ * in ascending date order, whatever order it was asked in"). It *used* to be
+ * pinned end to end as well, by `bulk-concurrency.db.spec.ts` › "a forced
+ * interleaving inside one multi-row INSERT", which breaks a multi-row `INSERT`
+ * between its rows with a test-only `BEFORE INSERT` trigger and deadlocked the
+ * moment the sort went. That pin is now weakened, not removed: `committedConfirm`
+ * retries a `40P01`, and the retry cannot tell a cell-ordering cycle from the
+ * monthly cap's, so a missing sort surfaces only if the retries lose too — which
+ * has not been re-measured. Treat `bulk-allocator.spec.ts` as the sort's only
+ * reliable guard and see `doc/decision/0307-*` §"What is not tested".
  *
- * No `FOR UPDATE` is taken, so this path stays out of the `FOR UPDATE` half of
- * the cancel/promote cycle in `doc/decision/0065-*`. It is not completely
- * outside that path's wait graph — see the deadlock table in
- * `doc/bulk-reservation.md` for the one narrow cycle that does exist, and which
- * ends in `CONFLICT`.
+ * This path takes no `FOR UPDATE` of its own, but that no longer keeps it out of
+ * the cancel/promote wait graph in `doc/decision/0065-*`, and the claim that it
+ * did is retracted. Since the monthly cap, `confirmOnce` takes a month-scoped
+ * `pg_advisory_xact_lock` on `(userId, month)` and then, in `releaseOwnQueues`,
+ * `DELETE`s that user's `WaitlistEntry` rows — which can block on a queue row a
+ * concurrent `cancel` + `promote` is holding `FOR UPDATE` while *that*
+ * transaction blocks on our advisory lock. A real cycle, rare but not
+ * impossible, and month scope is exactly what defeats the date-confinement
+ * argument the deadlock table in `doc/bulk-reservation.md` used to rest on.
+ *
+ * The resolution is a retry, not an ordering: `committedConfirm` re-runs the
+ * whole transaction on any {@link isWriteConflict}, and reports `CONFLICT` when
+ * the attempts run out. See `doc/decision/0307-*` and the deadlock table in
+ * `doc/bulk-reservation.md`.
  *
  * ## The one race this deliberately does not close
  *
@@ -111,6 +127,7 @@ import type { AuditEntry } from '../audit/audit-log.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { DomainError } from '../common/errors/domain-error';
+import { isWriteConflict } from '../common/errors/prisma-error-mapping';
 import { toDateColumn, toDateOnly, toPublicReservation } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
@@ -120,6 +137,7 @@ import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
 import type { DomainEvent } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
+import { MAX_CANCEL_ATTEMPTS } from './reservations.service';
 import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
 
 /**
@@ -233,16 +251,79 @@ export class BulkReservationService {
     this.assertRequestable(input.dates, actor, settings, today);
     const month = this.monthOf(input.dates);
 
-    const outcome = await this.prisma.client.$transaction(
-      (tx) => this.confirmOnce(tx, input.dates, month, actor),
-      RESERVATION_TRANSACTION_OPTIONS
-    );
+    const outcome = await this.committedConfirm(input.dates, month, actor);
 
-    // Past `await`, so past `COMMIT`. Nothing above this line may talk to Slack
-    // or Socket.io. There are no promotion notices: bulk booking never promotes
-    // anybody, it only queues them.
+    // Past `await`, so past `COMMIT` — and deliberately outside the retry loop.
+    // Nothing above this line may talk to Slack or Socket.io. There are no
+    // promotion notices: bulk booking never promotes anybody, it only queues
+    // them.
     this.publisher.publish(outcome.events);
     return outcome.result;
+  }
+
+  /**
+   * {@link confirm}'s transaction, retried. Returns only once something committed.
+   *
+   * The retry exists for exactly one condition: the deadlock the monthly cap's
+   * `(userId, month)` advisory lock introduced between this path and
+   * `cancel` + `promote` (`doc/decision/0307-*`). Everything else this
+   * transaction can hit is still handled the way the class comment describes —
+   * `ON CONFLICT DO NOTHING` turns a lost cell into a missing row rather than an
+   * error — so the test is {@link isWriteConflict} and nothing wider. In
+   * particular a `P2002` is *not* retried here: a statement that raises one is a
+   * defect in this file, and retrying a defect only makes it slower.
+   *
+   * `isWriteConflict` rather than `code === 'P2034'` because the same `40P01`
+   * arrives spelled two ways depending on which statement the server picks as
+   * the victim — Prisma's own SQL reports `P2034`, a `$queryRaw` reports `P2010`
+   * wrapping `40P01`. `doc/decision/0240-*`.
+   *
+   * **Why it terminates.** Not for the reason `ReservationsService.cancel`'s
+   * loop does: that one eliminates a candidate per attempt, and a re-run of
+   * `allocateBulk` makes no such monotone progress — it can reach for the same
+   * cells again. What is true is that the transaction it deadlocked with has
+   * committed or rolled back by the time the retry starts, so the retry does not
+   * replay the identical interleaving, and any cell the competitor won comes
+   * back as a missing row rather than an error, leaving the retry a strictly
+   * smaller set of days to assign. {@link MAX_CANCEL_ATTEMPTS} bounds it
+   * regardless, because a bound that rests on an argument about somebody else's
+   * code is not a bound.
+   *
+   * That constant is imported rather than duplicated with a bulk-flavoured name:
+   * both loops bound the same `40P01` retry against the same wait graph, and two
+   * numbers that must agree but are written down twice eventually disagree.
+   */
+  private async committedConfirm(
+    dates: readonly DateOnly[],
+    month: string,
+    actor: AuthenticatedUser
+  ): Promise<ConfirmOutcome> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.prisma.client.$transaction(
+          (tx) => this.confirmOnce(tx, dates, month, actor),
+          RESERVATION_TRANSACTION_OPTIONS
+        );
+      } catch (error) {
+        if (
+          !(error instanceof PrismaNamespace.PrismaClientKnownRequestError) ||
+          !isWriteConflict(error)
+        ) {
+          throw error;
+        }
+        if (attempt >= MAX_CANCEL_ATTEMPTS) {
+          // `CONFLICT`, not the underlying deadlock: the caller has no
+          // reservation problem of their own — they lost a race with somebody
+          // they have never heard of. It is declared on `confirmBulk`, is a 409,
+          // and its copy ("někdo jiný mezitím provedl stejnou změnu") is exactly
+          // the situation. The batch is all-or-nothing, so nothing was written.
+          throw new DomainError('CONFLICT', {
+            message: 'The batch could not be booked; another request kept winning the race.',
+            details: { attempts: MAX_CANCEL_ATTEMPTS },
+          });
+        }
+      }
+    }
   }
 
   /**

@@ -308,14 +308,29 @@ describe('two bulk bookings at once', () => {
      *
      * PostgreSQL detects the cycle and kills one side. Which side is up to the
      * server — the backend whose lock wait times out first runs the detector and
-     * aborts itself — so this asserts what is true either way: **somebody was
-     * killed, the confirmation is all-or-nothing, and if it lost it lost with
-     * `CONFLICT`** (`doc/decision/0065-*` maps `P2034`), never an unmapped 500.
+     * aborts itself.
      *
-     * This is the failure mode the ascending sort exists to prevent, and it is
-     * the reason the case above is not merely two requests that never met.
+     * **The caller no longer sees it.** `committedConfirm` retries on any write
+     * conflict (`doc/decision/0307-*`, added for the monthly cap's advisory-lock
+     * cycle, but not narrowable to it — a `40P01` from a cell-ordering cycle and
+     * one from the cap cycle are the same error). By the time the retry starts
+     * the competitor has settled, so it cannot deadlock again: it re-reads and
+     * queues the days the competitor took. `CONFLICT` is reachable only if
+     * `MAX_CANCEL_ATTEMPTS` attempts all lose, which this case cannot produce
+     * with a single competitor.
+     *
+     * So what is asserted is: the cycle really formed
+     * (`waitForBlockedBackend`), the confirmation came back rather than
+     * failing, and the outcome is all-or-nothing — either the competitor
+     * committed both cells and the booker holds neither, or the competitor was
+     * the victim and the booker holds both. Never one of each.
+     *
+     * That the retry also absorbs this deadlock is a widening the monthly cap
+     * paid for: this case used to be the end-to-end falsification of
+     * `allocateBulk`'s ascending sort, and it no longer is. See
+     * `doc/decision/0307-*` §"What is not tested".
      */
-    it('deadlocks, and the batch is all-or-nothing with a CONFLICT', async () => {
+    it('deadlocks, and the retry absorbs it without a half-written batch', async () => {
       const booker = await seedUser(client);
       const competitor = await seedUser(client);
       const [earlier, later] = DEADLOCK_DAYS as [DateOnly, DateOnly];
@@ -362,31 +377,37 @@ describe('two bulk bookings at once', () => {
       gate.release();
       const outcomes = await Promise.allSettled([confirming, competing]);
 
-      // One of the two was killed by the deadlock detector. Both surviving would
-      // mean the cycle never formed and this case proved nothing.
-      expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
-
-      const [bulkOutcome] = outcomes;
-      if (bulkOutcome === undefined) {
-        throw new Error('No settlement for the confirmation.');
+      const [bulkOutcome, competitorOutcome] = outcomes;
+      if (bulkOutcome === undefined || competitorOutcome === undefined) {
+        throw new Error('Missing a settlement.');
       }
+
+      // The confirmation always comes back. Reported with the contract code
+      // rather than as a bare status, so a regression says *why*: `rejected
+      // CONFLICT` here means the retry stopped absorbing the deadlock.
+      expect(
+        bulkOutcome.status === 'fulfilled'
+          ? 'fulfilled'
+          : `rejected ${codeOfRejection(bulkOutcome)}`
+      ).toBe('fulfilled');
+      if (bulkOutcome.status !== 'fulfilled') {
+        throw new Error('unreachable — asserted above');
+      }
+
+      // Whatever the confirmation reports, the database agrees with it: no
+      // half-written batch, no queue entry for a day it says it holds.
+      await assertResultMatchesDatabase(bulkOutcome.value, booker.id);
+
       const heldByBooker = await client.reservation.count({
         where: { userId: booker.id, date: { in: DEADLOCK_DAYS.map(toDateColumn) } },
       });
 
-      if (bulkOutcome.status === 'rejected') {
-        // A deadlock is a lost race, not a defect: 409, not 500.
-        expect(codeOfRejection(bulkOutcome)).toBe('CONFLICT');
-        // And nothing survived it — no half-written batch, no orphan audit row.
+      if (competitorOutcome.status === 'fulfilled') {
+        // The confirmation was the victim; its retry found both cells taken and
+        // queued the booker for them instead. Both days or neither — never one.
         expect(heldByBooker).toBe(0);
-        expect(
-          await client.waitlistEntry.count({
-            where: { userId: booker.id, date: { in: DEADLOCK_DAYS.map(toDateColumn) } },
-          })
-        ).toBe(0);
       } else {
-        // The competitor lost instead; the whole batch went through.
-        await assertResultMatchesDatabase(bulkOutcome.value, booker.id);
+        // The competitor was the victim; the confirmation's first attempt stood.
         expect(heldByBooker).toBe(2);
       }
     });
