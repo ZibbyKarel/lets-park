@@ -222,7 +222,7 @@ export interface CzechLotMessages {
   readonly guestNameRequired: string;
   /** Label of the overridable plate `Input`. */
   readonly plateField: string;
-  /** Badge beside a guest's name in the dialog, and on the tile. */
+  /** Badge beside a guest's name in the dialog. */
   readonly guestHolder: string;
 
   readonly legendTaken: string;

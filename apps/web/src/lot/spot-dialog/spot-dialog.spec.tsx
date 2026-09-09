@@ -51,16 +51,16 @@ const mine = spot({
   carColorClass: 'text-car-3',
 });
 
-function renderDialog(
-  overrides: {
-    spot?: SpotView | null;
-    canReserve?: boolean;
-    isAdmin?: boolean;
-    error?: unknown;
-    viewerUserId?: string | null;
-    holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
-  } = {}
-) {
+interface DialogOverrides {
+  spot?: SpotView | null;
+  canReserve?: boolean;
+  isAdmin?: boolean;
+  error?: unknown;
+  viewerUserId?: string | null;
+  holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
+}
+
+function renderDialog(overrides: DialogOverrides = {}) {
   const callbacks = {
     onClose: jest.fn(),
     onReserve: jest.fn(),
@@ -69,24 +69,38 @@ function renderDialog(
     onCancelReservation: jest.fn(),
   };
 
-  render(
-    <IntlProvider>
-      <SpotDialog
-        spot={overrides.spot === undefined ? spot() : overrides.spot}
-        date="2026-09-28"
-        canReserve={overrides.canReserve ?? true}
-        isAdmin={overrides.isAdmin ?? false}
-        monthName="září"
-        error={overrides.error ?? null}
-        pending={false}
-        viewerUserId={overrides.viewerUserId ?? null}
-        holderOptions={overrides.holderOptions ?? []}
-        {...callbacks}
-      />
-    </IntlProvider>
-  );
+  function tree(props: DialogOverrides) {
+    return (
+      <IntlProvider>
+        <SpotDialog
+          spot={props.spot === undefined ? spot() : props.spot}
+          date="2026-09-28"
+          canReserve={props.canReserve ?? true}
+          isAdmin={props.isAdmin ?? false}
+          monthName="září"
+          error={props.error ?? null}
+          pending={false}
+          viewerUserId={props.viewerUserId ?? null}
+          holderOptions={props.holderOptions ?? []}
+          {...callbacks}
+        />
+      </IntlProvider>
+    );
+  }
 
-  return { ...callbacks, user: userEvent.setup() };
+  const { rerender } = render(tree(overrides));
+
+  return {
+    ...callbacks,
+    user: userEvent.setup(),
+    /**
+     * Re-renders with `next` merged over the props this call was made with —
+     * the same component instance, which is the point: it is how a prop that
+     * arrives *after* mount (a profile query resolving, a second bay opening)
+     * gets exercised at all.
+     */
+    rerender: (next: DialogOverrides) => rerender(tree({ ...overrides, ...next })),
+  };
 }
 
 describe('SpotDialog', () => {
@@ -386,6 +400,41 @@ describe('SpotDialog — an admin reserving a free bay', () => {
       licensePlate: null,
     });
   });
+
+  /**
+   * These two are the only tests that exercise the `form.reset` effect
+   * (`spot-dialog.tsx:133-139`). Measured: with the `form.reset(...)` call
+   * deleted, the rest of this file's 671 tests still pass and only these two
+   * fail — which is what a test of a defensive branch is for.
+   */
+  it('seeds the holder once the viewer id arrives after the dialog was opened', async () => {
+    const { onReserve, user, rerender } = renderAdmin({ viewerUserId: null });
+
+    // No `viewerUserId` yet, so the plain self-book path is on screen.
+    expect(screen.queryByLabelText('Rezervovat pro')).not.toBeInTheDocument();
+
+    rerender({ viewerUserId: 'admin-1' });
+
+    expect(screen.getByLabelText('Rezervovat pro')).toHaveValue('admin-1');
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+    expect(onReserve).toHaveBeenCalledWith({
+      kind: 'USER',
+      userId: 'admin-1',
+      licensePlate: null,
+    });
+  });
+
+  it('does not carry a guest name from one bay into the next', async () => {
+    const { user, rerender } = renderAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'GUEST');
+    await user.type(screen.getByLabelText('Jméno hosta'), 'Jan Host');
+
+    rerender({ spot: spot({ spotId: 'spot-b', label: 'E2.93' }) });
+
+    expect(screen.getByLabelText('Rezervovat pro')).toHaveValue('admin-1');
+    expect(screen.queryByLabelText('Jméno hosta')).not.toBeInTheDocument();
+  });
 });
 
 describe('SpotDialog — a normal user reserving a free bay', () => {
@@ -407,14 +456,14 @@ describe('SpotDialog — a bay a guest holds', () => {
       spot: spot({
         appearance: 'taken',
         action: 'queue',
-        holderName: 'Jan Host',
+        holderName: 'Jan Novotný',
         holderPlate: null,
         holderIsGuest: true,
         carColorClass: 'text-fg-3',
       }),
     });
 
-    expect(screen.getByText('Jan Host')).toBeInTheDocument();
+    expect(screen.getByText('Jan Novotný')).toBeInTheDocument();
     expect(screen.getByText('Host')).toBeInTheDocument();
   });
 });

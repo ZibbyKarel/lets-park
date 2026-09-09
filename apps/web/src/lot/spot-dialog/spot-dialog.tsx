@@ -123,10 +123,17 @@ export function SpotDialog({
   // `defaultValues` are captured once, at mount — and this component mounts with
   // the screen, before `me.get` has necessarily resolved, so `viewerUserId` can
   // still be `null` then. React Hook Form never re-applies `defaultValues`, so
-  // without this the admin's holder would stay `''`, `holderId: z.string().min(1)`
-  // would refuse the submit, and the one-click journey
-  // (`apps/web-e2e/src/support/lot-page.ts:122-126`) would hang on a dialog that
-  // never hides.
+  // without this the admin's holder would stay `''` and `holderId:
+  // z.string().min(1)` would refuse the submit — and since that rule carries no
+  // message, the refusal is *silent*: the Rezervovat button simply does nothing.
+  //
+  // This is defensive rather than load-bearing, and it is worth being precise
+  // about which: `lot-screen.tsx:218-219` renders `<ScreenLoading />` while
+  // `dayQuery.isPending`, so this component does not mount until the day has
+  // resolved, and on the mount that follows, no bay is open yet — the guard
+  // below returns. The window the reset actually changes is narrower: a bay
+  // opened while `me.get` is *still* in flight, with the profile resolving
+  // while that same dialog stays open.
   //
   // Resetting on *open* is the right behaviour in its own right: a guest name
   // typed for one bay must not survive into the next bay's dialog.
