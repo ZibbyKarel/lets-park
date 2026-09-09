@@ -172,6 +172,8 @@
     "usersColumnAdmin": "Admin",
     "usersColumnActive": "Active",
     "usersAdminToggleLabel": "Admin role — {name}",
+    "usersLastAdminToggleLabel": "Admin role — {name} · the last admin can’t lose the role",
+    "usersLastAdminHint": "The last active admin can’t lose the role.",
     "usersActiveToggleLabel": "Active account — {name}",
     "usersSelfActiveToggleLabel": "Active account — {name} · you can’t deactivate your own account",
     "usersSelfActiveHint": "You can’t deactivate your own account.",

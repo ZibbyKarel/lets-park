@@ -131,8 +131,12 @@ describe('AdminUsersScreen', () => {
   it('shows the admin switch on and off according to the role', () => {
     renderScreen();
 
+    // KAREL is the only active admin in the default data, so his switch has the
+    // "last admin" label and is disabled.
     expect(
-      within(rowOf(KAREL)).getByRole('switch', { name: 'Admin role — Karel Zíbar' })
+      within(rowOf(KAREL)).getByRole('switch', {
+        name: 'Admin role — Karel Zíbar · poslední administrátor nemůže roli ztratit',
+      })
     ).toBeChecked();
     expect(
       within(rowOf(ADELA)).getByRole('switch', { name: 'Admin role — Adéla Horáková' })
@@ -144,12 +148,21 @@ describe('AdminUsersScreen', () => {
     // somebody else's role is ordinary administration and goes straight
     // through. The viewer's own demotion is the one that asks first, and it
     // has its own tests.
-    const { onRoleChange, user } = renderScreen({ viewerId: PETR.id });
+    // To allow demotion of KAREL, we start with ADELA as an admin too (so KAREL
+    // is not the last admin).
+    const adelaAdmin = { ...ADELA, role: 'ADMIN' as const };
+    const { onRoleChange, user } = renderScreen({
+      viewerId: PETR.id,
+      users: { kind: 'ready', data: { users: [KAREL, adelaAdmin, PETR] } },
+    });
 
+    // In this scenario, both KAREL and ADELA are already admins, so we test
+    // by demoting ADELA (still allowed since KAREL would remain) and then
+    // demoting KAREL (still allowed since ADELA would remain).
     await user.click(
       within(rowOf(ADELA)).getByRole('switch', { name: 'Admin role — Adéla Horáková' })
     );
-    expect(onRoleChange).toHaveBeenLastCalledWith(ADELA.id, true);
+    expect(onRoleChange).toHaveBeenLastCalledWith(ADELA.id, false);
 
     await user.click(
       within(rowOf(KAREL)).getByRole('switch', { name: 'Admin role — Karel Zíbar' })
@@ -226,7 +239,11 @@ describe('AdminUsersScreen', () => {
       // Demoting yourself is allowed while another admin remains — the API
       // decides that, and the UI must not pre-empt it. So the switch is
       // enabled, unlike the "aktivní" one above; what it is not is immediate.
-      renderScreen({ viewerId: KAREL.id });
+      const anotherAdmin = { ...ADELA, role: 'ADMIN' as const };
+      renderScreen({
+        viewerId: KAREL.id,
+        users: { kind: 'ready', data: { users: [KAREL, anotherAdmin, PETR] } },
+      });
 
       expect(
         within(rowOf(KAREL)).getByRole('switch', { name: 'Admin role — Karel Zíbar' })
@@ -243,9 +260,14 @@ describe('AdminUsersScreen', () => {
     describe('stepping down from your own admin role', () => {
       const CONFIRM_TITLE = 'Odebrat si roli administrátora?';
       const OWN_ADMIN_SWITCH = 'Admin role — Karel Zíbar';
+      // Another admin is needed so KAREL is not the last admin.
+      const anotherAdmin = { ...ADELA, role: 'ADMIN' as const };
 
       it('asks before doing it, and reports nothing until the answer is yes', async () => {
-        const { onRoleChange, user } = renderScreen({ viewerId: KAREL.id });
+        const { onRoleChange, user } = renderScreen({
+          viewerId: KAREL.id,
+          users: { kind: 'ready', data: { users: [KAREL, anotherAdmin, PETR] } },
+        });
 
         await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
 
@@ -254,7 +276,10 @@ describe('AdminUsersScreen', () => {
       });
 
       it('says what will be lost, not just that something will', async () => {
-        const { user } = renderScreen({ viewerId: KAREL.id });
+        const { user } = renderScreen({
+          viewerId: KAREL.id,
+          users: { kind: 'ready', data: { users: [KAREL, anotherAdmin, PETR] } },
+        });
 
         await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
 
@@ -266,7 +291,10 @@ describe('AdminUsersScreen', () => {
       });
 
       it('goes through once confirmed', async () => {
-        const { onRoleChange, user } = renderScreen({ viewerId: KAREL.id });
+        const { onRoleChange, user } = renderScreen({
+          viewerId: KAREL.id,
+          users: { kind: 'ready', data: { users: [KAREL, anotherAdmin, PETR] } },
+        });
 
         await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
         await user.click(screen.getByRole('button', { name: 'Odebrat roli' }));
@@ -276,7 +304,10 @@ describe('AdminUsersScreen', () => {
       });
 
       it('changes nothing when cancelled', async () => {
-        const { onRoleChange, user } = renderScreen({ viewerId: KAREL.id });
+        const { onRoleChange, user } = renderScreen({
+          viewerId: KAREL.id,
+          users: { kind: 'ready', data: { users: [KAREL, anotherAdmin, PETR] } },
+        });
 
         await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
         await user.click(screen.getByRole('button', { name: 'Zrušit' }));
@@ -302,7 +333,10 @@ describe('AdminUsersScreen', () => {
       });
 
       it('does not ask when demoting somebody else', async () => {
-        const { onRoleChange, user } = renderScreen({ viewerId: ADELA.id });
+        const { onRoleChange, user } = renderScreen({
+          viewerId: ADELA.id,
+          users: { kind: 'ready', data: { users: [KAREL, anotherAdmin, PETR] } },
+        });
 
         await user.click(within(rowOf(KAREL)).getByRole('switch', { name: OWN_ADMIN_SWITCH }));
 
@@ -316,6 +350,70 @@ describe('AdminUsersScreen', () => {
 
       expect(
         within(rowOf(KAREL)).getByRole('switch', { name: 'Aktivní účet — Karel Zíbar' })
+      ).toBeEnabled();
+    });
+  });
+
+  describe('the last active administrator cannot lose the role', () => {
+    const LAST_ADMIN_SWITCH =
+      'Admin role — Karel Zíbar · poslední administrátor nemůže roli ztratit';
+
+    it('disables the admin switch when they are the only active admin', () => {
+      renderScreen({ users: { kind: 'ready', data: { users: [KAREL, ADELA] } } });
+
+      expect(within(rowOf(KAREL)).getByRole('switch', { name: LAST_ADMIN_SWITCH })).toBeDisabled();
+    });
+
+    it("says in the switch's own name why it refuses", () => {
+      renderScreen({ users: { kind: 'ready', data: { users: [KAREL, ADELA] } } });
+
+      expect(
+        within(rowOf(KAREL)).getByRole('switch', { name: LAST_ADMIN_SWITCH })
+      ).toBeInTheDocument();
+      expect(
+        within(rowOf(ADELA)).queryByRole('switch', { name: /poslední administrátor/u })
+      ).not.toBeInTheDocument();
+    });
+
+    it('reports nothing when that switch is pressed', async () => {
+      const { onRoleChange, user } = renderScreen({
+        users: { kind: 'ready', data: { users: [KAREL, ADELA] } },
+      });
+
+      await user.click(within(rowOf(KAREL)).getByRole('switch', { name: LAST_ADMIN_SWITCH }));
+
+      expect(onRoleChange).not.toHaveBeenCalled();
+    });
+
+    it('does not disable the switch for an inactive admin, since they are not counted', () => {
+      const INACTIVE_ADMIN = aUser({
+        id: 'i',
+        name: 'Ivo Malý',
+        role: 'ADMIN',
+        active: false,
+      });
+      renderScreen({ users: { kind: 'ready', data: { users: [KAREL, INACTIVE_ADMIN] } } });
+
+      // KAREL is still the only *active* admin, so his switch is disabled...
+      expect(
+        within(rowOf(KAREL)).getByRole('switch', {
+          name: 'Admin role — Karel Zíbar · poslední administrátor nemůže roli ztratit',
+        })
+      ).toBeDisabled();
+      // ...and the inactive admin's own switch is unaffected by this rule.
+      expect(
+        within(rowOf(INACTIVE_ADMIN)).getByRole('switch', { name: 'Admin role — Ivo Malý' })
+      ).toBeEnabled();
+    });
+
+    it('re-enables once a second active admin exists', () => {
+      const secondAdmin = { ...ADELA, role: 'ADMIN' as const };
+      renderScreen({
+        users: { kind: 'ready', data: { users: [KAREL, secondAdmin, PETR] } },
+      });
+
+      expect(
+        within(rowOf(KAREL)).getByRole('switch', { name: 'Admin role — Karel Zíbar' })
       ).toBeEnabled();
     });
   });

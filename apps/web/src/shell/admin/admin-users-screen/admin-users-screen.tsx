@@ -118,6 +118,14 @@ export function AdminUsersScreen({
     [all, search]
   );
 
+  // How many active admins exist in the fetched list. `all`, not `visible`:
+  // a search filter must not change who counts as "the last admin" — the
+  // rule is about the whole account list, not what happens to be on screen.
+  const activeAdminCount = useMemo(
+    () => all.filter((user) => user.role === 'ADMIN' && user.active).length,
+    [all]
+  );
+
   const updateErrorMessage = describeWriteError('userUpdate', updateError);
 
   const columns: DataTableColumn<AdminUser>[] = [
@@ -143,22 +151,39 @@ export function AdminUsersScreen({
       header: t('usersColumnAdmin'),
       align: 'end',
       width: '120px',
-      cell: (user) => (
-        <Switch
-          checked={user.role === 'ADMIN'}
-          aria-label={t('usersAdminToggleLabel', { name: user.name })}
-          disabled={isRowBusy(pendingChange, user.id)}
-          onCheckedChange={(next) => {
-            // Only the viewer taking their *own* role away asks first — and
-            // only in that direction. Granting is not the irreversible one.
-            if (user.id === viewerId && !next) {
-              setConfirmingSelfDemotion(true);
-              return;
-            }
-            onRoleChange(user.id, next);
-          }}
-        />
-      ),
+      cell: (user) => {
+        const isLastActiveAdmin = user.role === 'ADMIN' && user.active && activeAdminCount <= 1;
+        return (
+          <span
+            className="inline-flex items-center"
+            title={isLastActiveAdmin ? t('usersLastAdminHint') : undefined}
+          >
+            <Switch
+              checked={user.role === 'ADMIN'}
+              // Same reasoning as the self-active switch below: the reason a
+              // switch is disabled belongs in its own name, not only in
+              // `title`, since `title` never reaches touch and is announced
+              // inconsistently by screen readers.
+              aria-label={
+                isLastActiveAdmin
+                  ? t('usersLastAdminToggleLabel', { name: user.name })
+                  : t('usersAdminToggleLabel', { name: user.name })
+              }
+              disabled={isLastActiveAdmin || isRowBusy(pendingChange, user.id)}
+              onCheckedChange={(next) => {
+                // Only the viewer taking their *own* role away asks first —
+                // and only in that direction. Granting is not the
+                // irreversible one.
+                if (user.id === viewerId && !next) {
+                  setConfirmingSelfDemotion(true);
+                  return;
+                }
+                onRoleChange(user.id, next);
+              }}
+            />
+          </span>
+        );
+      },
     },
     {
       id: 'active',

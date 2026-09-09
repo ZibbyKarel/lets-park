@@ -172,6 +172,8 @@
     "usersColumnAdmin": "Admin",
     "usersColumnActive": "Aktivní",
     "usersAdminToggleLabel": "Admin role — {name}",
+    "usersLastAdminToggleLabel": "Admin role — {name} · poslední administrátor nemůže roli ztratit",
+    "usersLastAdminHint": "Poslední aktivní administrátor nemůže přijít o roli.",
     "usersActiveToggleLabel": "Aktivní účet — {name}",
     "usersSelfActiveToggleLabel": "Aktivní účet — {name} · vlastní účet nelze deaktivovat",
     "usersSelfActiveHint": "Vlastní účet nelze deaktivovat.",
