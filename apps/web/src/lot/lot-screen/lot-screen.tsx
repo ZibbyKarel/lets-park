@@ -22,7 +22,6 @@ import {
   todayInPrague,
   useDateFormatters,
   useTranslations,
-  type DateOnly,
 } from '@lets-park/i18n';
 import { useSession } from '@lets-park/auth/client';
 import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
@@ -39,6 +38,7 @@ import { BulkReservationModal } from '../bulk-modal/bulk-modal';
 import { SpotDialog } from '../spot-dialog/spot-dialog';
 import type { HolderOption } from '../spot-dialog/holder-input';
 import { useCellLocks } from './use-cell-locks';
+import { useDateInUrl } from './use-date-in-url';
 import { useLotRealtime } from './use-lot-realtime';
 import {
   toBannerView,
@@ -69,7 +69,7 @@ export function LotScreen() {
   if (realtimeStatus === 'connected') hasEverConnected.current = true;
   const realtimeNotice = toRealtimeNoticeView(realtimeStatus, hasEverConnected.current);
 
-  const [date, setDate] = useState<DateOnly>(() => todayInPrague());
+  const [date, setDate] = useDateInUrl();
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   /**
@@ -326,10 +326,10 @@ export function LotScreen() {
           setBulkOpen(true);
         }}
         onPreviousDay={() => {
-          setDate((current) => addDays(current, -1));
+          setDate(addDays(date, -1));
         }}
         onNextDay={() => {
-          setDate((current) => addDays(current, 1));
+          setDate(addDays(date, 1));
         }}
         onToday={() => {
           setDate(todayInPrague());
