@@ -61,6 +61,11 @@ export class CalendarService {
    * *same* path through the same single indexed lookup: same statement, same
    * branch, same response. A post-hoc check would have made the deactivated
    * case measurably slower, which is a distinguisher on a public URL.
+   *
+   * A **guest** reservation is in nobody's feed: the filter is `userId`, and a
+   * guest row has none (`doc/decision/0303-*`). That is the intended outcome —
+   * a guest has no calendar to subscribe with — and `calendar.db.spec.ts`
+   * asserts it, so it cannot be lost to a later `where` clause.
    */
   async feedEntriesForToken(icsToken: string, now: Date = new Date()): Promise<IcsCalendarEntry[]> {
     // `findFirst` rather than `findUnique`: `icsToken` is unique, so this is

@@ -206,4 +206,39 @@ describe('the ICS feed against a real PostgreSQL', () => {
       expect(stored.toISOString()).toBe(`${date}T00:00:00.000Z`);
     });
   });
+
+  describe('a guest reservation', () => {
+    it('is in nobody’s feed, because the feed filters on userId', async () => {
+      // Not a filter anyone wrote for guests: `feedEntriesForToken` selects
+      // `where: { userId, date: { gte } }` (`calendar.service.ts:79-81`), and a
+      // guest row has no `userId`. Asserted because "nobody can see it" is a
+      // privacy property, not an implementation detail — and because the query
+      // is the thing a later `where` clause could quietly widen.
+      const rows = await inRolledBackTransaction(prisma, async (tx) => {
+        const token = unique('ics');
+        const user = await seedUser(tx, token);
+        const [mine, theirs] = [
+          await tx.parkingSpot.create({ data: { label: unique('SPOT'), group: 'SHARED' } }),
+          await tx.parkingSpot.create({ data: { label: unique('SPOT'), group: 'SHARED' } }),
+        ];
+        const day = toDateColumn('2099-01-05');
+
+        await tx.reservation.create({
+          data: { parkingSpotId: mine.id, userId: user.id, date: day },
+        });
+        await tx.reservation.create({
+          data: { parkingSpotId: theirs.id, guestName: 'Jan Host', date: day },
+        });
+
+        return tx.reservation.findMany({
+          where: { userId: user.id, date: { gte: day } },
+          include: { parkingSpot: { select: { label: true } } },
+        });
+      });
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.guestName).toBeNull();
+      expect(rows[0]?.parkingSpot.label).not.toBe('');
+    });
+  });
 });
