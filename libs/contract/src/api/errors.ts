@@ -51,6 +51,11 @@ export const ERROR_DEFINITIONS = {
     message: 'The user already has a reservation for that day.',
     data: errorDataSchema,
   },
+  MONTHLY_RESERVATION_LIMIT_REACHED: {
+    status: 409,
+    message: 'The user already holds the maximum number of reservations for that month.',
+    data: errorDataSchema,
+  },
   PAST_DATE: {
     status: 422,
     message: 'The date is in the past (Europe/Prague).',

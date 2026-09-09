@@ -168,6 +168,7 @@ export const confirmBulkContract = authed
       'PAST_DATE',
       'OUT_OF_HORIZON',
       'RESERVATIONS_LOCKED',
+      'MONTHLY_RESERVATION_LIMIT_REACHED',
       'VALIDATION_FAILED',
       'CONFLICT'
     )

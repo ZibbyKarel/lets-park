@@ -5,6 +5,7 @@ describe('ERROR_CODES', () => {
     expect([...ERROR_CODES]).toEqual([
       'SPOT_ALREADY_RESERVED',
       'RESERVATION_LIMIT_REACHED',
+      'MONTHLY_RESERVATION_LIMIT_REACHED',
       'PAST_DATE',
       'OUT_OF_HORIZON',
       'NOT_FOUND',

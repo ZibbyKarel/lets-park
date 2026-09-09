@@ -86,6 +86,7 @@ export const createReservationContract = authed
       'NOT_FOUND',
       'SPOT_ALREADY_RESERVED',
       'RESERVATION_LIMIT_REACHED',
+      'MONTHLY_RESERVATION_LIMIT_REACHED',
       'PAST_DATE',
       'OUT_OF_HORIZON',
       'RESERVATIONS_LOCKED',
