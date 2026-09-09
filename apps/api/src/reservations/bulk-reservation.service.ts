@@ -116,6 +116,7 @@ import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
 import type { AllocatableSpot, DayState } from './bulk-allocator';
 import { allocateBulk } from './bulk-allocator';
+import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
 import type { DomainEvent } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
@@ -260,6 +261,17 @@ export class BulkReservationService {
   ): Promise<ConfirmOutcome> {
     const world = await this.readWorld(tx, dates, actor.id);
     const plans = this.allocate(dates, world, actor.id);
+
+    const assignedCount = plans.filter((plan) => plan.outcome === 'SPOT_ASSIGNED').length;
+    if (assignedCount > 0) {
+      const [firstDate] = dates;
+      if (firstDate === undefined) {
+        throw new DomainError('VALIDATION_FAILED', {
+          message: 'A bulk booking must name at least one day.',
+        });
+      }
+      await assertWithinMonthlyReservationCap(tx, actor.id, firstDate, assignedCount);
+    }
 
     const created = await this.createReservations(tx, plans, actor.id);
     const createdByDate = new Map(created.map((row) => [toDateOnly(row.date), row]));
