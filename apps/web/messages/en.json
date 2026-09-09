@@ -21,6 +21,7 @@
     "adminBadge": "Admin",
     "settings": "Settings (car licence plate)",
     "administration": "Administration",
+    "language": "Language",
     "signOut": "Sign out"
   },
   "sections": {

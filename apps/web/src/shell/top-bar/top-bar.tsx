@@ -21,7 +21,7 @@
 import { Avatar, Badge, Dropdown, Stack, cx } from '@lets-park/design-system/primitives';
 import type { DropdownItem } from '@lets-park/design-system/primitives';
 import type { UserRole } from '@lets-park/contract';
-import { useTranslations } from '@lets-park/i18n';
+import { LOCALES, LOCALE_LABELS, isLocale, useTranslations, type Locale } from '@lets-park/i18n';
 import Link from 'next/link';
 import { ADMIN_ROUTE, LOT_ROUTE, SETTINGS_ROUTE } from '../../routes';
 import { Brand } from '../brand';
@@ -31,6 +31,9 @@ import { initialsOf } from '../initials';
 export const MENU_SETTINGS = 'settings';
 export const MENU_ADMIN = 'administration';
 export const MENU_SIGN_OUT = 'sign-out';
+
+/** Prefix of the `Dropdown` item id for a language choice: `locale:cs`, `locale:en`. */
+export const MENU_LOCALE_PREFIX = 'locale:';
 
 export interface TopBarProps {
   /** Display name. Empty while neither the session nor the profile has one. */
@@ -46,11 +49,37 @@ export interface TopBarProps {
   /** Called with {@link ADMIN_ROUTE} or {@link SETTINGS_ROUTE}. */
   readonly onNavigate: (route: string) => void;
   readonly onSignOut: () => void;
+  /** The active locale, so the menu can mark it. */
+  readonly locale: Locale;
+  /** Called with the locale the user picked. Never called for the active one. */
+  readonly onLocaleChange: (locale: Locale) => void;
 }
 
-export function TopBar({ name, email, role, onNavigate, onSignOut }: TopBarProps) {
+export function TopBar({
+  name,
+  email,
+  role,
+  onNavigate,
+  onSignOut,
+  locale,
+  onLocaleChange,
+}: TopBarProps) {
   const t = useTranslations('nav');
   const isAdmin = role === 'ADMIN';
+
+  // A labelled group of radio-style entries rather than a submenu: two
+  // languages do not earn a nested panel, and `Dropdown` has no submenu to
+  // nest into. The header is a disabled item, which is how `Dropdown` renders
+  // text the arrow keys skip.
+  const languageItems: DropdownItem[] = [
+    { id: 'language-separator', separator: true },
+    { id: 'language-header', label: t('language'), disabled: true },
+    ...LOCALES.map((candidate) => ({
+      id: `${MENU_LOCALE_PREFIX}${candidate}`,
+      label: LOCALE_LABELS[candidate],
+      checked: candidate === locale,
+    })),
+  ];
 
   const items: DropdownItem[] = [
     { id: 'identity-separator', separator: true },
@@ -66,6 +95,7 @@ export function TopBar({ name, email, role, onNavigate, onSignOut }: TopBarProps
           },
         ]
       : []),
+    ...languageItems,
     { id: 'sign-out-separator', separator: true },
     { id: MENU_SIGN_OUT, label: t('signOut'), danger: true },
   ];
@@ -75,6 +105,13 @@ export function TopBar({ name, email, role, onNavigate, onSignOut }: TopBarProps
       onNavigate(SETTINGS_ROUTE);
     } else if (id === MENU_ADMIN) {
       onNavigate(ADMIN_ROUTE);
+    } else if (id.startsWith(MENU_LOCALE_PREFIX)) {
+      const picked = id.slice(MENU_LOCALE_PREFIX.length);
+      // Re-picking the active language is a no-op rather than a reload: the
+      // cookie is already set and `router.refresh()` would repaint for nothing.
+      if (isLocale(picked) && picked !== locale) {
+        onLocaleChange(picked);
+      }
     } else if (id === MENU_SIGN_OUT) {
       onSignOut();
     }

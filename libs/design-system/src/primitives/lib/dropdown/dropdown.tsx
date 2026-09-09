@@ -37,6 +37,8 @@ export interface DropdownItem {
   /** Renders the item in the danger tone. */
   danger?: boolean | undefined;
   disabled?: boolean | undefined;
+  /** Renders the item as a radio-style choice: `role="menuitemradio"` plus `aria-checked`. */
+  checked?: boolean | undefined;
 }
 
 export interface DropdownProps {
@@ -330,7 +332,13 @@ export function Dropdown({
                     itemRefs.current[index] = node;
                   }}
                   type="button"
-                  role="menuitem"
+                  // A one-of-N choice inside a menu is `menuitemradio`, not
+                  // `menuitem`: the role is what carries `aria-checked`, and a
+                  // `menuitem` with `aria-checked` is not a state a screen
+                  // reader announces. `checked` being *defined* is the switch —
+                  // `false` still means "one of a set, not this one".
+                  role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                  aria-checked={item.checked}
                   // Roving tabindex: only the active item is reachable by Tab, so
                   // the menu is one stop rather than N.
                   tabIndex={index === activeIndex ? 0 : -1}
