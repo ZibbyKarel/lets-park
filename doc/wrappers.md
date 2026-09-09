@@ -4,7 +4,9 @@ Founded by Task 18 (`libs/form`), the first of a run of Tasks 18–22 that progr
 establishes the rest of `WRAPPED_LIBRARIES`. Task 19 added `libs/api-client` and
 `libs/query`, Task 20 `libs/auth`, Task 21 `libs/realtime-client`, Task 14
 `libs/calendar-export` — the one backend wrapper. Each wrapper adds its own section here, not
-a new file.
+a new file. `libs/query` was later removed (`TODO.md` item 6, `doc/decision/0308-*`):
+`@tanstack/react-query` is no longer wrapped, since this workspace only ever had one
+consumer for it.
 
 ## What a wrapper lib is and why it's mandatory
 
@@ -12,16 +14,15 @@ a new file.
 library code from importing certain third parties directly. For each of them there is
 exactly one **wrapper lib** — the single place in the whole workspace allowed to import it:
 
-| forbidden package | wrapper lib | tag |
-| --- | --- | --- |
-| `react-hook-form` | `libs/form` (done, Task 18) | `type:util`, `scope:web` |
-| `@tanstack/react-table` | `libs/design-system/src/compounds` | `type:ui`, `scope:web` |
-| `@tanstack/react-query` | `libs/query` (done, Task 19) | `type:util`, `scope:web` |
-| `@orpc/client` | `libs/api-client` (done, Task 19) | `type:util`, `scope:web` |
-| `socket.io-client` | `libs/realtime-client` | `type:util`, `scope:web` |
-| `next-auth` | `libs/auth` | `type:util`, `scope:web` |
-| `ical-generator` | `libs/calendar-export` (done, Task 14) | `type:util`, `scope:api` |
-| `next-intl` | `libs/i18n` (done, Task 17) | `type:util`, `scope:web` |
+| forbidden package       | wrapper lib                            | tag                      |
+| ----------------------- | -------------------------------------- | ------------------------ |
+| `react-hook-form`       | `libs/form` (done, Task 18)            | `type:util`, `scope:web` |
+| `@tanstack/react-table` | `libs/design-system/src/compounds`     | `type:ui`, `scope:web`   |
+| `@orpc/client`          | `libs/api-client` (done, Task 19)      | `type:util`, `scope:web` |
+| `socket.io-client`      | `libs/realtime-client`                 | `type:util`, `scope:web` |
+| `next-auth`             | `libs/auth`                            | `type:util`, `scope:web` |
+| `ical-generator`        | `libs/calendar-export` (done, Task 14) | `type:util`, `scope:api` |
+| `next-intl`             | `libs/i18n` (done, Task 17)            | `type:util`, `scope:web` |
 
 The reason for the ban isn't "save a few characters of import" but three concrete things a
 direct import anywhere else would break:
@@ -87,20 +88,20 @@ hands responsibility to the caller — and exactly what's easiest to forget when
 domain form:
 
 ```tsx
-import * as z from 'zod';
-import { Checkbox, Input, Select } from '@lets-park/design-system/primitives';
-import { FormField, FormProvider, useAppForm } from '@lets-park/form';
+import * as z from "zod";
+import { Checkbox, Input, Select } from "@lets-park/design-system/primitives";
+import { FormField, FormProvider, useAppForm } from "@lets-park/form";
 
 const bookingSchema = z.object({
-  spotId: z.string().min(1, 'Choose a spot'),
-  vehicleType: z.enum(['car', 'motorcycle']),
+  spotId: z.string().min(1, "Choose a spot"),
+  vehicleType: z.enum(["car", "motorcycle"]),
   recurring: z.boolean(),
 });
 
 function BookingForm() {
   const form = useAppForm({
     schema: bookingSchema,
-    defaultValues: { spotId: '', vehicleType: 'car', recurring: false },
+    defaultValues: { spotId: "", vehicleType: "car", recurring: false },
   });
 
   return (
@@ -177,10 +178,10 @@ parking domain instead of the generic demo schema.
 
 ## `libs/form` tests
 
-| file | what it verifies |
-| --- | --- |
-| `use-app-form.spec.tsx` | `useAppForm` + `FormField` on a bare `<input>`: a Zod error propagates into `role="alert"` and `aria-invalid`; a valid submit calls the handler with the values after Zod parsing |
-| `app-form.spec.tsx` | the same, on real `Input`/`Select`/`Checkbox` from `@lets-park/design-system/primitives` — three fields, three different primitives, one Zod schema; plus a test that reads its own source file and verifies there is no direct import of `react-hook-form` in it |
+| file                    | what it verifies                                                                                                                                                                                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `use-app-form.spec.tsx` | `useAppForm` + `FormField` on a bare `<input>`: a Zod error propagates into `role="alert"` and `aria-invalid`; a valid submit calls the handler with the values after Zod parsing                                                                                 |
+| `app-form.spec.tsx`     | the same, on real `Input`/`Select`/`Checkbox` from `@lets-park/design-system/primitives` — three fields, three different primitives, one Zod schema; plus a test that reads its own source file and verifies there is no direct import of `react-hook-form` in it |
 
 Zod in the tests is always a local `z.object(...)` schema, not an import from
 `@lets-park/contract` — `libs/form` is domain-independent, and `@orpc/contract` (ESM-only,
@@ -196,14 +197,14 @@ in `libs/form/jest.config.cts`, nor was one needed.
 It exports exactly two things, plus their types:
 
 ```ts
-import { createApiClient, toContractError } from '@lets-park/api-client';
+import { createApiClient, toContractError } from "@lets-park/api-client";
 
 const api = createApiClient({
-  url: 'https://example.test/rpc',
-  getAccessToken: () => session?.accessToken,   // libs/auth, Task 20
+  url: "https://example.test/rpc",
+  getAccessToken: () => session?.accessToken, // libs/auth, Task 20
 });
 
-const overview = await api.overview.day({ date: '2026-09-15' });
+const overview = await api.overview.day({ date: "2026-09-15" });
 ```
 
 `ApiClient` is `ContractClient` — **derived from `libs/contract`**, not written out. Every
@@ -240,26 +241,32 @@ would reject every real domain error this backend produces. Full reasoning:
 > **Known, reproduced and unguarded:** `apps/api`'s filter writes its error body at the top
 > level, but the RPC protocol reads it out of a `{ json, meta }` envelope — so a 409
 > `SPOT_ALREADY_RESERVED` currently arrives as `CONFLICT`, which is also a member of
-> `ERROR_CODES` and therefore does *not* fail closed. **No test watches for this**; the guard
+> `ERROR_CODES` and therefore does _not_ fail closed. **No test watches for this**; the guard
 > that would work belongs in `apps/api`'s filter spec and does not exist yet.
 > `doc/decision/0039-*` states the situation and why `libs/api-client` cannot guard it.
 
 `null` means "not a domain error" and covers a transport failure, an unknown code, and a plain
 thrown value alike — none of them has localized copy keyed to a code, so all three are
 "something went wrong". `errorStatus(error)` gives the HTTP status, or `undefined` when the
-request never reached a server; that distinction is the entire input to `libs/query`'s retry
-policy.
+request never reached a server; that distinction is the entire input to the app's retry
+policy (below).
 
-## `libs/query` — TanStack Query (Task 19)
+## TanStack Query — used directly, not wrapped (`doc/decision/0308-*`)
 
-`@lets-park/query` is the only place allowed to import `@tanstack/react-query`. It re-exports
-the hooks, so a feature component never needs a second import path:
+`@tanstack/react-query` was wrapped by `libs/query` (Task 19) until `TODO.md` item 6 removed
+it: this workspace only ever had one consumer, and the wrapper bought no swappability that
+consumer wasn't already getting for free. Feature code now imports
+`useQuery`/`useMutation`/`useQueryClient`/`QueryClientProvider` straight from
+`@tanstack/react-query`; the oRPC-to-TanStack-Query bridge lives in `libs/api-client`, and the
+app's `QueryClient` policy lives in `apps/web/src/shell/query/`:
 
 ```tsx
-import { createApiQueryUtils, useQuery, useMutation, useQueryClient } from '@lets-park/query';
-import { toContractError } from '@lets-park/api-client';
+import { useQuery, useMutation, useQueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createApiQueryUtils, toContractError } from "@lets-park/api-client";
+import { createQueryClient } from "./shell/query/query-client";
 
-const utils = createApiQueryUtils(api);        // once, at the app root
+const utils = createApiQueryUtils(api); // once, at the app root
+const queryClient = createQueryClient(); // one per request (SSR) / per session
 
 function DayOverview() {
   const { data, error } = useQuery(utils.overview.day.queryOptions({ input: { date } }));
@@ -268,8 +275,8 @@ function DayOverview() {
 }
 ```
 
-**Query keys are never written by hand.** `createApiQueryUtils` (built on
-`@orpc/tanstack-query`) mirrors the contract router, so each leaf carries `queryKey`,
+**Query keys are still never written by hand.** `createApiQueryUtils` (`libs/api-client`,
+built on `@orpc/tanstack-query`) mirrors the contract router, so each leaf carries `queryKey`,
 `queryOptions`, `mutationOptions` and `call`, and each branch carries `key()` for partial
 matching. Invalidating "everything about the day overview" is
 `invalidateQueries({ queryKey: utils.overview.key() })` — which is exactly what keeps a cache
@@ -278,23 +285,17 @@ entry from being missed because someone spelled its key differently.
 ### The client and the provider
 
 ```tsx
-const queryClient = createQueryClient();       // one per request (SSR) / per session
-<QueryProvider client={queryClient}>{children}</QueryProvider>
+const queryClient = createQueryClient(); // one per request (SSR) / per session
+<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 ```
 
-`QueryProvider` takes the client as a **required prop** rather than creating it: a client
-created in a component body is re-created on every render, throwing the cache away, and
-Next.js needs one instance per request on the server and one per session in the browser.
-Deciding that is the app's job.
+A client created in a component body is re-created on every render, throwing the cache away,
+and Next.js needs one instance per request on the server and one per session in the browser —
+`createQueryClient` is called once, at the app's provider, deciding that.
 
-`createQueryClient` is the **only** way to get a client. `@lets-park/query` exports
-`QueryClient` as a *type* only, so `new QueryClient()` is a compile error rather than a
-convention — otherwise app code could construct a client carrying TanStack's defaults (three
-retries on everything, including the 4xx domain errors that are decisions rather than
-hiccups) while still passing the ESLint wrapper ban, since the class would have come from the
-wrapper.
-
-`createQueryClient` carries the project's policy — `staleTime` 30 s, `gcTime` 5 min,
+Unlike the removed wrapper, nothing stops app code from calling `new QueryClient()` directly
+instead of `createQueryClient` — `doc/decision/0308-*` records that loss and why it was
+accepted. `createQueryClient` still carries the project's policy — `staleTime` 30 s, `gcTime` 5 min,
 `refetchOnWindowFocus: false` (realtime invalidation arrives over Socket.io in Task 21, so
 refetching on focus is redundant traffic), `retry: shouldRetryQuery`, and **mutations are not
 retried**. Overrides merge one level deep, so a caller changing one option cannot silently
@@ -305,38 +306,44 @@ drop the rest.
 A **4xx is never retried**; everything else is retried up to `MAX_QUERY_RETRIES` (2). The
 split is by HTTP status rather than by contract code, because it has to cover failures that
 carry no code at all — a throttled request and an unmatched route keep Nest's shape
-(`doc/decision/0033-*`). A rejected reservation or a closed window is a *decision*: repeating
+(`doc/decision/0033-*`). A rejected reservation or a closed window is a _decision_: repeating
 it produces the same answer three times, delays the error the user needs to see, and spends
 three requests against the throttler. A 5xx and a dropped connection are the transient cases
 retries exist for.
 
 Mutations are not retried because every mutation in this contract writes something a person
 did on purpose; a silent second attempt after an ambiguous failure risks a duplicate write,
-and the unique constraints that prevent double-booking would turn the retry into a *different*
+and the unique constraints that prevent double-booking would turn the retry into a _different_
 error than the original.
 
 ### Tests
 
-| file | what it verifies |
-| --- | --- |
-| `api-client/src/lib/api-client.spec.ts` | the URL, method and payload a contract procedure puts on the wire; nested admin paths; the `Authorization` header across five provider cases including per-request re-reads |
-| `api-client/src/lib/errors.spec.ts` | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; the `defined: false` case that `isDefinedError` would reject; and one test documenting oRPC's own envelope behaviour (which is *not* a guard on `apps/api` — see the note above) |
-| `query/src/lib/query-client.spec.ts` | the shipped defaults, override merging, and the retry policy counted in **requests that reached the transport** — one attempt for each of the twelve codes and for a 429, three for a 5xx and for an unreachable server |
-| `query/src/lib/api-query.spec.ts` | key stability (same input, across two util trees), key distinctness, and that a branch key really invalidates its leaves through the cache's own matcher |
-| `query/src/lib/app-usage.spec.tsx` | a real component reading, mutating and invalidating through the wrappers only — plus a test reading its own source to prove neither `@tanstack/*` nor `@orpc/*` was imported to do it |
+| file                                                  | what it verifies                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api-client/src/lib/api-client.spec.ts`               | the URL, method and payload a contract procedure puts on the wire; nested admin paths; the `Authorization` header across five provider cases including per-request re-reads                                                                                                                                                                           |
+| `api-client/src/lib/errors.spec.ts`                   | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; the `defined: false` case that `isDefinedError` would reject; and one test documenting oRPC's own envelope behaviour (which is _not_ a guard on `apps/api` — see the note above) |
+| `api-client/src/lib/api-query.spec.ts`                | key stability (same input, across two util trees) and key distinctness, without constructing a real `QueryClient` (see the note below on why)                                                                                                                                                                                                         |
+| `apps/web/src/shell/query/query-client.spec.ts`       | the shipped defaults, override merging, and the retry policy counted in **requests that reached the transport** — one attempt for each of the twelve codes and for a 429, three for a 5xx and for an unreachable server; plus the two invalidation tests proving a branch key really invalidates its leaves through the cache's own matcher           |
+| `apps/web/src/shell/query/query-integration.spec.tsx` | a real component reading, mutating and invalidating through `@tanstack/react-query` and `@lets-park/api-client` together, end to end                                                                                                                                                                                                                  |
 
 Every one of these drives a **real** `RPCLink` with only the bottom-most `fetch` stubbed. A
 hand-written fake client would skip the transport, which is precisely where the errors under
-test are produced. That choice is what forces the custom Jest environment in
-`libs/query/jest-environment-web.cjs` (jsdom implements no `fetch`; `doc/decision/0037-*`) and
-the `module` setting in `libs/query/tsconfig.spec.json` (`doc/decision/0038-*`).
+test are produced. `apps/web/jest.config.cts` already ships the custom Jest environment this
+needs (jsdom + Node's fetch/stream globals; `doc/decision/0037-*`), which is also why the
+tests that construct a real `QueryClient` next to the `@orpc/tanstack-query` bridge live in
+`apps/web` rather than `libs/api-client`: only `apps/web`'s `tsconfig.json` uses `module:
+esnext`, and building both together under a `commonjs`-resolving tsconfig is the dual-package
+hazard `doc/decision/0038-*` documents. `doc/decision/0308-*` has the full split.
 
 ### One allow-list addition, and one deliberately refused
 
-`NPM_ALLOWLIST.util` in `eslint.config.mjs` gained exactly one entry: `@orpc/tanstack-query`,
-the bridge `libs/query` is built on. It does not belong in `WRAPPED_LIBRARIES` for the same
-reason `@hookform/resolvers` doesn't — nothing could be imported *instead* of it, it only
-makes sense paired with a package that is already wrapped.
+`NPM_ALLOWLIST.util` in `eslint.config.mjs` carries one entry for `@orpc/tanstack-query`,
+the bridge `libs/api-client` is built on. It does not belong in `WRAPPED_LIBRARIES` for the same
+reason `@hookform/resolvers` doesn't — nothing could be imported _instead_ of it, it only
+makes sense paired with a package that is already wrapped. Unlike `@hookform/resolvers`, it no
+longer pairs with a wrapped package at all: `@tanstack/react-query` itself stopped being
+wrapped in the same change (`doc/decision/0308-*`), and the allow-list entry stayed because
+`libs/api-client`'s bridge (`api-query.ts`) still needs it.
 
 `@orpc/contract` was **not** added, although `libs/api-client` needs `ContractRouterClient`.
 `NPM_ALLOWLIST` hangs off the `type:` tag, which every wrapper lib shares, so the entry would
@@ -356,10 +363,10 @@ including `next-auth/react`, `next-auth/jwt` and `next-auth/providers/okta`, all
 > v4, `^5.0.0` matches nothing, and `@next` installs a v4 prerelease. Read
 > `doc/decision/0050-*` before changing that line.
 
-| import path | runs where | contains |
-| --- | --- | --- |
-| `@lets-park/auth` | Next.js server runtime | `createAuth`, `OKTA_PROVIDER_ID`, and the types `Auth` and `AuthOptions` |
-| `@lets-park/auth/client` | browser | `AuthProvider`, `useRequireAuth`, `useAccessTokenProvider`, and `useSession`/`signIn`/`signOut` re-exported |
+| import path              | runs where             | contains                                                                                                    |
+| ------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@lets-park/auth`        | Next.js server runtime | `createAuth`, `OKTA_PROVIDER_ID`, and the types `Auth` and `AuthOptions`                                    |
+| `@lets-park/auth/client` | browser                | `AuthProvider`, `useRequireAuth`, `useAccessTokenProvider`, and `useSession`/`signIn`/`signOut` re-exported |
 
 There is exactly one way in on the server side, and it is `createAuth`: one call in `apps/web`
 produces the route handlers, the universal `auth()`, server-side `signIn`/`signOut` and a
@@ -382,8 +389,8 @@ by `nx build web` before being deleted.
 
 ```ts
 // apps/web/src/auth.ts
-import { createAuth } from '@lets-park/auth';
-import { validateWebEnv } from './env';
+import { createAuth } from "@lets-park/auth";
+import { validateWebEnv } from "./env";
 
 const env = validateWebEnv();
 
@@ -392,14 +399,14 @@ export const { handlers, auth, signIn, signOut, getAccessToken } = createAuth({
   clientId: env.AUTH_OKTA_CLIENT_ID,
   clientSecret: env.AUTH_OKTA_CLIENT_SECRET,
   secret: env.AUTH_SECRET,
-  signInPath: '/login', // optional
+  signInPath: "/login", // optional
 });
 
 // apps/web/src/app/api/auth/[...nextauth]/route.ts
 export const { GET, POST } = handlers;
 
 // apps/web/middleware.ts
-export { auth as middleware } from './src/auth';
+export { auth as middleware } from "./src/auth";
 ```
 
 `createAuth` reads **no** environment variable of its own — Auth.js's `AUTH_SECRET` /
@@ -414,14 +421,14 @@ built around in Task 19 — that indirection is what keeps the two libs from imp
 other's third-party package:
 
 ```ts
-const api = createApiClient({ url, getAccessToken });   // server
+const api = createApiClient({ url, getAccessToken }); // server
 ```
 
 In the browser the same shape comes from a hook, so a long-lived client or Socket.io
 connection is not rebuilt on every session refresh:
 
 ```tsx
-const getAccessToken = useAccessTokenProvider();   // stable identity, reads the latest session
+const getAccessToken = useAccessTokenProvider(); // stable identity, reads the latest session
 ```
 
 Both return `null` — never a stale token — when the session is absent or reports
@@ -430,11 +437,11 @@ API answers "unauthenticated" rather than producing a 401 that looks like a bug.
 
 ### What is stored where
 
-| value | where it lives | reaches the browser? |
-| --- | --- | --- |
-| refresh token | encrypted, httpOnly Auth.js session cookie | **no** — `projectSession` does not copy it |
-| access token | the same cookie; React state after `/api/auth/session` | yes, in memory only |
-| `AUTH_SECRET`, client secret | `process.env`, server only | **no** — nothing is `NEXT_PUBLIC_` |
+| value                        | where it lives                                         | reaches the browser?                       |
+| ---------------------------- | ------------------------------------------------------ | ------------------------------------------ |
+| refresh token                | encrypted, httpOnly Auth.js session cookie             | **no** — `projectSession` does not copy it |
+| access token                 | the same cookie; React state after `/api/auth/session` | yes, in memory only                        |
+| `AUTH_SECRET`, client secret | `process.env`, server only                             | **no** — nothing is `NEXT_PUBLIC_`         |
 
 Nothing is written to `localStorage`, `sessionStorage`, or a JS-readable cookie. `next-auth`
 contains no reference to either storage API (`grep -rl localStorage node_modules/next-auth/`
@@ -455,7 +462,7 @@ session is read:
    endpoint. A minute of headroom exists because a token renewed exactly at `exp` races its
    own request.
 4. On failure the access token and refresh token are **dropped** and `error:
-   'RefreshTokenError'` is set. A session already in that state is not retried.
+'RefreshTokenError'` is set. A session already in that state is not retried.
 
 `AuthProvider` polls `/api/auth/session` every `SESSION_REFETCH_SECONDS` (300) — that is what
 makes step 3 happen in an idle tab, since the callback only runs when something asks for the
@@ -500,13 +507,13 @@ refresher rather than module-global precisely so that no test-only reset hook wa
 
 ### Tests
 
-| file | what it verifies |
-| --- | --- |
-| `refresh.spec.ts` | the discovery URL (and a trailing slash on the issuer), the document cached once but not when it failed, Basic vs. form-body client auth, the `refresh_token` grant, `expires_in` → absolute expiry, a rotated vs. preserved refresh token, error mapping, and that neither token appears in the error message |
-| `config.spec.ts` | seeding at sign-in; a healthy token untouched with no provider call; **renewal while the token is still valid**; renewal after expiry; a failed renewal dropping the token; no refresh token → fail closed; a failed session not retried; `projectSession` never emitting the refresh token and unable to leave a stale access token; `isAuthorized` in all three states; provider id, PKCE + state checks, `offline_access`, `strategy: 'jwt'`, no adapter; plus two runs of the configured `jwt` callback with only `fetch` stubbed |
-| `access-token.spec.ts` | the provider on its own, and three cases driving a **real** `createApiClient`: the token arrives as `Bearer …`, an absent session sends no header at all, and the header disappears the moment the refresh fails |
-| `client.spec.tsx` | against the **real** `SessionProvider`/`useSession`: stable provider identity, no browser storage, polling picking up a renewed token, and `useRequireAuth` signing in, signing out, redirecting once, and doing neither while loading |
-| `create-auth.spec.ts` | the v5 `{ handlers: { GET, POST }, auth, signIn, signOut }` shape really constructs, and constructs with every `AUTH_*` variable deleted |
+| file                   | what it verifies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `refresh.spec.ts`      | the discovery URL (and a trailing slash on the issuer), the document cached once but not when it failed, Basic vs. form-body client auth, the `refresh_token` grant, `expires_in` → absolute expiry, a rotated vs. preserved refresh token, error mapping, and that neither token appears in the error message                                                                                                                                                                                                                        |
+| `config.spec.ts`       | seeding at sign-in; a healthy token untouched with no provider call; **renewal while the token is still valid**; renewal after expiry; a failed renewal dropping the token; no refresh token → fail closed; a failed session not retried; `projectSession` never emitting the refresh token and unable to leave a stale access token; `isAuthorized` in all three states; provider id, PKCE + state checks, `offline_access`, `strategy: 'jwt'`, no adapter; plus two runs of the configured `jwt` callback with only `fetch` stubbed |
+| `access-token.spec.ts` | the provider on its own, and three cases driving a **real** `createApiClient`: the token arrives as `Bearer …`, an absent session sends no header at all, and the header disappears the moment the refresh fails                                                                                                                                                                                                                                                                                                                      |
+| `client.spec.tsx`      | against the **real** `SessionProvider`/`useSession`: stable provider identity, no browser storage, polling picking up a renewed token, and `useRequireAuth` signing in, signing out, redirecting once, and doing neither while loading                                                                                                                                                                                                                                                                                                |
+| `create-auth.spec.ts`  | the v5 `{ handlers: { GET, POST }, auth, signIn, signOut }` shape really constructs, and constructs with every `AUTH_*` variable deleted                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### No allow-list change
 
@@ -526,15 +533,15 @@ and every event name and payload type is derived from `@lets-park/contract/realt
 there is no way to emit or listen for something the contract does not declare, and no payload
 shape written down twice.
 
-| export | what it is |
-| --- | --- |
-| `RealtimeProvider` | the one connection, in context. Rendered once, in `apps/web`'s provider boundary |
-| `useRealtime` | **reads** the connection — `{ status, reconnect, reportInvalidPayload }`. Throws outside a provider rather than silently doing nothing |
-| `RealtimeStatus` | `connecting \| connected \| disconnected \| rejected`. `rejected` is a refused handshake: terminal for that socket, and the one status a UI can offer an action on (`reconnect()`) |
-| `useRealtimeEvent` | one server → client event, payload already parsed against its contract schema |
-| `useDayRoom` | joins one day's room, and rejoins it after every reconnect |
-| `useCellLock` | the editing hold: take, renew, release |
-| `AccessTokenProvider` | re-exported from `@lets-park/api-client`, not redeclared — see below |
+| export                | what it is                                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RealtimeProvider`    | the one connection, in context. Rendered once, in `apps/web`'s provider boundary                                                                                                   |
+| `useRealtime`         | **reads** the connection — `{ status, reconnect, reportInvalidPayload }`. Throws outside a provider rather than silently doing nothing                                             |
+| `RealtimeStatus`      | `connecting \| connected \| disconnected \| rejected`. `rejected` is a refused handshake: terminal for that socket, and the one status a UI can offer an action on (`reconnect()`) |
+| `useRealtimeEvent`    | one server → client event, payload already parsed against its contract schema                                                                                                      |
+| `useDayRoom`          | joins one day's room, and rejoins it after every reconnect                                                                                                                         |
+| `useCellLock`         | the editing hold: take, renew, release                                                                                                                                             |
+| `AccessTokenProvider` | re-exported from `@lets-park/api-client`, not redeclared — see below                                                                                                               |
 
 **One creator, and it is not exported at all.** `useRealtimeConnection` — the hook that builds
 the socket, owns its lifetime and tears it down — stays module-scoped, so `RealtimeProvider`
@@ -586,7 +593,7 @@ const { status, lockedBy } = useCellLock({ date, parkingSpotId, enabled: isFormO
 ```
 
 `doc/realtime.md` is the full client-side reference — the handshake, rooms, parsing, and the
-cell lock's three guarantees. Only what is specific to *being a wrapper* is repeated here.
+cell lock's three guarantees. Only what is specific to _being a wrapper_ is repeated here.
 
 ### The token seam is imported, not redeclared
 
@@ -623,17 +630,17 @@ effects only it has (`doc/decision/0061-*`).
 Read the config and you learn what it says; run it and you learn what it does. All five
 probe files were written, linted, and deleted.
 
-| probe | expected | result |
-| --- | --- | --- |
-| `libs/realtime-client/src/probe-owner.ts` imports `socket.io-client` | passes | `Successfully ran target lint for project realtime-client` |
-| `libs/query/src/lib/probe-outsider.ts` imports it | fails, naming the wrapper | `Do not import "socket.io-client" directly — use the wrapper lib @lets-park/realtime-client (libs/realtime-client)` |
-| `apps/web/src/probe-app.ts` imports it | fails, naming the wrapper | same message |
-| `libs/realtime-client/src/probe-allowlist.ts` imports `axios` | fails | `A project tagged with "type:util" is not allowed to import "axios"` |
-| `libs/realtime-client/src/probe-nextauth.ts` imports `next-auth/react` | fails, naming `libs/auth` | `Do not import "next-auth" directly — use the wrapper lib @lets-park/auth (libs/auth)` |
+| probe                                                                  | expected                  | result                                                                                                              |
+| ---------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `libs/realtime-client/src/probe-owner.ts` imports `socket.io-client`   | passes                    | `Successfully ran target lint for project realtime-client`                                                          |
+| `libs/query/src/lib/probe-outsider.ts` imports it                      | fails, naming the wrapper | `Do not import "socket.io-client" directly — use the wrapper lib @lets-park/realtime-client (libs/realtime-client)` |
+| `apps/web/src/probe-app.ts` imports it                                 | fails, naming the wrapper | same message                                                                                                        |
+| `libs/realtime-client/src/probe-allowlist.ts` imports `axios`          | fails                     | `A project tagged with "type:util" is not allowed to import "axios"`                                                |
+| `libs/realtime-client/src/probe-nextauth.ts` imports `next-auth/react` | fails, naming `libs/auth` | `Do not import "next-auth" directly — use the wrapper lib @lets-park/auth (libs/auth)`                              |
 
 The fourth is the one that would have caught an untagged lib — an untagged project is
 constrained by nothing. The fifth is the one that proves the per-wrapper override really is
-`restrictWrappedLibraries(['socket.io-client'])` and not a blanket exemption: every *other*
+`restrictWrappedLibraries(['socket.io-client'])` and not a blanket exemption: every _other_
 wrapped package is still banned inside this directory.
 
 ### Tests
@@ -651,12 +658,12 @@ emitting) and an ACK (by acknowledging an inbound event carrying an id), and rea
 off its own output. Hard-coding `2` for EVENT would have been a number the fixture believes
 that nothing checks — and it is why no `socket.io-parser` allow-list entry was needed.
 
-| file | what it verifies |
-| --- | --- |
-| `socket.spec.ts` | the token in the CONNECT packet and nowhere else (no `query`, no `extraHeaders`, no `?` in the URI); **re-read on every reconnect**; an async provider awaited; `{}` — not `{ token: undefined }` — for no session and for a rejected provider |
-| `connection.spec.tsx` | one socket, its status transitions, disconnect on unmount; `useRealtimeEvent` **parsing** (a bad `waitlistCount` and a bad uuid dropped and reported, undeclared keys stripped, unsubscribe on unmount); `useDayRoom` joining, **rejoining after a reconnect**, and swapping rooms; `useRealtime` throwing outside a provider |
-| `cell-lock.spec.tsx` | `renewDelayMs` (half the TTL, the floor, and never `NaN`); the request on connect; **the heartbeat**, and that it does not fire early; **release on unmount**, on `enabled: false` and on a cell change; the heartbeat stopped with the component; no release for a hold never acquired; no polling of a contended cell; re-acquisition after a reconnect; a schema-failing ack dropped rather than scheduled on |
-| `validation.spec.ts` | every registered event accepted, rejected as a non-object, and rejected on a broken cell ref — driven by the contract registry, with an exhaustive `Record<ServerToClientEventName, unknown>` payload table that stops compiling if the contract grows an event; ack parsing; the report carrying paths and messages but nothing from the payload; and this file's own source containing no `socket.io-client` import |
+| file                  | what it verifies                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `socket.spec.ts`      | the token in the CONNECT packet and nowhere else (no `query`, no `extraHeaders`, no `?` in the URI); **re-read on every reconnect**; an async provider awaited; `{}` — not `{ token: undefined }` — for no session and for a rejected provider                                                                                                                                                                        |
+| `connection.spec.tsx` | one socket, its status transitions, disconnect on unmount; `useRealtimeEvent` **parsing** (a bad `waitlistCount` and a bad uuid dropped and reported, undeclared keys stripped, unsubscribe on unmount); `useDayRoom` joining, **rejoining after a reconnect**, and swapping rooms; `useRealtime` throwing outside a provider                                                                                         |
+| `cell-lock.spec.tsx`  | `renewDelayMs` (half the TTL, the floor, and never `NaN`); the request on connect; **the heartbeat**, and that it does not fire early; **release on unmount**, on `enabled: false` and on a cell change; the heartbeat stopped with the component; no release for a hold never acquired; no polling of a contended cell; re-acquisition after a reconnect; a schema-failing ack dropped rather than scheduled on      |
+| `validation.spec.ts`  | every registered event accepted, rejected as a non-object, and rejected on a broken cell ref — driven by the contract registry, with an exhaustive `Record<ServerToClientEventName, unknown>` payload table that stops compiling if the contract grows an event; ack parsing; the report carrying paths and messages but nothing from the payload; and this file's own source containing no `socket.io-client` import |
 
 Each of the four behaviours the task brief names was **mutation-checked**: the behaviour was
 deleted, the suite run, and the failure recorded. Removing the `auth` callback's re-read
@@ -664,7 +671,7 @@ makes the reconnect test report `"token": "jwt-first"` where `"jwt-second"` was 
 removing the renewal timer, the release emit, and `parseServerEvent` each fail their tests
 (1, 4 and 3 tests respectively).
 
-> **A finding from writing that third test.** Unmounting the *whole* tree emits no
+> **A finding from writing that third test.** Unmounting the _whole_ tree emits no
 > `cell:unlock` — React runs a deletion's cleanups parent-first, so the provider has already
 > disconnected the socket. That is not a leak (a dropped socket is how the gateway frees a
 > hold, and it is the path a closed tab takes), but it does mean the emit is guaranteed for
@@ -681,7 +688,7 @@ both conditions, `zod` is dual, and `@lets-park/contract/realtime` is deliberate
 `@orpc` — which `libs/contract/src/realtime/no-orpc.spec.ts` enforces, and which this Jest
 config is a second, independent consequence of. `tsconfig.spec.json` does drop the
 generator's `module: commonjs`, the same way `libs/auth`'s and `libs/query`'s do
-(`doc/decision/0038-*`): *type* resolution reaches `@orpc/client` through
+(`doc/decision/0038-*`): _type_ resolution reaches `@orpc/client` through
 `@lets-park/api-client`, and that package has no `require` condition.
 
 ---
@@ -692,9 +699,9 @@ The only wrapper on the **backend** side of the workspace (`scope:api`), and the
 consumer is `apps/api` rather than `apps/web`.
 
 ```ts
-import { buildReservationCalendar } from '@lets-park/calendar-export';
+import { buildReservationCalendar } from "@lets-park/calendar-export";
 
-const ics: string = buildReservationCalendar({ entries });   // entries: IcsCalendarEntry[]
+const ics: string = buildReservationCalendar({ entries }); // entries: IcsCalendarEntry[]
 ```
 
 That is the entire public surface a caller needs: contract values in, an RFC 5545 document out.
@@ -702,7 +709,7 @@ That is the entire public surface a caller needs: contract values in, an RFC 554
 the property step 4 of the recipe above asks for, and `calendar-pipeline.spec.ts` is the running
 example of it (a real HTTP response, built through the wrapper, parsed by an independent library).
 
-The only other exports are the two pieces a caller legitimately needs to *assert* on:
+The only other exports are the two pieces a caller legitimately needs to _assert_ on:
 `ICS_CALENDAR_NAME` and `icsEventUid`. `apps/api`'s calendar pipeline suite reads a rendered
 feed back and has to name what it expects to find in it; writing those two out a second time
 there is how a test starts passing against the wrong document.
@@ -735,16 +742,16 @@ itself.
 
 The three kinds the recipe asks for:
 
-| kind | where |
-| --- | --- |
-| the wrapper can be used | the whole suite calls `buildReservationCalendar` through `@lets-park/calendar-export`'s public API |
+| kind                                  | where                                                                                                                                                                                                                  |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the wrapper can be used               | the whole suite calls `buildReservationCalendar` through `@lets-park/calendar-export`'s public API                                                                                                                     |
 | it behaves according to what it wraps | RFC 5545 conformance: mandatory `VERSION`/`PRODID`, `VALUE=DATE` bounds with an exclusive `DTEND`, `TEXT` escaping of `,` `;` `\`, 75-octet line folding under Czech diacritics, and a parse → re-serialise round trip |
-| app code needs no direct import | `apps/api/src/calendar/` contains no `ical-generator` import; `calendar-pipeline.spec.ts` fetches the real endpoint and parses the bytes |
+| app code needs no direct import       | `apps/api/src/calendar/` contains no `ical-generator` import; `calendar-pipeline.spec.ts` fetches the real endpoint and parses the bytes                                                                               |
 
 Two extras that are specific to this wrapper:
 
 - **A cross-time-zone check in child processes.** Flipping `process.env.TZ` inside a Jest test does
-  not work *and does not fail*: `jest-environment-node` gives each file a `process` whose `env` is a
+  not work _and does not fail_: `jest-environment-node` gives each file a `process` whose `env` is a
   copy, so the assignment never reaches the real environment ICU reads, and the test passes without
   having changed anything. Found because the first draft carried a sanity check comparing the local
   hour under two zones — and the sanity check is what failed. The suite now renders the same feed in
@@ -777,7 +784,7 @@ and its `scope:web` mirror. All probe files were deleted.
 `ical-generator` with `owner: libs/calendar-export`, and `NPM_ALLOWLIST.util` already contained it
 through the `Object.keys(WRAPPED_LIBRARIES).flatMap(...)` spread.
 
-What *was* added is the test-only reader, `ical.js` — and where it goes matters. Step 3 of the
+What _was_ added is the test-only reader, `ical.js` — and where it goes matters. Step 3 of the
 recipe says to put a package on the tag's allow-list, and the first draft did: one line on
 `NPM_ALLOWLIST.util`. But that list applies to **every** `type:util` project at once, so the entry
 also handed an RFC 5545 parser to the shipped source of six unrelated wrapper libs. It is now
