@@ -20,4 +20,4 @@ export * from './lib/provider';
  * `csMessages`/format dates without a second, direct `next-intl` import —
  * this lib stays the only allowed import site for the package itself.
  */
-export { useTranslations, useFormatter } from 'next-intl';
+export { useTranslations, useFormatter, useLocale } from 'next-intl';
