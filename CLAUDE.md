@@ -27,6 +27,13 @@ in `api:build`.
 **The documentation map is `doc/README.md`**; it indexes every topic document
 and all 192 decision records. `README.md` is the operational runbook.
 
+Before reading a specific topic document or decision record, check its
+index first — `doc/README.md` for topic documents, `doc/decision/README.md`
+for decision records — rather than opening files by guessing a name or
+grepping the whole directory. The indexes are one-line-per-entry, so a scan
+of one is far cheaper than opening several candidate files to find the right
+one.
+
 ### Commands
 
 Every command below was run in this repository and exited 0, with one stated
