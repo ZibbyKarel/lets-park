@@ -200,6 +200,14 @@ export function LotScreen() {
    * stale message surviving from an earlier `reservation.create` failure in
    * the same dialog session (`waitlist.join` sharing this code with
    * `reservation.create` is exactly the regression this guards).
+   *
+   * Defence-in-depth, and measured to be exactly that: deleting this clear
+   * leaves the whole web suite green, because one dialog is either a free bay
+   * offering Rezervovat or a taken one offering the queue — never both — so
+   * the two failures cannot follow each other without `closeDialog` or
+   * `openDialog` (which clear it too) running in between. It stays for the
+   * dialog that offers both one day; see `lot-screen.spec.tsx`'s
+   * carry-over test, which pins those two clears rather than this one.
    */
   const onWriteError = useCallback((error: unknown) => {
     setHolderLimitMessage(null);

@@ -556,11 +556,20 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
   });
 
   it('does not carry a holder-scoped message over from an earlier failed create into a later waitlist.join failure', async () => {
-    // Not the byte-identical assertion above — this one exercises the state
-    // the substitution actually lives in. An admin first fails a named-holder
-    // create (which *does* set the holder-scoped message), closes that
-    // dialog, then opens a different spot and fails to join its waitlist:
-    // `holderLimitMessage` must not have survived the trip.
+    // Not the byte-identical assertion above — this one carries state across
+    // two dialogs. An admin first fails a named-holder create (which *does*
+    // set the holder-scoped message), closes that dialog, then opens a
+    // different spot and fails to join its waitlist: `holderLimitMessage`
+    // must not have survived the trip.
+    //
+    // What this pins, measured rather than assumed: the clears in
+    // `closeDialog` and `openDialog`. Removing the one in `onWriteError`
+    // instead leaves all 686 tests green, and that is not a gap in this test —
+    // a single dialog is either a free bay offering Rezervovat or a taken one
+    // offering the queue, never both, so a create failure followed by a
+    // waitlist failure *without* closing is unreachable. That clear is
+    // defence-in-depth against a future dialog that offers both, and there is
+    // deliberately no test asserting it.
     const other: AdminUser = {
       id: OTHER_USER,
       email: 'jana@firma.cz',
