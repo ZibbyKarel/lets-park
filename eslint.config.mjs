@@ -42,10 +42,6 @@ const WRAPPED_LIBRARIES = {
     owner: 'libs/design-system/src/compounds',
     use: '@lets-park/design-system/compounds',
   },
-  '@tanstack/react-query': {
-    owner: 'libs/query',
-    use: '@lets-park/query',
-  },
   '@orpc/client': {
     owner: 'libs/api-client',
     use: '@lets-park/api-client',
@@ -239,11 +235,13 @@ const NPM_ALLOWLIST = {
     // just allow-listed here alongside it.
     '@hookform/resolvers',
     '@hookform/resolvers/*',
-    // `libs/query`'s bridge between the oRPC client and TanStack Query. Same
-    // reasoning as `@hookform/resolvers`: it is not itself a wrapped library
-    // (nothing could import it *instead* of something else — it only makes
-    // sense paired with `@orpc/client` and `@tanstack/react-query`), so it is
-    // not in `WRAPPED_LIBRARIES`, just allow-listed here alongside them.
+    // `libs/api-client`'s bridge between the oRPC client and TanStack Query
+    // (`api-query.ts`). Same reasoning as `@hookform/resolvers`: it is not
+    // itself a wrapped library (nothing could import it *instead* of
+    // something else — it only makes sense paired with `@orpc/client` and
+    // `@tanstack/react-query`, and the latter is not wrapped at all since
+    // `doc/decision/0308-*`), so it is not in `WRAPPED_LIBRARIES`, just
+    // allow-listed here alongside them.
     '@orpc/tanstack-query',
     '@orpc/tanstack-query/*',
     // `@orpc/contract` is deliberately **not** here, even though
