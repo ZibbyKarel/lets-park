@@ -82,6 +82,7 @@ import {
 } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
+import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
 import type { DomainEvent, WaitlistPromotionNotice } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
@@ -177,6 +178,10 @@ export class ReservationsService {
     // a reservation nobody can account for is exactly what the audit log exists
     // to prevent. No locks are taken and no queue is read, so this is short.
     const reservation = await this.prisma.client.$transaction(async (tx) => {
+      if (holder.kind === 'USER') {
+        await assertWithinMonthlyReservationCap(tx, holder.userId, input.date);
+      }
+
       // `include` rather than a second read: the broadcast needs the holder's
       // plate, and `AuthenticatedUser` deliberately does not carry one (it is a
       // token claim short of the row). One statement, one consistent answer.
@@ -220,7 +225,7 @@ export class ReservationsService {
         tx
       );
       return row;
-    });
+    }, RESERVATION_TRANSACTION_OPTIONS);
 
     this.publisher.publish([
       {
