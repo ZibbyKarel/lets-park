@@ -14,7 +14,7 @@ import type * as Prisma from "../internal/prismaNamespace"
 
 /**
  * Model Reservation
- * One spot booked by one user for one day.
+ * One spot booked for one day, by exactly one holder: a user, or a guest.
  * 
  * The two unique constraints are the concurrency guarantee of the whole
  * reservation flow: `(parkingSpotId, date)` is what makes double-booking

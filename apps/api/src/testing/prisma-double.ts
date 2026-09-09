@@ -502,7 +502,7 @@ export class PrismaDouble {
     return {
       findMany: async (args: {
         where: { date: Date | { gte: Date }; userId?: string };
-        include?: { parkingSpot?: unknown };
+        include?: { parkingSpot?: unknown; user?: unknown };
         orderBy?: unknown;
       }) => {
         // The ICS feed's query (`CalendarService`): one user's reservations
@@ -535,7 +535,23 @@ export class PrismaDouble {
         const target = args.where.date.getTime();
         return this.reservations
           .filter((row) => row.date.getTime() === target)
-          .map((row) => ({ ...row, user: copy(this.findHolder(row.userId)) }));
+          .map((row): ReservationRow & { user: UserRow | null } => {
+            const holder = this.findHolder(row.userId);
+            // `copy(null)` is `{ ...null }`, which is `{}` — not `null` — so a
+            // guest row must not go through `copy` at all here. A real Prisma
+            // `include`/`select` on a `User?` relation returns a genuine
+            // `null`, and this double has to match that or `requireHolder`'s
+            // callers (Task 2) never see the guest case they exist to catch.
+            //
+            // The return-type annotation documents this branch's actual shape
+            // (the other return path, above, joins `parkingSpot`, never
+            // `user`). A caller's own `row.user` type-checks independently of
+            // this annotation: calls go through `asPrismaService(): PrismaService`,
+            // so the caller sees the real generated `findMany` overloads and
+            // needs `include: { user: true }`, as `day-overview.service.ts`
+            // does.
+            return { ...row, user: holder === null ? null : copy(holder) };
+          });
       },
       count: async (args: { where: { parkingSpotId: string; date: { gte: Date } } }) => {
         const gte = args.where.date?.gte;

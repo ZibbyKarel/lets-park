@@ -82,6 +82,43 @@ describe('PrismaDouble', () => {
     });
   });
 
+  describe('reservation.findMany (day overview: an exact-date lookup with `user` joined)', () => {
+    it('joins a real user for a user-held reservation', async () => {
+      const spot = double.seedSpot({ label: 'A1' });
+      const holder = double.seedUser({ name: 'Alice' });
+      double.seedReservation({ parkingSpotId: spot.id, userId: holder.id, date: '2026-03-02' });
+
+      const [row] = await double.asPrismaService().client.reservation.findMany({
+        where: { date: new Date('2026-03-02T00:00:00.000Z') },
+        include: { user: true },
+      });
+
+      expect(row?.user).toMatchObject({ id: holder.id, name: 'Alice' });
+    });
+
+    it('joins `null`, not `{}`, for a guest reservation — mirroring a real `User?` relation', async () => {
+      // `copy(null)` is `{ ...null }`, which is `{}`, not `null`. A `{}` here
+      // would be typed `UserRow | null` but non-null at runtime, so
+      // `requireHolder` (`common/prisma-mapping.ts`) would never throw for a
+      // guest row and `toUserSummary({})` would render a nameless holder
+      // instead of failing loudly at the seam Task 2 has to fix.
+      const spot = double.seedSpot({ label: 'A1' });
+      double.seedReservation({
+        parkingSpotId: spot.id,
+        userId: null,
+        guestName: 'Jan Host',
+        date: '2026-03-02',
+      });
+
+      const [row] = await double.asPrismaService().client.reservation.findMany({
+        where: { date: new Date('2026-03-02T00:00:00.000Z') },
+        include: { user: true },
+      });
+
+      expect(row?.user).toBeNull();
+    });
+  });
+
   describe('reservationWindowSettings.findUnique', () => {
     it('answers the singleton', async () => {
       double.seedWindowSettings({ openDaysBefore: 14 });
