@@ -280,7 +280,7 @@ export class BulkReservationService {
     //
     // `WaitlistService.join` refuses that state at the door and `promote` clears
     // it on the other side; this was the one writer that could create it. The
-    // entry would not corrupt anything — `firstEligible` skips somebody who
+    // entry would not corrupt anything — `eligibleInOrder` skips somebody who
     // already holds the day — but the person's day screen would show them queued
     // for a spot they can never be promoted into while they hold their own. See
     // `doc/decision/0236-*`.
