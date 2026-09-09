@@ -893,6 +893,48 @@ describe('LotScreen — an admin naming a holder', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('shows the holder-scoped copy — never the plain self-facing one — when naming a colleague who is at their monthly cap hits MONTHLY_RESERVATION_LIMIT_REACHED', async () => {
+    // The same wrong-audience problem as the case above, one code along: the
+    // catalogue string says "V tomto měsíci už *máte* 5 rezervovaných míst",
+    // which is addressed to the admin about somebody else's budget.
+    const other: AdminUser = {
+      id: OTHER_USER,
+      email: 'jana@firma.cz',
+      name: 'Jana Nováková',
+      licensePlate: null,
+      role: 'USER',
+      oktaId: 'okta-2',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview({ spots: [freeSpot()] }),
+      adminUsers: [other],
+    });
+    apiMocks.reservationCreate.mockRejectedValue(
+      await failureWithCode('MONTHLY_RESERVATION_LIMIT_REACHED')
+    );
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+    await user.selectOptions(await screen.findByLabelText('Rezervovat pro'), OTHER_USER);
+    await user.click(screen.getByRole('button', { name: 'Rezervovat' }));
+
+    expect(
+      await screen.findByText(
+        'Tento uživatel už v tomto měsíci má 5 rezervovaných míst — víc jich v jednom měsíci mít nemůže.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'V tomto měsíci už máte 5 rezervovaných míst — víc jich v jednom měsíci mít nemůžete.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it('switches back to the plain copy on a retry that renames the holder to the admin themselves', async () => {
     // The failure-mode a stale substitution would be most visible in: the
     // holder-scoped message is set by the first attempt, the admin corrects

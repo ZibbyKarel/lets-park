@@ -51,6 +51,20 @@ import {
 /** How far the date-picker's year selector reaches either side of the day on screen. */
 const YEAR_PICKER_RADIUS = 1;
 
+/**
+ * Contract error codes whose catalogue copy is written in the second person,
+ * and the `lot.*` key to use instead when the reservation was created for
+ * somebody other than the viewer. Every other code — and every self-booking —
+ * keeps the catalogue string; see `createReservation`'s `onError`.
+ */
+const HOLDER_LIMIT_MESSAGE_KEYS: Record<
+  string,
+  'errHolderLimitReached' | 'errHolderMonthlyLimitReached'
+> = {
+  RESERVATION_LIMIT_REACHED: 'errHolderLimitReached',
+  MONTHLY_RESERVATION_LIMIT_REACHED: 'errHolderMonthlyLimitReached',
+};
+
 export function LotScreen() {
   const t = useTranslations('lot');
   const sections = useTranslations('sections');
@@ -73,11 +87,12 @@ export function LotScreen() {
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   /**
-   * The one substitution for `actionError`'s code-mapped copy — see
-   * `SpotDialog`'s `errorMessage` doc comment. `null` for every failure
-   * except a named-holder `reservation.create` naming someone other than the
-   * viewer, so a self-booking create and every `waitlist`/`cancel` failure
-   * keep the plain catalogue string untouched.
+   * The substitution for `actionError`'s code-mapped copy — see `SpotDialog`'s
+   * `errorMessage` doc comment. `null` for every failure except a
+   * `reservation.create` that named someone other than the viewer and came
+   * back with one of {@link HOLDER_LIMIT_MESSAGE_KEYS}'s second-person codes,
+   * so a self-booking create and every `waitlist`/`cancel` failure keep the
+   * plain catalogue string untouched.
    */
   const [holderLimitMessage, setHolderLimitMessage] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -219,32 +234,36 @@ export function LotScreen() {
     ...api.reservation.create.mutationOptions(),
     onSuccess: onMutationSuccess,
     /**
-     * The one place that can tell the `RESERVATION_LIMIT_REACHED` this call
-     * got back apart from every other caller of the same code: `variables`
-     * is what *this* call actually submitted. A named holder other than the
-     * viewer — a `GUEST`, or a `USER` whose id isn't the viewer's — reads the
-     * catalogue's "you already have a reservation" as false, so it renders
-     * `lot.errHolderLimitReached` instead; an admin naming *themselves*, a
-     * plain self-booking create, and every other code all fall through to the
-     * plain catalogue string via `holderLimitMessage` staying `null`.
+     * The one place that can tell the limit errors *this* call got back apart
+     * from every other caller of the same codes: `variables` is what this call
+     * actually submitted. A named holder other than the viewer — a `GUEST`, or
+     * a `USER` whose id isn't the viewer's — reads the catalogue's
+     * second-person copy as false, because the limit belongs to the person
+     * being booked for and not to the admin doing the booking. Two codes are
+     * addressed that way, and {@link HOLDER_LIMIT_MESSAGE_KEYS} gives each its
+     * own holder-scoped string; an admin naming *themselves*, a plain
+     * self-booking create, and every other code all fall through to the plain
+     * catalogue string via `holderLimitMessage` staying `null`.
      *
-     * The `GUEST` branch of `namedOther` cannot actually fire today — a guest
-     * holder is written with `userId: null`
-     * (`apps/api/src/reservations/reservations.service.ts`), which is exempt
-     * from the `Reservation(userId, date)` constraint this code comes from
-     * (`doc/decision/0303-*`), so `reservation.create` never returns
-     * `RESERVATION_LIMIT_REACHED` for a guest. Left in because it is the
-     * correct answer if that ever changes, not because it is reachable now.
+     * Neither code can reach the `GUEST` branch of `namedOther` today, for two
+     * different reasons — both of which come back to a guest holder being
+     * written with `userId: null`
+     * (`apps/api/src/reservations/reservations.service.ts`). For
+     * `RESERVATION_LIMIT_REACHED` that null is exempt from the
+     * `Reservation(userId, date)` constraint the code comes from
+     * (`doc/decision/0303-*`). For `MONTHLY_RESERVATION_LIMIT_REACHED` there is
+     * no constraint at all: the cap is a per-user budget, and a guest has no
+     * `userId`, so `assertWithinMonthlyReservationCap` is never called for one
+     * (`apps/api/src/reservations/monthly-reservation-cap.ts`). Both branches
+     * are left in because they are the correct answer if that ever changes, not
+     * because they are reachable now.
      */
     onError: (error, variables) => {
       const holder = variables.holder;
       const namedOther =
         holder !== undefined && (holder.kind === 'GUEST' || holder.userId !== viewerUserId);
-      setHolderLimitMessage(
-        namedOther && toContractError(error)?.code === 'RESERVATION_LIMIT_REACHED'
-          ? t('errHolderLimitReached')
-          : null
-      );
+      const key = HOLDER_LIMIT_MESSAGE_KEYS[toContractError(error)?.code ?? ''];
+      setHolderLimitMessage(namedOther && key !== undefined ? t(key) : null);
       setActionError(error);
     },
   });
