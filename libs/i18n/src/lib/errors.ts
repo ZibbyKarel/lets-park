@@ -1,38 +1,47 @@
 /**
- * Czech UI copy for the contract's closed error-code enum
- * (`libs/contract/src/schemas/errors.ts`, `doc/contract.md`).
+ * UI copy for the contract's closed error-code enum
+ * (`libs/contract/src/schemas/errors.ts`, `doc/contract.md`), outside React.
  *
- * Both entry points below read the very same `csMessages.errors` object (see
- * `./messages.ts`), so a plain lookup outside React and a next-intl
- * `Translator` inside React can never drift apart.
+ * Inside a component, `useTranslations('errors')` is the way — it reads the
+ * catalog already on the provider. This factory exists for the plain-TypeScript
+ * callers (a server action, a non-component helper) that have a catalog in hand
+ * but no React context, and it goes through the same next-intl ICU resolution,
+ * so the two paths cannot drift.
+ *
+ * The catalog is a parameter because it now lives in the application
+ * (`apps/web/messages/*.json`) and there is more than one of them — see
+ * `./provider.tsx`.
  */
 
 import { createTranslator } from 'next-intl';
 import type { ErrorCode } from '@lets-park/contract';
-import { csMessages } from './messages';
+import type { Locale } from './locale';
+import type { AppMessages } from './provider';
 
 /**
- * A next-intl `Translator` scoped to the `errors` namespace, built directly
- * from `csMessages` — no `NextIntlClientProvider`/request context required.
+ * Builds the `code → sentence` function for one locale's catalog.
  *
- * This is what makes `translateErrorCode` usable in plain TypeScript (e.g. a
- * server action or a non-component helper) while still going through
- * next-intl's ICU message resolution, exactly as `useTranslations('errors')`
- * would inside a component.
+ * Completeness is not this function's job to assert: `ErrorCode` is a closed
+ * union, and `apps/web/messages/messages.spec.ts` fails if any locale's
+ * `errors` namespace is missing one of its members — which is a better place
+ * for that check than here, because it can see every locale at once.
  */
-const errorTranslator = createTranslator({
-  locale: 'cs',
-  namespace: 'errors',
-  messages: csMessages,
-});
+export function createErrorTranslator(
+  locale: Locale,
+  messages: AppMessages
+): (code: ErrorCode) => string {
+  // `createTranslator` infers its key type from the `messages` argument, so a
+  // `Record<string, unknown>` would infer `never` and make `translator(code)`
+  // a type error. Narrowing to the one namespace this function reads is what
+  // gives it `ErrorCode` keys — and it is an honest narrowing: a catalog whose
+  // `errors` namespace is incomplete fails
+  // `apps/web/messages/messages.spec.ts`, which is the check that makes this
+  // assertion safe rather than hopeful.
+  const translator = createTranslator({
+    locale,
+    namespace: 'errors',
+    messages: messages as { readonly errors: Readonly<Record<ErrorCode, string>> },
+  });
 
-/**
- * The Czech sentence for one contract error code.
- *
- * Total by construction: `ErrorCode` is the same closed union the message
- * catalog is typed against (`CzechErrorMessages`), so a code without a
- * translation is a compile error here, not a raw enum leaking into the UI.
- */
-export function translateErrorCode(code: ErrorCode): string {
-  return errorTranslator(code);
+  return (code) => translator(code);
 }
