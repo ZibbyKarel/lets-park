@@ -38,6 +38,19 @@ jest.mock('@lets-park/i18n', () => {
   return { ...actual, todayInPrague: () => '2026-01-31' };
 });
 
+/**
+ * `useDateInUrl` (`use-date-in-url.ts`) reads/writes the `date` query param —
+ * doubled here the same way as everywhere else in this file: no router exists
+ * in a unit test, and this suite's own day-navigation assertions only care
+ * that `date` state moves, not that the URL replace call happened (that's
+ * `use-date-in-url.spec.ts`'s job).
+ */
+const routerReplace = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: routerReplace }),
+  useSearchParams: () => new URLSearchParams(''),
+}));
+
 let sessionStatusValue: 'authenticated' | 'unauthenticated' | 'loading' = 'authenticated';
 function currentSessionStatus() {
   return sessionStatusValue;
@@ -239,6 +252,7 @@ function setup(
   });
   useCellLockMock.mockReset();
   reconnectMock.mockReset();
+  routerReplace.mockReset();
   // `connected` is the resting state; a screen that has never connected is a
   // separate case, exercised by its own test below.
   realtimeStatusValue = options.realtimeStatus ?? 'connected';
