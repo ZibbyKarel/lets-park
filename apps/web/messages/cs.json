@@ -73,6 +73,7 @@
     "plateField": "SPZ",
     "guestHolder": "Host",
     "errHolderLimitReached": "Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.",
+    "errHolderMonthlyLimitReached": "Tento uživatel už v tomto měsíci má 5 rezervovaných míst — víc jich v jednom měsíci mít nemůže.",
     "legendTaken": "obsazeno",
     "legendFree": "volné",
     "legendWaitlist": "waitlist / editace",
