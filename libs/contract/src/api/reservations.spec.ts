@@ -125,19 +125,25 @@ describe('createReservationInputSchema — the holder', () => {
     expect(parsed.holder !== undefined && 'userId' in parsed.holder).toBe(false);
   });
 
-  it('rejects a guest with no name, a user with no id, and an unknown kind', () => {
+  it('rejects a guest with an empty name', () => {
     expect(
       createReservationInputSchema.safeParse({
         ...cell,
         holder: { kind: 'GUEST', name: '', licensePlate: null },
       }).success
     ).toBe(false);
+  });
+
+  it('rejects a user holder with no userId', () => {
     expect(
       createReservationInputSchema.safeParse({
         ...cell,
         holder: { kind: 'USER', licensePlate: null },
       }).success
     ).toBe(false);
+  });
+
+  it('rejects an unknown kind', () => {
     expect(
       createReservationInputSchema.safeParse({
         ...cell,
