@@ -125,6 +125,28 @@ export async function reserveSpot(page: Page, label: string): Promise<void> {
   await expect(dialog).toBeHidden();
 }
 
+/**
+ * Reserves `label` for somebody else, as an admin: picks the holder in the
+ * dialog's selector, then submits.
+ *
+ * `holder` is a user's display name, or `'Hosta'` for a guest — the visible
+ * option text, so this reads like the thing a person does.
+ */
+export async function reserveSpotFor(
+  page: Page,
+  label: string,
+  holder: string,
+  guestName?: string
+): Promise<void> {
+  const dialog = await openSpot(page, label);
+  await dialog.getByLabel('Rezervovat pro').selectOption({ label: holder });
+  if (guestName !== undefined) {
+    await dialog.getByLabel('Jméno hosta').fill(guestName);
+  }
+  await dialog.getByRole('button', { name: 'Rezervovat', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
 /** Cancels the reservation on `label` — as its holder, or as an admin. */
 export async function cancelReservation(page: Page, label: string): Promise<void> {
   const dialog = await openSpot(page, label);
