@@ -889,6 +889,66 @@ describe('reservations against a real PostgreSQL', () => {
       ).not.toBeNull();
     });
 
+    it('skips a waiter who is at the monthly cap and promotes the next person in the queue', async () => {
+      const [holder, capped, next, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      const dates = businessDaysInMonth(FUTURE_BUSINESS_DAY, 6);
+      const otherSpots = await Promise.all(Array.from({ length: 5 }, () => seedSpot(client)));
+      const targetDate = dates[0];
+      if (targetDate === undefined) {
+        throw new Error('unreachable: businessDaysInMonth(FUTURE_BUSINESS_DAY, 6) has 6 entries');
+      }
+
+      // `capped` already holds 5 reservations elsewhere this month — no budget left.
+      for (let i = 1; i <= 5; i++) {
+        const otherSpot = otherSpots[i - 1];
+        const date = dates[i];
+        if (otherSpot === undefined || date === undefined) {
+          throw new Error('unreachable: fixed-length arrays covered by the loop bound');
+        }
+        await client.reservation.create({
+          data: { parkingSpotId: otherSpot.id, userId: capped.id, date: toDateColumn(date) },
+        });
+      }
+
+      const reservation = await harness.reservations.create(
+        { parkingSpotId: spot.id, date: targetDate },
+        actorFor(holder),
+        TODAY
+      );
+      const cappedEntry = await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: targetDate },
+        actorFor(capped),
+        TODAY
+      );
+      await harness.waitlist.join(
+        { parkingSpotId: spot.id, date: targetDate },
+        actorFor(next),
+        TODAY
+      );
+
+      const result = await harness.reservations.cancel(
+        { reservationId: reservation.id },
+        actorFor(holder)
+      );
+
+      expect(result.promoted).toBe(true);
+      const promoted = await client.reservation.findUniqueOrThrow({
+        where: { parkingSpotId_date: { parkingSpotId: spot.id, date: toDateColumn(targetDate) } },
+      });
+      expect(promoted.userId).toBe(next.id);
+
+      // Left in place: `capped` is still legitimately waiting for this spot in
+      // case one of their other reservations this month is cancelled.
+      expect(
+        await client.waitlistEntry.findUnique({ where: { id: cappedEntry.entry.id } })
+      ).not.toBeNull();
+    });
+
     it('leaves the spot free when every waiter is blocked', async () => {
       const [holder, blocked, spot, elsewhere] = [
         await seedUser(client),

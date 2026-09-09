@@ -59,6 +59,8 @@ import type { Prisma, Reservation as ReservationRow } from '@lets-park/database'
 import type { DateOnly } from '@lets-park/shared-types';
 import { AuditLogService } from '../audit/audit-log.service';
 import { toDateColumn } from '../common/prisma-mapping';
+import { DomainError } from '../common/errors/domain-error';
+import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
 
 /** One queued person, as the locking read returns them. */
 interface QueueRow {
@@ -118,11 +120,44 @@ export class WaitlistPromotionService {
       return null;
     }
 
-    const candidate = await this.firstEligible(tx, queue, date);
-    if (candidate === undefined) {
-      return null;
+    const eligible = await this.eligibleInOrder(tx, queue, date);
+
+    // The per-day filter above is a snapshot read; the monthly cap check is
+    // the authoritative "lock, then recount" from `assertWithinMonthlyReservationCap`
+    // (Task 3), so it can still say no even for a candidate `eligibleInOrder`
+    // judged clear a moment ago. A capped candidate is **skipped**, not
+    // failed — their queue entry stays, and the spot goes to the next person
+    // in line, same as a per-day conflict.
+    for (const candidate of eligible) {
+      try {
+        await assertWithinMonthlyReservationCap(tx, candidate.userId, date);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'MONTHLY_RESERVATION_LIMIT_REACHED') {
+          continue;
+        }
+        throw error;
+      }
+
+      return this.promoteCandidate(tx, candidate, parkingSpotId, date, actorUserId, queue.length);
     }
 
+    return null;
+  }
+
+  /**
+   * Everything a chosen candidate's promotion does: insert their reservation,
+   * clear their queue entries for the day, look up the public holder fields,
+   * record the audit entry, and build the `Promotion` the caller emits events
+   * from.
+   */
+  private async promoteCandidate(
+    tx: Prisma.TransactionClient,
+    candidate: QueueRow,
+    parkingSpotId: string,
+    date: DateOnly,
+    actorUserId: string,
+    queueLength: number
+  ): Promise<Promotion> {
     const dateColumn = toDateColumn(date);
     const reservation = await tx.reservation.create({
       data: { parkingSpotId, userId: candidate.userId, date: dateColumn },
@@ -156,7 +191,7 @@ export class WaitlistPromotionService {
           date,
           promotedUserId: candidate.userId,
           fromWaitlistEntryId: candidate.id,
-          queueLength: queue.length,
+          queueLength,
         },
       },
       tx
@@ -192,25 +227,26 @@ export class WaitlistPromotionService {
   }
 
   /**
-   * The first person in the queue who does not already hold a reservation that
-   * day.
+   * The queue, filtered down to those who do not already hold a reservation
+   * that day, in the same order — the caller tries them in turn because the
+   * first such person may still fail the monthly cap's authoritative recheck.
    *
    * One query for the whole queue rather than one per candidate: the queue is
    * already in memory and locked, and N round trips inside a transaction holding
    * row locks is exactly the thing this task is supposed to keep short.
    */
-  private async firstEligible(
+  private async eligibleInOrder(
     tx: Prisma.TransactionClient,
     queue: readonly QueueRow[],
     date: DateOnly
-  ): Promise<QueueRow | undefined> {
+  ): Promise<QueueRow[]> {
     const taken = await tx.reservation.findMany({
       where: { date: toDateColumn(date), userId: { in: queue.map((row) => row.userId) } },
       select: { userId: true },
     });
     const blocked = new Set(taken.map((row) => row.userId));
 
-    return queue.find((row) => !blocked.has(row.userId));
+    return queue.filter((row) => !blocked.has(row.userId));
   }
 
   /** The three fields a `userSummary` may carry. Never `select: undefined`. */
