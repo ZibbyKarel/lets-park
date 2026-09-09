@@ -43,7 +43,10 @@
 
 import { toContractError } from '@lets-park/api-client';
 import type { ErrorCode } from '@lets-park/contract';
-import { useTranslations, type CzechAdminMessages } from '@lets-park/i18n';
+import { useTranslations } from '@lets-park/i18n';
+// Type-only: the key space now lives in the catalog itself, not in a
+// hand-written interface in `libs/i18n` (`doc/i18n.md`).
+import type CzechMessages from '../../../messages/cs.json';
 
 /**
  * One admin write, as the screen that started it understands it — not as the
@@ -84,12 +87,12 @@ export interface AdminWriteFailure {
  *
  * Derived from the catalogue rather than aliased to `string`: the alias
  * documented the intent and enforced nothing, so a typo in the table below
- * reached `t()` and printed the key itself. `libs/i18n` owns the key space, so
- * this is the one honest way to say it — and it is the same shape the rest of
+ * reached `t()` and printed the key itself. `apps/web/messages/cs.json` owns the
+ * key space, so this is the one honest way to say it — and it is the same shape the rest of
  * the app's view modules already use (`BannerMessageKey`,
  * `BulkErrorMessageKey`), spelled as a derivation instead of by hand.
  */
-type MessageKey = keyof CzechAdminMessages;
+type MessageKey = keyof (typeof CzechMessages)['admin'];
 
 /**
  * `FORBIDDEN` is inherited by every authenticated procedure, so it is spread

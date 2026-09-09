@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AdminUser } from '@lets-park/contract';
-import { csMessages, IntlProvider } from '@lets-park/i18n';
+import { IntlProvider } from '@lets-park/i18n';
+import cs from '../../../../messages/cs.json';
 import { failureWithCode } from '../../../testing/contract-failure';
 import { AdminUsersScreen, matchesUserSearch } from './admin-users-screen';
 import type { AdminUsersScreenProps } from './admin-users-screen';
@@ -53,7 +54,7 @@ function renderScreen(overrides: Partial<AdminUsersScreenProps> = {}) {
   };
 
   render(
-    <IntlProvider>
+    <IntlProvider locale="cs" messages={cs}>
       <AdminUsersScreen {...props} />
     </IntlProvider>
   );
@@ -395,7 +396,7 @@ describe('AdminUsersScreen', () => {
       ).toBeInTheDocument();
       // The `errors` namespace's generic CONFLICT sentence explains nothing
       // here, and this screen must not reach for it.
-      expect(screen.queryByText(csMessages.errors.CONFLICT)).not.toBeInTheDocument();
+      expect(screen.queryByText(cs.errors.CONFLICT)).not.toBeInTheDocument();
     });
 
     it('never shows the reservation wording for VALIDATION_FAILED', async () => {
@@ -404,7 +405,7 @@ describe('AdminUsersScreen', () => {
       expect(
         screen.getByText('Tuto změnu role ani aktivity účtu nelze provést.')
       ).toBeInTheDocument();
-      expect(screen.queryByText(csMessages.errors.VALIDATION_FAILED)).not.toBeInTheDocument();
+      expect(screen.queryByText(cs.errors.VALIDATION_FAILED)).not.toBeInTheDocument();
     });
 
     it('keeps the table on screen — the failure is a notice, not a screen state', async () => {
