@@ -13,7 +13,7 @@
 
 import type { MonthWindowOverview } from '@lets-park/contract';
 import { Toast } from '@lets-park/design-system/primitives';
-import { useTranslations } from '@lets-park/i18n';
+import { useDateFormatters, useTranslations } from '@lets-park/i18n';
 import { toAdminWindowBannerView } from './window-view';
 
 export interface WindowBannerProps {
@@ -23,7 +23,8 @@ export interface WindowBannerProps {
 
 export function WindowBanner({ window: month, className }: WindowBannerProps) {
   const t = useTranslations('admin');
-  const banner = toAdminWindowBannerView(month);
+  const f = useDateFormatters();
+  const banner = toAdminWindowBannerView(month, f);
 
   return (
     <Toast

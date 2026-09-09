@@ -18,8 +18,8 @@
  */
 
 import type { MonthWindowOverview } from '@lets-park/contract';
-import { formatDayAndMonth, formatMonthAndYear, startOfYearMonth } from '@lets-park/i18n';
-import type { MonthLockState } from '@lets-park/i18n';
+import { startOfYearMonth } from '@lets-park/i18n';
+import type { DateFormatters, MonthLockState } from '@lets-park/i18n';
 
 /**
  * Colour per state for the **banner**, matching `06-admin-overview.png`'s green
@@ -107,12 +107,16 @@ interface AdminWindowBannerView {
  * That is why `until` and `from` are blanked under a forced mode here, rather
  * than being left for each branch to remember not to interpolate.
  */
-export function toAdminWindowBannerView(window: MonthWindowOverview): AdminWindowBannerView {
+export function toAdminWindowBannerView(
+  window: MonthWindowOverview,
+  /** Passed in rather than imported: this module is not a component and the locale is not global. */
+  formatters: DateFormatters
+): AdminWindowBannerView {
   const isAuto = window.lockMode === 'AUTO';
   const values = {
-    month: formatMonthAndYear(startOfYearMonth(window.month)),
-    until: isAuto ? formatDayAndMonth(window.windowTo) : '',
-    from: isAuto ? formatDayAndMonth(window.windowFrom) : '',
+    month: formatters.monthAndYear(startOfYearMonth(window.month)),
+    until: isAuto ? formatters.dayAndMonth(window.windowTo) : '',
+    from: isAuto ? formatters.dayAndMonth(window.windowFrom) : '',
   };
   const paint = { tone: BANNER_STATE_TONE[window.state], glyph: STATE_GLYPH[window.state] };
 

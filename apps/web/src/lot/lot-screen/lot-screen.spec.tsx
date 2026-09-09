@@ -1,11 +1,13 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
-import { formatFullDate } from '@lets-park/i18n';
+import { createDateFormatters } from '@lets-park/i18n';
 import type { DayOverviewOutput, DaySpotOverview, MyProfile } from '@lets-park/contract';
 import { profile, T0 } from '../../testing/fixtures';
 import { createProviderWrapper } from '../../testing/providers';
 import { LotScreen } from './lot-screen';
+
+const cs = createDateFormatters('cs');
 
 /**
  * The connected half of the screen — Task 24's fix round, Important-1.
@@ -564,24 +566,24 @@ describe('LotScreen — the header date picker', () => {
     // on its own.
     const { user } = setup();
 
-    await user.click(screen.getByRole('button', { name: formatFullDate(DATE) }));
+    await user.click(screen.getByRole('button', { name: cs.fullDate(DATE) }));
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Měsíc' }), '2');
-    await user.click(within(dialog).getByRole('button', { name: formatFullDate('2026-02-28') }));
+    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2026-02-28') }));
 
     expect(screen.queryByRole('dialog', { name: 'Vybrat datum' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: formatFullDate('2026-02-28') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: cs.fullDate('2026-02-28') })).toBeInTheDocument();
   });
 
   it('browses to another year, then commits whichever day is picked', async () => {
     const { user } = setup();
 
-    await user.click(screen.getByRole('button', { name: formatFullDate(DATE) }));
+    await user.click(screen.getByRole('button', { name: cs.fullDate(DATE) }));
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Rok' }), '2027');
-    await user.click(within(dialog).getByRole('button', { name: formatFullDate('2027-01-31') }));
+    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2027-01-31') }));
 
-    expect(screen.getByRole('button', { name: formatFullDate('2027-01-31') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: cs.fullDate('2027-01-31') })).toBeInTheDocument();
   });
 });
 
