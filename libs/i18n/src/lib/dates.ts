@@ -1,10 +1,11 @@
 /**
- * Calendar-day helpers that are not locale-dependent.
+ * The one Czech form `Intl` cannot produce.
  *
- * The locale-dependent half — every `Intl`-backed formatter — moved to
- * `./date-formatters.ts` when the app gained a second language; what stays here
- * is the `DateOnly` plumbing and `MONTH_LOCATIVE_CS`, the one Czech form
- * `Intl` cannot produce.
+ * Every locale-dependent, `Intl`-backed formatter moved to
+ * `./date-formatters.ts` when the app gained a second language; the
+ * `DateOnly` plumbing that used to live alongside them here now comes from
+ * `libs/shared-types`, re-exported by `libs/i18n/src/index.ts`. What stays in
+ * this file is `MONTH_LOCATIVE_CS` and nothing else.
  */
 
 /**

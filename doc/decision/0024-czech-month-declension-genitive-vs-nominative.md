@@ -58,3 +58,5 @@ offering the genitive), `dates.spec.ts` would fail immediately — the tests
 assert an exact string, not just "some month". The fix would then live in
 `dates.ts` itself (an explicit table of declined forms), not in the API that
 `libs/i18n` exports outward.
+
+> **Note (0303):** `formatFullDate` / `formatDayAndMonth` / `formatMonthAndYear` / `formatMonthName` were renamed to methods `fullDate` / `dayAndMonth` / `monthAndYear` / `monthName` on `createDateFormatters(locale)` by `doc/decision/0303-*`. The Czech genitive-vs-nominative reasoning above is unaffected.

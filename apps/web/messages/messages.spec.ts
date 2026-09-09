@@ -27,7 +27,7 @@
  */
 
 import { ERROR_CODES, type ErrorCode } from '@lets-park/contract';
-import { LOCALES, type Locale } from '@lets-park/i18n';
+import { LOCALES, useTranslations, type Locale } from '@lets-park/i18n';
 import cs from './cs.json';
 import en from './en.json';
 
@@ -157,3 +157,33 @@ it('does not ship an English message that is still the Czech one', () => {
 
 const _check: Record<ErrorCode, string> = cs.errors;
 void _check;
+
+/**
+ * Compile-time regression guard for `apps/web/next-intl.d.ts`'s `AppConfig`
+ * augmentation — the mechanism that makes `useTranslations`' namespace and
+ * key arguments typecheck against `cs.json` in the first place.
+ *
+ * Nothing else would notice if that augmentation were deleted:
+ * `useTranslations` degrades to accepting a plain `string`, and every
+ * existing call site still compiles. So this asserts the opposite of the
+ * usual case — that a namespace absent from `cs.json` ("noSuchNamespace" is
+ * not a key of it, see the destructuring above) is a **type error** to pass
+ * to `useTranslations`. Reached through `@lets-park/i18n`, never `next-intl`
+ * directly, per the wrapper rule.
+ *
+ * If the augmentation ever stops binding, this expression becomes legal,
+ * the `@ts-expect-error` directive below becomes unused, and TypeScript
+ * flags an unused directive — which fails `web:typecheck`. That failure
+ * mode is the point: it is the regression guard.
+ *
+ * Never called — a function body that is never invoked, so this has no
+ * runtime effect and adds no test.
+ */
+function _neverCalled_augmentationGuard() {
+  // @ts-expect-error 'noSuchNamespace' is not a namespace in cs.json — this
+  // must not compile while the AppConfig augmentation binds. If it starts
+  // compiling, the augmentation stopped working and this directive goes
+  // unused, which is itself a typecheck failure.
+  useTranslations('noSuchNamespace');
+}
+void _neverCalled_augmentationGuard;

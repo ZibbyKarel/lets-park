@@ -42,14 +42,14 @@ describe('cs.dayMonthAndYear', () => {
     expect(cs.dayMonthAndYear('2026-08-28')).toBe('28. srpna 2026');
   });
 
-  it('omits the weekday that formatFullDate includes', () => {
+  it('omits the weekday that fullDate includes', () => {
     // The two differ by exactly one component; asserting the pair is what
-    // stops this from being re-implemented as `formatFullDate` by mistake.
+    // stops this from being re-implemented as `fullDate` by mistake.
     expect(cs.fullDate('2026-09-28')).toBe('pondělí 28. září 2026');
     expect(cs.dayMonthAndYear('2026-09-28')).toBe('28. září 2026');
   });
 
-  it('keeps the genitive month, unlike formatMonthAndYear', () => {
+  it('keeps the genitive month, unlike monthAndYear', () => {
     expect(cs.dayMonthAndYear('2026-08-01')).toBe('1. srpna 2026');
     expect(cs.monthAndYear('2026-08-01')).toBe('srpen 2026');
   });
@@ -119,7 +119,7 @@ describe('cs.monthLocative', () => {
   });
 
   it('differs from the nominative for every month but září', () => {
-    // The check that would have caught a table copied from `formatMonthName`:
+    // The check that would have caught a table copied from `monthName`:
     // September is the only month whose two forms coincide.
     //
     // Its ceiling, stated so nobody over-trusts it: this does **not**

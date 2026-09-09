@@ -53,7 +53,7 @@ apps/web/src/
 The screens have a spec each; the four panels share one
 (`admin-panels.spec.tsx`), which runs the real screens and the real
 `@lets-park/query` against a fake `api` object. What only that spec can see is
-everything *between* a screen and the contract: which procedure a control calls,
+everything _between_ a screen and the contract: which procedure a control calls,
 what input it sends, which `AdminWrite` a failure is attributed to, what is
 invalidated afterwards, and that `viewerId` really comes from `me.get` — the
 screens take it as a prop, so nothing on their side notices if a panel stops
@@ -172,8 +172,10 @@ surface cannot silently repaint the other.
 
 ## Czech copy
 
-All of it is in the `admin` namespace of `libs/i18n/src/lib/messages.ts`, and
-all of it is verbatim from the designs where the designs have it. Three notes:
+All of it is in the `admin` namespace of `apps/web/messages/cs.json`, and all
+of it is verbatim from the designs where the designs have it. English lives
+alongside it in `en.json`, kept in step by the parity guard at
+`apps/web/messages/messages.spec.ts`. Three notes:
 
 - **Plurals are ICU, not a hand-written table.** Czech has three integer plural
   categories (`one` = 1, `few` = 2–4, `other` = 5+) and "1 den" / "3 dny" /
@@ -181,6 +183,8 @@ all of it is verbatim from the designs where the designs have it. Three notes:
 - **One correction to the design's text.** `05-admin-window.png` reads
   "upravuje je pak může jen admin"; the shipped string says "upravovat je pak
   může jen admin", which is the grammatical form of the same sentence.
-- **`formatDayMonthAndYear`** was added to `libs/i18n` for the month card's
+- **`dayMonthAndYear`** was added to `libs/i18n` for the month card's
   "dnes je 28. srpna 2026" — day, genitive month, year, no weekday. It is a
-  separate `Intl` call rather than `formatFullDate` with the weekday cut off.
+  separate `Intl` call rather than `fullDate` with the weekday cut off. Both
+  are methods on the object `createDateFormatters(locale)` /
+  `useDateFormatters()` returns.

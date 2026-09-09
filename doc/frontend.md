@@ -20,21 +20,21 @@ The wrapper rule from `plan.md` applies here more than anywhere, because this
 is the code most tempted to reach past it. App code imports the wrapper, never
 the library:
 
-| Instead of | Import |
-|---|---|
-| `next-auth`, `next-auth/react` | `@lets-park/auth`, `@lets-park/auth/client` |
-| `@tanstack/react-query` | `@lets-park/query` |
-| `@tanstack/react-table` | `@lets-park/design-system/compounds` (`DataTable`) |
-| `socket.io-client` | `@lets-park/realtime-client` |
-| `next-intl` | `@lets-park/i18n` |
-| `react-hook-form` | `@lets-park/form` |
-| `@orpc/client` | `@lets-park/api-client` |
+| Instead of                     | Import                                             |
+| ------------------------------ | -------------------------------------------------- |
+| `next-auth`, `next-auth/react` | `@lets-park/auth`, `@lets-park/auth/client`        |
+| `@tanstack/react-query`        | `@lets-park/query`                                 |
+| `@tanstack/react-table`        | `@lets-park/design-system/compounds` (`DataTable`) |
+| `socket.io-client`             | `@lets-park/realtime-client`                       |
+| `next-intl`                    | `@lets-park/i18n`                                  |
+| `react-hook-form`              | `@lets-park/form`                                  |
+| `@orpc/client`                 | `@lets-park/api-client`                            |
 
 `no-restricted-imports` in `eslint.config.mjs` enforces this and `web:lint`
 runs with `--max-warnings=0`, so a direct import is a build failure rather than
 a review comment. It has been probed rather than assumed — a file importing
 `next-auth/react`, `@tanstack/react-query` and `socket.io-client` produced
-three errors and exit code 1, including for the `next-auth/react` *subpath*.
+three errors and exit code 1, including for the `next-auth/react` _subpath_.
 
 ## Route tree
 
@@ -60,12 +60,11 @@ src/app/
 screen/panel pair per tab, plus the shared failure-copy table, the window
 banner and the lock-mode control. See `doc/admin.md`.
 
-
 Every route is declared once, in
 `src/routes.ts` — `LOT_ROUTE`, `LOGIN_ROUTE`, `SETTINGS_ROUTE`, `ADMIN_ROUTE`,
 `AUTH_API_ROUTE_PREFIX`, `HEALTH_ROUTE`. `auth.ts` and `proxy.ts` both read
 `LOGIN_ROUTE` from there, which is what makes a redirect loop unconstructible:
-the path Auth.js redirects *to* and the path the proxy exempts cannot drift
+the path Auth.js redirects _to_ and the path the proxy exempts cannot drift
 apart.
 
 The `(app)` route group exists so the top bar and the page container wrap every
@@ -98,7 +97,7 @@ The order is load-bearing, not stylistic:
    provider (so it must be inside `AuthProvider`), and the query utilities are
    built from the client.
 4. **`RealtimeBoundary` innermost** — the only one needing both a session
-   *status* and a token, and it holds the socket closed until there is one.
+   _status_ and a token, and it holds the socket closed until there is one.
 
 The `QueryClient` is created in `useState`'s initialiser, so it survives
 re-renders (a client built in the render body would throw its cache away every
@@ -116,11 +115,11 @@ start Auth.js in `loading` and render every visitor as signed-out for a frame.
 `src/api-url.ts`. The configured value (`http://localhost:3000/api`) is the
 API's base URL and is **not itself** any of the endpoints the app calls:
 
-| Consumer | Function | Result |
-|---|---|---|
-| oRPC client | `apiRpcUrl(url)` | `…/api/rpc` — the RPC transport is a controller under the global prefix |
+| Consumer     | Function               | Result                                                                  |
+| ------------ | ---------------------- | ----------------------------------------------------------------------- |
+| oRPC client  | `apiRpcUrl(url)`       | `…/api/rpc` — the RPC transport is a controller under the global prefix |
 | health route | `apiReadinessUrl(url)` | `…/health/ready` — the API's probes are excluded from `setGlobalPrefix` |
-| Socket.io | `apiOriginOf(url)` | origin only — `io()` reads a path as a **namespace** |
+| Socket.io    | `apiOriginOf(url)`     | origin only — `io()` reads a path as a **namespace**                    |
 
 Each has a silent failure mode, so each is a named function with specs. Full
 reasoning and the measurements behind it: `doc/decision/0101-*`.
@@ -140,7 +139,7 @@ the same code and differ only in environment values.
 
    ```ts
    async function signInWithOkta() {
-     'use server';
+     "use server";
      await signIn(OKTA_PROVIDER_ID, { redirectTo: LOT_ROUTE });
    }
    ```
@@ -148,6 +147,7 @@ the same code and differ only in environment values.
    The screen is a blank page with the brand, two lines of Czech copy and one
    pill button, `Login přes OKTA Verify` — per the design. Because the action
    is a form submission, the page needs no client JavaScript to work.
+
 3. Auth.js redirects to Okta (the mock OIDC server in development) with
    `response_type=code`, `scope=openid profile email offline_access` and PKCE
    `S256`.
@@ -171,7 +171,7 @@ which would publish it to every visitor.
 
 - The mock OIDC server issues **no `email` claim by default**. The API refuses
   such a token (`The token does not identify a provisionable user.`). Supply
-  `{"email":"…","name":"…"}` in the mock login form's *Optional claims JSON*
+  `{"email":"…","name":"…"}` in the mock login form's _Optional claims JSON_
   field, or configure the mock server with a user that has them.
 - The mock server's access token carries `aud: "default"`. The API's
   `AUTH_OKTA_AUDIENCE` has to match it, or every request is a plain 401.
@@ -273,13 +273,13 @@ day's own rules — a past date, a weekend, a Czech public holiday — which are
 facts about the anchor day and say nothing about the window;
 `doc/decision/0175-*` records why that had to become a contract field instead of
 a client-side inference. Its locked-month refusal is deliberately ordered
-*after* the result step, so a window that closes between a successful
+_after_ the result step, so a window that closes between a successful
 confirmation and its refetch cannot replace a finished comparison with a
 sentence saying nothing was created (`doc/decision/0176-*`).
 
 ## Loading, empty and error
 
-`shell/screen-state/screen-state.tsx` holds the three states themselves *and* the type that
+`shell/screen-state/screen-state.tsx` holds the three states themselves _and_ the type that
 says which of them a screen is in, so a screen imports both from a single
 place. The three renderers first:
 
@@ -318,14 +318,14 @@ out in prose: "`undefined` exactly when `isPending || isError`". A fact an
 interface has to state in a comment is a fact its types are failing to carry.
 Nothing stopped a caller from writing `{ isPending: false, isError: false,
 data: undefined }`, and a screen that reached its ready branch with no data
-drew an empty table asserting *there are no parking spots* — a claim, where the
+drew an empty table asserting _there are no parking spots_ — a claim, where the
 truth was an absence.
 
 ```ts
 export type ScreenData<T> =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'error'; readonly error: unknown }
-  | { readonly kind: 'ready'; readonly data: T };
+  | { readonly kind: "loading" }
+  | { readonly kind: "error"; readonly error: unknown }
+  | { readonly kind: "ready"; readonly data: T };
 ```
 
 As a discriminated union that combination cannot be written down: `data` exists
@@ -350,7 +350,7 @@ Three details are worth knowing before using it:
   `@lets-park/query` stays the thin wrapper it is meant to be.
 - **`ScreenDataGuard`** is the two-branch guard every screen had copied into
   it, written once, and it takes a render prop rather than returning early: a
-  screen whose states belong *inside* something it has already opened — a modal
+  screen whose states belong _inside_ something it has already opened — a modal
   that keeps its header and footer while its body loads — cannot use an early
   return without losing the frame.
 
@@ -379,7 +379,7 @@ Two conventions hold across the five:
   `BulkBadgeView` — for the same reason `ScreenData<T>` above is one: the
   combinations that mean nothing should not be writable.
 - **Keys are structure, sentences are copy.** A view function returns a message
-  *key* — which case are we in — and never a formatted string: formatting
+  _key_ — which case are we in — and never a formatted string: formatting
   belongs to `@lets-park/i18n` and the sentence to the component. That also
   keeps each union enumerated once, in the module that produced it; re-switching
   on one in the component would enumerate its variants twice, and adding a
@@ -407,7 +407,7 @@ Czech holiday calendar (`czechPublicHolidayOn`) and weekend check
 (`isWeekend`), and `DayBar` only maps `note.highlighted` to a class and
 `note.key`/`note.name` to translated copy. The uppercase rendering is CSS
 (`uppercase`), not the message text — same pattern as the section eyebrow
-above the heading — so `libs/i18n/src/lib/messages.ts` stores
+above the heading — so `apps/web/messages/cs.json` stores
 `'Státní svátek · {name}'`, not shouted text.
 
 Changing the day — the arrows, the month/year selects, or "Dnes" — moves
@@ -424,7 +424,7 @@ of the socket-level proof already in `libs/realtime-client`'s own suite
 ## Realtime: what a broadcast is allowed to change
 
 Added by Task 24 (the parking screen), and the rule every future screen with a
-day room follows. `plan.md` (Fáze 6) asks for *one* mechanism — "realtime events
+day room follows. `plan.md` (Fáze 6) asks for _one_ mechanism — "realtime events
 invalidate/patch the query cache, no ad-hoc local state". That mechanism has two
 halves, and which half applies is decided by the **contract**, not by taste:
 
@@ -443,13 +443,13 @@ with Task 31: it carries the admin exemption, so it too is an answer about the
 caller and not about the day. Asking for the day again is the only honest way to learn
 their new values.
 
-| event | patched | also refetched when |
-|---|---|---|
-| `reservation:created` | `spots[i].reservation` | the caller is the new holder |
-| `reservation:cancelled` | `spots[i].reservation = null` | it was the caller's own reservation |
-| `reservation:reassigned` | `spots[i].reservation` | the caller was promoted, lost the spot, or is queued for it |
-| `waitlist:updated` | `spots[i].waitlistCount` | the caller is in that queue |
-| `cell:locked` / `cell:unlocked` | *nothing* | *never* — see below |
+| event                           | patched                       | also refetched when                                         |
+| ------------------------------- | ----------------------------- | ----------------------------------------------------------- |
+| `reservation:created`           | `spots[i].reservation`        | the caller is the new holder                                |
+| `reservation:cancelled`         | `spots[i].reservation = null` | it was the caller's own reservation                         |
+| `reservation:reassigned`        | `spots[i].reservation`        | the caller was promoted, lost the spot, or is queued for it |
+| `waitlist:updated`              | `spots[i].waitlistCount`      | the caller is in that queue                                 |
+| `cell:locked` / `cell:unlocked` | _nothing_                     | _never_ — see below                                         |
 
 Doing both is not redundant work. The patch repaints on the tick the event
 arrived; the refetch corrects the four viewer fields a moment later, and only
@@ -460,7 +460,7 @@ alone would leave "you are 2nd in the queue" wrong indefinitely.
 Three rules that make this safe to copy:
 
 1. **The patches are pure and identity-preserving.** They live in a module with
-   no React in it and return the *same object reference* when nothing changed —
+   no React in it and return the _same object reference_ when nothing changed —
    wrong day, unknown spot, redelivered event, unchanged count. A client is
    normally in several day rooms and Socket.io does not tell a handler which one
    a message arrived through, so the day guard is load-bearing.
@@ -469,7 +469,7 @@ Three rules that make this safe to copy:
    produces a patch nothing renders — indistinguishable from a broadcast that
    never arrived.
 3. **`cell:locked` is the documented exception**, and it is component state
-   *because the contract says so*: no procedure returns the current holds, so
+   _because the contract says so_: no procedure returns the current holds, so
    there is no cache entry to patch and minting a key no endpoint backs would
    invert the contract-first rule. A hold lives about thirty seconds, is swept
    locally on its own `expiresAt` (the contract requires this: "a lost
@@ -482,7 +482,7 @@ Full reasoning: `doc/decision/0123-*` (the two halves) and `doc/decision/0124-*`
 
 ## `/api/health`
 
-A readiness probe for the *pair*. It calls the API's `/health/ready` with a
+A readiness probe for the _pair_. It calls the API's `/health/ready` with a
 4-second timeout and answers `200` `{"status":"ok",…}` or `503`
 `{"status":"error","checks":{"api":{"status":"down","reason":…}}}` where the
 reason is one of `unreachable | timeout | not-ready | not-configured` — a fixed
@@ -501,14 +501,14 @@ an `@theme inline` block), then declares the three source trees Tailwind should
 scan for class names:
 
 ```css
-@import '../../../../libs/design-system/assets/theme.css';
+@import "../../../../libs/design-system/assets/theme.css";
 @source '../../src';
 @source '../../../../libs/design-system/src/primitives';
 @source '../../../../libs/design-system/src/compounds';
 ```
 
 The `@source` lines are required: Tailwind v4 scans the importing project by
-default, and without them every class used *inside* a primitive or compound
+default, and without them every class used _inside_ a primitive or compound
 would be absent from the app's stylesheet.
 
 `apps/web/postcss.config.mjs` loads `@tailwindcss/postcss`, which is Next's
@@ -540,10 +540,10 @@ globals (`jest-environment-web.cjs`), and `@testing-library/jest-dom`.
 
 Two details worth knowing before adding a suite:
 
-- **`transformIgnorePatterns` has to be overwritten on the *resolved* config.**
-  `next/jest` *appends* a custom `transformIgnorePatterns` after its own
+- **`transformIgnorePatterns` has to be overwritten on the _resolved_ config.**
+  `next/jest` _appends_ a custom `transformIgnorePatterns` after its own
   entries, and discards one coming from a preset entirely. Appending is no use:
-  the array is a union — Jest skips a file that matches *any* entry — and
+  the array is a union — Jest skips a file that matches _any_ entry — and
   Next's own `/node_modules/(?!.pnpm)(?!(geist)/)` already matches everything in
   `node_modules` but `geist`. So the ESM-only exemption is applied to the
   resolved object at the bottom of `jest.config.cts`, after `createJestConfig`
