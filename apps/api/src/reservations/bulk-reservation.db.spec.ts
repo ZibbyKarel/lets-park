@@ -84,6 +84,11 @@ const QUEUE_BUSY_DAYS = ['2100-03-01', '2100-03-02'] as DateOnly[];
 /** March 2100 too, and for the same reason: January has no day left. */
 const ALREADY_QUEUED_DAY = '2100-03-03' as DateOnly;
 
+/** 4 more March business days for the monthly-cap case — Thu/Fri/Mon/Tue, no Czech holiday near them (Easter 2100 is March 28). */
+const CAP_PREEXISTING_DAYS = ['2100-03-04', '2100-03-05', '2100-03-08', '2100-03-09'] as DateOnly[];
+/** The 2 days the cap-rejected request itself asks for — Wed/Thu, same week. */
+const CAP_REQUEST_DAYS = ['2100-03-10', '2100-03-11'] as DateOnly[];
+
 /** Every day this file names, for the fixture guard. */
 const BUSINESS_DAYS = [
   ...PREVIEW_DAYS,
@@ -100,7 +105,12 @@ const BUSINESS_DAYS = [
 ];
 
 /** The March days, kept apart from {@link BUSINESS_DAYS}'s one-month guard. */
-const MARCH_DAYS = [...QUEUE_BUSY_DAYS, ALREADY_QUEUED_DAY];
+const MARCH_DAYS = [
+  ...QUEUE_BUSY_DAYS,
+  ALREADY_QUEUED_DAY,
+  ...CAP_PREEXISTING_DAYS,
+  ...CAP_REQUEST_DAYS,
+];
 
 describe('bulk booking against a real PostgreSQL', () => {
   let client: PrismaClient;
@@ -415,6 +425,37 @@ describe('bulk booking against a real PostgreSQL', () => {
           where: { userId: booker.id, date: toDateColumn(taken) },
         })
       ).toBe(0);
+    });
+
+    it('rejects the whole request with MONTHLY_RESERVATION_LIMIT_REACHED when it would push the user over the monthly cap', async () => {
+      const user = await seedUser(client);
+      const preexisting = await Promise.all(Array.from({ length: 4 }, () => seedSpot(client)));
+
+      // 4 already held this month, leaving a budget of 1 — the 2-day request below asks for 2.
+      for (const [i, day] of CAP_PREEXISTING_DAYS.entries()) {
+        const spot = preexisting[i];
+        if (spot === undefined) {
+          throw new Error(`Expected a seeded spot at index ${i}.`);
+        }
+        await client.reservation.create({
+          data: {
+            parkingSpotId: spot.id,
+            userId: user.id,
+            date: toDateColumn(day),
+          },
+        });
+      }
+
+      const code = await codeOf(
+        harness.bulk.confirm({ dates: CAP_REQUEST_DAYS }, actorFor(user), TODAY)
+      );
+      expect(code).toBe('MONTHLY_RESERVATION_LIMIT_REACHED');
+
+      // Neither requested day was booked — the whole request was rejected.
+      const created = await client.reservation.findMany({
+        where: { userId: user.id, date: { in: CAP_REQUEST_DAYS.map(toDateColumn) } },
+      });
+      expect(created).toHaveLength(0);
     });
 
     it('releases a queue the caller was already in on a day it just reserved for them', async () => {
