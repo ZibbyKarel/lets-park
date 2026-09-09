@@ -75,7 +75,6 @@ import {
   mapUniqueConstraintViolation,
 } from '../common/errors/prisma-error-mapping';
 import {
-  requireHolder,
   toContractReservation,
   toDateColumn,
   toDateOnly,
@@ -179,7 +178,7 @@ export class ReservationsService {
         payload: {
           date: input.date,
           parkingSpotId: reservation.parkingSpotId,
-          reservation: toPublicReservation(reservation, requireHolder(reservation.user)),
+          reservation: toPublicReservation(reservation, reservation.user),
         },
       },
     ]);
@@ -242,7 +241,7 @@ export class ReservationsService {
     // Locked, not merely read: two requests cancelling the same reservation must
     // not both go on to promote. The loser blocks here, then finds the row gone.
     const [reservation] = await tx.$queryRaw<
-      { id: string; parkingSpotId: string; userId: string; date: Date }[]
+      { id: string; parkingSpotId: string; userId: string | null; date: Date }[]
     >`
       SELECT "id", "parkingSpotId", "userId", "date"
       FROM "Reservation"

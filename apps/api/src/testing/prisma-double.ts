@@ -540,8 +540,8 @@ export class PrismaDouble {
             // `copy(null)` is `{ ...null }`, which is `{}` — not `null` — so a
             // guest row must not go through `copy` at all here. A real Prisma
             // `include`/`select` on a `User?` relation returns a genuine
-            // `null`, and this double has to match that or `requireHolder`'s
-            // callers (Task 2) never see the guest case they exist to catch.
+            // `null`, and this double has to match that or `toPublicReservation`'s
+            // callers (Task 3) never see the guest holder they now project.
             //
             // The return-type annotation documents this branch's actual shape
             // (the other return path, above, joins `parkingSpot`, never

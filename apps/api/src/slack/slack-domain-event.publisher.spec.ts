@@ -96,7 +96,7 @@ describe('SlackDomainEventPublisher', () => {
             reservation: {
               id: 'r-2',
               createdAt: '2026-09-01T00:00:00.000Z',
-              user: { id: 'u-2', name: 'Jana', licensePlate: null },
+              holder: { kind: 'USER', userId: 'u-2', name: 'Jana', licensePlate: null },
             },
           },
         },
@@ -115,7 +115,7 @@ describe('SlackDomainEventPublisher', () => {
           reservation: {
             id: 'r-3',
             createdAt: '2026-09-01T00:00:00.000Z',
-            user: { id: 'u-1', name: 'Petr', licensePlate: null },
+            holder: { kind: 'USER', userId: 'u-1', name: 'Petr', licensePlate: null },
           },
         },
       },

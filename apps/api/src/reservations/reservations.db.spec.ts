@@ -92,7 +92,7 @@ describe('reservations against a real PostgreSQL', () => {
             reservation: {
               id: reservation.id,
               createdAt: reservation.createdAt,
-              user: { id: user.id, name: user.name, licensePlate: null },
+              holder: { kind: 'USER', userId: user.id, name: user.name, licensePlate: null },
             },
           },
         },
@@ -449,7 +449,7 @@ describe('reservations against a real PostgreSQL', () => {
         cause: 'WAITLIST_PROMOTION',
         previousReservationId: reservation.id,
         fromWaitlistEntryId: firstEntry.entry.id,
-        reservation: { id: promoted.id, user: { id: first.id } },
+        reservation: { id: promoted.id, holder: { kind: 'USER', userId: first.id } },
       });
       expect(harness.publisher.ofKind('waitlist:updated').map((event) => event.payload)).toEqual([
         { date: FUTURE_BUSINESS_DAY, parkingSpotId: spot.id, waitlistCount: 1 },

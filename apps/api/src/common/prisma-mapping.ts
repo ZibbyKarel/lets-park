@@ -124,29 +124,6 @@ export function toUserSummary(row: Pick<UserRow, 'id' | 'name' | 'licensePlate'>
   return { id: row.id, name: row.name, licensePlate: row.licensePlate };
 }
 
-/**
- * Narrows a fetched `User?` relation (or a projection of one) to non-null for
- * the callers that build a {@link PublicReservation} today, all of which only
- * ever see a user-held reservation — no writer can produce a `guestName` row
- * yet, since the request field a guest reservation needs does not exist until
- * Task 5.
- *
- * Once a guest reservation can reach this code, `null` here means the holder
- * really is a guest, and the caller's projection has to say so instead of
- * calling this — that is Task 2's `PublicReservation` extension, not this
- * function's job. Throwing rather than silently falling back keeps a guest
- * reservation from rendering as if the spot were free.
- */
-export function requireHolder<T>(user: T | null): T {
-  if (user === null) {
-    throw new Error(
-      'Reservation has no user holder — this call site assumes a user-held ' +
-        'reservation and has not been updated for guest holders (Task 2).'
-    );
-  }
-  return user;
-}
-
 /** A reservation row, whole. What `reservation.create` answers with. */
 export function toContractReservation(row: ReservationRow): Reservation {
   return {
@@ -162,21 +139,49 @@ export function toContractReservation(row: ReservationRow): Reservation {
 
 /**
  * A reservation as everybody who can see the day sees it: the reservation, and
- * the holder as a {@link toUserSummary}.
+ * its holder — a user, or the guest an admin booked it for.
  *
- * The spot, the day and the holder's id are deliberately absent from
- * `publicReservationSchema` — every consumer already knows them from context —
- * so this takes the holder separately rather than joining them back in.
+ * The holder is taken as a **separate argument** rather than joined back in,
+ * because `publicReservationSchema` deliberately carries neither the spot nor
+ * the day and every caller already has the joined row in hand. `null` means
+ * "this is a guest reservation"; the row's own `guestName` supplies the name.
+ *
+ * The plate is the row's override where there is one, and the holder's stored
+ * plate otherwise — a consumer never has to know the override exists
+ * (`doc/decision/0302-*`).
  */
 export function toPublicReservation(
   row: ReservationRow,
-  holder: Pick<UserRow, 'id' | 'name' | 'licensePlate'>
+  holder: Pick<UserRow, 'id' | 'name' | 'licensePlate'> | null
 ): PublicReservation {
-  return {
-    id: row.id,
-    createdAt: toTimestamp(row.createdAt),
-    user: toUserSummary(holder),
-  };
+  const createdAt = toTimestamp(row.createdAt);
+
+  if (holder !== null) {
+    return {
+      id: row.id,
+      createdAt,
+      holder: {
+        kind: 'USER',
+        userId: holder.id,
+        name: holder.name,
+        licensePlate: row.licensePlate ?? holder.licensePlate,
+      },
+    };
+  }
+
+  if (row.guestName !== null) {
+    return {
+      id: row.id,
+      createdAt,
+      holder: { kind: 'GUEST', name: row.guestName, licensePlate: row.licensePlate },
+    };
+  }
+
+  // `Reservation_holder_check` makes this unreachable from the database. Louder
+  // than a fabricated holder, which would reach a broadcast and a screen.
+  throw new Error(
+    `Reservation ${row.id} has neither a user nor a guest name; Reservation_holder_check should have refused it.`
+  );
 }
 
 /** A waitlist row, whole. What `waitlist.join` answers with. */

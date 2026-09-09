@@ -99,9 +99,9 @@ describe('PrismaDouble', () => {
     it('joins `null`, not `{}`, for a guest reservation — mirroring a real `User?` relation', async () => {
       // `copy(null)` is `{ ...null }`, which is `{}`, not `null`. A `{}` here
       // would be typed `UserRow | null` but non-null at runtime, so
-      // `requireHolder` (`common/prisma-mapping.ts`) would never throw for a
-      // guest row and `toUserSummary({})` would render a nameless holder
-      // instead of failing loudly at the seam Task 2 has to fix.
+      // `toPublicReservation` (`common/prisma-mapping.ts`) would take the
+      // `holder !== null` branch and render a nameless `USER` holder instead
+      // of the `GUEST` holder this row actually has.
       const spot = double.seedSpot({ label: 'A1' });
       double.seedReservation({
         parkingSpotId: spot.id,
