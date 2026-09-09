@@ -125,7 +125,11 @@ describe('assertWithinMonthlyReservationCap against a real PostgreSQL', () => {
   it('does not count a reservation in a different calendar month', async () => {
     const user = await seedUser(client);
     const spot = await seedSpot(client);
-    const [inMonth, ...rest] = businessDaysInMonth(MONTHLY_RESERVATION_CAP - 1);
+    // `CAP - 1` in-month rows, so the assertion below sits exactly on the cap:
+    // 4 + 1 = 5 passes, and the next-month row counted too would be 5 + 1 = 6
+    // and would throw. Seeding fewer would make this test pass either way —
+    // which it did, until the numbers were tightened to discriminate.
+    const [inMonth, ...rest] = businessDaysInMonth(MONTHLY_RESERVATION_CAP);
     for (const date of rest) {
       await client.reservation.create({
         data: { parkingSpotId: spot.id, userId: user.id, date: toDateColumn(date) },
