@@ -299,6 +299,7 @@
     "badgeNoSpots": "Žádné místo",
     "resultTitle": "Rozvrh potvrzen",
     "resultDescription": "Takhle jsme vás zapsali.",
+    "resultSuccessToast": "Hromadná rezervace byla úspěšně vytvořena.",
     "resultUnchanged": "Zapsali jsme vás přesně podle návrhu.",
     "resultChangedTitle": "Rozvrh se od návrhu liší",
     "resultChangedDescription": "Než jste rozvrh potvrdili, změnil se stav parkoviště. U těchto dnů jsme vás zapsali jinak, než návrh sliboval:",

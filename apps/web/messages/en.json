@@ -299,6 +299,7 @@
     "badgeNoSpots": "No spot",
     "resultTitle": "Schedule confirmed",
     "resultDescription": "This is how we signed you up.",
+    "resultSuccessToast": "The bulk reservation was created successfully.",
     "resultUnchanged": "We signed you up exactly as proposed.",
     "resultChangedTitle": "The schedule differs from the proposal",
     "resultChangedDescription": "The state of the parking lot changed before you confirmed the schedule. On these days we signed you up differently than the proposal promised:",
