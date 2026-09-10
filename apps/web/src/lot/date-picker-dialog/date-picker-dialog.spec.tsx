@@ -83,8 +83,25 @@ describe('DatePickerDialog — picking a day', () => {
     const { onSelect, user } = renderDialog();
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
 
-    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2026-09-20') }));
+    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2026-09-21') }));
 
-    expect(onSelect).toHaveBeenCalledWith('2026-09-20');
+    expect(onSelect).toHaveBeenCalledWith('2026-09-21');
+  });
+
+  it('disables a weekend day and does not call onSelect when clicked', async () => {
+    const { onSelect, user } = renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
+
+    // 2026-09-20 is a Sunday. The accessible name for a blocked cell is
+    // `t('dayCellBlocked', { date: f.fullDate(day.date) })` — the same
+    // formatted date `cs.fullDate` produces, not the raw ISO string.
+    const weekendButton = within(dialog).getByRole('button', {
+      name: `${cs.fullDate('2026-09-20')} — nelze vybrat`,
+    });
+    expect(weekendButton).toBeDisabled();
+
+    await user.click(weekendButton);
+
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

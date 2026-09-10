@@ -99,6 +99,7 @@
     "weekdaySat": "SAT",
     "weekdaySun": "SUN",
     "dayCell": "{date}",
+    "dayCellBlocked": "{date} — can’t be selected",
     "gridLabel": "Date selection",
     "bannerOpen": "Reservations for {month} are open — you can reserve until {until}.",
     "bannerOpenForced": "Reservations for {month} are open.",

@@ -165,8 +165,13 @@ function DatePickerDialogContent({
                   <td key={key}>
                     <button
                       type="button"
-                      aria-pressed={day.selected}
-                      aria-label={t('dayCell', { date: f.fullDate(day.date) })}
+                      disabled={!day.selectable}
+                      aria-pressed={day.selectable ? day.selected : undefined}
+                      aria-label={
+                        day.selectable
+                          ? t('dayCell', { date: f.fullDate(day.date) })
+                          : t('dayCellBlocked', { date: f.fullDate(day.date) })
+                      }
                       onClick={() => {
                         onSelect(day.date);
                       }}
@@ -174,9 +179,11 @@ function DatePickerDialogContent({
                         'h-[var(--control-h-lg)] w-full rounded-sm border text-base font-bold',
                         'outline-none focus-visible:outline-2 focus-visible:outline-offset-2',
                         'focus-visible:outline-brand-blue',
-                        day.selected
-                          ? 'border-brand-blue bg-brand-blue text-fg-on-blue'
-                          : 'border-border bg-bg text-fg hover:bg-bg-muted'
+                        day.selectable
+                          ? day.selected
+                            ? 'cursor-pointer border-brand-blue bg-brand-blue text-fg-on-blue'
+                            : 'cursor-pointer border-border bg-bg text-fg hover:bg-bg-muted'
+                          : 'cursor-default border-transparent bg-bg-soft text-fg-3'
                       )}
                     >
                       {day.dayOfMonth}

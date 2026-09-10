@@ -99,6 +99,7 @@
     "weekdaySat": "SO",
     "weekdaySun": "NE",
     "dayCell": "{date}",
+    "dayCellBlocked": "{date} — nelze vybrat",
     "gridLabel": "Výběr data",
     "bannerOpen": "Rezervace na {month} jsou otevřené — zapisovat lze do {until}.",
     "bannerOpenForced": "Rezervace na {month} jsou otevřené.",
