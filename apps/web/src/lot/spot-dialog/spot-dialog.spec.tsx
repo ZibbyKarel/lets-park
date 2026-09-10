@@ -372,6 +372,24 @@ describe('SpotDialog — a bay a guest holds', () => {
   });
 });
 
+describe('SpotDialog — a taken bay whose holder has no plate on file', () => {
+  it('omits the plate line instead of saying it is missing', () => {
+    renderDialog({
+      spot: spot({
+        appearance: 'taken',
+        action: 'queue',
+        holderName: 'Petr Novák',
+        holderPlate: null,
+        carColorClass: 'text-car-2',
+      }),
+    });
+
+    expect(screen.getByText('Petr Novák')).toBeInTheDocument();
+    expect(screen.queryByText('SPZ neuvedena')).not.toBeInTheDocument();
+    expect(screen.queryByText(/obsazeno/)).not.toBeInTheDocument();
+  });
+});
+
 const QUEUE_OPTIONS = [
   { userId: 'admin-1', name: 'Dev Admin', licensePlate: '1AA 1111' },
   { userId: 'user-2', name: 'Jana Nováková', licensePlate: null },

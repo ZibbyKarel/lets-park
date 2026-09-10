@@ -348,9 +348,9 @@ export function SpotDialog({
                   </span>
                 ) : null}
               </p>
-              <p className="text-sm text-fg-3">
-                {t('occupiedBy', { plate: spot.holderPlate ?? t('noPlate') })}
-              </p>
+              {spot.holderPlate === null ? null : (
+                <p className="text-sm text-fg-3">{t('occupiedBy', { plate: spot.holderPlate })}</p>
+              )}
             </div>
           </Stack>
 
