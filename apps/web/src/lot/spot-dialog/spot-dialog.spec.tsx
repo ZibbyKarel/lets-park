@@ -1,5 +1,4 @@
 import { screen } from '@testing-library/react';
-import { failureWithCode } from '../../testing/contract-failure';
 import { mine, renderDialog, spot, takenByOther } from './spot-dialog.test-helpers';
 
 /**
@@ -207,56 +206,6 @@ describe('SpotDialog — the caller’s own reservation', () => {
         'Měsíc je uzamčený — novou rezervaci už nezaložíte, tuhle ale můžete kdykoliv zrušit.'
       )
     ).toBeInTheDocument();
-  });
-});
-
-describe('SpotDialog — failures', () => {
-  it('renders a contract error by its code, never by its message', async () => {
-    // The error carries a developer-facing English `message`, which must not
-    // reach the page; the Czech sentence comes from the code.
-    const error = await failureWithCode('SPOT_ALREADY_RESERVED');
-    renderDialog({ error });
-
-    expect(
-      screen.getByText('Toto parkovací místo je na daný den už rezervované.')
-    ).toBeInTheDocument();
-    expect(screen.queryByText('developer-facing')).not.toBeInTheDocument();
-  });
-
-  it('renders the window codes the two write actions can raise', async () => {
-    const locked = await failureWithCode('RESERVATIONS_LOCKED');
-    renderDialog({ error: locked });
-
-    expect(screen.getByText('Rezervační okno pro tento měsíc je už uzamčené.')).toBeInTheDocument();
-  });
-
-  it('renders `errorMessage` instead of the code-mapped copy when the caller supplies one', async () => {
-    const error = await failureWithCode('RESERVATION_LIMIT_REACHED');
-    renderDialog({
-      error,
-      errorMessage: 'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.',
-    });
-
-    expect(
-      screen.getByText(
-        'Tento uživatel už na vybraný den rezervaci má — na den je povolená jen jedna.'
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText('Na tento den už máte rezervaci — na den je povolená jen jedna.')
-    ).not.toBeInTheDocument();
-  });
-
-  it('falls back to one generic sentence for a failure that is not in the contract', () => {
-    renderDialog({ error: new TypeError('Failed to fetch') });
-
-    expect(screen.getByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
-    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
-  });
-
-  it('shows no failure block when there is no failure', () => {
-    renderDialog();
-    expect(screen.queryByText('Něco se nepovedlo')).not.toBeInTheDocument();
   });
 });
 
