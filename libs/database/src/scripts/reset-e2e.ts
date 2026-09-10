@@ -30,8 +30,14 @@
  *   the ordinary `AUTO` rule (its window starts on or before the first of the
  *   current month and ends on its last day), which is what the suite books
  *   into. See `doc/decision/0181-*`.
- * - Touches **no user, spot or role**: `prisma db seed` owns those, is
- *   idempotent, and `globalSetup` runs it first.
+ * - **Deletes every parking spot that is not one of the nine seeded ones**,
+ *   together with any reservation or queue entry on it. That is a spot an
+ *   interrupted run of the spot-administration spec created and did not clean
+ *   up, and nothing else would ever remove it: the seed is upserts on the
+ *   natural key, so it restores the nine and is silent about a tenth.
+ * - Touches **no seeded spot, and no user or role**: `prisma db seed` owns
+ *   those, is idempotent, and `globalSetup` runs it first — so a role or an
+ *   `active` flag an admin spec changed heals itself before the next run.
  *
  * ## What stops it doing that to a real database
  *
@@ -75,7 +81,7 @@ import {
 } from '@lets-park/shared-types';
 import { createPrismaClient } from '../lib/create-prisma-client';
 import { assertDisposableDatabase } from '../lib/disposable-database';
-import { RESERVATION_WINDOW_SETTINGS_ID } from '../lib/seed-data';
+import { RESERVATION_WINDOW_SETTINGS_ID, SEED_PARKING_SPOTS } from '../lib/seed-data';
 
 /**
  * The month the e2e suite books into: the one after today's.
@@ -119,6 +125,40 @@ async function main(): Promise<void> {
     // API could promote somebody into the month being cleared.
     const waitlist = await prisma.waitlistEntry.deleteMany({ where: { date: range } });
     const reservations = await prisma.reservation.deleteMany({ where: { date: range } });
+
+    // **Spots the suite created and did not manage to clean up.** The spot
+    // administration spec creates a spot, and an interrupted run — a failed
+    // assertion before its teardown, a Ctrl-C — leaves it behind. Nothing else
+    // would ever remove it: `prisma db seed` is upserts on the natural key, so
+    // it restores the nine seeded rows and is silent about a tenth. The
+    // leftover would then be permanent, and every later run would start in a
+    // different world than the one its author measured — a parking lot with an
+    // extra bay, one more row in every admin table, one more `<option>` in
+    // every holder selector.
+    //
+    // Deleted here rather than in a spec's `afterAll` for the reason the
+    // reservations above are: this script's job is to state what is true before
+    // the first browser opens, and that has to hold however the previous run
+    // ended. Reservations on such a spot go with it — `onDelete: Cascade` on
+    // the relation, and the month sweep above has already taken the ones this
+    // suite makes.
+    const seededLabels = SEED_PARKING_SPOTS.map((spot) => spot.label);
+    const strayReservations = await prisma.reservation.deleteMany({
+      where: { parkingSpot: { label: { notIn: seededLabels } } },
+    });
+    const strayWaitlist = await prisma.waitlistEntry.deleteMany({
+      where: { parkingSpot: { label: { notIn: seededLabels } } },
+    });
+    const strays = await prisma.parkingSpot.deleteMany({
+      where: { label: { notIn: seededLabels } },
+    });
+    if (strays.count > 0) {
+      console.log(
+        `Removed ${strays.count} non-seeded parking spot(s) left over from an ` +
+          `earlier run, with ${strayReservations.count} reservation(s) and ` +
+          `${strayWaitlist.count} queue entrie(s) on them.`
+      );
+    }
 
     // **Not restored afterwards, and that is a stated term of this script's
     // contract, not an oversight.** The row is global and singular, so every

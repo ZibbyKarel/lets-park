@@ -200,3 +200,6 @@ for why, and take the next number from the end of this list.
 - [`0304-the-reservation-holder-projection-is-a-discriminated-union`](0304-the-reservation-holder-projection-is-a-discriminated-union.md) — 0304 – The reservation holder projection is a discriminated union
 - [`0305-a-reservation-holder-is-a-user-or-a-guest-never-neither`](0305-a-reservation-holder-is-a-user-or-a-guest-never-neither.md) — 0305 – A reservation holder is a user or a guest, never neither
 - [`0306-an-admin-names-the-holder-and-defaults-to-themselves`](0306-an-admin-names-the-holder-and-defaults-to-themselves.md) — 0306 – An admin names the holder, and it defaults to themselves
+- [`0307-the-monthly-cap-takes-an-advisory-lock-and-confirmbulk-retries`](0307-the-monthly-cap-takes-an-advisory-lock-and-confirmbulk-retries.md) — 0307 – The monthly cap takes an advisory lock, and `confirmBulk` retries
+- [`0308-tanstack-query-is-used-directly-no-wrapper-lib`](0308-tanstack-query-is-used-directly-no-wrapper-lib.md) — 0308 – TanStack Query is used directly, `libs/query` is gone
+- [`0309-reset-e2e-removes-parking-spots-the-suite-created`](0309-reset-e2e-removes-parking-spots-the-suite-created.md) — 0309 – `reset-e2e` removes parking spots the suite created

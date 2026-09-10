@@ -87,10 +87,10 @@ DATABASE_URL=$(grep '^DATABASE_URL=' /path/to/lets-park/.env | sed 's/^DATABASE_
   npx nx run api:test-db
 ```
 
-`web-e2e:e2e` is **27 passed, exit 0** — the nine spec files, the three
+`web-e2e:e2e` is **48 passed, exit 0** — the fifteen spec files, the three
 persona sign-ins in `support/auth.setup.ts`, and `support/build-identity.setup.ts`.
 In a worktree it needs the whole `.env` copied in, not just `DATABASE_URL`;
-without it the API exits on its own env schema before a test runs. Three things
+without it the API exits on its own env schema before a test runs. Four things
 are worth knowing before you run it yourself:
 
 - **Free port 4200 first, and expect a loud failure if you forget.** The suite
@@ -104,6 +104,13 @@ are worth knowing before you run it yourself:
   `doc/decision/0285-the-browser-suite-starts-a-server-it-can-kill-and-refuses-to-adopt-one`.
 - **A run leaves both ports free.** If 4200 is still held after one, that is a
   regression in the above, not housekeeping.
+- **A new spec file needs a day of its own.** `support/dates.ts`'s
+  `SPEC_DAY_SLOTS` gives each spec file one business day of the target month,
+  because a reservation is unique per `(spot, date)` _and_ per `(user, date)`:
+  two files booking the same persona on the same day fail each other
+  intermittently. Add an entry there rather than reusing one. The same file
+  is where the suite's date arithmetic lives — never a literal date, which
+  rots into a Saturday or a public holiday.
 - **Exit 1 after a passing summary line is not a test failure.** Nx writes its task history
   to a SQLite database under `.nx/`, and concurrent runs from several worktrees
   corrupt the write; the same thing has been seen here as exit 1 after 509

@@ -28,8 +28,52 @@ belongs:
   scheme that is not `Bearer`. `apps/web-e2e` always arrives holding a valid
   session, so it structurally cannot ask these questions.
 - **Browser end-to-end** — a whole user journey across both apps, the database
-  and the socket. Expensive; reserved for the six journeys in
-  `apps/web-e2e/src/`.
+  and the socket. Expensive; reserved for the journeys in `apps/web-e2e/src/`,
+  one spec file each. What earns a file here is a claim no lower layer can
+  make: two people disagreeing over the same bay, a setting saved on one
+  screen changing another, a URL that stops answering. What does **not** is a
+  server rule with no screen in it — the monthly reservation cap and the
+  `FORCE_LOCKED` lockdown are both deliberately absent, because they are
+  decided in `reservation-policy.ts` and asserted in the unit and database
+  layers, and reproducing them here would cost a browser and a shared-state
+  collision to re-test arithmetic.
+
+---
+
+## Writing a new browser spec
+
+Four constraints, each of which has already cost this suite a day:
+
+- **Take a day slot.** `support/dates.ts`'s `SPEC_DAY_SLOTS` hands each spec
+  file one business day of the target month. A reservation is unique per
+  `(spot, date)` and per `(user, date)`, so two files booking the same persona
+  on the same day fail each other intermittently. Never write a literal date:
+  it rots into a Saturday or 28 October, and `isReservableDay` then refuses
+  every write for a reason that has nothing to do with the test.
+- **`fullyParallel` is on, so global state is shared.** The reservation-window
+  row is a singleton; the spot roster, the user roster and their roles are one
+  set of rows for the whole run. A spec may touch these, but only in ways no
+  other file can notice: `admin-window.spec.ts` moves between `AUTO` and
+  `FORCE_OPEN` and never to `FORCE_LOCKED` or a lower `openDaysBefore`, both
+  of which would close the month everybody else books into;
+  `admin-users.spec.ts` mutates only `Dev Inactive`, never one of the three
+  personas other files sign in as; `admin-spots.spec.ts` creates its own bay
+  rather than editing a seeded one. Restore what you change in `afterAll`, and
+  tolerate a leftover on the way in — a teardown cannot promise anything about
+  a run that was killed.
+- **Assert your own day, not "the feed" or "the list".** An assertion that
+  reads global state and expects to see only its own writes is a race with
+  every other spec. `ics-feed.spec.ts` failed exactly this way: it asserted
+  that no `SUMMARY:Parkování – E2.96` appeared anywhere in a personal calendar
+  feed, while `admin-bulk-reservation.spec.ts` legitimately held an E2.96
+  reservation for the same person on another day (E2.96 is Dev User's seeded
+  preferred spot, and the bulk allocator prefers it). Scope to the date, the
+  row, the spot you own.
+- **Address the UI the way a person does.** Role plus the Czech accessible
+  name the app actually renders, read out of `apps/web/messages/cs.json` —
+  there are no `data-testid` hooks in this application and none are to be
+  added. Every wait is on a condition; a `waitForTimeout` passes on an idle
+  laptop and fails on a busy one.
 
 ---
 

@@ -79,6 +79,11 @@ export const SPEC_DAY_SLOTS = {
   icsFeed: 4,
   realtimeConnection: 5,
   adminBulkReservation: 6,
+  waitlistQueue: 7,
+  adminSpots: 8,
+  adminUsers: 9,
+  adminWindow: 10,
+  settingsProfile: 11,
 } as const;
 
 const CZECH_MONTHS_GENITIVE = [

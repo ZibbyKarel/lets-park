@@ -44,6 +44,23 @@ function unfold(ics: string): string {
   return ics.replace(/\r\n[ \t]/gu, '');
 }
 
+/**
+ * Every `VEVENT` in `ics` whose `DTSTART` names `date`, unparsed apart from
+ * that split — enough to ask "what does the feed say about this one day",
+ * never "what does the feed contain anywhere". `body` is *every* reservation
+ * this person holds, on every date, so a plain substring check for a summary
+ * or a date can each be satisfied by a *different* event; only reading the
+ * one block the date names makes them one claim instead of two independent
+ * ones that happen to both be true.
+ */
+function veventsOn(ics: string, date: string): string[] {
+  return ics
+    .split('BEGIN:VEVENT')
+    .slice(1)
+    .map((chunk) => chunk.slice(0, chunk.indexOf('END:VEVENT')))
+    .filter((event) => event.includes(`DTSTART;VALUE=DATE:${icsDate(date)}`));
+}
+
 test('a reservation appears in the personal ICS feed, fetched by token alone', async ({
   userPage,
   playwright,
@@ -74,8 +91,13 @@ test('a reservation appears in the personal ICS feed, fetched by token alone', a
 
     const body = unfold(await response.text());
     expect(body).toContain('BEGIN:VCALENDAR');
-    expect(body).toContain(`SUMMARY:Parkování – ${SPOT}`);
-    expect(body).toContain(`DTSTART;VALUE=DATE:${icsDate(DATE)}`);
+    // Exactly one event on this day, and it is the one this test just made —
+    // not two independent substring hits that could each come from a
+    // different event.
+    const events = veventsOn(body, DATE);
+    expect(events).toHaveLength(1);
+    const [eventOnDate] = events;
+    expect(eventOnDate).toContain(`SUMMARY:Parkování – ${SPOT}`);
 
     // A wrong token is a 404, not a 401 — otherwise the response code alone
     // would let somebody enumerate valid tokens.
@@ -96,7 +118,16 @@ test('a reservation appears in the personal ICS feed, fetched by token alone', a
   try {
     const body = unfold(await (await afterCancel.get(feedUrl)).text());
     expect(body).toContain('BEGIN:VCALENDAR');
-    expect(body).not.toContain(`SUMMARY:Parkování – ${SPOT}`);
+    // Scoped to DATE, not a plain `not.toContain('SUMMARY:Parkování – E2.96')`
+    // over the whole feed: E2.96 is Dev User's seeded `preferredParkingSpotLabel`
+    // (`seed-data.ts`), and `admin-bulk-reservation.spec.ts` legitimately books
+    // Dev User into an E2.96 event on its own day via the preferred-spot
+    // allocator (`bulk-allocator.ts`). Under `fullyParallel`, that event can be
+    // in the same feed at the same moment this spec reads it; a feed-wide
+    // substring check would read somebody else's live reservation as this
+    // spec's cancellation having failed. `DATE` is this spec's own day slot
+    // (`SPEC_DAY_SLOTS.icsFeed`), so no other spec's `DTSTART` can name it.
+    expect(veventsOn(body, DATE)).toHaveLength(0);
   } finally {
     await afterCancel.dispose();
   }
