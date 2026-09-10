@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createApiQueryUtils, createQueryClient } from '@lets-park/query';
+import { createApiQueryUtils } from '@lets-park/api-client';
+import { createQueryClient } from '../../shell/query/query-client';
 import { ERROR_DEFINITIONS } from '@lets-park/contract';
 import type {
   ConfirmBulkOutput,
@@ -25,7 +26,7 @@ import { BulkReservationModal } from './bulk-modal';
  *
  * Doubled at the wrapper boundary the same way `lot-screen.spec.tsx` does:
  * `@lets-park/api-client`'s transport and `@lets-park/auth/client`'s session.
- * `@lets-park/query` and `@lets-park/i18n` are real, so a wrong query key or a
+ * The real `QueryClient` and `@lets-park/i18n` are used, so a wrong query key or a
  * missing message would fail rather than pass silently; only `todayInPrague`
  * is pinned, so the grid does not depend on the wall clock.
  */

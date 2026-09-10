@@ -4,15 +4,17 @@
  * The parking overview — the application's main screen.
  *
  * This is the **connected** half: it owns the day on screen, reads
- * `overview.day` through `libs/query`, wires the day room's broadcasts onto
- * that cache entry, holds the cell lock while the dialog is open, and hands
- * plain data to the presentational pieces beside it. Everything it decides is
- * a pure function in `./lot-view`; everything it draws is
- * `./lot-grid`, `./lot-header`, `./date-picker-dialog` and `./spot-dialog`.
+ * `overview.day` through `@tanstack/react-query`, wires the day room's
+ * broadcasts onto that cache entry, holds the cell lock while the dialog is
+ * open, and hands plain data to the presentational pieces beside it.
+ * Everything it decides is a pure function in `./lot-view`; everything it
+ * draws is `./lot-grid`, `./lot-header`, `./date-picker-dialog` and
+ * `./spot-dialog`.
  *
- * Nothing here names `@tanstack/react-query`, `socket.io-client`, `next-intl`,
- * `next-auth` or `@orpc/client` — the wrapper rule, enforced by
- * `no-restricted-imports` (`doc/wrappers.md`).
+ * Nothing here names `socket.io-client`, `next-intl`, `next-auth` or
+ * `@orpc/client` — the wrapper rule, enforced by `no-restricted-imports`
+ * (`doc/wrappers.md`). `@tanstack/react-query` is no longer one of the wrapped
+ * packages (`doc/decision/0308-*`).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +26,7 @@ import {
   useTranslations,
 } from '@lets-park/i18n';
 import { useSession } from '@lets-park/auth/client';
-import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellLock, useRealtime } from '@lets-park/realtime-client';
 import { EmptyState } from '@lets-park/design-system/compounds';
 import { toContractError } from '@lets-park/api-client';

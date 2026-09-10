@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDayRoom, useRealtime, useRealtimeEvent } from '@lets-park/realtime-client';
-import { useQueryClient } from '@lets-park/query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { DayOverviewOutput } from '@lets-park/contract';
 import type { DateOnly } from '@lets-park/i18n';
 import { useApi } from '../../shell/api-provider/api-provider';

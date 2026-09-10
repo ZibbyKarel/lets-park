@@ -1,34 +1,31 @@
 /**
- * What a feature component actually writes.
+ * A feature component reading, mutating and invalidating through TanStack
+ * Query and `@lets-park/api-client`, end to end.
  *
- * This file is the wrapper's reason for being, stated as a running example: a
- * component reads and writes the API through `@lets-park/query` and
- * `@lets-park/api-client` only — no `@tanstack/react-query` import, no
- * `@orpc/client` import — and the last test in this file reads this file's own
- * source to prove it, rather than trusting that nobody adds one later.
+ * Ported from `libs/query`'s `app-usage.spec.tsx`, which existed to
+ * demonstrate the (now-removed) wrapper's API was sufficient for real feature
+ * code. That demonstration's premise is gone (`doc/decision/0308-*`), so the
+ * one test that read its own source to prove no `@tanstack/*`/`@orpc/*` import
+ * was needed is dropped; the rest is still exactly the coverage this app's
+ * query wiring needs — a real `RPCLink` with only `fetch` stubbed, so a
+ * mistake in the retry policy or the invalidation key shows up here, not just
+ * in production.
  */
 
-import { readFileSync } from 'node:fs';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { toContractError } from '@lets-park/api-client';
-import type { ApiClient } from '@lets-park/api-client';
-import {
-  createApiQueryUtils,
-  createQueryClient,
-  QueryProvider,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '../index';
-import type { ApiQueryUtils } from '../index';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toContractError, createApiQueryUtils } from '@lets-park/api-client';
+import type { ApiClient, ApiQueryUtils } from '@lets-park/api-client';
+import { createQueryClient } from './query-client';
 import {
   contractErrorResponse,
   rpcPayload,
   stubApi,
   transportErrorResponse,
-} from '../__fixtures__/stub-api';
-import type { StubbedApi, StubbedResponse } from '../__fixtures__/stub-api';
+} from '../../testing/stub-api';
+import type { StubbedApi, StubbedResponse } from '../../testing/stub-api';
 
 const DAY = { date: '2026-09-15' };
 const SPOT_ID = '22222222-2222-4222-8222-222222222222';
@@ -48,7 +45,7 @@ function renderWithApi(client: ApiClient, ui: (utils: ApiQueryUtils) => React.Re
     defaultOptions: { queries: { retryDelay: () => 0 } },
   });
 
-  return render(<QueryProvider client={queryClient}>{ui(utils)}</QueryProvider>);
+  return render(<QueryClientProvider client={queryClient}>{ui(utils)}</QueryClientProvider>);
 }
 
 function DayOverview({ utils }: { utils: ApiQueryUtils }) {
@@ -86,7 +83,7 @@ function alwaysRespond(response: StubbedResponse): StubbedApi {
   return stubApi(() => response);
 }
 
-describe('a feature component using only the wrapper libs', () => {
+describe('a feature component using TanStack Query and @lets-park/api-client directly', () => {
   it('renders data fetched through a contract procedure', async () => {
     const api = alwaysRespond({ status: 200, body: rpcPayload(DAY_OVERVIEW) });
 
@@ -151,20 +148,5 @@ describe('a feature component using only the wrapper libs', () => {
       '/rpc/reservation/create',
       '/rpc/overview/day',
     ]);
-  });
-
-  it('needs neither @tanstack/react-query nor @orpc/* imported directly', () => {
-    // A demonstration that the wrapper's API is *sufficient* for everything
-    // above — **not** the defence against the ban being broken. This file is
-    // inside the lib that owns `@tanstack/react-query`, where the import is
-    // legal and ESLint would not object to it. The ban lives in
-    // `eslint.config.mjs` (`no-restricted-imports`, `WRAPPED_LIBRARIES`) and is
-    // verified separately by linting `apps/**`; delete that rule and this test
-    // still passes.
-    const source = readFileSync(__filename, 'utf8');
-
-    expect(source).not.toMatch(/from\s+['"]@tanstack\//);
-    expect(source).not.toMatch(/from\s+['"]@orpc\//);
-    expect(source).not.toMatch(/require\(\s*['"]@(?:tanstack|orpc)\//);
   });
 });

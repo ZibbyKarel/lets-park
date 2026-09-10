@@ -1,18 +1,20 @@
 /**
  * The one `QueryClient` configuration the app runs on.
  *
- * `libs/query` owns `@tanstack/react-query` (`eslint.config.mjs`,
- * `WRAPPED_LIBRARIES`), so this is the only place these defaults can be set —
- * which is the point: caching and retry behaviour is a product decision, not
- * something each feature re-derives at its own call site.
+ * `@tanstack/react-query` is no longer a wrapped library (`doc/decision/0308-*`
+ * — it used to be, via `libs/query`), so this file is not the only place that
+ * *could* import it, but it stays the one place that sets these defaults —
+ * caching and retry behaviour is a product decision, not something each
+ * feature re-derives at its own call site.
  *
  * ## The cache is per-user only because the *client* is, not because the keys are
  *
  * Query keys here are `[path, { type, input }]` (`@orpc/tanstack-query`,
- * `./utils.ts`) and carry **no user identity**. Two people's `overview.day` for
- * the same date are the same key. Nothing in this lib can notice an identity
- * change, and there is no `queryClient.clear()` on one — so the isolation rests
- * entirely on two facts outside it, both currently true:
+ * `@lets-park/api-client`'s `api-query.ts`) and carry **no user identity**. Two
+ * people's `overview.day` for the same date are the same key. Nothing in this
+ * module can notice an identity change, and there is no `queryClient.clear()`
+ * on one — so the isolation rests entirely on two facts outside it, both
+ * currently true:
  *
  * - **sign-out is a full navigation.** `apps/web/src/shell/app-top-bar.tsx`
  *   calls `signOut({ redirectTo: LOGIN_ROUTE })`, which unloads the document
@@ -21,9 +23,9 @@
  *   `apps/web/src/app/providers.tsx` uses `useState(() => createQueryClient())`,
  *   so it is one client per browser session and — because Next.js renders this
  *   on the server too — one per request there, rather than a singleton shared
- *   across users. {@link createQueryClient} is a factory and
- *   `QueryClient` is exported as a **type only** (`../index.ts`) so a
- *   module-level `new QueryClient()` is not available to write.
+ *   across users. {@link createQueryClient} is a factory, kept that way on
+ *   purpose so a module-level `new QueryClient()` singleton is never tempting
+ *   to write here.
  *
  * **If an in-place account switch is ever added** — a "switch user" control, a
  * silent re-auth to a different subject, anything that changes the session
@@ -41,9 +43,9 @@ import { shouldRetryQuery } from './retry';
  * How long a fetched result is served without a refetch.
  *
  * Reservation data changes when *someone else* books a spot, and that arrives
- * over Socket.io (`libs/realtime-client`, Task 21) rather than by polling — so
- * this is about avoiding a refetch storm when a user moves between screens,
- * not about freshness.
+ * over Socket.io (`libs/realtime-client`) rather than by polling — so this is
+ * about avoiding a refetch storm when a user moves between screens, not about
+ * freshness.
  */
 export const DEFAULT_STALE_TIME_MS = 30_000;
 

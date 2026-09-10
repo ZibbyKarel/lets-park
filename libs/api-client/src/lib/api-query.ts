@@ -10,13 +10,15 @@
  *
  * `@orpc/tanstack-query` is not itself a wrapped library: nothing could be
  * imported *instead* of it, it only exists to pair the two packages this
- * workspace already wraps. It is allow-listed for `type:util` next to
- * `@hookform/resolvers`, for the same reason (`eslint.config.mjs`).
+ * workspace already wraps one of (`@orpc/client`, here) and no longer wraps the
+ * other of (`@tanstack/react-query`, since `doc/decision/0308-*`). It is
+ * allow-listed for `type:util` next to `@hookform/resolvers`, for the same
+ * reason (`eslint.config.mjs`).
  */
 
 import { createTanstackQueryUtils } from '@orpc/tanstack-query';
 import type { RouterUtils } from '@orpc/tanstack-query';
-import type { ApiClient } from '@lets-park/api-client';
+import type { ApiClient } from './api-client';
 
 /**
  * The contract's router, as query/mutation utilities.

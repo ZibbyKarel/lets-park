@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { useRequireAuth } from '@lets-park/auth/client';
-import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '../api-provider/api-provider';
 import { screenDataOf } from '../screen-state/screen-state';
 import { useCurrentUser } from '../use-current-user';

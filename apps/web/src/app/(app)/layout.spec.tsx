@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { createQueryClient } from '@lets-park/query';
+import { createQueryClient } from '../../shell/query/query-client';
 import { createProviderWrapper } from '../../testing/providers';
 import AppLayout from './layout';
 

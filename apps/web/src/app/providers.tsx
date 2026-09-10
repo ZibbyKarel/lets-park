@@ -17,9 +17,9 @@
  * 2. `IntlProvider` next, so that a failure rendered by any screen already has
  *    translated copy available. Its locale and catalog are resolved on the
  *    server (`layout.tsx`) and passed in — this component chooses neither.
- * 3. `QueryProvider`, then `ApiProvider` — the client is built from the token
- *    provider, so it has to be inside `AuthProvider`, and the query utilities
- *    are built from the client.
+ * 3. `QueryClientProvider`, then `ApiProvider` — the client is built from the
+ *    token provider, so it has to be inside `AuthProvider`, and the query
+ *    utilities are built from the client.
  * 4. `RealtimeBoundary` innermost: it is the only one that needs both a
  *    session *status* and a token, and it holds the socket closed until there
  *    is one.
@@ -31,7 +31,8 @@ import { AuthProvider } from '@lets-park/auth/client';
 import type { AuthSession } from '@lets-park/auth/client';
 import { IntlProvider } from '@lets-park/i18n';
 import type { AppMessages, Locale } from '@lets-park/i18n';
-import { QueryProvider, createQueryClient } from '@lets-park/query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '../shell/query/query-client';
 import { ApiProvider } from '../shell/api-provider/api-provider';
 import { RealtimeBoundary } from '../shell/realtime-boundary/realtime-boundary';
 
@@ -67,18 +68,18 @@ export function Providers({
   // request on the server, which is what SSR needs.
   //
   // `createQueryClient` rather than `new QueryClient`: the retry and caching
-  // policy is a product decision that lives in `libs/query`, and the class is
-  // exported as a type only precisely so this cannot be bypassed.
+  // policy is a product decision (`apps/web/src/shell/query/query-client.ts`),
+  // not something a call site should re-derive.
   const [queryClient] = useState(() => createQueryClient());
 
   return (
     <AuthProvider session={session}>
       <IntlProvider locale={locale} messages={messages}>
-        <QueryProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
           <ApiProvider url={apiUrl}>
             <RealtimeBoundary url={socketUrl}>{children}</RealtimeBoundary>
           </ApiProvider>
-        </QueryProvider>
+        </QueryClientProvider>
       </IntlProvider>
     </AuthProvider>
   );

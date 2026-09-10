@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { act } from 'react';
-import { QueryProvider, createApiQueryUtils, createQueryClient } from '@lets-park/query';
-import type { QueryClient } from '@lets-park/query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { createApiQueryUtils } from '@lets-park/api-client';
+import { createQueryClient } from '../../shell/query/query-client';
 import type { DayOverviewOutput, DaySpotOverview } from '@lets-park/contract';
 import type { ServerToClientEventName } from '@lets-park/contract/realtime';
 import { ApiProvider } from '../../shell/api-provider/api-provider';
@@ -21,9 +23,9 @@ import { useLotRealtime } from './use-lot-realtime';
  * hand-writes a key, or reaches for a different procedure, every assertion
  * below stops finding data.
  *
- * That is also why `@lets-park/query` is **real** here — a stubbed query
- * client would let a wrong key pass. Only two things are doubled, and both at
- * the wrapper boundary the app is allowed to name:
+ * That is also why the real `QueryClient` and `createApiQueryUtils` are used
+ * here — a stubbed query client would let a wrong key pass. Only two things
+ * are doubled, and both at the wrapper boundary the app is allowed to name:
  *
  * - `@lets-park/api-client` / `@lets-park/auth/client`, so `ApiProvider` can be
  *   built without a running Auth.js. Note the client itself is never called:
@@ -52,6 +54,7 @@ function mockApiClient() {
 }
 
 jest.mock('@lets-park/api-client', () => ({
+  ...jest.requireActual('@lets-park/api-client'),
   createApiClient: () => mockApiClient(),
 }));
 
@@ -197,9 +200,9 @@ function setup(
 
   function wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryProvider client={client}>
+      <QueryClientProvider client={client}>
         <ApiProvider url="http://localhost:3000/api">{children}</ApiProvider>
-      </QueryProvider>
+      </QueryClientProvider>
     );
   }
 

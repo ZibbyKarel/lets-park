@@ -1,15 +1,22 @@
 /**
- * The contract-derived query utilities: keys and delegation.
+ * The contract-derived query utilities: keys, not delegation through a live
+ * `QueryClient`.
  *
  * Query keys are the thing nobody notices is wrong until a cache entry quietly
  * fails to invalidate, so these tests check the properties that matter — the
- * same input yields the same key, a different input does not, and a branch key
- * really does match its leaves through the cache's own matcher, not through a
- * hand-written prefix comparison.
+ * same input yields the same key, a different input does not. The
+ * key-*invalidates-through-a-real-cache* tests live in
+ * `apps/web/src/shell/query/query-client.spec.ts` instead: they construct a
+ * real `QueryClient`, and mixing that with `@orpc/tanstack-query`'s
+ * `queryOptions()` output under this project's `"module": "commonjs"`
+ * reproduces the dual-package hazard `doc/decision/0038-*` found for
+ * `libs/query` (two structurally identical but nominally distinct
+ * `QueryClient` types). `apps/web` already resolves this correctly
+ * (`module: esnext`), this project does not need to.
  */
 
-import { createApiQueryUtils, createQueryClient } from '../index';
-import { rpcPayload, stubApi } from '../__fixtures__/stub-api';
+import { createApiQueryUtils } from './api-query';
+import { stubApi } from '../__fixtures__/stub-api';
 
 const DAY = { date: '2026-09-15' };
 const OTHER_DAY = { date: '2026-09-16' };
@@ -25,6 +32,10 @@ const DAY_OVERVIEW = {
 function utilsWith(body: unknown = DAY_OVERVIEW) {
   const api = stubApi(() => ({ status: 200, body: rpcPayload(body) }));
   return { api, utils: createApiQueryUtils(api.client) };
+}
+
+function rpcPayload(value: unknown): { json: unknown; meta: [] } {
+  return { json: value, meta: [] };
 }
 
 describe('createApiQueryUtils keys', () => {
@@ -67,42 +78,13 @@ describe('createApiQueryUtils keys', () => {
 
     expect(path).toEqual(['overview', 'day']);
   });
-
-  it('lets a branch key invalidate its leaves', async () => {
-    const { api, utils } = utilsWith();
-    const client = createQueryClient();
-    const options = utils.overview.day.queryOptions({ input: DAY });
-
-    await client.query(options);
-    expect(api.requests).toHaveLength(1);
-
-    // Partial match on the branch — this is how a feature invalidates
-    // "everything about the day overview" without naming each input.
-    await client.invalidateQueries({ queryKey: utils.overview.key() });
-    await client.query(options);
-
-    expect(api.requests).toHaveLength(2);
-  });
-
-  it('does not let an unrelated branch key invalidate them', async () => {
-    const { api, utils } = utilsWith();
-    const client = createQueryClient();
-    const options = utils.overview.day.queryOptions({ input: DAY });
-
-    await client.query(options);
-    await client.invalidateQueries({ queryKey: utils.admin.key() });
-    await client.query(options);
-
-    // Still fresh (`staleTime`), so the second fetch is served from cache.
-    expect(api.requests).toHaveLength(1);
-  });
 });
 
 describe('createApiQueryUtils delegation', () => {
   it('sends the query through the contract procedure it was built from', async () => {
     const { api, utils } = utilsWith();
 
-    const result = await createQueryClient().query(utils.overview.day.queryOptions({ input: DAY }));
+    const result = await utils.overview.day.call(DAY);
 
     expect(api.requests[0]?.url).toBe('https://api.test/rpc/overview/day');
     expect(JSON.parse(await (api.requests[0] as Request).text())).toEqual({ json: DAY });

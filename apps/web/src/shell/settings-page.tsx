@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { UpdateMySettingsInput } from '@lets-park/contract';
 import { useRequireAuth } from '@lets-park/auth/client';
-import { useMutation, useQuery, useQueryClient } from '@lets-park/query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LOT_ROUTE } from '../routes';
 import { useApi } from './api-provider/api-provider';
 import { useCurrentUser } from './use-current-user';

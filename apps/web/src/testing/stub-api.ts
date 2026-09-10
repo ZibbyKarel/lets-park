@@ -1,15 +1,11 @@
 /**
  * Test-only helpers that put a **real** `ApiClient` behind a stubbed `fetch`.
  *
- * The tests in this lib are about how TanStack Query reacts to what the API
+ * The tests that use this are about how TanStack Query reacts to what the API
  * actually returns — whether a 423 is retried, whether a domain code survives
  * into a component. A hand-written fake client would answer none of that,
  * because it would skip the transport that produces those errors in the first
  * place. So the only thing replaced here is the bottom-most `fetch`.
- *
- * Lives in `__fixtures__/` because `tsconfig.lib.json` excludes that folder;
- * being unreferenced by `src/index.ts` is not enough to keep a file out of the
- * library's compilation program.
  */
 
 import { createApiClient } from '@lets-park/api-client';

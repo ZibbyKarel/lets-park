@@ -5,7 +5,8 @@ import type { AdminUser, MyProfile, ParkingSpot, ReservationHolder } from '@lets
 import { IntlProvider, todayInPrague } from '@lets-park/i18n';
 import cs from '../../../messages/cs.json';
 import { failureWithCode } from '../../testing/contract-failure';
-import { createQueryClient, QueryProvider } from '@lets-park/query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '../query/query-client';
 import { LOT_ROUTE } from '../../routes';
 import { AdminDayPanel } from './admin-day-panel';
 import { AdminSpotsPanel } from './admin-spots-panel';
@@ -25,9 +26,9 @@ import { AdminWindowPanel } from './admin-window-panel';
  * green and tells an admin their retire was refused for a duplicate label.
  *
  * The seams are stubbed one layer out, not further in: `useApi` returns a fake
- * whose procedures resolve or reject, but `@lets-park/query`, the real
- * `QueryClient` with this project's retry policy, and the real screens all run.
- * So an assertion here is about what an admin would see.
+ * whose procedures resolve or reject, but the real `QueryClient` with this
+ * project's retry policy, and the real screens, all run. So an assertion here
+ * is about what an admin would see.
  */
 
 /** The fake `api` the panels are given. Reassigned per test, before render. */
@@ -160,7 +161,7 @@ function makeApi(responders: Record<string, Responder>) {
 function renderPanel(node: ReactNode) {
   render(
     <IntlProvider locale="cs" messages={cs}>
-      <QueryProvider client={createQueryClient()}>{node}</QueryProvider>
+      <QueryClientProvider client={createQueryClient()}>{node}</QueryClientProvider>
     </IntlProvider>
   );
   return userEvent.setup();

@@ -11,18 +11,18 @@
  *   referentially stable yet always reads the *latest* session. That is why the
  *   client can be memoised for the life of the page without pinning an expired
  *   token to it (`doc/auth.md`, §"Using it from the app").
- * - nothing here names `@orpc/client` or `@tanstack/react-query`. The transport
- *   comes from `@lets-park/api-client` and the query layer from
- *   `@lets-park/query` — the wrapper rule, enforced by `no-restricted-imports`
- *   in `eslint.config.mjs`.
+ * - nothing here names `@orpc/client` directly. The transport and the
+ *   contract-derived query utilities both come from `@lets-park/api-client` —
+ *   the wrapper rule for `@orpc/client`, enforced by `no-restricted-imports`
+ *   in `eslint.config.mjs`. `@tanstack/react-query` itself is not wrapped
+ *   (`doc/decision/0308-*`).
  */
 
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useAccessTokenProvider } from '@lets-park/auth/client';
-import { createApiClient } from '@lets-park/api-client';
-import { createApiQueryUtils } from '@lets-park/query';
-import type { ApiQueryUtils } from '@lets-park/query';
+import { createApiClient, createApiQueryUtils } from '@lets-park/api-client';
+import type { ApiQueryUtils } from '@lets-park/api-client';
 import { apiRpcUrl } from '../../api-url';
 
 const ApiContext = createContext<ApiQueryUtils | null>(null);

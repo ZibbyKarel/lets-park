@@ -1,18 +1,21 @@
 /**
- * The retry policy, exercised rather than asserted.
+ * The `QueryClient` policy and the query-key bridge, exercised together.
  *
- * Every test here counts the requests that reached the transport, so what is
- * verified is what a real `QueryClient` did with a real error from a real
- * `RPCLink` — not what `shouldRetryQuery` returns when handed a hand-built
- * object.
+ * Every retry test here counts the requests that reached the transport, so
+ * what is verified is what a real `QueryClient` did with a real error from a
+ * real `RPCLink` — not what `shouldRetryQuery` returns when handed a
+ * hand-built object. The two invalidation tests at the end construct a real
+ * client and a real `createApiQueryUtils` tree together on purpose — that
+ * combination is exactly what used to trip the dual-package hazard under
+ * `libs/api-client`'s `"module": "commonjs"` (`doc/decision/0038-*`); this
+ * file lives in `apps/web`, whose `tsconfig.json` already resolves both
+ * packages through `esnext`, so it does not need the same workaround.
  */
 
 import type { QueryClient } from '@tanstack/react-query';
 import { ERROR_CODES, ERROR_DEFINITIONS } from '@lets-park/contract';
-import { createApiQueryUtils, createQueryClient } from '../index';
-// The policy constants are the client's implementation and are not published
-// from the barrel; this is their own module.
-import { DEFAULT_GC_TIME_MS, DEFAULT_STALE_TIME_MS } from './query-client';
+import { createApiQueryUtils } from '@lets-park/api-client';
+import { createQueryClient, DEFAULT_GC_TIME_MS, DEFAULT_STALE_TIME_MS } from './query-client';
 import { MAX_QUERY_RETRIES } from './retry';
 import {
   contractErrorResponse,
@@ -20,8 +23,8 @@ import {
   stubApi,
   transportErrorResponse,
   unreachableApi,
-} from '../__fixtures__/stub-api';
-import type { StubbedApi, StubbedResponse } from '../__fixtures__/stub-api';
+} from '../../testing/stub-api';
+import type { StubbedApi, StubbedResponse } from '../../testing/stub-api';
 
 /**
  * A client with the shipped defaults, minus the wait between retries.
@@ -84,26 +87,6 @@ describe('createQueryClient defaults', () => {
     expect(queries?.gcTime).toBe(DEFAULT_GC_TIME_MS);
     expect(queries?.refetchOnWindowFocus).toBe(false);
   });
-
-  it('does not hand out `QueryClient` as a constructible value', () => {
-    // `createQueryClient` is the only way to get a client, because a
-    // `new QueryClient()` would silently carry TanStack's defaults (three
-    // retries on everything, `refetchOnWindowFocus` on) past this project's
-    // policy — while still passing the ESLint wrapper ban, since the class
-    // would have come from `@lets-park/query`. `index.ts` therefore exports the
-    // name as a type only.
-    //
-    // TypeScript already rejects `new QueryClient()` at compile time; this
-    // asserts the runtime side of the same fact, so re-adding it to the value
-    // export list fails a test rather than merely widening the API unnoticed.
-    const wrapper = require('../index') as Record<string, unknown>;
-
-    expect(Object.keys(wrapper)).not.toContain('QueryClient');
-    expect(wrapper['QueryClient']).toBeUndefined();
-    // The hooks, by contrast, are values and must stay so.
-    expect(typeof wrapper['useQuery']).toBe('function');
-    expect(typeof wrapper['createQueryClient']).toBe('function');
-  });
 });
 
 describe('query retry', () => {
@@ -161,5 +144,38 @@ describe('query retry', () => {
     await runDayOverview(api, testQueryClient());
 
     expect(api.requests).toHaveLength(2);
+  });
+});
+
+describe('createApiQueryUtils keys, through a real cache', () => {
+  it('lets a branch key invalidate its leaves', async () => {
+    const api = alwaysRespond({ status: 200, body: rpcPayload({ ok: true }) });
+    const utils = createApiQueryUtils(api.client);
+    const client = testQueryClient();
+    const options = utils.overview.day.queryOptions({ input: { date: '2026-09-15' } });
+
+    await client.query(options);
+    expect(api.requests).toHaveLength(1);
+
+    // Partial match on the branch — this is how a feature invalidates
+    // "everything about the day overview" without naming each input.
+    await client.invalidateQueries({ queryKey: utils.overview.key() });
+    await client.query(options);
+
+    expect(api.requests).toHaveLength(2);
+  });
+
+  it('does not let an unrelated branch key invalidate them', async () => {
+    const api = alwaysRespond({ status: 200, body: rpcPayload({ ok: true }) });
+    const utils = createApiQueryUtils(api.client);
+    const client = testQueryClient();
+    const options = utils.overview.day.queryOptions({ input: { date: '2026-09-15' } });
+
+    await client.query(options);
+    await client.invalidateQueries({ queryKey: utils.admin.key() });
+    await client.query(options);
+
+    // Still fresh (`staleTime`), so the second fetch is served from cache.
+    expect(api.requests).toHaveLength(1);
   });
 });
