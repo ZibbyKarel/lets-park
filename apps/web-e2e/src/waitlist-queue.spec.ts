@@ -69,6 +69,20 @@ test.describe.configure({ mode: 'serial' });
  * Best-effort pre-flight: leaves `label`'s queue for whichever caller `page`
  * is signed in as, tolerating a run that got interrupted mid-queue last time.
  * A no-op (just closes the dialog) when this caller isn't queued.
+ *
+ * `isVisible()` does not wait, so this branch is only safe because
+ * `SpotDialog` (`apps/web/src/lot/spot-dialog/spot-dialog.tsx`) is
+ * presentational: it renders entirely from the `spot: SpotView` prop it is
+ * handed, which is the same already-fetched `overview.day` data the tile
+ * grid rendered from — there is no async gap between "the dialog opened" and
+ * "its reservation/queue buttons reflect the real state" for this read to
+ * race. `cancelWhoeverHolds` below relies on the same fact, as do the
+ * equivalents in `settings-profile.spec.ts` (`cancelIfOwnLeftover`) and
+ * `admin-spots.spec.ts` (`cleanUpLeftoverSpot`). If `SpotDialog` ever grows a
+ * lazy fetch or a loading skeleton, these branches would silently read stale
+ * DOM, take the wrong path, and leave real state behind for the *next* spec
+ * to trip over — the same class of bug `tableRow` had before it moved off an
+ * exact match (`support/admin-page.ts`'s docblock on it).
  */
 async function leaveQueueIfQueued(page: Page, label: string): Promise<void> {
   const dialog = await openSpot(page, label);
@@ -87,6 +101,9 @@ async function leaveQueueIfQueued(page: Page, label: string): Promise<void> {
  * gated on being the holder (`spot-dialog.tsx`'s `showCancel`), unlike an
  * ordinary user's. That is what lets this free the spot regardless of which
  * persona an interrupted earlier run left holding it.
+ *
+ * Same non-waiting `.isVisible()` read as `leaveQueueIfQueued` above, safe
+ * for the same reason — see its docblock.
  */
 async function cancelWhoeverHolds(page: Page, label: string): Promise<void> {
   const dialog = await openSpot(page, label);
@@ -108,6 +125,11 @@ test('a second person joins an empty queue and is told their own position', asyn
   // never disturbs anything, but cancelling a reservation while somebody is
   // still queued for it would promote them (`WaitlistPromotionService`)
   // instead of freeing the bay, which is the opposite of what a reset wants.
+  // All three personas that can touch this bay are healed here, not just the
+  // two this test itself queues below — the assertions that follow read the
+  // *global* queue state (`waitlistCount`/`queueEmpty`), not this spec's own
+  // writes, so a stray entry left by any of them from an interrupted run
+  // would be visible too.
   await adminPage.goto(LOT_PATH);
   await goToDate(adminPage, DATE);
   await leaveQueueIfQueued(adminPage, SPOT);
@@ -115,6 +137,10 @@ test('a second person joins an empty queue and is told their own position', asyn
   await userTwoPage.goto(LOT_PATH);
   await goToDate(userTwoPage, DATE);
   await leaveQueueIfQueued(userTwoPage, SPOT);
+
+  await userPage.goto(LOT_PATH);
+  await goToDate(userPage, DATE);
+  await leaveQueueIfQueued(userPage, SPOT);
 
   await adminPage.goto(LOT_PATH);
   await goToDate(adminPage, DATE);

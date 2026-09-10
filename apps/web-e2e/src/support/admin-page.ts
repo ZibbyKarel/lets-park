@@ -66,11 +66,14 @@ export async function goToAdminTab(page: Page, tab: AdminTab): Promise<Locator> 
 }
 
 /**
- * The row of a `DataTable` whose first cell names `label`, within `panel`.
+ * The row of a `DataTable` whose label cell starts with `label`, within `panel`.
  *
- * Anchored on the first cell rather than on row text, so a row is never found
- * by something that merely appears in one of its other columns — a holder's
- * name, a plate, a category.
+ * Anchored on the start of a cell's accessible name rather than on row text, so
+ * a row is never found by something that merely appears somewhere inside one of
+ * its other columns — a holder's name, a plate, a category. (The filter accepts
+ * *any* cell whose name starts with `label`, not strictly the first one; in
+ * these two tables only the label column can start that way, and a locator that
+ * insisted on cell index would break the moment a column is reordered.)
  *
  * **`label` may be followed by more text in the same cell, and that is why this
  * is not an exact match.** It was `{ name: label, exact: true }`, which is

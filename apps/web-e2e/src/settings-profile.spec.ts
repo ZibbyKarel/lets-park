@@ -112,6 +112,15 @@ async function selectByLabel(select: Locator, label: string): Promise<string> {
  * Lives outside any `test()` body on purpose — `playwright/no-conditional-in-test`
  * flags a branch taken directly inside a test, and the branch here is not
  * something the test should have to know about; it is this helper's whole job.
+ *
+ * `isVisible()` does not wait — it reads whatever is in the DOM at that
+ * instant. That is safe here only because `SpotDialog`
+ * (`apps/web/src/lot/spot-dialog/spot-dialog.tsx`) is presentational and
+ * renders synchronously from the already-fetched `overview.day` data; see
+ * `waitlist-queue.spec.ts`'s `leaveQueueIfQueued` for the full argument and
+ * the `tableRow` precedent this is the same class of bug as. If the dialog
+ * ever gains a lazy fetch or a loading skeleton, this would silently pick
+ * the wrong branch and leave real state behind for the next spec.
  */
 async function cancelIfOwnLeftover(page: Page, label: string) {
   const dialog = await openSpot(page, label);

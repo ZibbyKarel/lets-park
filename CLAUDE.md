@@ -90,8 +90,12 @@ DATABASE_URL=$(grep '^DATABASE_URL=' /path/to/lets-park/.env | sed 's/^DATABASE_
 `web-e2e:e2e` is **48 passed, exit 0** — the fifteen spec files, the three
 persona sign-ins in `support/auth.setup.ts`, and `support/build-identity.setup.ts`.
 In a worktree it needs the whole `.env` copied in, not just `DATABASE_URL`;
-without it the API exits on its own env schema before a test runs. Four things
-are worth knowing before you run it yourself:
+without it the API exits on its own env schema before a test runs. Measured in
+both configurations, because they are not the same suite: `nxE2EPreset` sets
+`workers: process.env.CI ? 1 : undefined`, so a local run is parallel and CI's
+is serial. `CI=true npx nx run web-e2e:e2e --skip-nx-cache` is the one command
+that reproduces what CI actually runs — **48 passed, exit 0, 27.6 s**, against
+18 s parallel. Four things are worth knowing before you run it yourself:
 
 - **Free port 4200 first, and expect a loud failure if you forget.** The suite
   no longer adopts whatever is listening: `reuseExistingServer` is `false` for

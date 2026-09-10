@@ -49,7 +49,13 @@ Four constraints, each of which has already cost this suite a day:
   `(spot, date)` and per `(user, date)`, so two files booking the same persona
   on the same day fail each other intermittently. Never write a literal date:
   it rots into a Saturday or 28 October, and `isReservableDay` then refuses
-  every write for a reason that has nothing to do with the test.
+  every write for a reason that has nothing to do with the test. The slots are
+  finite: twelve of them are taken, and the shortest possible target month has
+  about nineteen business days, so there is room for a handful more files and
+  then no more. `e2eDayForSlot` throws when a slot runs past the month rather
+  than wrapping onto a day another file owns — so the wall, when you reach it,
+  is a loud one, and the answer then is a second target month, not a literal
+  date.
 - **`fullyParallel` is on, so global state is shared.** The reservation-window
   row is a singleton; the spot roster, the user roster and their roles are one
   set of rows for the whole run. A spec may touch these, but only in ways no

@@ -79,6 +79,13 @@ async function cleanUpLeftoverSpot(adminPage: Page): Promise<void> {
   // A held bay only ever shows the `⋯` menu for an admin looking at somebody
   // else's reservation (`showAdminMenu`) — every reservation this file makes
   // is `USER`'s, never the admin's own, so this is the one way in.
+  //
+  // `menuButton.count()` does not wait, so this branch is only safe because
+  // `SpotDialog`'s trigger (the tile grid) renders synchronously from
+  // already-fetched `overview.day` data — see `waitlist-queue.spec.ts`'s
+  // `leaveQueueIfQueued` for the full argument, and the `tableRow` precedent
+  // this is the same class of bug as. A lazy fetch or loading skeleton added
+  // later would make this silently take the wrong path.
   await adminPage.goto(LOT_PATH);
   await goToDate(adminPage, DATE);
   const menuButton = spotMenuButton(adminPage, SPOT);
