@@ -1,6 +1,6 @@
 import * as z from 'zod';
 import { userSchema } from '../schemas/entities';
-import { NOT_A_UUID, UUID_A, userFixture } from '../__fixtures__/fixtures';
+import { DATE_A, NOT_A_UUID, UUID_A, userFixture } from '../__fixtures__/fixtures';
 import {
   ADMIN_USER_FIELDS,
   adminListUsersInputSchema,
@@ -50,6 +50,31 @@ describe('adminListUsersInputSchema', () => {
     expect(adminListUsersInputSchema.parse({ role: 'ADMIN', active: true, search: 'nov' })).toEqual(
       { role: 'ADMIN', active: true, search: 'nov' }
     );
+  });
+
+  it('accepts the queue-target exclusion filter', () => {
+    expect(
+      adminListUsersInputSchema.parse({
+        active: true,
+        excludingReservedOrQueuedFor: { parkingSpotId: UUID_A, date: DATE_A },
+      })
+    ).toEqual({
+      active: true,
+      excludingReservedOrQueuedFor: { parkingSpotId: UUID_A, date: DATE_A },
+    });
+  });
+
+  it('rejects the exclusion filter with a non-uuid spot id or a malformed date', () => {
+    expect(
+      adminListUsersInputSchema.safeParse({
+        excludingReservedOrQueuedFor: { parkingSpotId: NOT_A_UUID, date: DATE_A },
+      }).success
+    ).toBe(false);
+    expect(
+      adminListUsersInputSchema.safeParse({
+        excludingReservedOrQueuedFor: { parkingSpotId: UUID_A, date: '2026-13-40' },
+      }).success
+    ).toBe(false);
   });
 
   it('rejects an unknown role and an empty search string', () => {

@@ -9,7 +9,7 @@
 import * as z from 'zod';
 import { userSchema } from '../schemas/entities';
 import { userRoleSchema } from '../schemas/enums';
-import { idSchema } from '../schemas/primitives';
+import { dateOnlySchema, idSchema } from '../schemas/primitives';
 import { authed, contractErrors } from './builder';
 
 /**
@@ -64,6 +64,18 @@ export const adminListUsersInputSchema = z.object({
   active: z.boolean().optional(),
   /** Free-text match against name and email; the backend decides how. */
   search: z.string().min(1).max(200).optional(),
+  /**
+   * Scopes the list to users eligible to be added to this spot's queue on
+   * this day: excludes anyone who already holds a reservation that day (any
+   * spot — `Reservation(userId, date)` is unique, so a second one is
+   * impossible) and anyone already in this spot's own queue that day
+   * (`WaitlistEntry(parkingSpotId, userId, date)`). Only the admin queue-target
+   * picker (`LotScreen`'s `queueTargetQuery`) sets this; every other caller
+   * gets the unfiltered list, same as before.
+   */
+  excludingReservedOrQueuedFor: z
+    .object({ parkingSpotId: idSchema, date: dateOnlySchema })
+    .optional(),
 });
 export type AdminListUsersInput = z.infer<typeof adminListUsersInputSchema>;
 
