@@ -629,9 +629,26 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
       createdAt: T0,
       updatedAt: T0,
     };
+    // The admin themselves, alongside `other` — needed since the queue-target
+    // form now defaults to the first eligible option when the viewer isn't
+    // among them (see `defaultQueueTargetId`), and this test's second half
+    // relies on "Přidat se do fronty" joining the admin themselves, not
+    // `other`.
+    const self: AdminUser = {
+      id: VIEWER,
+      email: 'karel.zibar@firma.cz',
+      name: 'Karel Zíbar',
+      licensePlate: '4AB 1234',
+      role: 'ADMIN',
+      oktaId: 'okta-1',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
     const { user } = setup({
       profile: profile({ role: 'ADMIN' }),
-      adminUsers: [other],
+      adminUsers: [self, other],
     });
     apiMocks.reservationCreate.mockRejectedValue(
       await failureWithCode('RESERVATION_LIMIT_REACHED')
@@ -1180,5 +1197,29 @@ describe('LotScreen — an admin adding somebody to the queue', () => {
     await user.click(await screen.findByRole('button', { name: /^Otevřít místo E2\.92,/u }));
 
     expect(await screen.findByRole('button', { name: 'Přidat se do fronty' })).toBeDisabled();
+  });
+
+  it('shows why the queue-target selector is missing when the filtered admin.user.list fails', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview(),
+      adminUsers: [],
+    });
+    // `holderQuery` and `queueTargetQuery` both call `admin.user.list`, told
+    // apart only by whether the input carries `excludingReservedOrQueuedFor`
+    // (`lot-screen.tsx`'s `queueTargetQuery`). Only the filtered call is made
+    // to fail, so this pins `queueTargetError` specifically — leaving the
+    // reserve-holder fetch failing too would show the same message for the
+    // wrong reason.
+    apiMocks.adminUserList.mockImplementation(
+      (input: { excludingReservedOrQueuedFor?: unknown }) =>
+        input?.excludingReservedOrQueuedFor === undefined
+          ? Promise.resolve({ users: [] })
+          : Promise.reject(new Error('boom'))
+    );
+
+    await user.click(await screen.findByRole('button', { name: /^Otevřít místo E2\.92,/u }));
+
+    expect(await screen.findByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
   });
 });

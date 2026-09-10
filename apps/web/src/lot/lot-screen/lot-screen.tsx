@@ -197,6 +197,10 @@ export function LotScreen() {
   // gates the query itself.
   const queueTargetPending =
     isAdmin && openSpot !== null && openSpot.action === 'queue' && queueTargetQuery.isPending;
+  const queueTargetError =
+    isAdmin && openSpot !== null && openSpot.action === 'queue' && queueTargetQuery.isError
+      ? queueTargetQuery.error
+      : null;
 
   const queueTargetOptions = useMemo<readonly HolderOption[]>(
     () =>
@@ -471,7 +475,7 @@ export function LotScreen() {
         canReserve={day.canReserve}
         isAdmin={isAdmin}
         monthName={f.monthName(parts.month)}
-        error={actionError ?? holderError}
+        error={actionError ?? holderError ?? queueTargetError}
         {...(holderLimitMessage === null ? {} : { errorMessage: holderLimitMessage })}
         pending={pending}
         viewerUserId={viewerUserId}
