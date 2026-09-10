@@ -1125,3 +1125,60 @@ describe('LotScreen — an admin naming a holder', () => {
     expect(await screen.findByText('Zkuste to prosím znovu za chvíli.')).toBeInTheDocument();
   });
 });
+
+describe('LotScreen — an admin adding somebody to the queue', () => {
+  it('fetches the queue-target list scoped to the open spot and day, excluding it for the reserve flow', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview(),
+      adminUsers: [],
+    });
+
+    // `/E2\.92/` alone is ambiguous here: an admin viewing a taken spot also
+    // gets the `⋯` admin-menu button (`Možnosti místa E2.92`) — the same
+    // `/^Otevřít místo E2\.92,/u` disambiguation the other describe blocks
+    // in this file already use.
+    await user.click(await screen.findByRole('button', { name: /^Otevřít místo E2\.92,/u }));
+
+    await waitFor(() => {
+      const call = apiMocks.adminUserList.mock.calls.find(
+        (args) => args[0]?.excludingReservedOrQueuedFor !== undefined
+      );
+      expect(call?.[0]).toEqual({
+        active: true,
+        excludingReservedOrQueuedFor: { parkingSpotId: 'spot-taken', date: DATE },
+      });
+    });
+  });
+
+  it('does not fetch the queue-target list while a free spot’s reserve dialog is open', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview(),
+      adminUsers: [],
+    });
+
+    await user.click(await screen.findByRole('button', { name: /E2\.93/ }));
+
+    await waitFor(() => expect(apiMocks.adminUserList).toHaveBeenCalled());
+    expect(
+      apiMocks.adminUserList.mock.calls.some(
+        (args) => args[0]?.excludingReservedOrQueuedFor !== undefined
+      )
+    ).toBe(false);
+  });
+
+  it('disables the queue button while the queue-target list is still loading', async () => {
+    const { user } = setup({
+      profile: profile({ role: 'ADMIN' }),
+      day: dayOverview(),
+      // Every call to admin.user.list hangs — both the reserve-holder query
+      // (which resolves the dialog's other affordances) and this one.
+      adminUsersImpl: () => new Promise(() => undefined),
+    });
+
+    await user.click(await screen.findByRole('button', { name: /^Otevřít místo E2\.92,/u }));
+
+    expect(await screen.findByRole('button', { name: 'Přidat se do fronty' })).toBeDisabled();
+  });
+});

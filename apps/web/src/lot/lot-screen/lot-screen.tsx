@@ -173,6 +173,41 @@ export function LotScreen() {
     [groups, openSpotId]
   );
 
+  // Only an admin adding somebody to a spot's queue fetches this — scoped to
+  // that spot and day so the excluded set (`excludingReservedOrQueuedFor`) is
+  // right for the bay actually open, and refetched whenever either changes.
+  const queueTargetQuery = useQuery({
+    ...api.admin.user.list.queryOptions({
+      input: {
+        active: true,
+        ...(openSpot === null
+          ? {}
+          : { excludingReservedOrQueuedFor: { parkingSpotId: openSpot.spotId, date } }),
+      },
+    }),
+    enabled:
+      sessionStatus === 'authenticated' &&
+      isAdmin &&
+      openSpot !== null &&
+      openSpot.action === 'queue',
+  });
+
+  // Same reasoning as `holderPending`/`holderError`: a disabled query never
+  // leaves `'pending'`, so both flags stay gated on the same condition that
+  // gates the query itself.
+  const queueTargetPending =
+    isAdmin && openSpot !== null && openSpot.action === 'queue' && queueTargetQuery.isPending;
+
+  const queueTargetOptions = useMemo<readonly HolderOption[]>(
+    () =>
+      (queueTargetQuery.data?.users ?? []).map((row) => ({
+        userId: row.id,
+        name: row.name,
+        licensePlate: row.licensePlate,
+      })),
+    [queueTargetQuery.data]
+  );
+
   // This client's own hold, taken while the dialog is open and released by the
   // same effect when it closes (`doc/realtime.md`, §"The cell lock"). It is a
   // courtesy, not an authorisation step: skipping it would get a `CONFLICT`
@@ -442,6 +477,8 @@ export function LotScreen() {
         viewerUserId={viewerUserId}
         holderOptions={holderOptions}
         holderPending={holderPending}
+        queueTargetOptions={queueTargetOptions}
+        queueTargetPending={queueTargetPending}
         onClose={closeDialog}
         onReserve={(holder) => {
           if (openSpot === null) return;
