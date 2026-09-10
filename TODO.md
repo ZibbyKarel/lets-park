@@ -1,6 +1,6 @@
 # TODO
 
-1. [ ] hromadná rezervace pro admin uživatele musí dát adminovi možnost rezervovat místa pro jiného uživatele tak jak je to při single reservation flow.
+1. [x] hromadná rezervace pro admin uživatele musí dát adminovi možnost rezervovat místa pro jiného uživatele tak jak je to při single reservation flow. (main@ef03272)
 2. [x] admin user - detail rezervace místa - pridání uživatele do fronty musí vyfiltrovat uživatele, kteří již mají na místo rezervaci nebo čekají ve frontě (main@4390124)
 3. [x] chybové hlášky - některé chybové hlášky se zobrazují v domu místo toho aby vyskočily jako toast/alert nahoře v pravém rohu aplikace. Příkladem jsou chybové hlášky v detailu rezervace při přidávání uživatele do fronty. Najdi i podobné případy v aplikaci a uprav to aby se chyby zobrazovaly jako alerty v pravém horním rohu (main@e0d44b0)
 4. [x] nezobrazovat "SPZ neuvedena" u rezervací, kde uživatelé nemají vyplněnou SPZ (main@0978607)
