@@ -19,8 +19,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addDays,
+  nextWeekday,
   parseDateOnly,
+  previousWeekday,
   todayInPrague,
   useDateFormatters,
   useTranslations,
@@ -370,10 +371,10 @@ export function LotScreen() {
           setBulkOpen(true);
         }}
         onPreviousDay={() => {
-          setDate(addDays(date, -1));
+          setDate(previousWeekday(date));
         }}
         onNextDay={() => {
-          setDate(addDays(date, 1));
+          setDate(nextWeekday(date));
         }}
         onToday={() => {
           setDate(todayInPrague());

@@ -663,7 +663,7 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
   });
 
   it('invalidates the day now on screen, not the one it left, after a day change', async () => {
-    const NEXT_DATE = '2026-02-01';
+    const NEXT_DATE = '2026-02-02';
     const { user, invalidate } = setup();
     // `overview.day` has to answer for whichever date is actually on screen
     // once the day changes, or the screen would be stuck loading — set
@@ -693,6 +693,60 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
     expect(invalidate).not.toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: dayKey(DATE) })
     );
+  });
+});
+
+describe('LotScreen — day navigation skips weekends', () => {
+  it('jumps from Friday straight to Monday on "next day"', async () => {
+    apiMocks.overviewDay.mockImplementation((input: { date: string }) =>
+      Promise.resolve(dayOverview({ date: input.date }))
+    );
+    const { user } = setup();
+
+    // Saturday 2026-01-31 -> Friday 2026-01-30 (an ordinary one-day step back).
+    await user.click(screen.getByRole('button', { name: 'Předchozí den' }));
+    await waitFor(() => {
+      expect(apiMocks.overviewDay).toHaveBeenCalledWith(
+        expect.objectContaining({ date: '2026-01-30' }),
+        expect.anything()
+      );
+    });
+
+    // Friday 2026-01-30 -> the actual skip, straight to Monday 2026-02-02.
+    await user.click(screen.getByRole('button', { name: 'Následující den' }));
+    await waitFor(() => {
+      expect(apiMocks.overviewDay).toHaveBeenCalledWith(
+        expect.objectContaining({ date: '2026-02-02' }),
+        expect.anything()
+      );
+    });
+  });
+
+  it('jumps from Monday straight back to Friday on "previous day"', async () => {
+    apiMocks.overviewDay.mockImplementation((input: { date: string }) =>
+      Promise.resolve(dayOverview({ date: input.date }))
+    );
+    const { user } = setup();
+
+    // Saturday 2026-01-31 -> Monday 2026-02-02 (already the skip, since the
+    // starting Saturday itself is a weekend — asserted here only as a stepping
+    // stone to reach the Monday, not as this test's point).
+    await user.click(screen.getByRole('button', { name: 'Následující den' }));
+    await waitFor(() => {
+      expect(apiMocks.overviewDay).toHaveBeenCalledWith(
+        expect.objectContaining({ date: '2026-02-02' }),
+        expect.anything()
+      );
+    });
+
+    // Monday 2026-02-02 -> the actual skip, straight back to Friday 2026-01-30.
+    await user.click(screen.getByRole('button', { name: 'Předchozí den' }));
+    await waitFor(() => {
+      expect(apiMocks.overviewDay).toHaveBeenCalledWith(
+        expect.objectContaining({ date: '2026-01-30' }),
+        expect.anything()
+      );
+    });
   });
 });
 
