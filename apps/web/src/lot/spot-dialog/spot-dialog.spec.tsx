@@ -1,10 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { IntlProvider } from '@lets-park/i18n';
-import cs from '../../../messages/cs.json';
+import { screen } from '@testing-library/react';
 import { failureWithCode } from '../../testing/contract-failure';
-import { SpotDialog } from './spot-dialog';
-import type { SpotView } from '../lot-view';
+import { mine, renderDialog, spot, takenByOther } from './spot-dialog.test-helpers';
 
 /**
  * Which actions the dialog offers, in which state.
@@ -14,100 +10,6 @@ import type { SpotView } from '../lot-view';
  * offered a way to book it, but must keep the way out of what they already
  * have. Both halves are checked, in both directions.
  */
-
-function spot(overrides: Partial<SpotView> = {}): SpotView {
-  return {
-    spotId: 'spot-a',
-    label: 'E2.92',
-    appearance: 'free',
-    action: 'reserve',
-    holderName: null,
-    holderPlate: null,
-    carColorClass: null,
-    editorName: null,
-    waitlistCount: 0,
-    isMine: false,
-    viewerWaitlistEntryId: null,
-    viewerWaitlistPosition: null,
-    showAdminMenu: false,
-    holderIsGuest: false,
-    infoReason: null,
-    ...overrides,
-  };
-}
-
-const takenByOther = spot({
-  appearance: 'taken',
-  action: 'queue',
-  holderName: 'Petr Novák',
-  holderPlate: '8SC 9012',
-  carColorClass: 'text-car-2',
-});
-
-const mine = spot({
-  appearance: 'taken',
-  action: 'mine',
-  isMine: true,
-  holderName: 'Karel Zíbar',
-  holderPlate: '4AB 1234',
-  carColorClass: 'text-car-3',
-});
-
-interface DialogOverrides {
-  spot?: SpotView | null;
-  canReserve?: boolean;
-  isAdmin?: boolean;
-  error?: unknown;
-  errorMessage?: string;
-  viewerUserId?: string | null;
-  holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
-  holderPending?: boolean;
-}
-
-function renderDialog(overrides: DialogOverrides = {}) {
-  const callbacks = {
-    onClose: jest.fn(),
-    onReserve: jest.fn(),
-    onJoinWaitlist: jest.fn(),
-    onLeaveWaitlist: jest.fn(),
-    onCancelReservation: jest.fn(),
-  };
-
-  function tree(props: DialogOverrides) {
-    return (
-      <IntlProvider locale="cs" messages={cs}>
-        <SpotDialog
-          spot={props.spot === undefined ? spot() : props.spot}
-          date="2026-09-28"
-          canReserve={props.canReserve ?? true}
-          isAdmin={props.isAdmin ?? false}
-          monthName="září"
-          error={props.error ?? null}
-          {...(props.errorMessage === undefined ? {} : { errorMessage: props.errorMessage })}
-          pending={false}
-          viewerUserId={props.viewerUserId ?? null}
-          holderOptions={props.holderOptions ?? []}
-          holderPending={props.holderPending ?? false}
-          {...callbacks}
-        />
-      </IntlProvider>
-    );
-  }
-
-  const { rerender } = render(tree(overrides));
-
-  return {
-    ...callbacks,
-    user: userEvent.setup(),
-    /**
-     * Re-renders with `next` merged over the props this call was made with —
-     * the same component instance, which is the point: it is how a prop that
-     * arrives *after* mount (a profile query resolving, a second bay opening)
-     * gets exercised at all.
-     */
-    rerender: (next: DialogOverrides) => rerender(tree({ ...overrides, ...next })),
-  };
-}
 
 describe('SpotDialog', () => {
   it('renders nothing when no bay is open', () => {
