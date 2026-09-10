@@ -41,6 +41,87 @@ describe('UsersService', () => {
       await expect(users.adminList({ search: 'bob@' })).resolves.toMatchObject([{ name: 'Bob' }]);
       await expect(users.adminList({ search: 'nobody' })).resolves.toEqual([]);
     });
+
+    describe('excludingReservedOrQueuedFor', () => {
+      it('excludes a user who already has a reservation that day, for any spot', async () => {
+        const spotA = double.seedSpot({ label: 'A1' });
+        const spotB = double.seedSpot({ label: 'B1' });
+        const bob = double.users.find((row) => row.name === 'Bob');
+        if (bob === undefined) throw new Error('seed missing Bob');
+        double.seedReservation({ parkingSpotId: spotB.id, userId: bob.id, date: '2026-09-15' });
+
+        const listed = await users.adminList({
+          active: true,
+          excludingReservedOrQueuedFor: { parkingSpotId: spotA.id, date: '2026-09-15' },
+        });
+
+        expect(listed.map((row) => row.name)).not.toContain('Bob');
+      });
+
+      it('excludes a user already queued for this specific spot that day', async () => {
+        const spotA = double.seedSpot({ label: 'A1' });
+        const bob = double.users.find((row) => row.name === 'Bob');
+        if (bob === undefined) throw new Error('seed missing Bob');
+        double.seedWaitlistEntry({ parkingSpotId: spotA.id, userId: bob.id, date: '2026-09-15' });
+
+        const listed = await users.adminList({
+          active: true,
+          excludingReservedOrQueuedFor: { parkingSpotId: spotA.id, date: '2026-09-15' },
+        });
+
+        expect(listed.map((row) => row.name)).not.toContain('Bob');
+      });
+
+      it('does not exclude a user queued for a different spot that day', async () => {
+        const spotA = double.seedSpot({ label: 'A1' });
+        const spotB = double.seedSpot({ label: 'B1' });
+        const bob = double.users.find((row) => row.name === 'Bob');
+        if (bob === undefined) throw new Error('seed missing Bob');
+        double.seedWaitlistEntry({ parkingSpotId: spotB.id, userId: bob.id, date: '2026-09-15' });
+
+        const listed = await users.adminList({
+          active: true,
+          excludingReservedOrQueuedFor: { parkingSpotId: spotA.id, date: '2026-09-15' },
+        });
+
+        expect(listed.map((row) => row.name)).toContain('Bob');
+      });
+
+      it('does not exclude anyone for a reservation or queue entry on a different day', async () => {
+        const spotA = double.seedSpot({ label: 'A1' });
+        const bob = double.users.find((row) => row.name === 'Bob');
+        if (bob === undefined) throw new Error('seed missing Bob');
+        double.seedReservation({ parkingSpotId: spotA.id, userId: bob.id, date: '2026-09-16' });
+
+        const listed = await users.adminList({
+          active: true,
+          excludingReservedOrQueuedFor: { parkingSpotId: spotA.id, date: '2026-09-15' },
+        });
+
+        expect(listed.map((row) => row.name)).toContain('Bob');
+      });
+
+      it('applies role/active/search filtering and the exclusion together', async () => {
+        const spotA = double.seedSpot({ label: 'A1' });
+        const alice = double.users.find((row) => row.name === 'Alice');
+        if (alice === undefined) throw new Error('seed missing Alice');
+        // Alice is the seeded ADMIN; excluding her should still leave the
+        // `role: 'ADMIN'` filter's result empty, not error.
+        double.seedReservation({ parkingSpotId: spotA.id, userId: alice.id, date: '2026-09-15' });
+
+        const listed = await users.adminList({
+          role: 'ADMIN',
+          excludingReservedOrQueuedFor: { parkingSpotId: spotA.id, date: '2026-09-15' },
+        });
+
+        expect(listed).toEqual([]);
+      });
+
+      it('leaves the list untouched when no filter is given', async () => {
+        const listed = await users.adminList({ active: true });
+        expect(listed.map((row) => row.name).sort()).toEqual(['Alice', 'Bob']);
+      });
+    });
   });
 
   describe('adminUpdate', () => {

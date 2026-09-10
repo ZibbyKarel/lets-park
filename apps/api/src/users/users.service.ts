@@ -29,7 +29,7 @@ import type { AdminListUsersInput, AdminUpdateUserInput, AdminUser } from '@lets
 import type { Prisma } from '@lets-park/database';
 import { AuditLogService } from '../audit/audit-log.service';
 import { DomainError } from '../common/errors/domain-error';
-import { toAdminUser } from '../common/prisma-mapping';
+import { toAdminUser, toDateColumn } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
@@ -65,7 +65,49 @@ export class UsersService {
       where,
       orderBy: [{ name: 'asc' }, { email: 'asc' }],
     });
-    return rows.map(toAdminUser);
+
+    const excludedIds = await this.excludedForQueueTarget(input.excludingReservedOrQueuedFor);
+    const filtered = excludedIds === null ? rows : rows.filter((row) => !excludedIds.has(row.id));
+
+    return filtered.map(toAdminUser);
+  }
+
+  /**
+   * Who to leave out of the admin's "add to queue" picker: everyone who
+   * already holds *a* reservation this day — `Reservation(userId, date)` is
+   * unique, so one is already the ceiling — and everyone already queued for
+   * *this* spot this day (`WaitlistEntry(parkingSpotId, userId, date)`).
+   * Mirrors, ahead of time, the refusals `WaitlistService.joinOnce` would
+   * otherwise only report after submission (`RESERVATION_LIMIT_REACHED`,
+   * `ALREADY_IN_WAITLIST`).
+   *
+   * `null` when the caller passed no target — the ordinary, unfiltered list.
+   */
+  private async excludedForQueueTarget(
+    target: AdminListUsersInput['excludingReservedOrQueuedFor']
+  ): Promise<Set<string> | null> {
+    if (target === undefined) {
+      return null;
+    }
+
+    const date = toDateColumn(target.date);
+    const [reservations, waitlistEntries] = await Promise.all([
+      this.prisma.client.reservation.findMany({ where: { date } }),
+      this.prisma.client.waitlistEntry.findMany({ where: { date } }),
+    ]);
+
+    const excluded = new Set<string>();
+    for (const reservation of reservations) {
+      if (reservation.userId !== null) {
+        excluded.add(reservation.userId);
+      }
+    }
+    for (const entry of waitlistEntries) {
+      if (entry.parkingSpotId === target.parkingSpotId) {
+        excluded.add(entry.userId);
+      }
+    }
+    return excluded;
   }
 
   /** Changes a user's role and/or activity. See the two rules above. */
