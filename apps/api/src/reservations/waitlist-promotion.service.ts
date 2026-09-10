@@ -11,8 +11,9 @@
  * ## Why a row lock, and what exactly it prevents
  *
  * The queue is read with `SELECT … FOR UPDATE` through `$queryRaw`, ordered by
- * `createdAt` then `id` — the same order `DayOverviewService` shows people as
- * their position, so the number in the UI is the number that gets promoted.
+ * `WAITLIST_ORDER_SQL` (`waitlist-order.ts`) — the same order `DayOverviewService`
+ * shows people as their position, so the number in the UI is the number that
+ * gets promoted.
  *
  * The lock is not there to stop two promotions of the same spot: two
  * reservations for one spot and day cannot coexist (unique index), so two
@@ -61,6 +62,7 @@ import { AuditLogService } from '../audit/audit-log.service';
 import { toDateColumn } from '../common/prisma-mapping';
 import { DomainError } from '../common/errors/domain-error';
 import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
+import { WAITLIST_ORDER_SQL } from './waitlist-order';
 
 /** One queued person, as the locking read returns them. */
 interface QueueRow {
@@ -221,7 +223,7 @@ export class WaitlistPromotionService {
       FROM "WaitlistEntry"
       WHERE "parkingSpotId" = ${parkingSpotId}::uuid
         AND "date" = ${date}::date
-      ORDER BY "createdAt" ASC, "id" ASC
+      ${WAITLIST_ORDER_SQL}
       FOR UPDATE
     `;
   }

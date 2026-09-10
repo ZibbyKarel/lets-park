@@ -38,6 +38,7 @@ import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { toDateColumn, toPublicReservation } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
+import { WAITLIST_ORDER } from '../reservations/waitlist-order';
 import { SpotsService } from '../spots/spots.service';
 
 @Injectable()
@@ -64,7 +65,7 @@ export class DayOverviewService {
       }),
       this.prisma.client.waitlistEntry.findMany({
         where: { date: dateColumn },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        orderBy: WAITLIST_ORDER,
         select: { id: true, parkingSpotId: true, userId: true },
       }),
     ]);
