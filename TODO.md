@@ -1,20 +1,11 @@
 # TODO
 
-1. [x] `libs/design-system` should be one package rather than three nested ones. (merged into main as 6ef72d8)
-2. [x] `libs/shared-types` → `czech-holidays`: is there a library for this? The whole file is unsatisfying. (branch todo-2-libs-shared-types-czech-holidays-is-there-a-library-for-this)
-3. [x] flow rezervování míst pro admin usera se liší od flow rezervace normálního usera - user rezervuje pro sebe ale admin může rezervovat pro ostaní uživatele (včetně sebe) tzn musí tam být selector uživatelů, který vybere jméno i spz (měla by jít změnit), případně rezervovat místo pro hosta. (8870616)
-4. [x] Cap registered parking spots at 5 per user per month. ([1](https://github.com/ZibbyKarel/lets-park/pull/1))
-5. [x] pokud má uživatel již auto registrované na vybraný den, rezervace ani přidání se do fronty na parkovací místo nesmí být povolena dokud nezruší současnou rezervaci ([3](https://github.com/ZibbyKarel/lets-park/pull/3))
-6. [x] Drop `libs/query` and import TanStack Query directly in the application. **Done by explicit user override of `plan.md`'s mandatory-wrapper rule for `@tanstack/react-query`** (this workspace only ever had one consumer, so the wrapper bought no swappability). `libs/query` is deleted; the oRPC↔TanStack Query bridge moved to `libs/api-client`, the app's `QueryClient` policy to `apps/web/src/shell/query/`, `eslint.config.mjs`'s `WRAPPED_LIBRARIES` no longer lists it. See `doc/decision/0308-*` and `doc/wrappers.md`. A repo-specific TanStack Query skill was vendored at `.claude/skills/tanstack-query/SKILL.md`. ([4](https://github.com/ZibbyKarel/lets-park/pull/4))
-7. [x] vybraný den se musí ukládat do URL a extrahovat z URL při page loadu jako defaultní hodnota ([2](https://github.com/ZibbyKarel/lets-park/pull/2))
-8. [x] chybí možnost přidání kategorie parkovacích míst pro adminy v přehledu parkovacích míst na stránce /admin (doc/decision/0164-parking-categories-stay-a-closed-enum.md (already decided against; re-affirmed on review))
-   - **Ambiguous, and half of it already exists.** _Assigning_ a category to a spot is done — `admin-spots-screen.tsx` renders a `Select` over `PARKING_GROUPS` on both create and edit, and `createSpotInputSchema` takes `group`. _Adding a new_ category is not, and is a bigger change than it looks: `PARKING_GROUPS` is a closed tuple in `libs/shared-types/src/lib/domain-constants.ts`, mirrored by the Prisma `ParkingGroup` enum and pinned by `libs/database/src/lib/schema-contract-parity.spec.ts`, so user-defined categories mean a `Category` table and a migration. Decide which one you meant before planning it.
-9. [x] Překlady (merged into main as 313a4bc)
-   - použít pro překlady next-intl a přeložit stránky do EN po vzoru vzorového příkladu na https://github.com/amannn/next-intl/tree/main/examples/example-app-router. Všechny překlady pujdou do json souborů v /apps/web/messages. Typ se resolvne z cs.json a napíšeme testy, které zkontrolují že existují překlady pro všechny klíče ve všech jazycích.
-   - automaticky detekovat jazyk prohlížeče uživatele a nastavit jazyk aplikace CZ pro CZ a SK a jinak EN.
-   - přidat přepínač jazyků do menu pod user avatarem
-10. [x] pokud existuje jen jeden administrátor v systému tak musíme zařídit že se mu nemůže role administrátora odstranit -> disablujeme toggle (main@912647e)
-    - **Backend is done; the toggle is not.** `UsersService.requireAnotherActiveAdmin()` (`apps/api/src/users/users.service.ts:134`) already refuses to demote or deactivate the last active admin, with `CONFLICT` declared on `adminUpdateUserContract`. What remains is exactly what this item asks for: in `admin-users-screen.tsx` the Admin switch's `disabled` is only `isRowBusy(...)`, so the last admin can click it and gets a `CONFLICT` toast instead of an inert control. Needs the admin count on the client — `adminListUsers` already returns `role` and `active`, so it is derivable without a contract change.
-11. [x] udělat indexy ve složkách doc, doc/decision pro lepší vyhledávání agenty a napsat krátký odstavec do CLaude.md o tom že se mají nejprve dívat na indexové soubory a až pak číst konkrétní. (main@7b7faa1)
-    - **Partly done.** `doc/README.md` (43.8 KB) already indexes both the topic documents and all 189 decision records, and `CLAUDE.md:22` points at it as "the documentation map". Two things are missing: `doc/decision/` has no index of its own (189 files, currently only discoverable through `doc/README.md` or a filename glob), and CLAUDE.md never states the _rule_ this item asks for — that an agent should read the index first and only then open a specific file.
-12. [x] Admin musí být schopen přidat někoho dalšího do fronty na dané místo. V dialogu detailu rezervace bude v sekci Fronta stejný selektor jako při vytváření rezervace na prázdné místo. Normální uživatel sekci Fronta neuvidí, pokud je fronta prázdná. (main@7f0e372)
+1. - [ ] v testech nepoužívat hodnoty překladů. Místo toho namockovat překladovou funkci tak aby vracela klíč a v testovacích souborech testovat přítomnost toho klíče tzn pseudokod:
+   ```tsx
+     const mockedT = (key: MessageKey, substitutes: Substitutes) => `${key}: ${substitutes.join(',')}
+     ...
+      screen.getByText(
+        mockedT('errHolderLimitReached')
+      )
+   ```
+   tím zabráníme tomu aby testy padaly když se změní jen hodnota překladu
