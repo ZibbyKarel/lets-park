@@ -641,11 +641,13 @@ describe('BulkReservationModal — the confirmed result against the proposal', (
 
     // `role="status"` takes no accessible name from content (ARIA `status` is
     // `nameFrom: author`), so the toast is located via the notifications
-    // region's own `aria-label` instead, then its text asserted within it.
+    // region's own `aria-label` instead. Asserting via the `status` role
+    // (rather than plain text) confirms this is a success/status toast and
+    // not a `danger` one, which renders `role="alert"` instead; the exact
+    // text is checked on top of that.
     const region = await screen.findByRole('region', { name: 'Oznámení' });
-    expect(
-      await within(region).findByText('Hromadná rezervace byla úspěšně vytvořena.')
-    ).toBeInTheDocument();
+    const toast = await within(region).findByRole('status');
+    expect(toast).toHaveTextContent('Hromadná rezervace byla úspěšně vytvořena.');
   });
 
   it('shows the difference when a promised spot turned into a queue place', async () => {

@@ -238,63 +238,62 @@ function BulkReservationModalContent({
   if (result !== null) {
     const differences = diffBulkSchedule(proposal?.days ?? [], result.days);
     return (
-      <>
-        <Modal
-          open={open}
-          onClose={onClose}
-          size="md"
-          title={t('resultTitle')}
-          description={t('resultDescription')}
-          closeLabel={t('close')}
-          closeOnScrimClick={false}
-          footer={<Button onClick={onClose}>{t('ctaDone')}</Button>}
-        >
-          {differences.length === 0 ? (
-            <p role="status" className="mb-5 text-base text-fg-3">
-              {t('resultUnchanged')}
-            </p>
-          ) : (
-            <Box
-              role="alert"
-              radius="md"
-              padding={[3, 4]}
-              className="mb-5 border border-brand-yellow bg-brand-yellow-100"
-            >
-              <p className="text-base font-bold text-fg">{t('resultChangedTitle')}</p>
-              <p className="mt-1 text-base leading-loose text-fg-2">
-                {t('resultChangedDescription')}
-              </p>
-              <ul className="mt-3 flex flex-col gap-2">
-                {differences.map((difference) => (
-                  <li key={difference.date} className="text-base text-fg">
-                    <span className="font-bold">
-                      {f.dayAndMonth(difference.date)} · {f.weekdayName(difference.date)}
-                    </span>
-                    <span className="block text-fg-2">
-                      {t('resultChangedProposed')}: {describeOutcome(difference.proposed)}
-                    </span>
-                    <span className="block text-fg-2">
-                      {t('resultChangedActual')}: {describeOutcome(difference.confirmed)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Box>
-          )}
-
-          <CalendarTable days={result.days} t={t} />
-
-          <p className="mt-4 text-base text-fg-2">
-            {t('scheduleSummary', {
-              assigned: result.summary.assigned,
-              queued: result.summary.queued,
-            })}
+      <Modal
+        open={open}
+        onClose={onClose}
+        size="md"
+        title={t('resultTitle')}
+        description={t('resultDescription')}
+        closeLabel={t('close')}
+        closeOnScrimClick={false}
+        footer={<Button onClick={onClose}>{t('ctaDone')}</Button>}
+      >
+        {differences.length === 0 ? (
+          <p role="status" className="mb-5 text-base text-fg-3">
+            {t('resultUnchanged')}
           </p>
-        </Modal>
+        ) : (
+          <Box
+            role="alert"
+            radius="md"
+            padding={[3, 4]}
+            className="mb-5 border border-brand-yellow bg-brand-yellow-100"
+          >
+            <p className="text-base font-bold text-fg">{t('resultChangedTitle')}</p>
+            <p className="mt-1 text-base leading-loose text-fg-2">
+              {t('resultChangedDescription')}
+            </p>
+            <ul className="mt-3 flex flex-col gap-2">
+              {differences.map((difference) => (
+                <li key={difference.date} className="text-base text-fg">
+                  <span className="font-bold">
+                    {f.dayAndMonth(difference.date)} · {f.weekdayName(difference.date)}
+                  </span>
+                  <span className="block text-fg-2">
+                    {t('resultChangedProposed')}: {describeOutcome(difference.proposed)}
+                  </span>
+                  <span className="block text-fg-2">
+                    {t('resultChangedActual')}: {describeOutcome(difference.confirmed)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Box>
+        )}
+
+        <CalendarTable days={result.days} t={t} />
+
+        <p className="mt-4 text-base text-fg-2">
+          {t('scheduleSummary', {
+            assigned: result.summary.assigned,
+            queued: result.summary.queued,
+          })}
+        </p>
+
         <ToastRegion placement="top-right" label={tShell('notificationsRegion')}>
           <Toast tone="success">{t('resultSuccessToast')}</Toast>
         </ToastRegion>
-      </>
+      </Modal>
     );
   }
 
