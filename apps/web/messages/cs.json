@@ -267,6 +267,7 @@
   "bulk": {
     "title": "Hromadná rezervace",
     "description": "Vyberte dny v {month}. Místo přiřadíme automaticky — kde nebude volno, zařadíme vás do fronty.",
+    "holderField": "Rezervovat pro",
     "weekdayMon": "PO",
     "weekdayTue": "ÚT",
     "weekdayWed": "ST",
