@@ -1,4 +1,4 @@
-import type { DaySpotOverview, MonthWindowOverview } from '@lets-park/contract';
+import type { AdminUser, DaySpotOverview, MonthWindowOverview } from '@lets-park/contract';
 import { CAR_COLOR_PALETTE } from '@lets-park/design-system/tokens';
 import { createDateFormatters } from '@lets-park/i18n';
 import {
@@ -9,6 +9,7 @@ import {
   toBannerView,
   toDayNoteView,
   toGroupViews,
+  toHolderOptions,
   toLotCounts,
   toRealtimeNoticeView,
   toSpotView,
@@ -312,6 +313,30 @@ describe('toLotCounts', () => {
 
   it('is zero for an empty lot', () => {
     expect(toLotCounts([])).toEqual({ free: 0, taken: 0 });
+  });
+});
+
+describe('toHolderOptions', () => {
+  it('picks the three fields a picker needs, dropping the rest of the admin row', () => {
+    const row: AdminUser = {
+      id: VIEWER,
+      email: 'a@b.cz',
+      name: 'Anna Nováková',
+      licensePlate: '1AB2345',
+      role: 'USER',
+      oktaId: 'okta-1',
+      active: true,
+      preferredParkingSpotId: null,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    expect(toHolderOptions([row])).toEqual([
+      { userId: VIEWER, name: 'Anna Nováková', licensePlate: '1AB2345' },
+    ]);
+  });
+
+  it('is empty for an empty list', () => {
+    expect(toHolderOptions([])).toEqual([]);
   });
 });
 

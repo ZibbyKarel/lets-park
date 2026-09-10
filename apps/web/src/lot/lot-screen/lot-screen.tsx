@@ -39,10 +39,10 @@ import { DatePickerDialog } from '../date-picker-dialog/date-picker-dialog';
 import { LotGrid } from '../lot-grid/lot-grid';
 import { BulkReservationModal } from '../bulk-modal/bulk-modal';
 import { SpotDialog } from '../spot-dialog/spot-dialog';
-import type { HolderOption } from '../spot-dialog/holder-input';
 import { useCellLocks } from './use-cell-locks';
 import { useDateInUrl } from './use-date-in-url';
 import { useLotRealtime } from './use-lot-realtime';
+import { useAdminUserOptions } from '../use-admin-user-options';
 import {
   toBannerView,
   toDayNoteView,
@@ -128,27 +128,11 @@ export function LotScreen() {
   // Only an admin may name a holder, so only an admin fetches the list. Filtered
   // server-side: `adminListUsersInputSchema` carries `active`, and a deactivated
   // colleague is not somebody to book a bay for.
-  const holderQuery = useQuery({
-    ...api.admin.user.list.queryOptions({ input: { active: true } }),
-    enabled: sessionStatus === 'authenticated' && isAdmin,
-  });
-
-  // Both gated on `isAdmin`: `holderQuery` stays `enabled: false` for a normal
-  // user, and a disabled TanStack query reports `isPending: true` forever
-  // (`status` never leaves `'pending'`) — reading either flag unguarded would
-  // disable a normal user's button and show them an error that never resolves.
-  const holderPending = isAdmin && holderQuery.isPending;
-  const holderError = isAdmin && holderQuery.isError ? holderQuery.error : null;
-
-  const holderOptions = useMemo<readonly HolderOption[]>(
-    () =>
-      (holderQuery.data?.users ?? []).map((row) => ({
-        userId: row.id,
-        name: row.name,
-        licensePlate: row.licensePlate,
-      })),
-    [holderQuery.data]
-  );
+  const {
+    options: holderOptions,
+    pending: holderPending,
+    error: holderError,
+  } = useAdminUserOptions({ input: { active: true }, enabled: isAdmin });
 
   useLotRealtime({ date, viewerUserId });
   const locks = useCellLocks(date);
@@ -176,41 +160,19 @@ export function LotScreen() {
   // Only an admin adding somebody to a spot's queue fetches this — scoped to
   // that spot and day so the excluded set (`excludingReservedOrQueuedFor`) is
   // right for the bay actually open, and refetched whenever either changes.
-  const queueTargetQuery = useQuery({
-    ...api.admin.user.list.queryOptions({
-      input: {
-        active: true,
-        ...(openSpot === null
-          ? {}
-          : { excludingReservedOrQueuedFor: { parkingSpotId: openSpot.spotId, date } }),
-      },
-    }),
-    enabled:
-      sessionStatus === 'authenticated' &&
-      isAdmin &&
-      openSpot !== null &&
-      openSpot.action === 'queue',
+  const {
+    options: queueTargetOptions,
+    pending: queueTargetPending,
+    error: queueTargetError,
+  } = useAdminUserOptions({
+    input: {
+      active: true,
+      ...(openSpot === null
+        ? {}
+        : { excludingReservedOrQueuedFor: { parkingSpotId: openSpot.spotId, date } }),
+    },
+    enabled: isAdmin && openSpot !== null && openSpot.action === 'queue',
   });
-
-  // Same reasoning as `holderPending`/`holderError`: a disabled query never
-  // leaves `'pending'`, so both flags stay gated on the same condition that
-  // gates the query itself.
-  const queueTargetPending =
-    isAdmin && openSpot !== null && openSpot.action === 'queue' && queueTargetQuery.isPending;
-  const queueTargetError =
-    isAdmin && openSpot !== null && openSpot.action === 'queue' && queueTargetQuery.isError
-      ? queueTargetQuery.error
-      : null;
-
-  const queueTargetOptions = useMemo<readonly HolderOption[]>(
-    () =>
-      (queueTargetQuery.data?.users ?? []).map((row) => ({
-        userId: row.id,
-        name: row.name,
-        licensePlate: row.licensePlate,
-      })),
-    [queueTargetQuery.data]
-  );
 
   // This client's own hold, taken while the dialog is open and released by the
   // same effect when it closes (`doc/realtime.md`, §"The cell lock"). It is a

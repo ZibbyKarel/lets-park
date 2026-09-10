@@ -29,9 +29,15 @@ import {
   type DateFormatters,
   type DateOnly,
 } from '@lets-park/i18n';
-import type { DaySpotOverview, MonthWindowOverview, ParkingGroup } from '@lets-park/contract';
+import type {
+  AdminUser,
+  DaySpotOverview,
+  MonthWindowOverview,
+  ParkingGroup,
+} from '@lets-park/contract';
 import type { RealtimeStatus } from '@lets-park/realtime-client';
 import { CAR_COLOR_PALETTE } from '@lets-park/design-system/tokens';
+import type { HolderOption } from './spot-dialog/holder-input';
 
 /**
  * Group order on screen. Taken from the contract's closed enum rather than
@@ -472,4 +478,21 @@ export function toDayNoteView(date: DateOnly): DayNoteView {
     return { key: 'weekend', name: '', highlighted: true };
   }
   return { key: 'workday', name: '', highlighted: false };
+}
+
+/**
+ * `admin.user.list`'s rows, as `SpotDialog`'s holder picker needs them.
+ *
+ * Used for both the holder picker (`LotScreen`'s `holderQuery`) and the
+ * queue-target picker (`queueTargetQuery`) — the two queries differ in their
+ * `enabled` condition and input, but the response shape and what a picker
+ * wants from it are identical, so this mapping is shared rather than written
+ * twice (`use-admin-user-options.ts` calls it once per query).
+ */
+export function toHolderOptions(users: readonly AdminUser[]): readonly HolderOption[] {
+  return users.map((row) => ({
+    userId: row.id,
+    name: row.name,
+    licensePlate: row.licensePlate,
+  }));
 }
