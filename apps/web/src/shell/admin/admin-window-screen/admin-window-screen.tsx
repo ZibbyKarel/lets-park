@@ -40,6 +40,7 @@ import {
   useTranslations,
 } from '@lets-park/i18n';
 import type { DateOnly, MonthLockState } from '@lets-park/i18n';
+import { AppToastRegion } from '../../notifications/toast-region';
 import { ScreenDataGuard } from '../../screen-state/screen-state';
 import type { ScreenData } from '../../screen-state/screen-state';
 import { useAdminWriteError } from '../admin-errors';
@@ -141,9 +142,15 @@ export function AdminWindowScreen({
                   onValueChange={(next) => onChange({ openDaysBefore, lockMode: next })}
                 />
 
-                {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
+                {saveErrorMessage ? (
+                  <AppToastRegion>
+                    <Toast tone="danger">{saveErrorMessage}</Toast>
+                  </AppToastRegion>
+                ) : null}
                 {saveErrorMessage === null && isSaved ? (
-                  <Toast tone="success">{t('windowSaved')}</Toast>
+                  <AppToastRegion>
+                    <Toast tone="success">{t('windowSaved')}</Toast>
+                  </AppToastRegion>
                 ) : null}
               </Stack>
             </Card>

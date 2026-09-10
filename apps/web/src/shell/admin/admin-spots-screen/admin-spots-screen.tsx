@@ -39,6 +39,7 @@ import { Badge, Button, Select, Stack, Switch, Toast } from '@lets-park/design-s
 import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { PARKING_GROUPS, useTranslations } from '@lets-park/i18n';
+import { AppToastRegion } from '../../notifications/toast-region';
 import { ScreenDataGuard, type ScreenData } from '../../screen-state/screen-state';
 import { useAdminWriteError, type AdminWriteFailure } from '../admin-errors';
 import {
@@ -260,7 +261,11 @@ export function AdminSpotsScreen({
     <ScreenDataGuard state={spots} onRetry={onRetry} headingLevel={3}>
       {(loaded) => (
         <Stack spacing={4}>
-          {tableError ? <Toast tone="danger">{tableError}</Toast> : null}
+          {tableError ? (
+            <AppToastRegion>
+              <Toast tone="danger">{tableError}</Toast>
+            </AppToastRegion>
+          ) : null}
 
           <DataTable
             columns={columns}
@@ -324,7 +329,11 @@ export function AdminSpotsScreen({
             }}
             onCancel={() => changeDialog(null)}
           >
-            {deleteError === null ? null : <Toast tone="danger">{deleteError}</Toast>}
+            {deleteError === null ? null : (
+              <AppToastRegion>
+                <Toast tone="danger">{deleteError}</Toast>
+              </AppToastRegion>
+            )}
           </ConfirmDialog>
         </Stack>
       )}

@@ -25,6 +25,7 @@ import { FormField, FormProvider, useAppForm } from '@lets-park/form';
 import { Button, Input, Modal, Select, Stack, Toast } from '@lets-park/design-system/primitives';
 import { ConfirmDialog } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
+import { AppToastRegion } from '../notifications/toast-region';
 import { ScreenError, ScreenLoading } from '../screen-state/screen-state';
 import { NO_PREFERRED_SPOT, shouldClearPreferredSpot, toIcsFeedView } from './settings-view';
 import { IcsSection } from './ics-section';
@@ -325,9 +326,17 @@ export function SettingsScreen({
                 {spotsPending ? (
                   <p className="text-sm text-fg-3">{t('preferredSpotLoading')}</p>
                 ) : null}
-                {spotsError ? <Toast tone="danger">{t('preferredSpotLoadError')}</Toast> : null}
+                {spotsError ? (
+                  <AppToastRegion>
+                    <Toast tone="danger">{t('preferredSpotLoadError')}</Toast>
+                  </AppToastRegion>
+                ) : null}
 
-                {saveErrorMessage ? <Toast tone="danger">{saveErrorMessage}</Toast> : null}
+                {saveErrorMessage ? (
+                  <AppToastRegion>
+                    <Toast tone="danger">{saveErrorMessage}</Toast>
+                  </AppToastRegion>
+                ) : null}
               </form>
 
               {/* Deliberately outside the `<form>` above: the ICS section acts
@@ -359,7 +368,11 @@ export function SettingsScreen({
         onConfirm={() => void handleConfirmRegenerate()}
         onCancel={() => setConfirmOpen(false)}
       >
-        {regenerateErrorMessage ? <Toast tone="danger">{regenerateErrorMessage}</Toast> : null}
+        {regenerateErrorMessage ? (
+          <AppToastRegion>
+            <Toast tone="danger">{regenerateErrorMessage}</Toast>
+          </AppToastRegion>
+        ) : null}
       </ConfirmDialog>
     </>
   );

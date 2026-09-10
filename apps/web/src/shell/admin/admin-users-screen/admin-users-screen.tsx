@@ -47,6 +47,7 @@ import { ConfirmDialog, DataTable } from '@lets-park/design-system/compounds';
 import type { DataTableColumn } from '@lets-park/design-system/compounds';
 import { useTranslations } from '@lets-park/i18n';
 import { initialsOf } from '../../initials';
+import { AppToastRegion } from '../../notifications/toast-region';
 import { ScreenDataGuard } from '../../screen-state/screen-state';
 import type { ScreenData } from '../../screen-state/screen-state';
 import { useAdminWriteError } from '../admin-errors';
@@ -222,7 +223,11 @@ export function AdminUsersScreen({
     <ScreenDataGuard state={users} onRetry={onRetry} headingLevel={3}>
       {() => (
         <Stack spacing={4}>
-          {updateErrorMessage ? <Toast tone="danger">{updateErrorMessage}</Toast> : null}
+          {updateErrorMessage ? (
+            <AppToastRegion>
+              <Toast tone="danger">{updateErrorMessage}</Toast>
+            </AppToastRegion>
+          ) : null}
 
           <DataTable
             columns={columns}
