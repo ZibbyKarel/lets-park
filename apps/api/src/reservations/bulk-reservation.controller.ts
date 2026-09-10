@@ -5,9 +5,12 @@
  * `WaitlistController` is one: a controller here is a thin delegation to exactly
  * one service, and bulk booking has its own.
  *
- * No `@Roles()`: any authenticated user may book for themselves, and the whole
- * batch is written for `context.user` — the procedures take no user id, so there
- * is no "somebody else's booking" to authorize.
+ * No `@Roles()`: any authenticated user may book for themselves. The batch may
+ * now name a different holder (`input.holderId`) — `BulkReservationService`
+ * authorizes that with `ReservationPolicy.assertMayNameWaitlistTarget`, the
+ * same rule `WaitlistService.join` applies, so a route-level admin-only guard
+ * would wrongly lock out the common case of a normal user booking for
+ * themselves.
  */
 
 import { Controller, Post, Req, Res } from '@nestjs/common';
