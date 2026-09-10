@@ -436,6 +436,10 @@ export function LotScreen() {
         }}
         anchorDate={date}
         canReserveMonth={day.canReserveMonth}
+        isAdmin={isAdmin}
+        viewerUserId={viewerUserId}
+        holderOptions={holderOptions}
+        holderPending={holderPending}
       />
 
       <DatePickerDialog
