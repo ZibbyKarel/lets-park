@@ -6,9 +6,10 @@
  *
  * The grid itself borrows `../bulk-modal/bulk-modal.tsx`'s table: a `<caption>` for the
  * accessible name, weekday heads, and a button per day. What differs is the
- * rule a cell obeys — every day here is pickable, since this dialog only
- * navigates the lot screen, it never books — which is exactly why the layout
- * moved to `../calendar-grid.ts` rather than this file reaching into
+ * rule a cell obeys — since this dialog only navigates the lot screen and
+ * never books, a past day or a Czech holiday is pickable here, with weekends
+ * the one exception (see `./date-picker-view.ts`) — which is exactly why the
+ * layout moved to `../calendar-grid.ts` rather than this file reaching into
  * `../bulk-modal/bulk-view.ts` for a grid shaped by booking rules that do not apply here.
  *
  * Picking a day calls `onSelect` with nothing further: the caller (`../lot-header/lot-header.tsx`

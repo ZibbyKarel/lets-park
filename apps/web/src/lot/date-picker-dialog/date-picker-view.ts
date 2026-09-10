@@ -3,11 +3,14 @@
  * (`datePickerOpen` branch), which browses a month grid to jump the lot
  * screen to any day.
  *
- * Unlike `../bulk-modal/bulk-view.ts`'s grid, every day here is selectable: this picker
- * only navigates, it never books, so a past day, a weekend or a holiday is as
- * pickable as any other. `../calendar-grid.ts` supplies the week layout both
- * grids share; this module supplies the one fact its cells carry — is this
- * the day currently open on the lot screen.
+ * Unlike `../bulk-modal/bulk-view.ts`'s grid, this picker only navigates, it
+ * never books, so a past day or a Czech holiday is as pickable as any other.
+ * The one exception is a weekend day: it mirrors the header's own
+ * day-navigation arrows in excluding weekends (`nextWeekday`/`previousWeekday`
+ * in `libs/shared-types`), enforced here via `selectable: !isWeekend(date)`.
+ * `../calendar-grid.ts` supplies the week layout both grids share; this
+ * module supplies the one fact its cells carry — is this the day currently
+ * open on the lot screen.
  */
 
 import { compareDateOnly, isWeekend, parseDateOnly, type DateOnly } from '@lets-park/i18n';

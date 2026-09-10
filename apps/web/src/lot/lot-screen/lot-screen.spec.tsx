@@ -778,16 +778,18 @@ describe('LotScreen — the header date picker', () => {
   it('browses to another month without moving the day, until one is picked', async () => {
     // FIXED_TODAY is 2026-01-31; February 2026 has 28 days, so day 31 cannot
     // be clicked there — proof that browsing the grid does not commit a date
-    // on its own.
+    // on its own. 2026-02-28 is a Saturday and thus unpickable under the
+    // weekend rule, so the target is 2026-02-27 (Friday) instead — still the
+    // last selectable day of that February, illustrating the same point.
     const { user } = setup();
 
     await user.click(screen.getByRole('button', { name: cs.fullDate(DATE) }));
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Měsíc' }), '2');
-    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2026-02-28') }));
+    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2026-02-27') }));
 
     expect(screen.queryByRole('dialog', { name: 'Vybrat datum' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: cs.fullDate('2026-02-28') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: cs.fullDate('2026-02-27') })).toBeInTheDocument();
   });
 
   it('browses to another year, then commits whichever day is picked', async () => {
@@ -796,9 +798,9 @@ describe('LotScreen — the header date picker', () => {
     await user.click(screen.getByRole('button', { name: cs.fullDate(DATE) }));
     const dialog = screen.getByRole('dialog', { name: 'Vybrat datum' });
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Rok' }), '2027');
-    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2027-01-31') }));
+    await user.click(within(dialog).getByRole('button', { name: cs.fullDate('2027-01-29') }));
 
-    expect(screen.getByRole('button', { name: cs.fullDate('2027-01-31') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: cs.fullDate('2027-01-29') })).toBeInTheDocument();
   });
 });
 
