@@ -53,8 +53,16 @@ describe('SpotDialog — failures', () => {
     expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
   });
 
-  it('shows no failure block when there is no failure', () => {
+  it('shows no failure alert when there is no failure', () => {
     renderDialog();
-    expect(screen.queryByText(mockedT('errorTitle'))).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('announces a failure as an alert, not a heading', async () => {
+    const error = await failureWithCode('SPOT_ALREADY_RESERVED');
+    renderDialog({ error });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(mockedT('SPOT_ALREADY_RESERVED'));
+    expect(screen.queryByRole('heading', { name: mockedT('errorTitle') })).not.toBeInTheDocument();
   });
 });

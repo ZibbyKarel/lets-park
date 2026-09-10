@@ -33,13 +33,13 @@
  */
 
 import { useEffect } from 'react';
-import { Avatar, Button, Modal, Stack } from '@lets-park/design-system/primitives';
+import { Avatar, Button, Modal, Stack, Toast } from '@lets-park/design-system/primitives';
 import { useDateFormatters, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import { FormProvider, useAppForm } from '@lets-park/form';
 import type { ReservationHolderInput } from '@lets-park/contract';
+import { toContractError } from '@lets-park/api-client';
 import { initialsOf } from '../../shell/initials';
-import { ScreenError } from '../../shell/screen-state/screen-state';
 import type { SpotView } from '../lot-view';
 import { HolderFields } from './holder-fields';
 import { holderFormSchema, toHolderInput } from './holder-input';
@@ -138,6 +138,8 @@ export function SpotDialog({
   onCancelReservation,
 }: SpotDialogProps) {
   const t = useTranslations('lot');
+  const tShell = useTranslations('shell');
+  const errors = useTranslations('errors');
   const f = useDateFormatters();
 
   const showHolderForm =
@@ -241,6 +243,18 @@ export function SpotDialog({
               ? t('subQueue')
               : t('subTaken')
         : t('subReserve', { date: f.dayAndMonth(date) });
+
+  // Same rule `ScreenError` documents: keyed off the contract error's
+  // **code**, never its message — a contract message is developer-facing
+  // English and a transport failure's is stack-adjacent.
+  // `errorMessage` overrides it — see `SpotDialogProps.errorMessage`'s doc
+  // comment for the one caller (a named-holder `RESERVATION_LIMIT_REACHED`).
+  const contractError = toContractError(error);
+  const failureMessage =
+    error === null || error === undefined
+      ? null
+      : (errorMessage ??
+        (contractError === null ? tShell('errorUnknown') : errors(contractError.code)));
 
   return (
     <Modal
@@ -375,18 +389,7 @@ export function SpotDialog({
         </Stack>
       ) : null}
 
-      {error === null || error === undefined ? null : (
-        // Keyed off the contract error's **code**, never its message: a
-        // contract message is developer-facing English and a transport
-        // failure's is stack-adjacent. `ScreenError` already owns that rule.
-        // `errorMessage` is `undefined` for every failure but the
-        // named-holder `RESERVATION_LIMIT_REACHED` — see its doc comment.
-        <ScreenError
-          error={error}
-          headingLevel={3}
-          {...(errorMessage === undefined ? {} : { message: errorMessage })}
-        />
-      )}
+      {failureMessage === null ? null : <Toast tone="danger">{failureMessage}</Toast>}
     </Modal>
   );
 }
