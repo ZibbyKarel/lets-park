@@ -10,13 +10,14 @@
  * the day currently open on the lot screen.
  */
 
-import { compareDateOnly, parseDateOnly, type DateOnly } from '@lets-park/i18n';
+import { compareDateOnly, isWeekend, parseDateOnly, type DateOnly } from '@lets-park/i18n';
 import { buildCalendarGrid, type CalendarGrid } from '../calendar-grid';
 
 export interface DatePickerDayCell {
   readonly date: DateOnly;
   readonly dayOfMonth: number;
   readonly selected: boolean;
+  readonly selectable: boolean;
 }
 
 export type DatePickerGrid = CalendarGrid<DatePickerDayCell>;
@@ -27,5 +28,6 @@ export function buildDatePickerGrid(anchor: DateOnly, selectedDate: DateOnly): D
     date,
     dayOfMonth: parseDateOnly(date).day,
     selected: compareDateOnly(date, selectedDate) === 0,
+    selectable: !isWeekend(date),
   }));
 }

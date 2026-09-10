@@ -1,12 +1,15 @@
 import { buildDatePickerGrid } from './date-picker-view';
 
 /**
- * Unlike `../bulk-modal/bulk-view.spec.ts`'s `buildMonthGrid`, there is no "which days
- * may be picked" suite here — every day this grid produces is selectable,
- * because `./date-picker-dialog.tsx` only navigates the lot screen, it never
- * books. What is worth asserting is the layout `../calendar-grid.ts` gives it
- * (Monday-first, padded to whole weeks) and the one fact this module adds:
- * which cell, if any, is the day currently open.
+ * Unlike `../bulk-modal/bulk-view.spec.ts`'s `buildMonthGrid`, this suite does not
+ * check for a past day or a Czech public holiday being blocked — this picker
+ * only navigates the lot screen, it never books, so a past day and a holiday
+ * stay pickable. A weekend day is the one exception: `../lot-screen/lot-screen.tsx`'s
+ * day-navigation arrows already skip weekends (`nextWeekday`/`previousWeekday`),
+ * and this picker enforces the same rule when a day is chosen directly. What is
+ * otherwise worth asserting is the layout `../calendar-grid.ts` gives it
+ * (Monday-first, padded to whole weeks) and the one other fact this module
+ * adds: which cell, if any, is the day currently open.
  */
 
 function cells(grid: ReturnType<typeof buildDatePickerGrid>) {
@@ -29,16 +32,25 @@ describe('buildDatePickerGrid — the layout', () => {
   });
 });
 
-describe('buildDatePickerGrid — every day is selectable', () => {
-  it('includes a past day', () => {
+describe('buildDatePickerGrid — which days may be picked', () => {
+  it('still marks a past day as selectable — this picker only navigates, it never books', () => {
     const grid = buildDatePickerGrid('2026-01-15', '2026-06-01');
-    expect(cells(grid).some((day) => day?.date === '2026-01-05')).toBe(true);
+    const day = cells(grid).find((day) => day?.date === '2026-01-05');
+    expect(day?.selectable).toBe(true);
   });
 
-  it('includes a weekend day', () => {
+  it('marks a weekend day as not selectable', () => {
     // 2026-09-05 is a Saturday.
     const grid = buildDatePickerGrid('2026-09-15', '2026-09-15');
-    expect(cells(grid).some((day) => day?.date === '2026-09-05')).toBe(true);
+    const day = cells(grid).find((day) => day?.date === '2026-09-05');
+    expect(day?.selectable).toBe(false);
+  });
+
+  it('marks an ordinary weekday as selectable', () => {
+    // 2026-09-01 is a Tuesday.
+    const grid = buildDatePickerGrid('2026-09-15', '2026-09-15');
+    const day = cells(grid).find((day) => day?.date === '2026-09-01');
+    expect(day?.selectable).toBe(true);
   });
 });
 
