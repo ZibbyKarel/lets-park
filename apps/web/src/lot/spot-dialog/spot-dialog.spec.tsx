@@ -441,6 +441,23 @@ describe('SpotDialog — an admin adding somebody to the queue', () => {
     expect(screen.queryByLabelText('Přidat do fronty')).not.toBeInTheDocument();
   });
 
+  it('defaults to the first eligible user instead of the admin themselves, when the admin already holds a reservation that day and is excluded from the filtered list', async () => {
+    // `queueTargetOptions` is already filtered server-side
+    // (`excludingReservedOrQueuedFor`) — an admin who already holds a
+    // reservation that day is not in it, even though `viewerUserId` still
+    // names them. Defaulting to `viewerUserId` regardless would leave the
+    // `<select>` showing no option selected while the form still held the
+    // excluded id, so a submit would send it straight into
+    // `RESERVATION_LIMIT_REACHED` — the exact post-submission failure this
+    // filtered list exists to prevent up front.
+    const { onJoinWaitlist, user } = renderAdminQueue({ viewerUserId: 'admin-9' });
+
+    expect(screen.getByLabelText('Přidat do fronty')).toHaveValue('admin-1');
+
+    await user.click(screen.getByRole('button', { name: 'Přidat se do fronty' }));
+    expect(onJoinWaitlist).toHaveBeenCalledWith('admin-1');
+  });
+
   it('disables Přidat se do fronty while the queue-target list is still loading', () => {
     // Mirrors the reserve flow's equivalent test: without `queueTargetPending`,
     // one click would call `onJoinWaitlist()` with no argument and queue the

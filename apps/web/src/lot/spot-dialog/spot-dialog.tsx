@@ -52,7 +52,7 @@ import { HolderFields } from './holder-fields';
 import { holderFormSchema, toHolderInput } from './holder-input';
 import type { HolderFormValues, HolderOption } from './holder-input';
 import { QueueTargetFields } from './queue-target-fields';
-import { queueTargetFormSchema } from './queue-target-input';
+import { defaultQueueTargetId, queueTargetFormSchema } from './queue-target-input';
 import type { QueueTargetFormValues } from './queue-target-input';
 
 export interface SpotDialogProps {
@@ -181,7 +181,7 @@ export function SpotDialog({
 
   const queueForm = useAppForm<QueueTargetFormValues>({
     schema: queueTargetFormSchema,
-    defaultValues: { userId: viewerUserId ?? '' },
+    defaultValues: { userId: defaultQueueTargetId(viewerUserId, queueTargetOptions) },
   });
   const submitQueueTarget = queueForm.handleSubmit((values) => onJoinWaitlist(values.userId));
 
@@ -206,10 +206,14 @@ export function SpotDialog({
   useEffect(() => {
     if (openSpotId === null) return;
     form.reset({ holderId: viewerUserId ?? '', guestName: '', licensePlate: '' });
-    queueForm.reset({ userId: viewerUserId ?? '' });
+    queueForm.reset({ userId: defaultQueueTargetId(viewerUserId, queueTargetOptions) });
     // `form`/`queueForm` are stable across renders; `.reset` is the documented
     // way to re-seed, and listing them keeps the exhaustive-deps rule satisfied.
-  }, [openSpotId, viewerUserId, form, queueForm]);
+    // `queueTargetOptions` is a dependency too, not just `viewerUserId`: the
+    // default now depends on whether the viewer is even IN the (filtered)
+    // list, and that list can arrive — or change, as the admin opens a
+    // different spot — after this effect has already run once.
+  }, [openSpotId, viewerUserId, queueTargetOptions, form, queueForm]);
 
   if (spot === null) return null;
 
