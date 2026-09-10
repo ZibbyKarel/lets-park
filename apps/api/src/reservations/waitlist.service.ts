@@ -49,10 +49,12 @@ import { DomainError } from '../common/errors/domain-error';
 import { toContractWaitlistEntry, toDateColumn, toDateOnly } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
+import { assertActiveUser } from './active-user';
 import type { DomainEvent } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
 import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
+import { WAITLIST_ORDER } from './waitlist-order';
 
 /** What one waitlist mutation produced, before anything is broadcast. */
 interface WaitlistOutcome<TResult> {
@@ -105,17 +107,9 @@ export class WaitlistService {
 
     const targetUserId = input.holderId ?? actor.id;
     if (targetUserId !== actor.id) {
-      // A real check, not a constraint's job: the foreign key would only say
-      // `CONFLICT`, and an admin who mistyped an id deserves `NOT_FOUND`. Read
-      // outside the transaction for the same reason `ReservationsService
-      // .create`'s target lookup is — it is a lookup, not an invariant.
-      const target = await this.prisma.client.user.findFirst({
-        where: { id: targetUserId, active: true },
-        select: { id: true },
-      });
-      if (target === null) {
-        throw new DomainError('NOT_FOUND', { message: 'No such active user.' });
-      }
+      // See `active-user.ts` for why this is a real check and runs outside
+      // the transaction.
+      await assertActiveUser(this.prisma.client, targetUserId);
     }
 
     const outcome = await this.prisma.client.$transaction(
@@ -213,10 +207,10 @@ export class WaitlistService {
 
     // The position is read back rather than counted before the insert: what the
     // caller wants to know is where they *are*, and only the committed order can
-    // say. Same order the promotion uses — `createdAt`, then `id`.
+    // say. Same order the promotion uses — `WAITLIST_ORDER` (`waitlist-order.ts`).
     const queue = await tx.waitlistEntry.findMany({
       where: { parkingSpotId: input.parkingSpotId, date: dateColumn },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: WAITLIST_ORDER,
       select: { id: true },
     });
     const position = queue.findIndex((row) => row.id === entry.id) + 1;

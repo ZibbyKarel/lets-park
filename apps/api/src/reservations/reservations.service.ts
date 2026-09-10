@@ -82,6 +82,7 @@ import {
 } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
+import { assertActiveUser } from './active-user';
 import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
 import type { DomainEvent, WaitlistPromotionNotice } from './reservation-events';
 import { DomainEventPublisher } from './reservation-events';
@@ -161,17 +162,9 @@ export class ReservationsService {
     const holder = input.holder ?? { kind: 'USER' as const, userId: actor.id, licensePlate: null };
 
     if (holder.kind === 'USER' && holder.userId !== actor.id) {
-      // A real check, not a constraint's job: the foreign key would only say
-      // `CONFLICT`, and an admin who mistyped an id deserves `NOT_FOUND`. Read
-      // outside the transaction for the same reason the spot is — it is a
-      // lookup, not an invariant.
-      const target = await this.prisma.client.user.findFirst({
-        where: { id: holder.userId, active: true },
-        select: { id: true },
-      });
-      if (target === null) {
-        throw new DomainError('NOT_FOUND', { message: 'No such active user.' });
-      }
+      // See `active-user.ts` for why this is a real check and runs outside
+      // the transaction, for the same reason the spot lookup above does.
+      await assertActiveUser(this.prisma.client, holder.userId);
     }
 
     // The reservation and the audit entry that records it share a transaction:

@@ -131,6 +131,7 @@ import { isWriteConflict } from '../common/errors/prisma-error-mapping';
 import { toDateColumn, toDateOnly, toPublicReservation } from '../common/prisma-mapping';
 import { PrismaService } from '../database/prisma.service';
 import { ReservationWindowService } from '../reservation-window/reservation-window.service';
+import { assertActiveUser } from './active-user';
 import type { AllocatableSpot, DayState } from './bulk-allocator';
 import { allocateBulk } from './bulk-allocator';
 import { assertWithinMonthlyReservationCap } from './monthly-reservation-cap';
@@ -139,6 +140,7 @@ import { DomainEventPublisher } from './reservation-events';
 import { ReservationPolicy } from './reservation-policy';
 import { MAX_CANCEL_ATTEMPTS } from './reservations.service';
 import { RESERVATION_TRANSACTION_OPTIONS } from './transaction-options';
+import { WAITLIST_ORDER } from './waitlist-order';
 
 /**
  * The reservation fields a created row has to give back.
@@ -235,18 +237,9 @@ export class BulkReservationService {
     this.policy.assertMayNameWaitlistTarget(holderId, actor);
     const targetUserId = holderId ?? actor.id;
     if (targetUserId !== actor.id) {
-      // A real check, not a constraint's job: the foreign key on `Reservation`/
-      // `WaitlistEntry` would only say `CONFLICT`, and an admin who mistyped an
-      // id deserves `NOT_FOUND`. Read outside any transaction, the same way
-      // `ReservationsService.create`'s and `WaitlistService.join`'s target
-      // lookups are.
-      const target = await this.prisma.client.user.findFirst({
-        where: { id: targetUserId, active: true },
-        select: { id: true },
-      });
-      if (target === null) {
-        throw new DomainError('NOT_FOUND', { message: 'No such active user.' });
-      }
+      // See `active-user.ts` for why this is a real check and runs outside
+      // any transaction.
+      await assertActiveUser(this.prisma.client, targetUserId);
     }
     return targetUserId;
   }
@@ -521,10 +514,10 @@ export class BulkReservationService {
       }),
       client.waitlistEntry.findMany({
         where: { date: { in: dateColumns } },
-        // The same order the queue is promoted in and the day overview shows —
-        // `createdAt`, then `id`. The position the preview reports is therefore
-        // the position that would be promoted.
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        // `WAITLIST_ORDER` (`waitlist-order.ts`) — the same order the queue is
+        // promoted in and the day overview shows. The position the preview
+        // reports is therefore the position that would be promoted.
+        orderBy: WAITLIST_ORDER,
         select: { parkingSpotId: true, userId: true, date: true },
       }),
     ]);
@@ -600,7 +593,7 @@ export class BulkReservationService {
         date: { in: [...targets.keys()].map(toDateColumn) },
         parkingSpotId: { in: [...new Set([...targets.values()].map((spot) => spot.id))] },
       },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: WAITLIST_ORDER,
       select: { id: true, parkingSpotId: true, userId: true, date: true },
     });
 
