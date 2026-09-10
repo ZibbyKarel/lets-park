@@ -30,7 +30,7 @@ import {
   type DateOnly,
 } from '@lets-park/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Modal, cx } from '@lets-park/design-system/primitives';
+import { Box, Button, Modal, Toast, cx } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
 import { useApi } from '../../shell/api-provider/api-provider';
 import { useCurrentUser } from '../../shell/use-current-user';
@@ -217,11 +217,7 @@ function BulkReservationModalContent({
   }
 
   const failureNote =
-    failure === null ? null : (
-      <p role="alert" className="mt-4 text-base text-danger">
-        {t(toBulkErrorMessageKey(failure))}
-      </p>
-    );
+    failure === null ? null : <Toast tone="danger">{t(toBulkErrorMessageKey(failure))}</Toast>;
 
   const pending = previewBulk.isPending || confirmBulk.isPending;
 

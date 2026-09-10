@@ -753,6 +753,20 @@ describe('BulkReservationModal — what each typed failure says', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders the preview failure through the Toast primitive, not a bare paragraph', async () => {
+    const { user } = setup({
+      previewFailure: await contractFailure('VALIDATION_FAILED'),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' }));
+
+    // A `Toast` wraps its message in a `<div role="alert">`; the bare `<p
+    // role="alert">` it replaces would fail this on tag name alone.
+    const alert = await screen.findByRole('alert');
+    expect(alert.tagName).toBe('DIV');
+  });
+
   it('says the month is locked when the API refuses the confirmation', async () => {
     const { user } = setup();
     const confirm = await reachSchedule(user);
