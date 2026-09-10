@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createApiQueryUtils } from '@lets-park/api-client';
 import { createQueryClient } from '../../shell/query/query-client';
@@ -633,6 +633,19 @@ describe('BulkReservationModal — the confirmed result against the proposal', (
 
     expect(await screen.findByText('Zapsali jsme vás přesně podle návrhu.')).toBeInTheDocument();
     expect(screen.queryByText('Rozvrh se od návrhu liší')).not.toBeInTheDocument();
+  });
+
+  it('floats a success toast top-right once the batch is confirmed', async () => {
+    const { user } = setup();
+    await user.click(await reachSchedule(user));
+
+    // `role="status"` takes no accessible name from content (ARIA `status` is
+    // `nameFrom: author`), so the toast is located via the notifications
+    // region's own `aria-label` instead, then its text asserted within it.
+    const region = await screen.findByRole('region', { name: 'Oznámení' });
+    expect(
+      await within(region).findByText('Hromadná rezervace byla úspěšně vytvořena.')
+    ).toBeInTheDocument();
   });
 
   it('shows the difference when a promised spot turned into a queue place', async () => {
