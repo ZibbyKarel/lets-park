@@ -251,6 +251,11 @@ export async function bulkResultSpotLabel(page: Page, date: DateOnly): Promise<s
 
 export async function confirmBulkSchedule(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Potvrdit rozvrh' }).click();
+  // Confirmation is async; wait for the result step (the "Hotovo" button)
+  // before returning, so callers reading the result step (e.g.
+  // `bulkResultSpotLabel`) never race the still-mounted preview step, which
+  // renders the same row markup.
+  await page.getByRole('button', { name: 'Hotovo' }).waitFor({ state: 'visible' });
 }
 
 export async function closeBulkResult(page: Page): Promise<void> {
