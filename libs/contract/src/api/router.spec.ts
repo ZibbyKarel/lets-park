@@ -80,6 +80,7 @@ const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
   'reservation.cancel': ['FORBIDDEN', 'NOT_FOUND', 'CONFLICT'],
   'reservation.previewBulk': [
     'FORBIDDEN',
+    'NOT_FOUND',
     'PAST_DATE',
     'OUT_OF_HORIZON',
     'RESERVATIONS_LOCKED',
@@ -87,6 +88,7 @@ const EXPECTED_ERROR_CODES: Record<string, readonly string[]> = {
   ],
   'reservation.confirmBulk': [
     'FORBIDDEN',
+    'NOT_FOUND',
     'PAST_DATE',
     'OUT_OF_HORIZON',
     'RESERVATIONS_LOCKED',
