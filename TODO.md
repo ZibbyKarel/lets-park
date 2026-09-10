@@ -1,11 +1,8 @@
 # TODO
 
-1. [x] v testech nepoužívat hodnoty překladů. Místo toho namockovat překladovou funkci tak aby vracela klíč a v testovacích souborech testovat přítomnost toho klíče tzn pseudokod: (main@793dfa0)
-   ```tsx
-     const mockedT = (key: MessageKey, substitutes: Substitutes) => `${key}: ${substitutes.join(',')}
-     ...
-      screen.getByText(
-        mockedT('errHolderLimitReached')
-      )
-   ```
-   tím zabráníme tomu aby testy padaly když se změní jen hodnota překladu
+1. [ ] hromadná rezervace pro admin uživatele musí rezervovat vždy jen pro něj samotného
+2. [ ] admin user - detail rezervace místa - pridání uživatele do fronty musí vyfiltrovat uživatele, kteří již mají na místo rezervaci nebo čekají ve frontě
+3. [ ] chybové hlášky - některé chybové hlášky se zobrazují v domu místo toho aby vyskočily jako toast/alert nahoře v pravém rohu aplikace. Příkladem jsou chybové hlášky v detailu rezervace při přidávání uživatele do fronty. Najdi i podobné případy v aplikaci a uprav to aby se chyby zobrazovaly jako alerty v pravém horním rohu
+4. [ ] nezobrazovat "SPZ neuvedena" u rezervací, kde uživatelé nemají vyplněnou SPZ
+5. [ ] stejný případ jako pro bod 3. akorát pro úspěšné hlášky. Například při vytvoření hromadné rezervace zobrazit success alert v pravém horním rohu
+6. [ ] šipky v datumové navigaci v headeru by měly přeskakovat výkendy tedy z pátku skočit rovnou na pondělí. Stejně tak bych neměl být schopen v celé aplikaci vybrat víkendový den. Projdi kalendáře a disabluj víkendy.
