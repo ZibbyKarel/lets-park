@@ -248,3 +248,21 @@ export function dayOfWeek(value: DateOnly): number {
 export function isWeekend(value: DateOnly): boolean {
   return dayOfWeek(value) >= 6;
 }
+
+/** The next calendar day after `value`, skipping Saturday and Sunday. */
+export function nextWeekday(value: DateOnly): DateOnly {
+  let candidate = addDays(value, 1);
+  while (isWeekend(candidate)) {
+    candidate = addDays(candidate, 1);
+  }
+  return candidate;
+}
+
+/** The calendar day before `value`, skipping Saturday and Sunday. */
+export function previousWeekday(value: DateOnly): DateOnly {
+  let candidate = addDays(value, -1);
+  while (isWeekend(candidate)) {
+    candidate = addDays(candidate, -1);
+  }
+  return candidate;
+}

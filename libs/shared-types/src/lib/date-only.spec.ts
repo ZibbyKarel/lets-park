@@ -15,7 +15,9 @@ import {
   isSameDay,
   isWeekend,
   isYearMonth,
+  nextWeekday,
   parseDateOnly,
+  previousWeekday,
   startOfMonth,
   startOfYearMonth,
   toUtcMidnight,
@@ -244,5 +246,35 @@ describe('dayOfWeek / isWeekend', () => {
     expect(isWeekend('2026-08-29')).toBe(true);
     expect(isWeekend('2026-08-30')).toBe(true);
     expect(isWeekend('2026-08-31')).toBe(false);
+  });
+});
+
+describe('nextWeekday / previousWeekday', () => {
+  it('nextWeekday moves an ordinary weekday by one day', () => {
+    // 2026-08-24 is a Monday.
+    expect(nextWeekday('2026-08-24')).toBe('2026-08-25');
+  });
+
+  it('nextWeekday skips the whole weekend, landing on Monday', () => {
+    // 2026-08-28 is a Friday; 2026-08-29/30 are Saturday/Sunday.
+    expect(nextWeekday('2026-08-28')).toBe('2026-08-31');
+  });
+
+  it('nextWeekday started from a Saturday still lands on the following Monday', () => {
+    expect(nextWeekday('2026-08-29')).toBe('2026-08-31');
+  });
+
+  it('previousWeekday moves an ordinary weekday back by one day', () => {
+    // 2026-08-25 is a Tuesday.
+    expect(previousWeekday('2026-08-25')).toBe('2026-08-24');
+  });
+
+  it('previousWeekday skips the whole weekend, landing on the prior Friday', () => {
+    // 2026-08-31 is a Monday.
+    expect(previousWeekday('2026-08-31')).toBe('2026-08-28');
+  });
+
+  it('previousWeekday started from a Sunday still lands on the same prior Friday', () => {
+    expect(previousWeekday('2026-08-30')).toBe('2026-08-28');
   });
 });
