@@ -351,6 +351,158 @@ describe('bulk booking against a real PostgreSQL', () => {
     });
   });
 
+  describe('an admin naming a holder', () => {
+    const HOLDER_ASSIGNED_DAY = '2100-06-04' as DateOnly;
+    const HOLDER_QUEUED_DAY = '2100-06-07' as DateOnly;
+
+    it('books and queues on behalf of another user, and audits it as an admin action', async () => {
+      const [admin, target, spot] = [
+        await seedUser(client),
+        await seedUser(client, { name: 'Jana Nováková' }),
+        await seedSpot(client),
+      ];
+      await setPreferredSpot(client, target.id, spot.id);
+      // Fill the *whole lot* on the queued day so the batch has one of each
+      // outcome — filling only `spot` would leave the allocator free to assign
+      // any of the other active spots instead of queueing (see `fillTheLot`'s
+      // own doc comment: spots are global across every `*.db.spec.ts`).
+      await fillTheLot(HOLDER_QUEUED_DAY);
+
+      const result = await harness.bulk.confirm(
+        { dates: [HOLDER_ASSIGNED_DAY, HOLDER_QUEUED_DAY], holderId: target.id },
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+
+      const assigned = result.days.find((day) => day.date === HOLDER_ASSIGNED_DAY);
+      const queued = result.days.find((day) => day.date === HOLDER_QUEUED_DAY);
+      if (assigned?.outcome !== 'SPOT_ASSIGNED') {
+        throw new Error(
+          `Expected ${HOLDER_ASSIGNED_DAY} to be assigned, got ${assigned?.outcome}.`
+        );
+      }
+      if (queued?.outcome !== 'QUEUED') {
+        throw new Error(`Expected ${HOLDER_QUEUED_DAY} to be queued, got ${queued?.outcome}.`);
+      }
+      expect(assigned).toMatchObject({ outcome: 'SPOT_ASSIGNED', parkingSpotId: spot.id });
+      expect(queued).toMatchObject({ outcome: 'QUEUED' });
+
+      // The rows belong to the target, not the admin.
+      const reservationId = assigned.reservationId;
+      const reservation = await client.reservation.findUniqueOrThrow({
+        where: { id: reservationId },
+      });
+      expect(reservation.userId).toBe(target.id);
+
+      const waitlistEntryId = queued.waitlistEntryId;
+      const entry = await client.waitlistEntry.findUniqueOrThrow({
+        where: { id: waitlistEntryId },
+      });
+      expect(entry.userId).toBe(target.id);
+
+      // The trail says who did it and for whom.
+      const reservationAudit = await client.auditLog.findMany({
+        where: { entityId: reservationId },
+      });
+      expect(reservationAudit).toHaveLength(1);
+      expect(reservationAudit[0]).toMatchObject({
+        action: 'RESERVATION_CREATED_BY_ADMIN',
+        actorUserId: admin.id,
+      });
+      expect(reservationAudit[0]?.payload).toMatchObject({
+        holderUserId: target.id,
+        guestName: null,
+      });
+
+      const waitlistAudit = await client.auditLog.findMany({
+        where: { entityId: waitlistEntryId },
+      });
+      expect(waitlistAudit).toHaveLength(1);
+      expect(waitlistAudit[0]).toMatchObject({
+        action: 'WAITLIST_JOINED_BY_ADMIN',
+        actorUserId: admin.id,
+      });
+      expect(waitlistAudit[0]?.payload).toMatchObject({ targetUserId: target.id });
+    });
+
+    it("lets an admin's own exemption from the window apply even when booking for somebody else", async () => {
+      const [admin, target, spot] = [
+        await seedUser(client),
+        await seedUser(client),
+        await seedSpot(client),
+      ];
+      await setLockMode(client, 'FORCE_LOCKED');
+      // Deterministic against the shared spot pool — see `fillTheLot`'s comment.
+      await setPreferredSpot(client, target.id, spot.id);
+
+      const result = await harness.bulk.confirm(
+        { dates: ['2100-06-08' as DateOnly], holderId: target.id },
+        actorFor(admin, 'ADMIN'),
+        TODAY
+      );
+
+      expect(result.days[0]).toMatchObject({ outcome: 'SPOT_ASSIGNED', parkingSpotId: spot.id });
+    });
+
+    it('refuses a non-admin naming somebody else', async () => {
+      const [user, target] = [await seedUser(client), await seedUser(client)];
+
+      expect(
+        await codeOf(
+          harness.bulk.preview(
+            { dates: ['2100-06-11' as DateOnly], holderId: target.id },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).toBe('FORBIDDEN');
+      expect(
+        await codeOf(
+          harness.bulk.confirm(
+            { dates: ['2100-06-11' as DateOnly], holderId: target.id },
+            actorFor(user),
+            TODAY
+          )
+        )
+      ).toBe('FORBIDDEN');
+    });
+
+    it('lets a user name themselves — the same batch they would get by omitting holderId', async () => {
+      const [user, spot] = [await seedUser(client), await seedSpot(client)];
+      // Deterministic against the shared spot pool — see `fillTheLot`'s comment.
+      await setPreferredSpot(client, user.id, spot.id);
+
+      const result = await harness.bulk.confirm(
+        { dates: ['2100-06-14' as DateOnly], holderId: user.id },
+        actorFor(user),
+        TODAY
+      );
+
+      expect(result.days[0]).toMatchObject({ outcome: 'SPOT_ASSIGNED', parkingSpotId: spot.id });
+      const created = await client.reservation.findFirstOrThrow({
+        where: { userId: user.id, date: toDateColumn('2100-06-14' as DateOnly) },
+      });
+      // Booking for yourself is never the admin-flavoured action, admin or not.
+      const audit = await client.auditLog.findMany({ where: { entityId: created.id } });
+      expect(audit[0]).toMatchObject({ action: 'RESERVATION_CREATED' });
+    });
+
+    it('reports NOT_FOUND for a holder id that names nobody', async () => {
+      const admin = await seedUser(client);
+      const missingId = '00000000-0000-0000-0000-000000000000';
+
+      expect(
+        await codeOf(
+          harness.bulk.preview(
+            { dates: ['2100-06-15' as DateOnly], holderId: missingId },
+            actorFor(admin, 'ADMIN'),
+            TODAY
+          )
+        )
+      ).toBe('NOT_FOUND');
+    });
+  });
+
   describe('confirmBulk', () => {
     it('writes a reservation, an audit entry and a broadcast for every assigned day', async () => {
       const booker = await seedUser(client);

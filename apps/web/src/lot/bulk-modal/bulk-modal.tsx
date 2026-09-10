@@ -21,7 +21,7 @@
  * here names a wrapped package (`doc/wrappers.md`).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   parseDateOnly,
   todayInPrague,
@@ -32,8 +32,10 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Box, Button, Modal, Toast, ToastRegion, cx } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
+import { FormProvider, useAppForm } from '@lets-park/form';
 import { useApi } from '../../shell/api-provider/api-provider';
 import { useCurrentUser } from '../../shell/use-current-user';
+import type { HolderOption } from '../spot-dialog/holder-input';
 import {
   buildMonthGrid,
   diffBulkSchedule,
@@ -46,6 +48,9 @@ import {
   type BulkDayOutcomeView,
 } from './bulk-view';
 import { CalendarTable, badgeLabel } from './calendar-table';
+import { BulkHolderFields } from './holder-fields';
+import { bulkHolderFormSchema, defaultBulkHolderId } from './holder-input';
+import type { BulkHolderFormValues } from './holder-input';
 import { SchedulePreviewModal } from './schedule-preview-modal';
 
 export interface BulkReservationModalProps {
@@ -72,6 +77,15 @@ export interface BulkReservationModalProps {
    * must never block is the *result* step: see `doc/decision/0176-*`.
    */
   readonly canReserveMonth: boolean;
+  /** Whether the caller is an admin — gates the holder selector, same as `SpotDialog`'s. */
+  readonly isAdmin: boolean;
+  /** `null` while the profile is still loading. */
+  readonly viewerUserId: string | null;
+  /** `LotScreen`'s own `admin.user.list` fetch — not refetched here. */
+  readonly holderOptions: readonly HolderOption[];
+  readonly holderPending: boolean;
+  /** Set when `LotScreen`'s `admin.user.list` fetch failed. */
+  readonly holderError?: unknown;
 }
 
 /** Monday-first column heads, in the message catalog's key order. */
@@ -117,6 +131,11 @@ function BulkReservationModalContent({
   onClose,
   anchorDate,
   canReserveMonth,
+  isAdmin,
+  viewerUserId,
+  holderOptions,
+  holderPending,
+  holderError,
 }: BulkReservationModalProps) {
   const t = useTranslations('bulk');
   const tShell = useTranslations('shell');
@@ -136,6 +155,28 @@ function BulkReservationModalContent({
   // `open` and the month, so every opening is a fresh mount and the four
   // `useState`s start at their initial values. An effect could only ever undo
   // the previous run's state *after* the reopening render had already used it.
+
+  const showHolderForm = isAdmin && holderOptions.length > 0;
+  const holderForm = useAppForm<BulkHolderFormValues>({
+    schema: bulkHolderFormSchema,
+    defaultValues: { userId: defaultBulkHolderId(viewerUserId, holderOptions) },
+  });
+
+  // `holderForm`'s `defaultValues` are captured once, at mount, by
+  // react-hook-form — unlike the `useState`s above, a `key`-based remount
+  // cannot re-seed them a second time, because a remount only re-evaluates
+  // the *original* `defaultValues` expression at the render where it happens.
+  // If the modal is opened while `LotScreen`'s `admin.user.list` fetch is
+  // still in flight, that expression sees an empty `holderOptions` and mounts
+  // with `userId: ''`; the fetch then resolves in a **later** render, with no
+  // remount in between, and nothing would otherwise tell the form about it.
+  // Left alone, the `<select>` shows its first real option (native fallback
+  // for a value with no match) while the form still holds `''`, so
+  // `bulkHolderFormSchema` rejects the submit and "Generate" does nothing.
+  // Same problem, same fix as `spot-dialog.tsx`'s `queueForm.reset` effect.
+  useEffect(() => {
+    holderForm.reset({ userId: defaultBulkHolderId(viewerUserId, holderOptions) });
+  }, [holderOptions, viewerUserId, holderForm]);
 
   const profile = useCurrentUser();
   const spotList = useQuery({ ...api.spot.list.queryOptions(), enabled: open });
@@ -217,10 +258,13 @@ function BulkReservationModalContent({
     return t(message.messageKey, message.values);
   }
 
+  // `holderError` is optional (existing test call sites never pass it), so
+  // fold its `undefined` into `null` explicitly rather than leaning on `==`.
+  const displayedError = failure ?? (isAdmin ? (holderError ?? null) : null);
   const failureNote =
-    failure === null ? null : (
+    displayedError === null ? null : (
       <ToastRegion placement="top-right" label={tShell('notificationsRegion')}>
-        <Toast tone="danger">{t(toBulkErrorMessageKey(failure))}</Toast>
+        <Toast tone="danger">{t(toBulkErrorMessageKey(displayedError))}</Toast>
       </ToastRegion>
     );
 
@@ -346,7 +390,10 @@ function BulkReservationModalContent({
           // requested day — but "we confirm exactly what you were shown" is
           // the invariant, and reading it off the thing that was shown is
           // the only way to state it.
-          confirmBulk.mutate({ dates: proposal.days.map((day) => day.date) });
+          confirmBulk.mutate({
+            dates: proposal.days.map((day) => day.date),
+            ...(showHolderForm ? { holderId: holderForm.getValues('userId') } : {}),
+          });
         }}
         failureNote={failureNote}
       />
@@ -372,10 +419,16 @@ function BulkReservationModalContent({
           </Button>
           <Button
             loading={previewBulk.isPending}
-            disabled={selected.length === 0 || pending}
-            onClick={() => {
-              previewBulk.mutate({ dates: [...selected] });
-            }}
+            disabled={selected.length === 0 || pending || (isAdmin && holderPending)}
+            onClick={
+              showHolderForm
+                ? holderForm.handleSubmit((values) => {
+                    previewBulk.mutate({ dates: [...selected], holderId: values.userId });
+                  })
+                : () => {
+                    previewBulk.mutate({ dates: [...selected] });
+                  }
+            }
           >
             {selected.length === 0
               ? t('ctaSelectDays')
@@ -384,6 +437,12 @@ function BulkReservationModalContent({
         </>
       }
     >
+      {showHolderForm ? (
+        <FormProvider {...holderForm}>
+          <BulkHolderFields options={holderOptions} />
+        </FormProvider>
+      ) : null}
+
       <table className="w-full border-separate border-spacing-2">
         <caption className="sr-only">{t('gridLabel')}</caption>
         <thead>

@@ -220,18 +220,50 @@ export class BulkReservationService {
     private readonly publisher: DomainEventPublisher
   ) {}
 
+  /**
+   * The user this batch is for, and the authorization check that allows it.
+   *
+   * Mirrors `WaitlistService.join`'s `targetUserId` resolution exactly — bulk
+   * booking's queue days land on `WaitlistEntry`, the same table, under the
+   * same non-nullable-`userId` constraint, so there is no guest branch here
+   * either. An omitted `holderId` is always the caller.
+   */
+  private async resolveHolder(
+    holderId: string | undefined,
+    actor: AuthenticatedUser
+  ): Promise<string> {
+    this.policy.assertMayNameWaitlistTarget(holderId, actor);
+    const targetUserId = holderId ?? actor.id;
+    if (targetUserId !== actor.id) {
+      // A real check, not a constraint's job: the foreign key on `Reservation`/
+      // `WaitlistEntry` would only say `CONFLICT`, and an admin who mistyped an
+      // id deserves `NOT_FOUND`. Read outside any transaction, the same way
+      // `ReservationsService.create`'s and `WaitlistService.join`'s target
+      // lookups are.
+      const target = await this.prisma.client.user.findFirst({
+        where: { id: targetUserId, active: true },
+        select: { id: true },
+      });
+      if (target === null) {
+        throw new DomainError('NOT_FOUND', { message: 'No such active user.' });
+      }
+    }
+    return targetUserId;
+  }
+
   /** The read-only proposal. Writes nothing — see the class comment. */
   async preview(
     input: BulkBookingInput,
     actor: AuthenticatedUser,
     today: DateOnly = todayInPrague()
   ): Promise<PreviewBulkOutput> {
+    const holderId = await this.resolveHolder(input.holderId, actor);
     const settings = await this.window.getSettings();
     this.assertRequestable(input.dates, actor, settings, today);
     const month = this.monthOf(input.dates);
 
-    const world = await this.readWorld(this.prisma.client, input.dates, actor.id);
-    const days = this.inRequestOrder(input.dates, this.allocate(input.dates, world, actor.id));
+    const world = await this.readWorld(this.prisma.client, input.dates, holderId);
+    const days = this.inRequestOrder(input.dates, this.allocate(input.dates, world, holderId));
 
     return {
       month,
@@ -247,11 +279,12 @@ export class BulkReservationService {
     actor: AuthenticatedUser,
     today: DateOnly = todayInPrague()
   ): Promise<ConfirmBulkOutput> {
+    const holderId = await this.resolveHolder(input.holderId, actor);
     const settings = await this.window.getSettings();
     this.assertRequestable(input.dates, actor, settings, today);
     const month = this.monthOf(input.dates);
 
-    const outcome = await this.committedConfirm(input.dates, month, actor);
+    const outcome = await this.committedConfirm(input.dates, month, actor, holderId);
 
     // Past `await`, so past `COMMIT` — and deliberately outside the retry loop.
     // Nothing above this line may talk to Slack or Socket.io. There are no
@@ -296,12 +329,13 @@ export class BulkReservationService {
   private async committedConfirm(
     dates: readonly DateOnly[],
     month: string,
-    actor: AuthenticatedUser
+    actor: AuthenticatedUser,
+    holderId: string
   ): Promise<ConfirmOutcome> {
     for (let attempt = 1; ; attempt += 1) {
       try {
         return await this.prisma.client.$transaction(
-          (tx) => this.confirmOnce(tx, dates, month, actor),
+          (tx) => this.confirmOnce(tx, dates, month, actor, holderId),
           RESERVATION_TRANSACTION_OPTIONS
         );
       } catch (error) {
@@ -338,10 +372,11 @@ export class BulkReservationService {
     tx: Prisma.TransactionClient,
     dates: readonly DateOnly[],
     month: string,
-    actor: AuthenticatedUser
+    actor: AuthenticatedUser,
+    holderId: string
   ): Promise<ConfirmOutcome> {
-    const world = await this.readWorld(tx, dates, actor.id);
-    const plans = this.allocate(dates, world, actor.id);
+    const world = await this.readWorld(tx, dates, holderId);
+    const plans = this.allocate(dates, world, holderId);
 
     const assignedCount = plans.filter((plan) => plan.outcome === 'SPOT_ASSIGNED').length;
     if (assignedCount > 0) {
@@ -351,10 +386,10 @@ export class BulkReservationService {
           message: 'A bulk booking must name at least one day.',
         });
       }
-      await assertWithinMonthlyReservationCap(tx, actor.id, firstDate, assignedCount);
+      await assertWithinMonthlyReservationCap(tx, holderId, firstDate, assignedCount);
     }
 
-    const created = await this.createReservations(tx, plans, actor.id);
+    const created = await this.createReservations(tx, plans, holderId);
     const createdByDate = new Map(created.map((row) => [toDateOnly(row.date), row]));
 
     // A day the caller was already queued on and has now been given a spot.
@@ -365,7 +400,7 @@ export class BulkReservationService {
     // already holds the day — but the person's day screen would show them queued
     // for a spot they can never be promoted into while they hold their own. See
     // `doc/decision/0236-*`.
-    const releasedCells = await this.releaseOwnQueues(tx, [...createdByDate.keys()], actor.id);
+    const releasedCells = await this.releaseOwnQueues(tx, [...createdByDate.keys()], holderId);
 
     // Every day that could still end up on a queue, re-read before it does.
     //
@@ -381,22 +416,31 @@ export class BulkReservationService {
       plan.outcome === 'SPOT_ASSIGNED' && !createdByDate.has(plan.date) ? [plan.date] : []
     );
     const planned = plans.flatMap((plan) => (plan.outcome === 'QUEUED' ? [plan.date] : []));
-    const busyElsewhere = await this.datesAlreadyReserved(tx, [...lost, ...planned], actor.id);
+    const busyElsewhere = await this.datesAlreadyReserved(tx, [...lost, ...planned], holderId);
 
     const targets = this.queueTargets(plans, createdByDate, busyElsewhere);
-    const queued = await this.createWaitlistEntries(tx, targets, actor.id);
+    const queued = await this.createWaitlistEntries(tx, targets, holderId);
     const queues = await this.readQueues(tx, targets);
 
-    // The `payload` shape is fixed per action by `../audit/audit-payloads.ts`.
+    // Naming somebody other than the actor as holder is a different action
+    // than the actor acting for themselves — the trail has to say who acted
+    // and on whose behalf, mirroring `ReservationsService.create`'s
+    // `bookedForSomebodyElse` and `WaitlistService.join`'s
+    // `queuedForSomebodyElse`. One flag for the whole batch: a bulk request
+    // names exactly one holder, never a mix.
+    const bookedForSomebodyElse = holderId !== actor.id;
     await this.audit.recordMany(
-      [...this.reservationAudit(created, actor.id), ...this.queueAudit(queued, actor.id)],
+      [
+        ...this.reservationAudit(created, actor.id, holderId, bookedForSomebodyElse),
+        ...this.queueAudit(queued, actor.id, holderId, bookedForSomebodyElse),
+      ],
       tx
     );
 
     const days = this.inRequestOrder(
       dates,
       plans.map((plan) =>
-        this.resolve(plan, createdByDate, busyElsewhere, targets, queues, actor.id)
+        this.resolve(plan, createdByDate, busyElsewhere, targets, queues, holderId)
       )
     );
 
@@ -455,7 +499,7 @@ export class BulkReservationService {
   private async readWorld(
     client: Prisma.TransactionClient,
     dates: readonly DateOnly[],
-    userId: string
+    holderId: string
   ): Promise<World> {
     const dateColumns = dates.map(toDateColumn);
 
@@ -468,7 +512,7 @@ export class BulkReservationService {
       // `AuthenticatedUser` carries neither, exactly as `reservation.create`
       // found when it needed the plate for its broadcast.
       client.user.findUniqueOrThrow({
-        where: { id: userId },
+        where: { id: holderId },
         select: { id: true, name: true, licensePlate: true, preferredParkingSpotId: true },
       }),
       client.reservation.findMany({
@@ -506,7 +550,7 @@ export class BulkReservationService {
     for (const row of reservations) {
       const day = dayFor(toDateOnly(row.date));
       day.reservedSpotIds.add(row.parkingSpotId);
-      if (row.userId === userId) {
+      if (row.userId === holderId) {
         day.userHasReservation = true;
       }
     }
@@ -529,13 +573,13 @@ export class BulkReservationService {
   private async datesAlreadyReserved(
     tx: Prisma.TransactionClient,
     dates: readonly DateOnly[],
-    userId: string
+    holderId: string
   ): Promise<Set<DateOnly>> {
     if (dates.length === 0) {
       return new Set();
     }
     const rows = await tx.reservation.findMany({
-      where: { userId, date: { in: dates.map(toDateColumn) } },
+      where: { userId: holderId, date: { in: dates.map(toDateColumn) } },
       select: { date: true },
     });
     return new Set(rows.map((row) => toDateOnly(row.date)));
@@ -582,11 +626,11 @@ export class BulkReservationService {
   private async createReservations(
     tx: Prisma.TransactionClient,
     plans: readonly BulkDayPlan[],
-    userId: string
+    holderId: string
   ): Promise<CreatedReservation[]> {
     const data = plans.flatMap((plan) =>
       plan.outcome === 'SPOT_ASSIGNED'
-        ? [{ parkingSpotId: plan.parkingSpotId, userId, date: toDateColumn(plan.date) }]
+        ? [{ parkingSpotId: plan.parkingSpotId, userId: holderId, date: toDateColumn(plan.date) }]
         : []
     );
     if (data.length === 0) {
@@ -612,7 +656,7 @@ export class BulkReservationService {
   private async createWaitlistEntries(
     tx: Prisma.TransactionClient,
     targets: ReadonlyMap<DateOnly, QueueTarget>,
-    userId: string
+    holderId: string
   ): Promise<QueueRow[]> {
     if (targets.size === 0) {
       return [];
@@ -620,7 +664,11 @@ export class BulkReservationService {
 
     const data = [...targets.entries()]
       .sort(([left], [right]) => compareDateOnly(left, right))
-      .map(([date, spot]) => ({ parkingSpotId: spot.id, userId, date: toDateColumn(date) }));
+      .map(([date, spot]) => ({
+        parkingSpotId: spot.id,
+        userId: holderId,
+        date: toDateColumn(date),
+      }));
 
     return tx.waitlistEntry.createManyAndReturn({
       data,
@@ -646,7 +694,7 @@ export class BulkReservationService {
   private async releaseOwnQueues(
     tx: Prisma.TransactionClient,
     dates: readonly DateOnly[],
-    userId: string
+    holderId: string
   ): Promise<DomainEvent[]> {
     if (dates.length === 0) {
       return [];
@@ -657,7 +705,7 @@ export class BulkReservationService {
     );
     const cleared = await tx.$queryRaw<{ parkingSpotId: string; date: Date }[]>`
       DELETE FROM "WaitlistEntry"
-      WHERE "userId" = ${userId}::uuid
+      WHERE "userId" = ${holderId}::uuid
         AND "date" IN (${days})
       RETURNING "parkingSpotId", "date"
     `;
@@ -682,11 +730,11 @@ export class BulkReservationService {
 
   // --- assembling the answer -------------------------------------------------
 
-  private allocate(dates: readonly DateOnly[], world: World, userId: string): BulkDayPlan[] {
+  private allocate(dates: readonly DateOnly[], world: World, holderId: string): BulkDayPlan[] {
     return allocateBulk({
       dates,
       spots: world.spots,
-      userId,
+      userId: holderId,
       preferredParkingSpotId: world.preferredParkingSpotId,
       stateByDate: world.stateByDate,
     });
@@ -742,7 +790,7 @@ export class BulkReservationService {
     busyElsewhere: ReadonlySet<DateOnly>,
     targets: ReadonlyMap<DateOnly, QueueTarget>,
     queues: ReadonlyMap<string, readonly QueueRow[]>,
-    userId: string
+    holderId: string
   ): BulkDayResult {
     if (plan.outcome === 'UNAVAILABLE') {
       return plan;
@@ -772,13 +820,13 @@ export class BulkReservationService {
     }
 
     const queue = queues.get(cellKey({ date: plan.date, parkingSpotId: target.id })) ?? [];
-    const index = queue.findIndex((row) => row.userId === userId);
+    const index = queue.findIndex((row) => row.userId === holderId);
     const entry = queue[index];
     if (entry === undefined) {
       // The entry was either inserted by this transaction or was already there,
       // and both are visible to this read. Absent means a defect, and a defect
       // is better as a 500 than as a fabricated queue position.
-      throw new Error(`No queue entry for ${userId} on ${plan.date} after inserting one.`);
+      throw new Error(`No queue entry for ${holderId} on ${plan.date} after inserting one.`);
     }
 
     return {
@@ -793,25 +841,57 @@ export class BulkReservationService {
 
   private reservationAudit(
     created: readonly CreatedReservation[],
-    actorUserId: string
+    actorUserId: string,
+    holderUserId: string,
+    bookedForSomebodyElse: boolean
   ): AuditEntry[] {
-    return created.map((row) => ({
-      actorUserId,
-      action: 'RESERVATION_CREATED',
-      entityType: 'Reservation',
-      entityId: row.id,
-      payload: { parkingSpotId: row.parkingSpotId, date: toDateOnly(row.date) },
-    }));
+    return created.map((row) =>
+      bookedForSomebodyElse
+        ? {
+            actorUserId,
+            action: 'RESERVATION_CREATED_BY_ADMIN',
+            entityType: 'Reservation',
+            entityId: row.id,
+            payload: {
+              parkingSpotId: row.parkingSpotId,
+              date: toDateOnly(row.date),
+              holderUserId,
+              guestName: null,
+            },
+          }
+        : {
+            actorUserId,
+            action: 'RESERVATION_CREATED',
+            entityType: 'Reservation',
+            entityId: row.id,
+            payload: { parkingSpotId: row.parkingSpotId, date: toDateOnly(row.date) },
+          }
+    );
   }
 
-  private queueAudit(queued: readonly QueueRow[], actorUserId: string): AuditEntry[] {
-    return queued.map((row) => ({
-      actorUserId,
-      action: 'WAITLIST_JOINED',
-      entityType: 'WaitlistEntry',
-      entityId: row.id,
-      payload: { parkingSpotId: row.parkingSpotId, date: toDateOnly(row.date) },
-    }));
+  private queueAudit(
+    queued: readonly QueueRow[],
+    actorUserId: string,
+    targetUserId: string,
+    queuedForSomebodyElse: boolean
+  ): AuditEntry[] {
+    return queued.map((row) =>
+      queuedForSomebodyElse
+        ? {
+            actorUserId,
+            action: 'WAITLIST_JOINED_BY_ADMIN',
+            entityType: 'WaitlistEntry',
+            entityId: row.id,
+            payload: { parkingSpotId: row.parkingSpotId, date: toDateOnly(row.date), targetUserId },
+          }
+        : {
+            actorUserId,
+            action: 'WAITLIST_JOINED',
+            entityType: 'WaitlistEntry',
+            entityId: row.id,
+            payload: { parkingSpotId: row.parkingSpotId, date: toDateOnly(row.date) },
+          }
+    );
   }
 
   /**

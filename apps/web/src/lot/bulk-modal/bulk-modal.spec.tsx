@@ -10,6 +10,7 @@ import type {
   ParkingSpot,
   PreviewBulkOutput,
 } from '@lets-park/contract';
+import type { HolderOption } from '../spot-dialog/holder-input';
 import { profile as sharedProfile, T0 } from '../../testing/fixtures';
 import { createProviderWrapper } from '../../testing/providers';
 import { BulkReservationModal } from './bulk-modal';
@@ -203,6 +204,10 @@ interface SetupOptions {
   readonly previewFailure?: unknown;
   /** Makes `spot.list` reject, so the query settles into `isError`. */
   readonly spotListFails?: boolean;
+  readonly isAdmin?: boolean;
+  readonly viewerUserId?: string | null;
+  readonly holderOptions?: readonly HolderOption[];
+  readonly holderPending?: boolean;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -239,6 +244,10 @@ function setup(options: SetupOptions = {}) {
       onClose={onClose}
       anchorDate={ANCHOR}
       canReserveMonth={options.canReserveMonth ?? true}
+      isAdmin={options.isAdmin ?? false}
+      viewerUserId={options.viewerUserId ?? null}
+      holderOptions={options.holderOptions ?? []}
+      holderPending={options.holderPending ?? false}
     />,
     { wrapper: Wrapper }
   );
@@ -372,9 +381,29 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     expect(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' })).toBeEnabled();
 
     rerender(
-      <BulkReservationModal open={false} onClose={onClose} anchorDate={ANCHOR} canReserveMonth />
+      <BulkReservationModal
+        open={false}
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
     );
-    rerender(<BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth />);
+    rerender(
+      <BulkReservationModal
+        open
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
+    );
 
     expect(screen.getByRole('button', { name: 'Vyberte dny' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'úterý 1. září 2026' })).toHaveAttribute(
@@ -407,9 +436,29 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     });
 
     rerender(
-      <BulkReservationModal open={false} onClose={onClose} anchorDate={ANCHOR} canReserveMonth />
+      <BulkReservationModal
+        open={false}
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
     );
-    rerender(<BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth />);
+    rerender(
+      <BulkReservationModal
+        open
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
+    );
 
     const primary = screen.getByRole('button', { name: 'Vyberte dny' });
     expect(primary).not.toHaveAttribute('aria-busy');
@@ -430,6 +479,92 @@ describe('BulkReservationModal — step 1, choosing the days', () => {
     await waitFor(() => {
       expect(apiMocks.previewBulk).toHaveBeenCalledWith(
         { dates: ['2026-09-01', '2026-09-03'] },
+        expect.anything()
+      );
+    });
+  });
+});
+
+describe('BulkReservationModal — the admin holder selector', () => {
+  const ADMIN_OPTIONS: readonly HolderOption[] = [
+    { userId: 'admin-1', name: 'Dev Admin', licensePlate: null },
+    { userId: 'user-1', name: 'Dev User', licensePlate: '1AB 2345' },
+  ];
+
+  it('shows no holder selector for a normal user', () => {
+    setup();
+    expect(screen.queryByLabelText('Rezervovat pro')).not.toBeInTheDocument();
+  });
+
+  it('offers a holder selector for an admin, defaulting to the admin themselves', () => {
+    setup({ isAdmin: true, viewerUserId: 'admin-1', holderOptions: ADMIN_OPTIONS });
+    expect(screen.getByLabelText('Rezervovat pro')).toHaveValue('admin-1');
+  });
+
+  it('previews for the selected holder, not the admin', async () => {
+    const { user } = setup({
+      isAdmin: true,
+      viewerUserId: 'admin-1',
+      holderOptions: ADMIN_OPTIONS,
+    });
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'user-1');
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' }));
+
+    await waitFor(() => {
+      expect(apiMocks.previewBulk).toHaveBeenCalledWith(
+        { dates: ['2026-09-01'], holderId: 'user-1' },
+        expect.anything()
+      );
+    });
+  });
+
+  it('confirms for the same holder the preview was generated for', async () => {
+    // A single-day `previewOutput`, not the fixture's default two-day one:
+    // `SchedulePreviewModal` confirms exactly the days of the proposal on
+    // screen, so a two-day proposal here would make the assertion below
+    // disagree with itself rather than with the holder id under test.
+    const { user } = setup({
+      isAdmin: true,
+      viewerUserId: 'admin-1',
+      holderOptions: ADMIN_OPTIONS,
+      previewOutput: preview({
+        days: [
+          {
+            outcome: 'SPOT_ASSIGNED',
+            date: '2026-09-01',
+            parkingSpotId: PREFERRED_SPOT_ID,
+            parkingSpotLabel: 'E2.92',
+            isPreferredSpot: true,
+          },
+        ],
+        summary: { assigned: 1, queued: 0, unavailable: 0, preferredSpotHits: 1 },
+      }),
+    });
+
+    await user.selectOptions(screen.getByLabelText('Rezervovat pro'), 'user-1');
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' }));
+    await user.click(await screen.findByRole('button', { name: 'Potvrdit rozvrh' }));
+
+    await waitFor(() => {
+      expect(apiMocks.confirmBulk).toHaveBeenCalledWith(
+        { dates: ['2026-09-01'], holderId: 'user-1' },
+        expect.anything()
+      );
+    });
+  });
+
+  it('omits holderId entirely for a normal user', async () => {
+    const { user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'úterý 1. září 2026' }));
+    await user.click(screen.getByRole('button', { name: 'Vygenerovat rozvrh (1 den)' }));
+
+    await waitFor(() => {
+      expect(apiMocks.previewBulk).toHaveBeenCalledWith(
+        { dates: ['2026-09-01'] },
         expect.anything()
       );
     });
@@ -837,7 +972,16 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
     await reachSchedule(user);
 
     rerender(
-      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+      <BulkReservationModal
+        open
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth={false}
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
     );
 
     const dialog = screen.getByRole('dialog', { name: 'Rezervace jsou uzamčené' });
@@ -854,7 +998,16 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
     await reachSchedule(user);
 
     rerender(
-      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+      <BulkReservationModal
+        open
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth={false}
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
     );
 
     expect(screen.getByRole('dialog', { name: 'Rezervace jsou uzamčené' })).toBeInTheDocument();
@@ -897,7 +1050,16 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
     await screen.findByRole('alert');
 
     rerender(
-      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+      <BulkReservationModal
+        open
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth={false}
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
     );
 
     expect(screen.getByRole('dialog', { name: 'Rozvrh potvrzen' })).toBeInTheDocument();
@@ -915,7 +1077,16 @@ describe('BulkReservationModal — the locked month is blocked, not merely hidde
     await screen.findByText('Zapsali jsme vás přesně podle návrhu.');
 
     rerender(
-      <BulkReservationModal open onClose={onClose} anchorDate={ANCHOR} canReserveMonth={false} />
+      <BulkReservationModal
+        open
+        onClose={onClose}
+        anchorDate={ANCHOR}
+        canReserveMonth={false}
+        isAdmin={false}
+        viewerUserId={null}
+        holderOptions={[]}
+        holderPending={false}
+      />
     );
 
     expect(screen.getByRole('dialog', { name: 'Rozvrh potvrzen' })).toBeInTheDocument();

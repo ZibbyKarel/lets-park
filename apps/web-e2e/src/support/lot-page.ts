@@ -16,6 +16,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { parseDateOnly, todayInPrague } from '@lets-park/shared-types';
 import type { DateOnly } from '@lets-park/shared-types';
+import { dayAndMonthCzech } from './dates';
 
 /** The tile for one spot, whatever state it is in. */
 export function spotTile(page: Page, label: string): Locator {
@@ -202,6 +203,64 @@ export async function expectFree(page: Page, label: string): Promise<void> {
  * fixed delay. See `doc/decision/0183-*`.
  */
 export const FIRST_ROUTE_VISIT_TIMEOUT_MS = 30_000;
+
+/** Opens the bulk-reservation modal from the lot header's button. */
+export async function openBulkModal(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Hromadná rezervace' }).click();
+}
+
+/**
+ * Toggles one day cell in the bulk modal's month grid.
+ *
+ * Located by its visible day-of-month text inside the grid `<table>`, not by
+ * its `aria-label` — that label is a full Czech date string this support
+ * file has no formatter for, and the bare number is unique within one
+ * month's grid.
+ */
+export async function selectBulkDay(page: Page, date: DateOnly): Promise<void> {
+  const dayOfMonth = String(Number(date.slice(8, 10)));
+  await page
+    .getByRole('table', { name: 'Výběr dní' })
+    .locator('button', { hasText: new RegExp(`^${dayOfMonth}$`) })
+    .click();
+}
+
+/** Picks who the batch is for, from the admin-only "Rezervovat pro" select. */
+export async function pickBulkHolder(page: Page, name: string): Promise<void> {
+  await page.getByLabel('Rezervovat pro').selectOption({ label: name });
+}
+
+export async function generateBulkSchedule(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^Vygenerovat rozvrh/ }).click();
+}
+
+/**
+ * Reads the spot label the result step shows for one day, off
+ * `CalendarTable`'s rendered row — the label the confirmation actually
+ * assigned, which a bulk booking never predicts ahead of time (the allocator
+ * picks the spot; nothing in the flow lets a caller name one).
+ */
+export async function bulkResultSpotLabel(page: Page, date: DateOnly): Promise<string> {
+  const row = page.getByRole('listitem').filter({ hasText: dayAndMonthCzech(date) });
+  const label = await row.locator('span.font-bold').first().textContent();
+  if (label === null) {
+    throw new Error(`No spot label found for ${date} in the bulk result.`);
+  }
+  return label.trim();
+}
+
+export async function confirmBulkSchedule(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Potvrdit rozvrh' }).click();
+  // Confirmation is async; wait for the result step (the "Hotovo" button)
+  // before returning, so callers reading the result step (e.g.
+  // `bulkResultSpotLabel`) never race the still-mounted preview step, which
+  // renders the same row markup.
+  await page.getByRole('button', { name: 'Hotovo' }).waitFor({ state: 'visible' });
+}
+
+export async function closeBulkResult(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Hotovo' }).click();
+}
 
 /**
  * Opens Nastavení from the user menu and returns the modal.

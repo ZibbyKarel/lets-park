@@ -267,6 +267,7 @@
   "bulk": {
     "title": "Bulk reservation",
     "description": "Select days in {month}. We’ll assign a spot automatically — where nothing is free, we put you in the queue.",
+    "holderField": "Reserve for",
     "weekdayMon": "MON",
     "weekdayTue": "TUE",
     "weekdayWed": "WED",
