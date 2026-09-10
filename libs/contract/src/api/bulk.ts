@@ -6,6 +6,9 @@
  * 2. `confirmBulk` takes **the same day list** and performs the writes, then
  *    reports what actually happened.
  *
+ * Both procedures also take an optional `holderId`, naming whom the batch is
+ * for when the caller is not booking for themselves.
+ *
  * The two outputs are deliberately the same shape, keyed by `date`, differing
  * only in that the confirmed one carries the ids of the rows it created. That
  * is what makes the difference legible: the client keeps the preview it showed
@@ -31,7 +34,7 @@ export const bulkUnavailableReasonSchema = z.enum(BULK_UNAVAILABLE_REASONS);
 export type BulkUnavailableReason = z.infer<typeof bulkUnavailableReasonSchema>;
 
 /**
- * The day list both procedures take.
+ * The day list both procedures take, plus who it is for.
  *
  * The refinements are **structural** — they are about the list itself, not about
  * the world. Whether a day is in the past, inside the open window or a business
@@ -39,10 +42,25 @@ export type BulkUnavailableReason = z.infer<typeof bulkUnavailableReasonSchema>;
  * the service layer (ruling window-2, and the same reasoning that keeps
  * `dateOnlySchema` format-only).
  */
-export const bulkBookingInputSchema = z
-  .object({
-    dates: z.array(dateOnlySchema).min(1).max(MAX_BULK_BOOKING_DAYS),
-  })
+const bulkBookingShapeSchema = z.object({
+  dates: z.array(dateOnlySchema).min(1).max(MAX_BULK_BOOKING_DAYS),
+  /**
+   * Who the batch is for, when the caller is not booking for themselves.
+   *
+   * A bare user id, not `reservationHolderInputSchema`'s guest-capable union:
+   * a bulk day that misses its spot falls onto `WaitlistEntry`, whose `userId`
+   * is non-nullable, so there is nobody to queue but an active user — the same
+   * reason `joinWaitlistInputSchema.holderId` is a bare id (`waitlist.ts`).
+   *
+   * **Only an admin may name a holder other than themselves.** That is not
+   * expressible in a schema — a schema cannot see who is calling — so it is
+   * `ReservationPolicy.assertMayNameWaitlistTarget`, and the refusal is the
+   * `FORBIDDEN` the base builder already declares.
+   */
+  holderId: idSchema.optional(),
+});
+
+export const bulkBookingInputSchema = bulkBookingShapeSchema
   .refine((value) => new Set(value.dates).size === value.dates.length, {
     error: 'dates must not contain duplicates',
     path: ['dates'],
@@ -150,7 +168,13 @@ export const previewBulkContract = authed
   .input(bulkBookingInputSchema)
   .output(previewBulkOutputSchema)
   .errors(
-    contractErrors('PAST_DATE', 'OUT_OF_HORIZON', 'RESERVATIONS_LOCKED', 'VALIDATION_FAILED')
+    contractErrors(
+      'PAST_DATE',
+      'OUT_OF_HORIZON',
+      'RESERVATIONS_LOCKED',
+      'VALIDATION_FAILED',
+      'NOT_FOUND'
+    )
   );
 
 /**
@@ -170,6 +194,7 @@ export const confirmBulkContract = authed
       'RESERVATIONS_LOCKED',
       'MONTHLY_RESERVATION_LIMIT_REACHED',
       'VALIDATION_FAILED',
-      'CONFLICT'
+      'CONFLICT',
+      'NOT_FOUND'
     )
   );

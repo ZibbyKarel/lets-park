@@ -15,6 +15,24 @@ describe('bulkBookingInputSchema', () => {
     });
   });
 
+  it('accepts an omitted holderId, unchanged from before this field existed', () => {
+    const result = bulkBookingInputSchema.safeParse({ dates: [DATE_A, DATE_B] });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.holderId).toBeUndefined();
+  });
+
+  it('accepts a holderId alongside the dates', () => {
+    const result = bulkBookingInputSchema.safeParse({ dates: [DATE_A], holderId: UUID_B });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.holderId).toBe(UUID_B);
+  });
+
+  it('rejects a holderId that is not a uuid', () => {
+    expect(
+      bulkBookingInputSchema.safeParse({ dates: [DATE_A], holderId: 'not-a-uuid' }).success
+    ).toBe(false);
+  });
+
   it('accepts a single day and a full month', () => {
     expect(bulkBookingInputSchema.safeParse({ dates: [DATE_A] }).success).toBe(true);
     const wholeMonth = Array.from(
