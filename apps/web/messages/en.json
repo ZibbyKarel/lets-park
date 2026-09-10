@@ -4,6 +4,7 @@
     "loading": "Loading…",
     "errorTitle": "Something went wrong",
     "errorUnknown": "Please try again in a moment.",
+    "notificationsRegion": "Notifications",
     "retry": "Try again",
     "notFoundTitle": "Page not found",
     "notFoundDescription": "The link you opened doesn’t lead anywhere.",

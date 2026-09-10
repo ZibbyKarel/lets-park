@@ -30,7 +30,7 @@ import {
   type DateOnly,
 } from '@lets-park/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Modal, Toast, cx } from '@lets-park/design-system/primitives';
+import { Box, Button, Modal, Toast, ToastRegion, cx } from '@lets-park/design-system/primitives';
 import type { ConfirmBulkOutput, PreviewBulkOutput } from '@lets-park/contract';
 import { useApi } from '../../shell/api-provider/api-provider';
 import { useCurrentUser } from '../../shell/use-current-user';
@@ -119,6 +119,7 @@ function BulkReservationModalContent({
   canReserveMonth,
 }: BulkReservationModalProps) {
   const t = useTranslations('bulk');
+  const tShell = useTranslations('shell');
   const f = useDateFormatters();
   const api = useApi();
   const queryClient = useQueryClient();
@@ -217,7 +218,11 @@ function BulkReservationModalContent({
   }
 
   const failureNote =
-    failure === null ? null : <Toast tone="danger">{t(toBulkErrorMessageKey(failure))}</Toast>;
+    failure === null ? null : (
+      <ToastRegion placement="top-right" label={tShell('notificationsRegion')}>
+        <Toast tone="danger">{t(toBulkErrorMessageKey(failure))}</Toast>
+      </ToastRegion>
+    );
 
   const pending = previewBulk.isPending || confirmBulk.isPending;
 

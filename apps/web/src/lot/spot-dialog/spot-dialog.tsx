@@ -33,7 +33,14 @@
  */
 
 import { useEffect } from 'react';
-import { Avatar, Button, Modal, Stack, Toast } from '@lets-park/design-system/primitives';
+import {
+  Avatar,
+  Button,
+  Modal,
+  Stack,
+  Toast,
+  ToastRegion,
+} from '@lets-park/design-system/primitives';
 import { useDateFormatters, useTranslations } from '@lets-park/i18n';
 import type { DateOnly } from '@lets-park/i18n';
 import { FormProvider, useAppForm } from '@lets-park/form';
@@ -389,7 +396,11 @@ export function SpotDialog({
         </Stack>
       ) : null}
 
-      {failureMessage === null ? null : <Toast tone="danger">{failureMessage}</Toast>}
+      {failureMessage === null ? null : (
+        <ToastRegion placement="top-right" label={tShell('notificationsRegion')}>
+          <Toast tone="danger">{failureMessage}</Toast>
+        </ToastRegion>
+      )}
     </Modal>
   );
 }

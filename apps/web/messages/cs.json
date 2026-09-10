@@ -4,6 +4,7 @@
     "loading": "Načítá se…",
     "errorTitle": "Něco se nepovedlo",
     "errorUnknown": "Zkuste to prosím znovu za chvíli.",
+    "notificationsRegion": "Oznámení",
     "retry": "Zkusit znovu",
     "notFoundTitle": "Stránka nenalezena",
     "notFoundDescription": "Odkaz, který jste otevřeli, nikam nevede.",

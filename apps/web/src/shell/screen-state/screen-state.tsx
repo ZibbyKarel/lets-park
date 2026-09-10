@@ -58,20 +58,6 @@ export interface ScreenErrorProps {
    * dropped connection, a 500, a bug — falls back to the generic sentence.
    */
   readonly error: unknown;
-  /**
-   * Overrides the code-mapped catalogue string with a caller-supplied one.
-   *
-   * The only caller today is `SpotDialog`'s named-holder create: the contract
-   * has one code, `RESERVATION_LIMIT_REACHED`, for both "you already have a
-   * reservation" and "the colleague you named already has one", and no
-   * per-code sentence can be true for both readers
-   * (`.superpowers/sdd/2026-09-08-admin-reserves-for-others-and-guests-v2/fix-limit-copy-brief.md`).
-   * The caller decides this off the real contract **code** plus who it
-   * addressed the call to, never off the error's own `message` — the rule
-   * below still holds, this is a second sentence keyed the same way, chosen
-   * further up the tree because only the caller knows who was named.
-   */
-  readonly message?: string;
   /** Rendered as a "Zkusit znovu" button when supplied. */
   readonly onRetry?: () => void;
   /** See `EmptyStateProps.headingLevel`: only the page knows its own outline. */
@@ -85,11 +71,8 @@ export interface ScreenErrorProps {
  * a contract error's `message` field is developer-facing English by design
  * (`libs/contract/src/api/errors.ts`), and a transport failure's message is a
  * stack-adjacent string that has no business on a page. Neither is ever shown.
- * {@link ScreenErrorProps.message} is the one sanctioned exception, and it is
- * not an exception to this rule — it is still resolved from the code, just by
- * the caller instead of here.
  */
-export function ScreenError({ error, message, onRetry, headingLevel }: ScreenErrorProps) {
+export function ScreenError({ error, onRetry, headingLevel }: ScreenErrorProps) {
   const t = useTranslations('shell');
   const errors = useTranslations('errors');
   const contractError = toContractError(error);
@@ -97,9 +80,7 @@ export function ScreenError({ error, message, onRetry, headingLevel }: ScreenErr
   return (
     <EmptyState
       title={t('errorTitle')}
-      description={
-        message ?? (contractError === null ? t('errorUnknown') : errors(contractError.code))
-      }
+      description={contractError === null ? t('errorUnknown') : errors(contractError.code)}
       {...(headingLevel === undefined ? {} : { headingLevel })}
       {...(onRetry === undefined
         ? {}
