@@ -1,6 +1,6 @@
 # TODO
 
-1. - [ ] v testech nepoužívat hodnoty překladů. Místo toho namockovat překladovou funkci tak aby vracela klíč a v testovacích souborech testovat přítomnost toho klíče tzn pseudokod:
+1. [ ] v testech nepoužívat hodnoty překladů. Místo toho namockovat překladovou funkci tak aby vracela klíč a v testovacích souborech testovat přítomnost toho klíče tzn pseudokod:
    ```tsx
      const mockedT = (key: MessageKey, substitutes: Substitutes) => `${key}: ${substitutes.join(',')}
      ...
