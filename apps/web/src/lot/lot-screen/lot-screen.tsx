@@ -440,6 +440,7 @@ export function LotScreen() {
         viewerUserId={viewerUserId}
         holderOptions={holderOptions}
         holderPending={holderPending}
+        holderError={holderError}
       />
 
       <DatePickerDialog

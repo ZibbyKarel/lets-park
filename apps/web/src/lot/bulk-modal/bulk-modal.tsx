@@ -21,7 +21,7 @@
  * here names a wrapped package (`doc/wrappers.md`).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   parseDateOnly,
   todayInPrague,
@@ -84,6 +84,8 @@ export interface BulkReservationModalProps {
   /** `LotScreen`'s own `admin.user.list` fetch — not refetched here. */
   readonly holderOptions: readonly HolderOption[];
   readonly holderPending: boolean;
+  /** Set when `LotScreen`'s `admin.user.list` fetch failed. */
+  readonly holderError?: unknown;
 }
 
 /** Monday-first column heads, in the message catalog's key order. */
@@ -133,6 +135,7 @@ function BulkReservationModalContent({
   viewerUserId,
   holderOptions,
   holderPending,
+  holderError,
 }: BulkReservationModalProps) {
   const t = useTranslations('bulk');
   const tShell = useTranslations('shell');
@@ -158,6 +161,22 @@ function BulkReservationModalContent({
     schema: bulkHolderFormSchema,
     defaultValues: { userId: defaultBulkHolderId(viewerUserId, holderOptions) },
   });
+
+  // `holderForm`'s `defaultValues` are captured once, at mount, by
+  // react-hook-form — unlike the `useState`s above, a `key`-based remount
+  // cannot re-seed them a second time, because a remount only re-evaluates
+  // the *original* `defaultValues` expression at the render where it happens.
+  // If the modal is opened while `LotScreen`'s `admin.user.list` fetch is
+  // still in flight, that expression sees an empty `holderOptions` and mounts
+  // with `userId: ''`; the fetch then resolves in a **later** render, with no
+  // remount in between, and nothing would otherwise tell the form about it.
+  // Left alone, the `<select>` shows its first real option (native fallback
+  // for a value with no match) while the form still holds `''`, so
+  // `bulkHolderFormSchema` rejects the submit and "Generate" does nothing.
+  // Same problem, same fix as `spot-dialog.tsx`'s `queueForm.reset` effect.
+  useEffect(() => {
+    holderForm.reset({ userId: defaultBulkHolderId(viewerUserId, holderOptions) });
+  }, [holderOptions, viewerUserId, holderForm]);
 
   const profile = useCurrentUser();
   const spotList = useQuery({ ...api.spot.list.queryOptions(), enabled: open });
@@ -239,10 +258,13 @@ function BulkReservationModalContent({
     return t(message.messageKey, message.values);
   }
 
+  // `holderError` is optional (existing test call sites never pass it), so
+  // fold its `undefined` into `null` explicitly rather than leaning on `==`.
+  const displayedError = failure ?? (isAdmin ? (holderError ?? null) : null);
   const failureNote =
-    failure === null ? null : (
+    displayedError === null ? null : (
       <ToastRegion placement="top-right" label={tShell('notificationsRegion')}>
-        <Toast tone="danger">{t(toBulkErrorMessageKey(failure))}</Toast>
+        <Toast tone="danger">{t(toBulkErrorMessageKey(displayedError))}</Toast>
       </ToastRegion>
     );
 
