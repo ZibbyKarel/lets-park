@@ -58,6 +58,8 @@ export interface DialogOverrides {
   viewerUserId?: string | null;
   holderOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
   holderPending?: boolean;
+  queueTargetOptions?: readonly { userId: string; name: string; licensePlate: string | null }[];
+  queueTargetPending?: boolean;
 }
 
 export function renderDialog(overrides: DialogOverrides = {}) {
@@ -84,6 +86,8 @@ export function renderDialog(overrides: DialogOverrides = {}) {
           viewerUserId={props.viewerUserId ?? null}
           holderOptions={props.holderOptions ?? []}
           holderPending={props.holderPending ?? false}
+          queueTargetOptions={props.queueTargetOptions ?? []}
+          queueTargetPending={props.queueTargetPending ?? false}
           {...callbacks}
         />
       </IntlProvider>

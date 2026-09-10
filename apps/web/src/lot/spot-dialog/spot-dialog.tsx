@@ -102,6 +102,17 @@ export interface SpotDialogProps {
    * admin themselves before the selector has had a chance to appear.
    */
   readonly holderPending: boolean;
+  /**
+   * The users an admin may add to this spot's queue on this day — already
+   * excludes anyone who holds a reservation that day or is already in this
+   * queue (`libs/contract/src/api/users.ts`'s `excludingReservedOrQueuedFor`).
+   * Distinct from {@link holderOptions}: naming a reservation holder and
+   * naming a queue target are refused for different reasons, so the two lists
+   * are fetched, and can be empty, independently.
+   */
+  readonly queueTargetOptions: readonly HolderOption[];
+  /** Same shape as {@link holderPending}, for {@link queueTargetOptions}. */
+  readonly queueTargetPending: boolean;
   readonly onClose: () => void;
   /**
    * Reserve the bay. **No argument means "for the caller"** — the contract's
@@ -138,6 +149,8 @@ export function SpotDialog({
   viewerUserId,
   holderOptions,
   holderPending,
+  queueTargetOptions,
+  queueTargetPending,
   onClose,
   onReserve,
   onJoinWaitlist,
@@ -161,7 +174,7 @@ export function SpotDialog({
 
   const showQueueTargetForm =
     isAdmin &&
-    holderOptions.length > 0 &&
+    queueTargetOptions.length > 0 &&
     viewerUserId !== null &&
     spot?.action === 'queue' &&
     spot.viewerWaitlistEntryId === null;
@@ -305,7 +318,7 @@ export function SpotDialog({
               ) : (
                 <Button
                   loading={pending}
-                  disabled={holderPending}
+                  disabled={queueTargetPending}
                   onClick={showQueueTargetForm ? submitQueueTarget : () => onJoinWaitlist()}
                 >
                   {t('ctaQueue')}
@@ -371,7 +384,7 @@ export function SpotDialog({
               ) : null}
               {showQueueTargetForm ? (
                 <FormProvider {...queueForm}>
-                  <QueueTargetFields options={holderOptions} />
+                  <QueueTargetFields options={queueTargetOptions} />
                 </FormProvider>
               ) : null}
             </>

@@ -401,7 +401,7 @@ describe('SpotDialog — an admin adding somebody to the queue', () => {
       spot: takenByOther,
       isAdmin: true,
       viewerUserId: 'admin-1',
-      holderOptions: QUEUE_OPTIONS,
+      queueTargetOptions: QUEUE_OPTIONS,
       ...overrides,
     });
   }
@@ -441,11 +441,20 @@ describe('SpotDialog — an admin adding somebody to the queue', () => {
     expect(screen.queryByLabelText('Přidat do fronty')).not.toBeInTheDocument();
   });
 
+  it('disables Přidat se do fronty while the queue-target list is still loading', () => {
+    // Mirrors the reserve flow's equivalent test: without `queueTargetPending`,
+    // one click would call `onJoinWaitlist()` with no argument and queue the
+    // spot for the admin, with no selector ever shown.
+    renderAdminQueue({ queueTargetOptions: [], queueTargetPending: true });
+
+    expect(screen.getByRole('button', { name: 'Přidat se do fronty' })).toBeDisabled();
+  });
+
   it('offers no selector to a normal user, who still joins for themselves', async () => {
     const { onJoinWaitlist, user } = renderDialog({
       spot: takenByOther,
       viewerUserId: 'user-2',
-      holderOptions: [],
+      queueTargetOptions: [],
     });
 
     expect(screen.queryByLabelText('Přidat do fronty')).not.toBeInTheDocument();
