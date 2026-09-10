@@ -43,6 +43,8 @@
     // them: its `exclude` is `[]` and it reaches them through the specs'
     // imports.
     "src/**/testing/**",
+    "**/*.test-helpers.ts",
+    "**/*.test-helpers.tsx",
     "jest.config.ts",
     "jest.config.cts",
     "**/*.spec.ts",
