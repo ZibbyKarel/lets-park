@@ -63,7 +63,7 @@ export function SpotTile({ spot, onOpen, onAdminOpen }: SpotTileProps) {
     spot.appearance === 'free'
       ? [t('free')]
       : spot.appearance === 'taken'
-        ? [spot.holderName, spot.holderPlate ?? t('noPlate')]
+        ? [spot.holderName, spot.holderPlate]
         : spot.appearance === 'window-locked'
           ? [t('tileLocked')]
           : // "právě upravuje Jana Dvořáková" reads as one clause and is joined
@@ -125,9 +125,11 @@ export function SpotTile({ spot, onOpen, onAdminOpen }: SpotTileProps) {
             <CarGlyph colorClass={spot.carColorClass} />
             <span className="block text-center">
               <span className="block text-sm font-bold text-neutral-0">{spot.holderName}</span>
-              <span className="block text-xs tracking-normal text-neutral-0/60">
-                {spot.holderPlate ?? t('noPlate')}
-              </span>
+              {spot.holderPlate === null ? null : (
+                <span className="block text-xs tracking-normal text-neutral-0/60">
+                  {spot.holderPlate}
+                </span>
+              )}
             </span>
           </span>
         ) : null}

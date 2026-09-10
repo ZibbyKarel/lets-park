@@ -104,7 +104,7 @@ describe('LotGrid', () => {
     ).toBeEnabled();
   });
 
-  it('says so rather than showing a blank line when a holder has no plate', () => {
+  it('shows a blank line rather than saying so when a holder has no plate', () => {
     renderGrid([
       group([
         spot({
@@ -117,10 +117,9 @@ describe('LotGrid', () => {
       ]),
     ]);
 
-    expect(screen.getByText('SPZ neuvedena')).toBeInTheDocument();
-    expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Otevřít místo E2.92, Petr Novák, SPZ neuvedena'
-    );
+    expect(screen.getByText('Petr Novák')).toBeInTheDocument();
+    expect(screen.queryByText('SPZ neuvedena')).not.toBeInTheDocument();
+    expect(screen.getByRole('button')).toHaveAccessibleName('Otevřít místo E2.92, Petr Novák');
   });
 
   it('draws a window-locked bay and still lets it be opened for the explanation', async () => {
