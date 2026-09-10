@@ -22,6 +22,7 @@ import {
   addDays,
   endOfMonth,
   isBusinessDay,
+  parseDateOnly,
   startOfMonth,
   addMonths,
   todayInPrague,
@@ -77,4 +78,31 @@ export const SPEC_DAY_SLOTS = {
   adminReservation: 3,
   icsFeed: 4,
   realtimeConnection: 5,
+  adminBulkReservation: 6,
 } as const;
+
+const CZECH_MONTHS_GENITIVE = [
+  'ledna',
+  'února',
+  'března',
+  'dubna',
+  'května',
+  'června',
+  'července',
+  'srpna',
+  'září',
+  'října',
+  'listopadu',
+  'prosince',
+] as const;
+
+/**
+ * `"<day>. <month>"` in the genitive, matching `useDateFormatters().dayAndMonth`'s
+ * rendering closely enough for a `hasText` match against `CalendarTable`'s row
+ * text (`{f.dayAndMonth(row.date)} · {f.weekdayName(row.date)}`) — a prefix
+ * match, so it does not need to reproduce the weekday half.
+ */
+export function dayAndMonthCzech(date: DateOnly): string {
+  const parts = parseDateOnly(date);
+  return `${parts.day}. ${CZECH_MONTHS_GENITIVE[parts.month - 1]}`;
+}
