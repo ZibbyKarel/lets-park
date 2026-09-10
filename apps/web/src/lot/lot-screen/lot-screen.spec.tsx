@@ -229,7 +229,13 @@ function dayOverview(overrides: Partial<DayOverviewOutput> = {}): DayOverviewOut
     canReserve: true,
     canReserveMonth: true,
     spots: [freeSpot(), takenSpot(), mineSpot()],
-    viewerReservationId: 'res-mine',
+    // Not `'res-mine'` by default, even though `mineSpot()` is in `spots`:
+    // most tests here exercise reserving `freeSpot`/queueing `takenSpot` and
+    // are not about the "viewer already holds a reservation elsewhere" rule,
+    // which would otherwise block both. Tests for that rule (and for `mine`'s
+    // own cancel flow, which reads the row's holder, not this field) set it
+    // explicitly.
+    viewerReservationId: null,
     ...overrides,
   };
 }
@@ -476,6 +482,30 @@ describe('LotScreen — every write closes the dialog and invalidates the day', 
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: dayKey(DATE) }));
+  });
+
+  it('explains rather than reserving a free spot when the viewer already holds a reservation elsewhere that day', async () => {
+    const { user } = setup({ day: dayOverview({ viewerReservationId: 'res-mine' }) });
+
+    await user.click(screen.getByRole('button', { name: /^Rezervovat místo E2\.93,/u }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Na tento den už máte místo' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rezervovat' })).not.toBeInTheDocument();
+    expect(apiMocks.reservationCreate).not.toHaveBeenCalled();
+  });
+
+  it('explains rather than queueing on a taken spot when the viewer already holds a reservation elsewhere that day', async () => {
+    const { user } = setup({ day: dayOverview({ viewerReservationId: 'res-mine' }) });
+
+    await user.click(screen.getByRole('button', { name: /^Otevřít místo E2\.92,/u }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Na tento den už máte místo' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Přidat se do fronty' })).not.toBeInTheDocument();
+    expect(apiMocks.waitlistJoin).not.toHaveBeenCalled();
   });
 
   it('joining the waitlist on a spot somebody else holds', async () => {
