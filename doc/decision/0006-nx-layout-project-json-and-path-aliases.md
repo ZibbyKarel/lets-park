@@ -8,7 +8,7 @@ The workspace uses the **classic Nx layout**, not the newer "TS solution setup":
 
 - every project has its own `project.json` (`--useProjectJson`),
 - libs are resolved via path aliases in `tsconfig.base.json`
-  (`"@lets-park/contract": ["./libs/contract/src/index.ts"]`),
+  (`"@lets-park/contract": ["./libs/lets-park/contract/src/index.ts"]`),
 - **not** npm workspaces + TypeScript project references (`--no-workspaces`).
 
 ## Why

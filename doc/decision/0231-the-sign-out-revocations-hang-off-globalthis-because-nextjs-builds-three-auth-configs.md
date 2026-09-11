@@ -32,7 +32,7 @@ Temporary instrumentation in the running `next start` process said why:
 **Three `createAuthConfig` instances in one process.** Next.js compiles the
 proxy, the `/api/auth/*` route handlers and the server components into separate
 bundles, each with its own module registry, so `createAuth()` in
-`apps/web/src/auth.ts` runs once per bundle. The sign-out event reached exactly
+`apps/lets-park/web/src/auth.ts` runs once per bundle. The sign-out event reached exactly
 one of them. Every authorization check that mattered — the proxy's, which is
 what issues the redirect — ran against a different, permanently empty registry.
 
@@ -88,7 +88,7 @@ visible at the call site instead of hidden in a module.
   `doc/decision/0246-*` records why it takes that shape, and applies the same
   test to the refresher's state (`doc/decision/0245-*`).
 - **Process-wide state is process-wide.** A second web instance would not see
-  the first's sign-outs, which makes horizontal scaling of `apps/web` a change
+  the first's sign-outs, which makes horizontal scaling of `apps/lets-park/web` a change
   that must go through this file. `SignOutRegistry` is deliberately four methods
   wide so that moving it behind Redis or a table touches nothing else.
 - **A restart empties it.** Stated in `0230-*` under Risk; repeated here because

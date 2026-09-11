@@ -79,7 +79,7 @@ decisions about that boundary:
   the direction is announced once rather than twice.
 - **Jest needs the ESM transform block.** `@tanstack/react-table` v9 and its
   whole chain (`table-core`, `react-store`, `store`) are `"type": "module"` with
-  no `require` condition, so `libs/design-system/compounds/jest.config.cts`
+  no `require` condition, so `libs/shared/design-system/compounds/jest.config.cts`
   carries the `transformIgnorePatterns` line from
   `doc/decision/0020-orpc-is-esm-only-jest-must-transpile-it.md`. This is the
   **sixth** copy of that block; see the risk below.

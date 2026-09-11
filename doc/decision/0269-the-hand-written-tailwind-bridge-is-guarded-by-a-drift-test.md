@@ -7,7 +7,7 @@ properties into Tailwind utilities — is hand-written and says so at the top of
 itself. `tokens.css` is generated and compared byte-for-byte by
 `generate-css.spec.ts`; the bridge had nothing checking it at all.
 
-New: `libs/design-system/tokens/src/lib/theme-css.spec.ts`, which asserts
+New: `libs/shared/design-system/tokens/src/lib/theme-css.spec.ts`, which asserts
 
 1. every `--x` declared in `tokens.css` is either referenced as `var(--x)` by
    `theme.css` or named in an explicit `UNMAPPED_ON_PURPOSE` list (25 tokens,
@@ -21,7 +21,7 @@ New: `libs/design-system/tokens/src/lib/theme-css.spec.ts`, which asserts
 6. the file compiles, and its spacing and colour utilities resolve to tokens
    (see `0268`).
 
-Also new: `libs/design-system/tokens/src/lib/color-utilities.ts`, exporting
+Also new: `libs/shared/design-system/tokens/src/lib/color-utilities.ts`, exporting
 `COLOR_UTILITIES` — every colour the bridge maps, keyed by the name that appears
 in a utility (`brand-blue-100`, `fg-2`, `scrim`, `car-1`) and valued with the CSS
 colour it resolves to. It is derived from the token modules, not transcribed.

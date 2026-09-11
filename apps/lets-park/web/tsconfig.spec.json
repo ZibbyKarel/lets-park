@@ -1,0 +1,50 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/out-tsc",
+    // Deliberately **not** `commonjs`, which the generator emits — the same
+    // trap `libs/query/tsconfig.spec.json` documents and `doc/decision/0038-*`
+    // explains. `@tanstack/react-query` and `@tanstack/query-core` are dual
+    // packages: under `commonjs` this program resolved them through the
+    // `require` condition (`index.d.cts`) on one import path and the `import`
+    // condition (`index.d.ts`) on another, producing two nominally distinct
+    // `QueryClient` types and "Property '#private' … refers to a different
+    // member" on every `queryOptions()` in the four admin panels. The app
+    // program (`tsconfig.json`) has always used `esnext`; this brings the spec
+    // program in line. Nothing is emitted here (`--noEmit`) and jest transpiles
+    // through SWC, so the module format only affects resolution.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["jest", "node"]
+  },
+  // Without its own `exclude`, this config would inherit `tsconfig.json`'s —
+  // and since that parent's exclude glob deliberately matches every
+  // `.spec.*`/`.test.*` extension this file's own `include` below lists,
+  // inheriting it would silently empty this program to zero files (see
+  // `doc/decision/0126-*`). An explicit empty override is the fix.
+  "exclude": [],
+  "include": [
+    "index.d.ts",
+    "next-intl.d.ts",
+    "messages/**/*.spec.ts",
+    "next-env.d.ts",
+    "src/test-setup.ts",
+    "jest.config.ts",
+    "jest.config.cts",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.tsx",
+    "src/**/*.test.js",
+    "src/**/*.spec.js",
+    "src/**/*.test.jsx",
+    "src/**/*.spec.jsx",
+    "src/**/*.d.ts",
+    "specs/**/*.test.ts",
+    "specs/**/*.spec.ts",
+    "specs/**/*.test.tsx",
+    "specs/**/*.spec.tsx",
+    "specs/**/*.d.ts"
+  ]
+}

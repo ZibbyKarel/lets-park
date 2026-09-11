@@ -5,8 +5,8 @@
 `@lets-park/contract/realtime` is a **second entry point** of the same lib, not
 a section of the first one:
 
-- `libs/contract/src/realtime/*` imports nothing from `src/api`,
-- the root `libs/contract/src/index.ts` does **not** re-export realtime,
+- `libs/lets-park/contract/src/realtime/*` imports nothing from `src/api`,
+- the root `libs/lets-park/contract/src/index.ts` does **not** re-export realtime,
 - the alias `@lets-park/contract/realtime` lives in `tsconfig.base.json`,
 - isolation is guarded by `src/realtime/no-orpc.spec.ts`, which walks the
   actual module graph.

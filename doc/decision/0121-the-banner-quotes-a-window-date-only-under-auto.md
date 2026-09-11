@@ -41,7 +41,7 @@ that date. That is a sentence the user would act on and it would be wrong.
 
 The design's window predicate is a boolean (`monthOpen()`), so the design can
 only draw "open" or "locked". The contract's `MonthLockState` has three
-members, and the difference is not cosmetic — `libs/i18n` already words the two
+members, and the difference is not cosmetic — `libs/shared/i18n` already words the two
 error codes apart on purpose:
 
 > `OUT_OF_HORIZON` and `RESERVATIONS_LOCKED` are worded to read as different
@@ -57,7 +57,7 @@ is not.
 ## Consequences
 
 - Six message keys where the design implies three. All six live in
-  `libs/i18n`'s `lot` namespace, keyed off `state` and `lockMode`.
+  `libs/shared/i18n`'s `lot` namespace, keyed off `state` and `lockMode`.
 - `toBannerView` is a pure function returning `{ tone, messageKey, values }`
   rather than a formatted string, so the branch table is testable without a
   DOM. `values` always carries all three placeholders — `month`, `until`,
@@ -70,7 +70,7 @@ is not.
 
 ## Verified by
 
-`apps/web/src/lot/lot-view.spec.ts`, §`toBannerView` — six tests, one per row
+`apps/lets-park/web/src/lot/lot-view.spec.ts`, §`toBannerView` — six tests, one per row
 of the table above. Mutating `toBannerView` to drop the `isAuto` guard and
 always interpolate the dates fails 2 tests by name
 ("never quotes a date when an admin forced the state", "drops the opening date

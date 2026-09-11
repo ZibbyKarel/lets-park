@@ -1,7 +1,7 @@
 # Let's Park
 
-Company parking-reservation app. Nx monorepo: `apps/api` (NestJS 11) and
-`apps/web` (Next.js 16), sharing a contract-first Zod contract over oRPC, with
+Company parking-reservation app. Nx monorepo: `apps/lets-park/api` (NestJS 11) and
+`apps/lets-park/web` (Next.js 16), sharing a contract-first Zod contract over oRPC, with
 Socket.io realtime, Okta sign-in, a personal ICS feed and PostgreSQL 17 behind
 Prisma 7.
 
@@ -17,7 +17,7 @@ Requires Docker and the Node version in [`.nvmrc`](.nvmrc).
 ```bash
 npm ci
 cp .env.example .env                  # git-ignored; edit if you like
-cp .env.example apps/web/.env         # Next.js reads env files from its own directory
+cp .env.example apps/lets-park/web/.env         # Next.js reads env files from its own directory
 docker compose --profile dev up -d    # PostgreSQL 17, mock OIDC issuer, adminer
 npx prisma migrate deploy
 npx prisma db seed                    # development fixture: 9 spots, 4 users
@@ -54,7 +54,7 @@ does not recognise.
 | Dev User 2   | `dev-user2`    | `{"email":"user2@example.com","name":"Dev User Two"}`    | USER  |
 | Dev Inactive | `dev-inactive` | `{"email":"inactive@example.com","name":"Dev Inactive"}` | USER  |
 
-These four come from the seed fixture (`libs/database/src/lib/seed-data.ts`)
+These four come from the seed fixture (`libs/lets-park/database/src/lib/seed-data.ts`)
 and only exist after `npx prisma db seed`. Open a second browser (or a private
 window) as `dev-user2` to see the realtime cell-lock and booking broadcasts
 land in another tab.
@@ -217,11 +217,11 @@ The MVP targets a single instance, and there is no Redis, no BullMQ and no
 broker. The seams for adding them exist and are documented; none of them is
 built:
 
-| What                       | Where the seam is                                                                                                           | The upgrade                                                                                                                                                         |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Socket.io across instances | `configureRealtime` in `apps/api/src/realtime/realtime-io.adapter.ts`                                                       | Give the adapter `@socket.io/redis-adapter` so a broadcast from one instance reaches sockets held by another. Nothing above the adapter changes.                    |
-| Cell locks                 | `LockService` (`apps/api/src/realtime/`) — an interface over an in-process map with a TTL                                   | Back it with Redis `SET NX PX`. The TTL is already the contract (`REALTIME_LOCK_TTL_MS`, `doc/decision/0110-the-cell-lock-ttl-is-thirty-seconds-and-configurable`). |
-| Scheduled work             | `ScheduledJobRunner` (`apps/api/src/scheduling/`) — today the daily Slack summary in `apps/api/src/slack/` (`doc/slack.md`) | An in-process schedule fires once per instance, so N instances post N summaries. BullMQ with a repeatable job, or a single elected leader, is the fix.              |
+| What                       | Where the seam is                                                                                                                               | The upgrade                                                                                                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Socket.io across instances | `configureRealtime` in `apps/lets-park/api/src/realtime/realtime-io.adapter.ts`                                                                 | Give the adapter `@socket.io/redis-adapter` so a broadcast from one instance reaches sockets held by another. Nothing above the adapter changes.                    |
+| Cell locks                 | `LockService` (`apps/lets-park/api/src/realtime/`) — an interface over an in-process map with a TTL                                             | Back it with Redis `SET NX PX`. The TTL is already the contract (`REALTIME_LOCK_TTL_MS`, `doc/decision/0110-the-cell-lock-ttl-is-thirty-seconds-and-configurable`). |
+| Scheduled work             | `ScheduledJobRunner` (`apps/lets-park/api/src/scheduling/`) — today the daily Slack summary in `apps/lets-park/api/src/slack/` (`doc/slack.md`) | An in-process schedule fires once per instance, so N instances post N summaries. BullMQ with a repeatable job, or a single elected leader, is the fix.              |
 
 Until then: **run one instance.** `doc/realtime.md` and `doc/api-operations.md`
 describe what each seam guarantees today.

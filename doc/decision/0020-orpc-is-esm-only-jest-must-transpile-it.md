@@ -9,8 +9,8 @@ single build `dist/index.mjs`, no `require` condition in `exports`. Jest
 projects in this workspace run as CommonJS, so importing it fails with
 `SyntaxError: Cannot use import statement outside a module`.
 
-The fix lives in `libs/contract/jest.config.cts` and
-`libs/contract/tsconfig.spec.json`:
+The fix lives in `libs/lets-park/contract/jest.config.cts` and
+`libs/lets-park/contract/tsconfig.spec.json`:
 
 ```js
 transform: {
@@ -47,9 +47,9 @@ would be extra code that has to be maintained across every oRPC minor.
 
 ## How
 
-The configuration lives only in `libs/contract` for now, since it's the only
-project that imports `@orpc/contract`. **Tasks 11 (`libs/api-client`) and 12
-(`apps/api`) will hit the same issue** the moment their tests touch
+The configuration lives only in `libs/lets-park/contract` for now, since it's the only
+project that imports `@orpc/contract`. **Tasks 11 (`libs/shared/api-client`) and 12
+(`apps/lets-park/api`) will hit the same issue** the moment their tests touch
 `@lets-park/contract` — they'll need to copy these three lines.
 
 > Once a **third** project needs it, move the configuration into

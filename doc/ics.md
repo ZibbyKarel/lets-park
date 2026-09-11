@@ -33,7 +33,7 @@ envelope, and it wants `text/calendar` rather than JSON. Nothing else in the
 application bypasses the contract, and the contract still owns everything it can
 here — the URL's shape (`ICS_FEED_BASE_PATH`, `buildIcsFeedPath`,
 `buildIcsFeedUrl`) and the data that goes into the calendar
-(`icsCalendarEntrySchema`), both in `libs/contract/src/api/ics.ts`.
+(`icsCalendarEntrySchema`), both in `libs/lets-park/contract/src/api/ics.ts`.
 
 Never build the URL by hand:
 
@@ -99,7 +99,7 @@ END:VCALENDAR
   new hostname would otherwise duplicate every event in every calendar.
 - **`DTSTAMP` is the reservation's `createdAt`**, never "now". That is what makes
   the document a pure function of the data — see §4 and `doc/decision/0081-*`.
-- **The copy is Czech and lives in `libs/calendar-export`**, not in `libs/i18n`
+- **The copy is Czech and lives in `libs/lets-park/calendar-export`**, not in `libs/shared/i18n`
   (which is `scope:web` and unreachable from the API): `doc/decision/0082-*`.
 - **The parking group is not shown.** It has no Czech label anywhere in the
   workspace, and the spot label is what a person reads off the asphalt.
@@ -126,7 +126,7 @@ client that receives a parse error unsubscribes.
 ## 3. Authentication, and why every failure is a 404
 
 `@Public()`, because there is no bearer token to check
-(`apps/api/src/auth/public.decorator.ts` lists this as one of the two legitimate
+(`apps/lets-park/api/src/auth/public.decorator.ts` lists this as one of the two legitimate
 uses). `@StrictThrottle()`, because that makes it the one route an
 unauthenticated stranger can reach with a payload of their choosing:
 `THROTTLE_STRICT_LIMIT` requests per `THROTTLE_STRICT_TTL_MS` — **20 per
@@ -193,19 +193,19 @@ surface is for values that differ between them.
 
 | file | what it owns |
 | --- | --- |
-| `libs/contract/src/api/ics.ts` | `ICS_FEED_BASE_PATH`, `buildIcsFeedPath`, `buildIcsFeedUrl`, `icsCalendarEntrySchema`, `icsFeedSchema` |
-| `libs/calendar-export/src/lib/reservation-calendar.ts` | `buildReservationCalendar` — the **only** importer of `ical-generator` in the workspace |
-| `apps/api/src/calendar/calendar.service.ts` | resolving the token, selecting the reservations, `ICS_FEED_PAST_DAYS` |
-| `apps/api/src/calendar/calendar.controller.ts` | the route, `@Public()`, `@StrictThrottle()`, the response headers |
+| `libs/lets-park/contract/src/api/ics.ts` | `ICS_FEED_BASE_PATH`, `buildIcsFeedPath`, `buildIcsFeedUrl`, `icsCalendarEntrySchema`, `icsFeedSchema` |
+| `libs/lets-park/calendar-export/src/lib/reservation-calendar.ts` | `buildReservationCalendar` — the **only** importer of `ical-generator` in the workspace |
+| `apps/lets-park/api/src/calendar/calendar.service.ts` | resolving the token, selecting the reservations, `ICS_FEED_PAST_DAYS` |
+| `apps/lets-park/api/src/calendar/calendar.controller.ts` | the route, `@Public()`, `@StrictThrottle()`, the response headers |
 
 `ical-generator` may not be imported anywhere else. That is enforced, not merely
-documented — `eslint.config.mjs`'s `WRAPPED_LIBRARIES`, probed from `apps/api`
-and from `libs/form`:
+documented — `eslint.config.mjs`'s `WRAPPED_LIBRARIES`, probed from `apps/lets-park/api`
+and from `libs/shared/form`:
 
 ```
 error  'ical-generator' import is restricted from being used by a pattern.
 Do not import "ical-generator" directly — use the wrapper lib
-@lets-park/calendar-export (libs/calendar-export). Only libs/calendar-export
+@lets-park/calendar-export (libs/lets-park/calendar-export). Only libs/lets-park/calendar-export
 may import "ical-generator"   no-restricted-imports
 ```
 
@@ -215,22 +215,22 @@ may import "ical-generator"   no-restricted-imports
 
 Three layers, and the division is deliberate.
 
-- **`libs/calendar-export/src/lib/reservation-calendar.spec.ts`** — the
+- **`libs/lets-park/calendar-export/src/lib/reservation-calendar.spec.ts`** — the
   rendering. Every assertion reads the output back through **`ical.js`**,
   Mozilla's RFC 5545 parser, never through a regular expression or a string the
   test wrote. A test that compares the builder's output to a template the same
   author wrote proves the template equals itself. Includes line folding under
   Czech diacritics, `TEXT` escaping of `,` `;` `\`, and a **child-process**
   check that the output is identical under four server time zones.
-- **`apps/api/src/calendar/calendar.service.spec.ts`** — the selection: whose
+- **`apps/lets-park/api/src/calendar/calendar.service.spec.ts`** — the selection: whose
   reservations, in what order, within what horizon, and the four rejection cases.
-- **`apps/api/src/calendar/calendar-pipeline.spec.ts`** — the assembled
+- **`apps/lets-park/api/src/calendar/calendar-pipeline.spec.ts`** — the assembled
   application over real HTTP: that `@Public()` fires under a global
   `JwtAuthGuard`, that Express's path parser really splits `:icsToken` from the
   `.ics` suffix, that the strict throttler admits two requests and refuses the
   third, that the bytes on the wire parse as a calendar, and that a rejection is
   header-for-header the same as an unrouted 404.
-- **`apps/api/src/calendar/calendar.db.spec.ts`** — part of `nx run api:test-db`,
+- **`apps/lets-park/api/src/calendar/calendar.db.spec.ts`** — part of `nx run api:test-db`,
   against a **real PostgreSQL 17**. Two claims here are about Prisma 7 with
   `@prisma/adapter-pg` rather than about our logic, and a double cannot settle
   either: that `findFirst({ icsToken, active: true })` really authenticates and
@@ -277,7 +277,7 @@ logger writes by default, so it had to be redacted at four separate sites —
 `req.url` and `req.params` in the per-request line, and `path` and `reason` in
 `ContractExceptionFilter`'s rejection line, the last of which carries the URL
 inside Nest's own `Cannot GET …` message. `redactIcsToken`
-(`apps/api/src/logging/redact-ics-token.ts`) does all four, and
+(`apps/lets-park/api/src/logging/redact-ics-token.ts`) does all four, and
 `calendar-logging.spec.ts` boots the application at `LOG_LEVEL: 'info'`, sends real
 requests and asserts on the bytes pino emitted. It is the only spec in the
 workspace that reads log output; every other one pins `LOG_LEVEL: 'fatal'`, which

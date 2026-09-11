@@ -5,13 +5,13 @@
 
 ## What
 
-`libs/design-system` was three Nx projects — `design-system-tokens`,
+`libs/shared/design-system` was three Nx projects — `design-system-tokens`,
 `design-system-primitives`, `design-system-compounds` — nested in one
 directory. It is now **one** project, `design-system`, and the three layers are
 three directories under one `src/`:
 
 ```
-libs/design-system/src/{tokens,primitives,compounds}/
+libs/shared/design-system/src/{tokens,primitives,compounds}/
 ```
 
 The three import specifiers are **unchanged**:
@@ -21,7 +21,7 @@ The three import specifiers are **unchanged**:
 right-hand side moved. That is the whole point of the change and it is the one
 invariant everything below is arranged to protect: 109 files moved inside the
 package (121 renames, 153 files changed across the three commits) and **no line
-outside `libs/design-system/` that mentions `@lets-park/design-system` changed
+outside `libs/shared/design-system/` that mentions `@lets-park/design-system` changed
 at all** — proved by diffing the workspace-wide grep for that string before and
 after, filtered to exclude the package's own files.
 
@@ -70,7 +70,7 @@ reconciled rather than glossed:
 `plan.md` itself is git-ignored and does not travel with a worktree, so the
 path-only repointing of its Fáze 2/3/4 sentences was handed to the owner as a
 patch rather than committed on this branch. Anyone reading `plan.md` and
-finding `libs/design-system/tokens` should read `libs/design-system/src/tokens`
+finding `libs/shared/design-system/tokens` should read `libs/shared/design-system/src/tokens`
 and this record.
 
 ## Why `no-restricted-imports` and not tags
@@ -91,7 +91,7 @@ is worse than no constraint, because no constraint at least does not lie. The
 `ds:` block in the root `eslint.config.mjs` was therefore deleted and replaced
 by a comment saying where the rule went.
 
-Where it went: `libs/design-system/eslint.config.mjs`, as path-scoped
+Where it went: `libs/shared/design-system/eslint.config.mjs`, as path-scoped
 `no-restricted-imports` blocks — one for `src/tokens/**`, one for
 `src/primitives/**`, one for `src/compounds/**` (which carries no layer ban,
 because compounds may import both, and that asymmetry *is* the rule).
@@ -149,7 +149,7 @@ Sixteen imports inside the package cross a layer, all written as
 `@lets-park/design-system/primitives`. They were **not** rewritten to relative
 paths. `@nx/enforce-module-boundaries` reads a project importing its own alias
 as a circular self-dependency, so the project's config sets
-`allowCircularSelfDependency: true` — the same thing `libs/form`'s spec block in
+`allowCircularSelfDependency: true` — the same thing `libs/shared/form`'s spec block in
 the root config does, for the same reason.
 
 Rewriting them to `../../primitives/index` instead would have been sixteen more
@@ -180,7 +180,7 @@ claimed.
   `typecheck` target compiles — it is now done deliberately, by the target whose
   job it is, instead of accidentally, by the test runner.
 - **Storybook.** 25 stories before the merge, 25 after.
-- **CSS.** `apps/web/.next` was wiped and rebuilt, and the emitted stylesheet
+- **CSS.** `apps/lets-park/web/.next` was wiped and rebuilt, and the emitted stylesheet
   was checked for three markers that only one source can produce: a token custom
   property (`--brand-blue`, which proves the `theme.css` import), a
   primitives-only utility (`peer-checked`), and a compounds-only one
@@ -198,7 +198,7 @@ the other two layers after a token change.
 Inside one project that edge is free: `nx affected` sees one project and runs
 all of it. But the fact the declaration documented is not free, and it is the
 kind of thing that gets rediscovered by a broken build. It is written down in
-`libs/design-system/project.json` under a `"// implicit deps"` key, and it is
+`libs/shared/design-system/project.json` under a `"// implicit deps"` key, and it is
 worth repeating here: **a change under `src/tokens` can break the stories and
 specs of the other two layers with no TS import connecting them.**
 
@@ -215,7 +215,7 @@ were separate Nx projects with separate `lint`, `typecheck` and
 the project boundary the `ds:*` tags drew. Merging the projects removed the
 boundary that argument rested on.
 
-There is now **one** Storybook, at `libs/design-system/.storybook`, on port
+There is now **one** Storybook, at `libs/shared/design-system/.storybook`, on port
 4400, building into `dist/storybook/design-system`. **Port 4401 is free.**
 
 Its `preview.css` needs one `@source '../src'` line where the compounds

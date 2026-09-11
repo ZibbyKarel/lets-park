@@ -2,7 +2,7 @@
 
 ## What
 
-Two accessibility decisions for the `libs/design-system/primitives` layer:
+Two accessibility decisions for the `libs/shared/design-system/primitives` layer:
 
 1. **Every focusable primitive gets a uniform focus ring** –
    `outline: 2px var(--brand-blue)` with a 2px `outline-offset`, via

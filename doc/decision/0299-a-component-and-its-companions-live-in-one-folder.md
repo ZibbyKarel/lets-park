@@ -2,7 +2,7 @@
 
 ## What
 
-Every component in `apps/web` and `libs/design-system` that has at least one
+Every component in `apps/lets-park/web` and `libs/shared/design-system` that has at least one
 companion file now lives in its own folder, named after the component:
 
 ```
@@ -16,9 +16,9 @@ means — `@lets-park/design-system/primitives` still resolves through the
 lib's own barrel; inside a folder, `./button/button` is written out in full,
 never shortened to `./button`.
 
-45 folders were created this way — `libs/design-system/primitives/src/lib`
-(23), `libs/design-system/compounds/src/lib` (3), `apps/web/src/lot` (6),
-`apps/web/src/shell` (7) and `apps/web/src/shell/admin` (6) — moving roughly
+45 folders were created this way — `libs/shared/design-system/primitives/src/lib`
+(23), `libs/shared/design-system/compounds/src/lib` (3), `apps/lets-park/web/src/lot` (6),
+`apps/lets-park/web/src/shell` (7) and `apps/lets-park/web/src/shell/admin` (6) — moving roughly
 120 files. Measured over the whole move: 152 files changed, 196 insertions,
 196 deletions, perfectly paired — every line touched was an import path, save
 one `jest.mock` string literal that named a moved file.
@@ -50,13 +50,13 @@ following a redirect.
 
 ## What counts as a group, and what doesn't
 
-Four shapes appear in `apps/web` and `libs/design-system`; only the first
+Four shapes appear in `apps/lets-park/web` and `libs/shared/design-system`; only the first
 gets a folder.
 
 1. **A component with at least one companion** (a spec, a story, or both).
    This is the case the rule is for, and it is the 45 folders above.
 2. **A component with no companion.** `app-top-bar.tsx`, `brand.tsx` and
-   `settings-page.tsx` (all in `apps/web/src/shell`) stay flat — there is
+   `settings-page.tsx` (all in `apps/lets-park/web/src/shell`) stay flat — there is
    nothing to group them with, and a folder holding one file says nothing a
    flat file didn't already say.
 3. **A cross-cutting spec with no component of its own.** `contrast.spec.tsx`
@@ -97,7 +97,7 @@ do not otherwise know about each other; putting it inside one of their
 folders would make the other importers reach into a sibling's directory for
 something that isn't private to it. `calendar-grid.ts` in particular is
 shared by `bulk-modal/` and `date-picker-dialog/` for exactly this reason —
-it stays at `apps/web/src/lot/calendar-grid.ts`, not inside either.
+it stays at `apps/lets-park/web/src/lot/calendar-grid.ts`, not inside either.
 
 The splitting then added one importer to two of these: `bulk-view.ts` now has
 two (`calendar-table.tsx` joined it) and `lot-view.ts` has six
@@ -155,14 +155,14 @@ moved, to point at the new folder.
 `npm run build`, `npm run typecheck` and `npm test` all pass after the move —
 a `.spec.tsx` beside its component under test still resolves it with a
 same-directory `./name` import, and Storybook's story glob
-(`libs/design-system/*/.storybook`) still discovers every `*.stories.tsx`
+(`libs/shared/design-system/*/.storybook`) still discovers every `*.stories.tsx`
 regardless of how many directories deep it sits. `npx nx run-many -t build,build-storybook`
 covers both libs' Storybook builds, which would fail to resolve a story whose
 component moved without its import following it.
 
 ## Consequences and residuals
 
-- **`TODO.md` proposes collapsing `libs/design-system` from three packages
+- **`TODO.md` proposes collapsing `libs/shared/design-system` from three packages
   (`tokens`, `primitives`, `compounds`) into one.** If that happens, it will
   re-churn the design-system half of this layout — every primitive and
   compound folder moves again, though the folder convention this record

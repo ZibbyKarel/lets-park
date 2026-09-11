@@ -2,8 +2,8 @@
 
 ## What
 
-`libs/database/src/lib/disposable-database.ts` exports
-`assertDisposableDatabase(url)`. Both scripts in `libs/database/src/scripts`
+`libs/lets-park/database/src/lib/disposable-database.ts` exports
+`assertDisposableDatabase(url)`. Both scripts in `libs/lets-park/database/src/scripts`
 call it before they touch a row, and both print the host and database they are
 about to write to.
 
@@ -23,7 +23,7 @@ if (process.env['NODE_ENV'] === 'production') { throw new Error(…); }
 
 - **The old guard was inert in exactly the situation it existed for.**
   `NODE_ENV` is unset in a plain shell; `nx run database:reset-e2e` sets only
-  `SWC_NODE_PROJECT` (`project.json`); `apps/web-e2e`'s `globalSetup` spawns the
+  `SWC_NODE_PROJECT` (`project.json`); `apps/lets-park/web-e2e`'s `globalSetup` spawns the
   script with whatever environment it inherited. Meanwhile the variable that
   actually decides which database gets emptied — `DATABASE_URL` — was never
   consulted. The script's own docblock said *"'delete a month of reservations'
@@ -76,7 +76,7 @@ if (process.env['NODE_ENV'] === 'production') { throw new Error(…); }
 - **The override is a single environment variable**, so it can be exported in a
   shell profile and forgotten. Nothing prevents that; the printed target line is
   the mitigation.
-- `LETS_PARK_ALLOW_DESTRUCTIVE_RESET` is not in `apps/api/src/env.ts` or
+- `LETS_PARK_ALLOW_DESTRUCTIVE_RESET` is not in `apps/lets-park/api/src/env.ts` or
   `.env.example` on purpose — it is a flag for one invocation of a CLI script,
   not configuration, and a variable that lives in `.env` is a variable that is
   always set.

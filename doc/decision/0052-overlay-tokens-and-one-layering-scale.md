@@ -2,7 +2,7 @@
 
 ## What
 
-A new token module, `libs/design-system/tokens/src/lib/overlays.ts`, and the
+A new token module, `libs/shared/design-system/tokens/src/lib/overlays.ts`, and the
 section generated from it in `tokens.css`:
 
 | token | value | origin |

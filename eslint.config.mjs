@@ -5,7 +5,7 @@ import nx from '@nx/eslint-plugin';
  *
  * Nx runs `eslint .` with the *project* directory as cwd, and every project's
  * `eslint.config.mjs` re-exports this file. Without an explicit `basePath`,
- * workspace-relative globs such as `apps/**` or `libs/form/**` would be matched
+ * workspace-relative globs such as `apps/**` or `libs/shared/form/**` would be matched
  * against project-relative file paths and silently never fire. Every config
  * object below whose `files` are workspace-relative therefore pins `basePath`.
  */
@@ -35,31 +35,31 @@ const under = (root) => LINTED_EXTENSIONS.map((ext) => `${root}/**/*.${ext}`);
  */
 const WRAPPED_LIBRARIES = {
   'react-hook-form': {
-    owner: 'libs/form',
+    owner: 'libs/shared/form',
     use: '@lets-park/form',
   },
   '@tanstack/react-table': {
-    owner: 'libs/design-system/src/compounds',
+    owner: 'libs/shared/design-system/src/compounds',
     use: '@lets-park/design-system/compounds',
   },
   '@orpc/client': {
-    owner: 'libs/api-client',
+    owner: 'libs/shared/api-client',
     use: '@lets-park/api-client',
   },
   'socket.io-client': {
-    owner: 'libs/realtime-client',
+    owner: 'libs/lets-park/realtime-client',
     use: '@lets-park/realtime-client',
   },
   'next-auth': {
-    owner: 'libs/auth',
+    owner: 'libs/lets-park/auth',
     use: '@lets-park/auth',
   },
   'ical-generator': {
-    owner: 'libs/calendar-export',
+    owner: 'libs/lets-park/calendar-export',
     use: '@lets-park/calendar-export',
   },
   'next-intl': {
-    owner: 'libs/i18n',
+    owner: 'libs/shared/i18n',
     use: '@lets-park/i18n',
   },
 };
@@ -80,7 +80,7 @@ const WRAPPED_LIBRARIES = {
  * block that sets it wins outright, so a lib adding its own bans without
  * spreading these in would silently switch the wrapper ban off for itself —
  * which is exactly the kind of enforcement-shaped hole this file has been
- * caught in before. `libs/design-system/eslint.config.mjs` spreads
+ * caught in before. `libs/shared/design-system/eslint.config.mjs` spreads
  * `restrictWrappedLibraries().patterns` into every one of its blocks for that
  * reason.
  */
@@ -100,7 +100,7 @@ export function restrictWrappedLibraries(allowedPackages = []) {
  * `import` declaration: `require('pkg')` and `await import('pkg')`.
  *
  * **`no-restricted-imports` does not cover either, and nothing else did.**
- * Measured, on a throwaway `apps/web/src/__probe__.ts` holding
+ * Measured, on a throwaway `apps/lets-park/web/src/__probe__.ts` holding
  * `require('socket.io-client')` and `import('socket.io-client')`:
  * `nx run web:lint` exited **0** with no finding. `@nx/enforce-module-boundaries`
  * does see dynamic imports, but it constrains applications not at all here —
@@ -159,7 +159,7 @@ export function restrictWrappedLibrariesDynamically(allowedPackages = []) {
  * ## Why a list is mandatory on every tag
  *
  * A tag with **no** `allowedExternalImports` constrains nothing at all — that is
- * how `libs/shared-types` was free to import Zod despite decision 0003
+ * how `libs/lets-park/shared-types` was free to import Zod despite decision 0003
  * (Task 3 review, S3). An empty array (`[]`) is not the same thing: it bans
  * every npm package. Omission is inert; `[]` is a rule.
  *
@@ -182,7 +182,7 @@ const NPM_ALLOWLIST = {
   feature: ['tslib'],
 
   /**
-   * Design system (`libs/design-system`). React plus styling helpers and
+   * Design system (`libs/shared/design-system`). React plus styling helpers and
    * Storybook; TanStack Table is here because the design system's compounds
    * layer owns the DataTable wrapper. Never a backend package.
    */
@@ -217,7 +217,7 @@ const NPM_ALLOWLIST = {
    * coarse: *which* wrapper may import *which* package is enforced per-directory
    * by `no-restricted-imports` below, which this list cannot express.
    *
-   * `libs/shared-types` also carries `type:util`, but it additionally carries
+   * `libs/lets-park/shared-types` also carries `type:util`, but it additionally carries
    * `layer:foundation`, whose empty list ANDs this one down to nothing.
    */
   util: [
@@ -229,13 +229,13 @@ const NPM_ALLOWLIST = {
     'next',
     'next/*',
     ...Object.keys(WRAPPED_LIBRARIES).flatMap((pkg) => [pkg, `${pkg}/*`]),
-    // `libs/form`'s Zod resolver for react-hook-form. It is not itself a
+    // `libs/shared/form`'s Zod resolver for react-hook-form. It is not itself a
     // wrapped library (nothing else could import it instead — it only makes
     // sense paired with react-hook-form), so it is not in `WRAPPED_LIBRARIES`,
     // just allow-listed here alongside it.
     '@hookform/resolvers',
     '@hookform/resolvers/*',
-    // `libs/api-client`'s bridge between the oRPC client and TanStack Query
+    // `libs/shared/api-client`'s bridge between the oRPC client and TanStack Query
     // (`api-query.ts`). Same reasoning as `@hookform/resolvers`: it is not
     // itself a wrapped library (nothing could import it *instead* of
     // something else — it only makes sense paired with `@orpc/client` and
@@ -245,14 +245,14 @@ const NPM_ALLOWLIST = {
     '@orpc/tanstack-query',
     '@orpc/tanstack-query/*',
     // `@orpc/contract` is deliberately **not** here, even though
-    // `libs/api-client` needs `ContractRouterClient` to type its client. This
+    // `libs/shared/api-client` needs `ContractRouterClient` to type its client. This
     // list applies to every `type:util` lib at once, so adding it would also
-    // hand the contract builder to `libs/form`, `libs/i18n` and every wrapper
+    // hand the contract builder to `libs/shared/form`, `libs/shared/i18n` and every wrapper
     // still to come — undoing the narrowness `NPM_ALLOWLIST.contract` is
-    // documented to have. Instead `libs/contract` applies the type itself and
-    // exports the result as `ContractClient` (see `libs/contract/src/api/router.ts`),
+    // documented to have. Instead `libs/lets-park/contract` applies the type itself and
+    // exports the result as `ContractClient` (see `libs/lets-park/contract/src/api/router.ts`),
     // which is what a contract lib is for. See `doc/decision/0040-*`.
-    // `libs/form` types `useAppForm` against a Zod schema (`z.input`/`z.output`)
+    // `libs/shared/form` types `useAppForm` against a Zod schema (`z.input`/`z.output`)
     // and its resolver validates with Zod at runtime — it is the one wrapper
     // whose whole job is bridging Zod to react-hook-form, so it needs Zod
     // itself, not just the contract lib built on it.
@@ -260,12 +260,12 @@ const NPM_ALLOWLIST = {
     'zod/*',
     // Test-only, same reasoning as `ui` above: the boundary rule cannot tell
     // a spec file from a shipped one, so these have to be allowed for the
-    // whole tag. Needed by `libs/i18n`'s component test (`IntlProvider`) and
-    // `libs/form`'s (`userEvent.type`/`.click` on rendered primitives).
+    // whole tag. Needed by `libs/shared/i18n`'s component test (`IntlProvider`) and
+    // `libs/shared/form`'s (`userEvent.type`/`.click` on rendered primitives).
     '@testing-library/react',
     '@testing-library/jest-dom',
     '@testing-library/user-event',
-    // `ical.js` is deliberately **not** here, even though `libs/calendar-export`'s
+    // `ical.js` is deliberately **not** here, even though `libs/lets-park/calendar-export`'s
     // specs need it: this list applies to every `type:util` lib at once, so an
     // entry would reach shipped source in six unrelated wrappers. It is scoped
     // to the spec files that actually use it — see
@@ -273,21 +273,21 @@ const NPM_ALLOWLIST = {
   ],
 
   /**
-   * `libs/contract`. `@orpc/contract` only — never `@orpc/client` or
+   * `libs/lets-park/contract`. `@orpc/contract` only — never `@orpc/client` or
    * `@orpc/server`, so the contract can not reach a transport
    * (`doc/decision/0007-*`).
    */
   contract: ['tslib', 'zod', 'zod/*', '@orpc/contract', '@orpc/contract/*'],
 
   /**
-   * Data access (`libs/database`, Task 9). Prisma and nothing else — no HTTP
+   * Data access (`libs/lets-park/database`, Task 9). Prisma and nothing else — no HTTP
    * client, no frontend package.
    */
   data: ['tslib', 'prisma', 'prisma/*', '@prisma/client', '@prisma/*', '.prisma/*'],
 
   /**
-   * `libs/shared-types`: zero npm dependencies, by decision 0003. It is imported
-   * by `apps/api`, `libs/contract` and `libs/i18n` alike, so anything it pulls
+   * `libs/lets-park/shared-types`: zero npm dependencies, by decision 0003. It is imported
+   * by `apps/lets-park/api`, `libs/lets-park/contract` and `libs/shared/i18n` alike, so anything it pulls
    * in lands in all three. `[]` bans every package — Node builtins
    * (`node:fs`, …) are not npm nodes and stay allowed.
    */
@@ -306,7 +306,7 @@ const wrapperLibOverrides = Object.entries(WRAPPED_LIBRARIES).map(([pkg, { owner
 
 /**
  * `@nx/enforce-module-boundaries`'s `depConstraints`, factored out to a named
- * constant so `libs/form`'s test-only override below (`formSpecDepConstraints`)
+ * constant so `libs/shared/form`'s test-only override below (`formSpecDepConstraints`)
  * can clone it rather than silently drifting from a second, hand-copied array.
  * Flat config replaces a rule's whole option object for a later, matching
  * config block — it does not merge — so any override has to restate every
@@ -322,7 +322,7 @@ const DEP_CONSTRAINTS = [
   // Layering, top to bottom, is acyclic:
   //   app → feature → ui → util → contract → foundation
   // `type:util` may depend on `type:contract` (that is what
-  // `libs/api-client` is for), and `type:contract` depends on
+  // `libs/shared/api-client` is for), and `type:contract` depends on
   // `layer:foundation` — not on `type:util` — so the two directions
   // no longer form a cycle at the tag level (Task 3 review, N3).
   //
@@ -370,7 +370,7 @@ const DEP_CONSTRAINTS = [
   },
 
   // --- foundation ------------------------------------------------
-  // `libs/shared-types` is the bottom of the graph: it depends on no
+  // `libs/lets-park/shared-types` is the bottom of the graph: it depends on no
   // workspace lib and on no npm package. Both empty arrays are
   // load-bearing — `onlyDependOnLibsWithTags: []` rejects every
   // tagged target, `allowedExternalImports: []` rejects every
@@ -382,8 +382,8 @@ const DEP_CONSTRAINTS = [
   },
 
   // --- scope dimension ------------------------------------------
-  // Keeps frontend-only libs (e.g. libs/i18n, next-intl) out of
-  // apps/api, and backend-only libs out of apps/web.
+  // Keeps frontend-only libs (e.g. libs/shared/i18n, next-intl) out of
+  // apps/lets-park/api, and backend-only libs out of apps/lets-park/web.
   // See doc/decision/0003-date-helpers-in-shared-types.md.
   {
     sourceTag: 'scope:web',
@@ -402,13 +402,13 @@ const DEP_CONSTRAINTS = [
   // Gone, deliberately. `ds:tokens` / `ds:primitives` / `ds:compounds` tagged
   // three Nx projects, and `@nx/enforce-module-boundaries` constrained the
   // tokens -> primitives -> compounds direction between them. The three layers
-  // are now three directories of one project (`libs/design-system`), and one
+  // are now three directories of one project (`libs/shared/design-system`), and one
   // project carries one tag set, so there is no project boundary left for these
   // entries to match — leaving them here would be three constraints that never
   // fire, which is worse than none.
   //
   // The rule itself is unchanged and still enforced: `plan.md` line 51 states
-  // it, and `libs/design-system/eslint.config.mjs` now enforces it with
+  // it, and `libs/shared/design-system/eslint.config.mjs` now enforces it with
   // path-scoped `no-restricted-imports` groups that catch both the workspace
   // alias and a relative escape, each with a probe recorded beside it. See
   // doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md.
@@ -420,21 +420,21 @@ const DEP_CONSTRAINTS = [
 ];
 
 /**
- * `depConstraints` for `libs/form`'s own **test** files only: identical to
+ * `depConstraints` for `libs/shared/form`'s own **test** files only: identical to
  * `DEP_CONSTRAINTS`, except the `type:util` entry also allows `type:ui`.
  *
- * Why this exists: `libs/form`'s test suite demonstrates the wrapper's whole
+ * Why this exists: `libs/shared/form`'s test suite demonstrates the wrapper's whole
  * reason for being — a real, Zod-validated, submittable form built from
  * `@lets-park/form` plus design-system primitives (`Input`, `Select`,
  * `Checkbox`), with no direct `react-hook-form` import anywhere in that file
  * (`doc/decision/0030-*`, Task 18). That demo can only run if the test file
  * may import the design system (`design-system`, `type:ui`), which the general
  * `type:util` constraint forbids — composing the design system is supposed to
- * happen in app/feature code (global constraint 5), and `libs/form`'s own
+ * happen in app/feature code (global constraint 5), and `libs/shared/form`'s own
  * *shipped* source must stay just as constrained as every other wrapper lib.
  *
- * Scoped to `libs/form/**\/*.spec.{ts,tsx}` below, nowhere else: every other
- * `type:util` project, and `libs/form`'s non-test source, still gets the
+ * Scoped to `libs/shared/form/**\/*.spec.{ts,tsx}` below, nowhere else: every other
+ * `type:util` project, and `libs/shared/form`'s non-test source, still gets the
  * unmodified `DEP_CONSTRAINTS`.
  */
 const formSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
@@ -447,7 +447,7 @@ const formSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
 );
 
 /**
- * `depConstraints` for `libs/calendar-export`'s own **test** files only:
+ * `depConstraints` for `libs/lets-park/calendar-export`'s own **test** files only:
  * identical to `DEP_CONSTRAINTS`, except the `type:util` entry also allows
  * `ical.js`.
  *
@@ -455,7 +455,7 @@ const formSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
  * and it is the independent reader that makes those specs worth anything — a
  * test that asserts our own generated string back at us proves the template
  * matches itself, not that a calendar client can parse the feed. Nothing
- * shipped imports it, and `libs/calendar-export`'s own shipped source must not:
+ * shipped imports it, and `libs/lets-park/calendar-export`'s own shipped source must not:
  * `ical-generator` writes the feed, `ical.js` only reads it back in a test.
  *
  * Scoped rather than added to `NPM_ALLOWLIST.util`, which is where it started:
@@ -463,7 +463,7 @@ const formSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
  * reaches the shipped source of six unrelated wrapper libs that have no
  * business parsing calendars. Same shape as `formSpecDepConstraints` above.
  *
- * `apps/api`'s calendar pipeline spec also uses it and needs no entry — it is
+ * `apps/lets-park/api`'s calendar pipeline spec also uses it and needs no entry — it is
  * `type:app`, whose allow-list is broad by design.
  */
 const calendarExportSpecDepConstraints = DEP_CONSTRAINTS.map((constraint) =>
@@ -567,16 +567,16 @@ export default [
     },
   },
   ...wrapperLibOverrides,
-  // See `formSpecDepConstraints` above: only `libs/form`'s own test files may
+  // See `formSpecDepConstraints` above: only `libs/shared/form`'s own test files may
   // reach the design system (`design-system`, `type:ui`), to demonstrate the wrapper
   // building a real form without a direct `react-hook-form` import.
   // `allowCircularSelfDependency` is needed alongside it because that same
   // demo imports `@lets-park/form` by its workspace alias from inside
-  // `libs/form` itself (the point being to prove the *public* API is enough),
+  // `libs/shared/form` itself (the point being to prove the *public* API is enough),
   // which the boundary rule otherwise flags as a circular self-dependency.
   {
     basePath: workspaceRoot,
-    files: ['libs/form/**/*.spec.ts', 'libs/form/**/*.spec.tsx'],
+    files: ['libs/shared/form/**/*.spec.ts', 'libs/shared/form/**/*.spec.tsx'],
     rules: {
       '@nx/enforce-module-boundaries': [
         'error',
@@ -593,7 +593,7 @@ export default [
   // reader, allowed in this lib's specs and nowhere else in `type:util`.
   {
     basePath: workspaceRoot,
-    files: ['libs/calendar-export/**/*.spec.ts'],
+    files: ['libs/lets-park/calendar-export/**/*.spec.ts'],
     rules: {
       '@nx/enforce-module-boundaries': [
         'error',
@@ -605,14 +605,14 @@ export default [
       ],
     },
   },
-  // `libs/shared-types` has to stay dependency-free: it is imported by
-  // apps/api, libs/contract and libs/i18n alike. The Nx `type:util` constraint
+  // `libs/lets-park/shared-types` has to stay dependency-free: it is imported by
+  // apps/lets-park/api, libs/lets-park/contract and libs/shared/i18n alike. The Nx `type:util` constraint
   // cannot express this, because the same tag covers the wrapper libs, which
   // exist precisely to depend on third-party packages.
   // See doc/decision/0003-date-helpers-in-shared-types.md.
   {
     basePath: workspaceRoot,
-    files: under('libs/shared-types'),
+    files: under('libs/lets-park/shared-types'),
     rules: {
       'no-restricted-imports': [
         'error',
@@ -622,7 +622,7 @@ export default [
             {
               group: ['zod', 'zod/*'],
               message:
-                'libs/shared-types must not depend on Zod — it is imported by apps/api too. Zod schemas belong to libs/contract (@lets-park/contract).',
+                'libs/lets-park/shared-types must not depend on Zod — it is imported by apps/lets-park/api too. Zod schemas belong to libs/lets-park/contract (@lets-park/contract).',
             },
           ],
         },
@@ -632,7 +632,7 @@ export default [
   // Structured logging only (nestjs-pino on the backend); no ad-hoc console output.
   {
     basePath: workspaceRoot,
-    files: ['apps/api/**/*.ts', 'libs/**/*.ts', 'libs/**/*.tsx'],
+    files: ['apps/lets-park/api/**/*.ts', 'libs/**/*.ts', 'libs/**/*.tsx'],
     rules: {
       'no-console': 'error',
     },
@@ -650,8 +650,8 @@ export default [
    * this block exists; see the note there.
    *
    * Why these two rules and no others: the codebase names the failure they
-   * guard, in `apps/api/src/reservations/composite-domain-event.publisher.ts`
-   * — an escaping rejection is worse than an escaping throw, because `apps/api`
+   * guard, in `apps/lets-park/api/src/reservations/composite-domain-event.publisher.ts`
+   * — an escaping rejection is worse than an escaping throw, because `apps/lets-park/api`
    * installs no `unhandledRejection` handler, so Node's default terminates the
    * process **after COMMIT**, on a user's cancellation path.
    *
@@ -675,7 +675,7 @@ export default [
    *
    * So the composite's runtime try/catch is the dynamic half of that defense
    * and stays; this rule is the static half, and it stops the bad override
-   * being written anywhere in `apps/api` or `libs` in the first place. A
+   * being written anywhere in `apps/lets-park/api` or `libs` in the first place. A
    * delegate injected from outside the linted tree is still the guard's job.
    * The only waiver is the two disables on `AsyncRejectingPublisher` in
    * `composite-domain-event.publisher.spec.ts`, which *is* the guard's test —
@@ -683,7 +683,7 @@ export default [
    *
    * Cost of adding `no-misused-promises`: five errors, all in spec files, none
    * in production code. Two are that fixture; three were
-   * `onSubmit={form.handleSubmit(...)}` in the `libs/form` specs, fixed rather
+   * `onSubmit={form.handleSubmit(...)}` in the `libs/shared/form` specs, fixed rather
    * than silenced — `(event) => void form.handleSubmit(...)(event)`.
    *
    * Its wall-clock cost is small, because the expensive part — building the
@@ -700,18 +700,18 @@ export default [
    * off would not find a bug — it would demand ~24 disables for code the
    * analysis pass already read and cleared.
    *
-   * **`apps/web/**` is deliberately out.** Its React
+   * **`apps/lets-park/web/**` is deliberately out.** Its React
    * `void queryClient.invalidateQueries(...)` sites need their own pass, and a
    * half-considered sweep of them would bury the backend result this block is
    * for. `.tsx` is listed for `libs/**` only, for the same reason: the design
    * system and the wrapper libs are in, the app's React tree is not.
    *
-   * One visible consequence, so nobody "fixes" it by halves: the `libs/form`
+   * One visible consequence, so nobody "fixes" it by halves: the `libs/shared/form`
    * specs now wrap `handleSubmit` in `void`, while the two production callers
-   * — `apps/web/src/shell/settings-screen/settings-screen.tsx` and
-   * `apps/web/src/shell/admin/admin-spots-screen/admin-spots-screen.tsx` —
+   * — `apps/lets-park/web/src/shell/settings-screen/settings-screen.tsx` and
+   * `apps/lets-park/web/src/shell/admin/admin-spots-screen/admin-spots-screen.tsx` —
    * still pass it bare,
-   * purely because `apps/web/**` is outside this block. That is the same
+   * purely because `apps/lets-park/web/**` is outside this block. That is the same
    * finding waiting for the web pass, not an inconsistency to paper over.
    *
    * Scoped to `.ts`/`.tsx` rather than `LINTED_EXTENSIONS`: a file the
@@ -721,7 +721,7 @@ export default [
    */
   {
     basePath: workspaceRoot,
-    files: ['apps/api/**/*.ts', 'libs/**/*.ts', 'libs/**/*.tsx'],
+    files: ['apps/lets-park/api/**/*.ts', 'libs/**/*.ts', 'libs/**/*.tsx'],
     languageOptions: {
       parserOptions: {
         projectService: true,

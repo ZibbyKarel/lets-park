@@ -1,6 +1,6 @@
 # Contract – structure, rules, how to add a schema
 
-`libs/contract` is the **single source of truth** for every data shape that
+`libs/lets-park/contract` is the **single source of truth** for every data shape that
 crosses the frontend ↔ backend boundary. No endpoint, DTO, or realtime event
 may exist in code before it exists here.
 
@@ -13,12 +13,12 @@ contract); Task 4 added the oRPC procedures and Task 5 the realtime events.
 
 | lib | tags | what it is | what it **must not** contain |
 | --- | --- | --- | --- |
-| `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` | domain constants and pure date-only logic for `Europe/Prague` | Zod, next-intl, any runtime dependency |
-| `libs/contract` | `type:contract`, `scope:shared` | Zod schemas + the oRPC contract + realtime events | anything from npm besides `zod`, `@orpc/contract`, `tslib` |
+| `libs/lets-park/shared-types` | `type:util`, `scope:shared`, `layer:foundation` | domain constants and pure date-only logic for `Europe/Prague` | Zod, next-intl, any runtime dependency |
+| `libs/lets-park/contract` | `type:contract`, `scope:shared` | Zod schemas + the oRPC contract + realtime events | anything from npm besides `zod`, `@orpc/contract`, `tslib` |
 
-The split isn't cosmetic. `libs/shared-types` is imported by both `apps/api`
-and `libs/i18n`, so it must not pull in Zod or frontend libraries (see
-`doc/decision/0003-*`). `libs/contract`, conversely, must not reach for
+The split isn't cosmetic. `libs/lets-park/shared-types` is imported by both `apps/lets-park/api`
+and `libs/shared/i18n`, so it must not pull in Zod or frontend libraries (see
+`doc/decision/0003-*`). `libs/lets-park/contract`, conversely, must not reach for
 transport — which is why ESLint only allows it `@orpc/contract`, never
 `@orpc/client` or `@orpc/server` (see `doc/decision/0007-*`).
 
@@ -27,10 +27,10 @@ reverse.
 
 ---
 
-## Structure of `libs/contract`
+## Structure of `libs/lets-park/contract`
 
 ```
-libs/contract/src/
+libs/lets-park/contract/src/
   index.ts                  entry point @lets-park/contract
   schemas/
     primitives.ts           idSchema, dateOnlySchema, yearMonthSchema, timestampSchema
@@ -99,7 +99,7 @@ admin form sends the input shape while the service layer works with the
 output shape.
 
 One exception that isn't really an exception: enum values (`PARKING_GROUPS`,
-`USER_ROLES`, …) live in `libs/shared-types` as an `as const` tuple, and the
+`USER_ROLES`, …) live in `libs/lets-park/shared-types` as an `as const` tuple, and the
 contract just wraps them (`z.enum(PARKING_GROUPS)`). The values therefore
 still live in one place, and the type in the contract stays derived. A test
 in `enums.spec.ts` also type-checks that the two sides haven't drifted apart.
@@ -127,7 +127,7 @@ can't see. The old horizon from `plan.md` ("until the end of the following
 month") was replaced by `doc/decision/0004-*`.
 
 Computing the month state is done by the pure function `monthLockState()` /
-`isMonthOpen()` in `libs/shared-types`. It's deliberately **descriptive
+`isMonthOpen()` in `libs/lets-park/shared-types`. It's deliberately **descriptive
 only** — it enforces nothing. An automatic waitlist promotion is a system
 action, and the lock doesn't apply to it, which works only because the
 caller simply never invokes it.
@@ -145,7 +145,7 @@ The backend never returns an ad-hoc error shape. Everything goes through
 
 `ERROR_CODES` is a closed enum of twelve codes. The frontend branches on
 `code`; `message` is detail for logs and unexpected cases, and the Czech UI
-copy is keyed by code (`libs/i18n`).
+copy is keyed by code (`libs/shared/i18n`).
 
 Two "window" codes are deliberately distinguished, because they tell the user
 something different:
@@ -173,7 +173,7 @@ is an authorization boundary:** everything under `admin.` requires
 
 That file exports two types alongside it: `Contract` (the router object's own
 type) and **`ContractClient`** — the same router seen from the caller's side,
-i.e. `ContractRouterClient<Contract>` already applied. `libs/api-client` types
+i.e. `ContractRouterClient<Contract>` already applied. `libs/shared/api-client` types
 its client as `ContractClient` and never imports `@orpc/contract` itself, which
 keeps that package allow-listed for the `type:contract` tag alone rather than
 for every wrapper lib. See `doc/decision/0040-*`.
@@ -222,7 +222,7 @@ response, not an error for the whole batch.)
 `admin.window.months` **does not declare** `VALIDATION_FAILED`. The
 `from`–`to` range is entirely guarded structurally: `from <= to` via a
 refinement, and the range length against `MAX_MONTH_WINDOW_SPAN`
-(`libs/shared-types`), the same way `MAX_BULK_BOOKING_DAYS` works for the
+(`libs/lets-park/shared-types`), the same way `MAX_BULK_BOOKING_DAYS` works for the
 bulk reservation. The client therefore learns the limit from the schema and
 doesn't have to discover it by being rejected.
 
@@ -425,11 +425,11 @@ or a session cookie. It's a plain `GET`, authenticated by an unguessable
 token in the path.
 
 The contract therefore doesn't own an endpoint, but **the URL's shape**, so
-`apps/api` (which serves it) and `apps/web` (which displays it) can't drift
+`apps/lets-park/api` (which serves it) and `apps/lets-park/web` (which displays it) can't drift
 apart:
 
 ```ts
-ICS_FEED_BASE_PATH        // '/api/calendar'   (including apps/api's global prefix)
+ICS_FEED_BASE_PATH        // '/api/calendar'   (including apps/lets-park/api's global prefix)
 ICS_FEED_FILE_EXTENSION   // '.ics'
 buildIcsFeedPath(token)   // '/api/calendar/<token>.ics'
 buildIcsFeedUrl(base, token)  // 'https://host/api/calendar/<token>.ics'
@@ -662,7 +662,7 @@ must not reach for transport, and ESLint enforces that.
 1. **Figure out where it belongs.** A shared entity → `schemas/entities.ts`.
    A new primitive (a scalar used in multiple places) → `schemas/primitives.ts`.
    A new enum value → first a tuple in
-   `libs/shared-types/src/lib/domain-constants.ts`, only then a Zod wrapper
+   `libs/lets-park/shared-types/src/lib/domain-constants.ts`, only then a Zod wrapper
    in `schemas/enums.ts`.
 2. **Build on existing pieces.** Never rewrite `z.uuid()` or `z.iso.date()` –
    use `idSchema`, `dateOnlySchema`, `timestampSchema`. Derive request shapes
@@ -683,9 +683,9 @@ layer.
 
 ---
 
-## What `libs/shared-types` provides
+## What `libs/lets-park/shared-types` provides
 
-The contract builds on it, but the backend and `libs/i18n` use it too.
+The contract builds on it, but the backend and `libs/shared/i18n` use it too.
 
 | area | functions |
 | --- | --- |
@@ -718,7 +718,7 @@ published to the browser bundle too.
 ## Related decisions
 
 - `doc/decision/0003-date-helpers-in-shared-types.md` – why the date logic
-  isn't in `libs/i18n`
+  isn't in `libs/shared/i18n`
 - `doc/decision/0004-mvp-scope-includes-design-features.md` – the reservation
   window, bulk reservation, preferred spot
 - `doc/decision/0013-calendar-arithmetic-and-single-timezone-boundary.md`

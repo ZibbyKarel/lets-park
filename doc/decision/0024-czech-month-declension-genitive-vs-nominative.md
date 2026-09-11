@@ -1,10 +1,10 @@
-# 0024 – Czech month declension: genitive vs. nominative in `libs/i18n`
+# 0024 – Czech month declension: genitive vs. nominative in `libs/shared/i18n`
 
 **Date:** 2026-08-28 · **Status:** accepted
 
 ## What
 
-The `libs/i18n` formatting functions (`formatFullDate`, `formatDayAndMonth`,
+The `libs/shared/i18n` formatting functions (`formatFullDate`, `formatDayAndMonth`,
 `formatMonthAndYear`, `formatMonthName`) don't share a single
 `Intl.DateTimeFormat` call — they use two different option combinations,
 because Czech declines month names, and the design
@@ -43,7 +43,7 @@ October (`říjen` / `října`), where the two forms differ.
   `day` → nominative.
 - All four go through next-intl (`createFormatter({ locale: 'cs', timeZone: 'UTC'
   })`), not through raw `Intl.DateTimeFormat` — next-intl is only a thin layer
-  over the same ICU behavior here, but `libs/i18n` is the only place allowed
+  over the same ICU behavior here, but `libs/shared/i18n` is the only place allowed
   to import `next-intl` (`eslint.config.mjs`), so the formatting code has to go
   through it here too.
 - `timeZone: 'UTC'` in both formatters is independent of `PRAGUE_TIME_ZONE`,
@@ -57,6 +57,6 @@ If the ICU data for `cs-CZ` changed between Node/ICU versions (e.g. stopped
 offering the genitive), `dates.spec.ts` would fail immediately — the tests
 assert an exact string, not just "some month". The fix would then live in
 `dates.ts` itself (an explicit table of declined forms), not in the API that
-`libs/i18n` exports outward.
+`libs/shared/i18n` exports outward.
 
 > **Note (0303):** `formatFullDate` / `formatDayAndMonth` / `formatMonthAndYear` / `formatMonthName` were renamed to methods `fullDate` / `dayAndMonth` / `monthAndYear` / `monthName` on `createDateFormatters(locale)` by `doc/decision/0303-*`. The Czech genitive-vs-nominative reasoning above is unaffected.

@@ -1,22 +1,22 @@
-# 0040 – `libs/contract` exports the applied client type; `@orpc/contract` stays out of `type:util`
+# 0040 – `libs/lets-park/contract` exports the applied client type; `@orpc/contract` stays out of `type:util`
 
-**Date:** 2026-09-02 · **Status:** accepted · **Task:** 19 (`libs/api-client`)
+**Date:** 2026-09-02 · **Status:** accepted · **Task:** 19 (`libs/shared/api-client`)
 **Follows on from:** `doc/decision/0007-*`, `doc/decision/0017-*`
 
 ## What
 
-`libs/api-client` needs `ContractRouterClient<Contract>` to type its client. That generic
+`libs/shared/api-client` needs `ContractRouterClient<Contract>` to type its client. That generic
 lives in `@orpc/contract`, which `NPM_ALLOWLIST` grants to the **`type:contract` tag only**.
 
-`libs/contract` applies the generic itself and exports the result:
+`libs/lets-park/contract` applies the generic itself and exports the result:
 
 ```ts
-// libs/contract/src/api/router.ts
+// libs/lets-park/contract/src/api/router.ts
 export type Contract = typeof contract;
 export type ContractClient = ContractRouterClient<Contract>;
 ```
 
-`libs/api-client` then writes `export type ApiClient = ContractClient;` and never names
+`libs/shared/api-client` then writes `export type ApiClient = ContractClient;` and never names
 `@orpc/contract` at all. `NPM_ALLOWLIST.util` does **not** list `@orpc/contract`, and carries
 a comment saying why.
 
@@ -27,11 +27,11 @@ The first version of this task took the other route: it added `@orpc/contract` t
 Review rejected it, correctly.
 
 **The allow-lists hang off `type:`, and that tag is shared.** `NPM_ALLOWLIST.util` applies to
-every `type:util` project at once — today `libs/form`, `libs/i18n`, `libs/api-client`,
-`libs/query`, and `libs/shared-types`; tomorrow `libs/realtime-client`, `libs/auth`,
-`libs/calendar-export`. Adding a package to serve one of them hands it to all of them. The
+every `type:util` project at once — today `libs/shared/form`, `libs/shared/i18n`, `libs/shared/api-client`,
+`libs/query`, and `libs/lets-park/shared-types`; tomorrow `libs/lets-park/realtime-client`, `libs/lets-park/auth`,
+`libs/lets-park/calendar-export`. Adding a package to serve one of them hands it to all of them. The
 reviewer's probe confirmed the consequence directly: with that entry in place, an
-`@orpc/contract` import from `libs/i18n` passed lint.
+`@orpc/contract` import from `libs/shared/i18n` passed lint.
 
 **"Type-only" is not the mitigation it sounds like.** It is true that nothing of
 `@orpc/contract` reaches the runtime through a type import — but `@nx/enforce-module-boundaries`
@@ -52,42 +52,42 @@ from the caller's side. Putting the application here also fixes the parameterisa
 place — `TClientContext` stays at its default, so a second consumer cannot quietly instantiate
 it differently and end up with a structurally different client type.
 
-**Alternatives rejected.** A new `layer:` tag isolating `libs/api-client` would let it keep the
+**Alternatives rejected.** A new `layer:` tag isolating `libs/shared/api-client` would let it keep the
 direct import, at the cost of a whole tag dimension existing to serve one line. Re-declaring the
-generic by hand in `libs/api-client` would duplicate a type the contract already owns and
+generic by hand in `libs/shared/api-client` would duplicate a type the contract already owns and
 reintroduce exactly the drift contract-first is for.
 
 ## How
 
-The type is exported from `libs/contract/src/api/router.ts`, next to `Contract`, and reaches
+The type is exported from `libs/lets-park/contract/src/api/router.ts`, next to `Contract`, and reaches
 `@lets-park/contract` through the existing `src/api/index.ts` barrel — no new entry point.
 
 Verified by probe rather than by lint passing green (`doc/workspace.md` warns this trap has
 already fired three times). A temporary `import type { ContractRouterClient } from '@orpc/contract'`
-in `libs/i18n` **and** in `libs/api-client` itself:
+in `libs/shared/i18n` **and** in `libs/shared/api-client` itself:
 
 ```
-libs/api-client/src/zz-probe-contract.ts
+libs/shared/api-client/src/zz-probe-contract.ts
   4:1  error  A project tagged with "type:util" is not allowed to import "@orpc/contract"
-libs/i18n/src/zz-probe-contract.ts
+libs/shared/i18n/src/zz-probe-contract.ts
   3:1  error  A project tagged with "type:util" is not allowed to import "@orpc/contract"
 ```
 
-Both probes deleted afterwards. The `libs/api-client` probe is the important one: it shows the
+Both probes deleted afterwards. The `libs/shared/api-client` probe is the important one: it shows the
 narrowing is not merely "i18n is fenced off" but that the owning lib itself has no privileged
 path either.
 
 ## Risk if this is wrong
 
-`libs/contract` now names a type from the client half of oRPC's type surface. That is a smaller
+`libs/lets-park/contract` now names a type from the client half of oRPC's type surface. That is a smaller
 step than it looks — `ContractRouterClient` is defined in `@orpc/contract`, the package the
 contract already depends on, and `NPM_ALLOWLIST.contract` still bans `@orpc/client` and
 `@orpc/server` outright, so the contract still cannot reach a transport. The line to hold is
-that one: if a future task finds itself wanting `@orpc/client` inside `libs/contract`, that is
+that one: if a future task finds itself wanting `@orpc/client` inside `libs/lets-park/contract`, that is
 not an extension of this decision, it is `doc/decision/0007-*` being overturned.
 
 The second risk is the pattern being over-applied. "Re-export it from the contract lib" is the
 right answer for a *type derived from the contract*; it is the wrong answer for a package a
 wrapper genuinely needs at runtime (`@orpc/tanstack-query` in `libs/query`, `@hookform/resolvers`
-in `libs/form`). Those stay in `NPM_ALLOWLIST.util`, coarse tag and all, because the per-directory
+in `libs/shared/form`). Those stay in `NPM_ALLOWLIST.util`, coarse tag and all, because the per-directory
 `no-restricted-imports` override is what actually confines them.

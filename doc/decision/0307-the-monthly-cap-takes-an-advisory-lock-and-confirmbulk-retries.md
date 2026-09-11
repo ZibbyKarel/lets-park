@@ -4,7 +4,7 @@
 
 ## What
 
-`apps/api/src/reservations/monthly-reservation-cap.ts` enforces a cap of five
+`apps/lets-park/api/src/reservations/monthly-reservation-cap.ts` enforces a cap of five
 confirmed reservations per user per calendar month. Every path that inserts a
 `Reservation` row for a real user calls `assertWithinMonthlyReservationCap` as
 its last check before the insert, inside the transaction that will do the

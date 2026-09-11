@@ -1,6 +1,6 @@
 # 0060 – The websocket token is a handshake callback, not a query string
 
-**Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/realtime-client`)
+**Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/lets-park/realtime-client`)
 
 ## What
 
@@ -26,7 +26,7 @@ Three consequences follow from the function form specifically:
 
 - the provider is re-read on **every** engine open — the first connect and every reconnect;
 - the CONNECT packet is not sent until the callback fires, so an `async` provider (which
-  `libs/auth`'s is, once a refresh is in flight) is awaited rather than raced;
+  `libs/lets-park/auth`'s is, once a refresh is in flight) is awaited rather than raced;
 - a provider that rejects, or that has no session, produces `{}` — an empty handshake the
   gateway refuses — rather than a connection that quietly proceeds unauthenticated.
 
@@ -43,15 +43,15 @@ explicitly; it is also the standard Socket.io guidance.
 **`extraHeaders` would not have worked anyway.** The browser `WebSocket` API cannot set
 request headers, so Socket.io only applies `extraHeaders` to the polling transport — a socket
 that upgraded to websocket would silently stop presenting its credential. An `Authorization`
-header is the right answer for HTTP (`libs/api-client`) and simply is not available here.
+header is the right answer for HTTP (`libs/shared/api-client`) and simply is not available here.
 
 **An object would pin the token.** `auth` as a plain object is read once, when the socket is
 constructed. This socket is meant to live as long as the tab, across a token expiry, a refresh
-and any number of transport drops. `libs/auth` rotates the access token in the `jwt` callback
+and any number of transport drops. `libs/lets-park/auth` rotates the access token in the `jwt` callback
 and the browser polls `/api/auth/session` every five minutes (`doc/decision/0049-*`), so the
 token the socket was built with is *expected* to go stale. Re-reading a provider is the same
-per-request seam `libs/api-client` already uses for its `Authorization` header — which is why
-`AccessTokenProvider` has one definition, in `libs/api-client`, that both consume.
+per-request seam `libs/shared/api-client` already uses for its `Authorization` header — which is why
+`AccessTokenProvider` has one definition, in `libs/shared/api-client`, that both consume.
 
 **Failing to a `{}` handshake is not a downgrade path.** The gateway (Task 15) requires a
 valid token; an empty `auth` is refused exactly as a forged one is. The alternative —
@@ -62,7 +62,7 @@ failed to refresh (`doc/decision/0048-*`).
 
 ## How it is verified
 
-`libs/realtime-client/src/lib/socket.spec.ts` asserts on packets a **real**
+`libs/lets-park/realtime-client/src/lib/socket.spec.ts` asserts on packets a **real**
 `socket.io-client` socket produced — the fixture replaces only the transport, never the
 protocol (`src/__fixtures__/offline-transport.ts`).
 
@@ -93,7 +93,7 @@ nothing re-reads the provider by itself. `doc/decision/0061-*` is what makes the
 **A `cb` that is never called hangs the socket open.** Socket.io does not time the `auth`
 callback out; if a provider neither resolved nor rejected, the CONNECT packet would never be
 sent and the connection would sit in `connecting` forever. Every provider in this workspace is
-either synchronous or a settled promise, and `libs/auth`'s refresher has its own error path,
+either synchronous or a settled promise, and `libs/lets-park/auth`'s refresher has its own error path,
 so this is a contract on the provider rather than a live hazard — but it is the reason the
 rejection branch exists at all instead of leaving the promise unhandled.
 

@@ -1,11 +1,11 @@
 # 0031 – `useAppForm` is parameterized by `TIn`/`TOut`, not by `TSchema` — no cast
 
 **Date:** 2026-08-28 · **Status:** accepted (revised after Task 18 code review) · **Task:** 18
-(`libs/form`)
+(`libs/shared/form`)
 
 ## What
 
-`useAppForm` (`libs/form/src/lib/use-app-form.ts`) calls `zodResolver(schema)` and passes its
+`useAppForm` (`libs/shared/form/src/lib/use-app-form.ts`) calls `zodResolver(schema)` and passes its
 result to `useForm` **with no cast**. The original revision was generic over `TSchema
 extends z.ZodType<FieldValues, FieldValues>` and cast the `zodResolver` result through
 `unknown`; Task 18's review showed the cast could be removed by changing what `useAppForm` is

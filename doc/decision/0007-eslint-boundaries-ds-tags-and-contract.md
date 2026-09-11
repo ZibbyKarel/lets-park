@@ -14,8 +14,8 @@ Two deviations from the literal wording of the Task 1 brief in the
 
 ## Why
 
-**1) The `ds:*` dimension.** The brief requires that `libs/design-system/primitives`
-must not import `libs/design-system/compounds`. But both libs are `type:ui`, and the
+**1) The `ds:*` dimension.** The brief requires that `libs/shared/design-system/primitives`
+must not import `libs/shared/design-system/compounds`. But both libs are `type:ui`, and the
 rule `type:ui → [type:ui, type:util]` cannot distinguish between them. Nx evaluates
 every rule whose `sourceTag` matches **conjunctively** – adding a second tag therefore
 creates an additional condition the target must satisfy:
@@ -36,7 +36,7 @@ must not import anything besides `zod` and `type:util`", but `plan.md` (Phase 1)
 places the **oRPC contract** in that same lib – procedures are defined there via
 `@orpc/contract`. The literal rule would make Phase 1 impossible to write. Only
 `@orpc/contract` (contract definitions) is allowed, not `@orpc/server` or
-`@orpc/client` – those belong to the backend and to `libs/api-client` respectively.
+`@orpc/client` – those belong to the backend and to `libs/shared/api-client` respectively.
 `tslib` is a TypeScript runtime helper (`importHelpers: true`), not a dependency in
 the domain sense.
 

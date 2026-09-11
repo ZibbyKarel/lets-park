@@ -12,7 +12,7 @@ Two of the three compounds have **no model in the design**:
 
 Both are therefore derived from the design's existing language rather than
 copied from it, and this record says so explicitly — the same discipline
-`libs/design-system/tokens/src/lib/overlays.ts` applies per token
+`libs/shared/design-system/tokens/src/lib/overlays.ts` applies per token
 (`doc/decision/0052-overlay-tokens-and-one-layering-scale.md`).
 
 ## Why

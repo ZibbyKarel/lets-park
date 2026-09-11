@@ -1,6 +1,6 @@
 # API domain modules
 
-How `apps/api` serves the contract: the transport that carries a procedure, the modules that
+How `apps/lets-park/api` serves the contract: the transport that carries a procedure, the modules that
 implement one, and the rules each module owns. Written for Task 12's surface — parking spots,
 users, personal settings, the reservation window, the day overview and the audit log. Reservations
 and the waitlist (Task 13) plug into the same transport and are documented with their own task. The
@@ -16,7 +16,7 @@ feed, the one controller outside the contract).
 
 ## 1. The transport
 
-Every procedure in `libs/contract` is served over oRPC's **RPC protocol** at
+Every procedure in `libs/lets-park/contract` is served over oRPC's **RPC protocol** at
 
 ```
 POST /api/rpc/<procedure/path/with/slashes>
@@ -24,9 +24,9 @@ POST /api/rpc/<procedure/path/with/slashes>
 
 so `admin.spot.create` is `POST /api/rpc/admin/spot/create`, with the request body
 `{ "json": <input>, "meta": [] }` and the response `{ "json": <output> }`. That is exactly what
-`libs/api-client`'s `RPCLink` sends and reads; nothing in `apps/web` constructs these URLs by hand.
+`libs/shared/api-client`'s `RPCLink` sends and reads; nothing in `apps/lets-park/web` constructs these URLs by hand.
 
-Three files carry it, all in `apps/api/src/orpc/`:
+Three files carry it, all in `apps/lets-park/api/src/orpc/`:
 
 | File | What it owns |
 | --- | --- |
@@ -54,7 +54,7 @@ Why one route per procedure rather than one wildcard, and why the RPC protocol r
 
 ### Keeping the routing table honest
 
-`apps/api/src/orpc/orpc-route-parity.spec.ts` walks the contract router and, for every procedure,
+`apps/lets-park/api/src/orpc/orpc-route-parity.spec.ts` walks the contract router and, for every procedure,
 asserts that
 
 - a Nest route exists at `rpcRoute(...)`'s path, or the procedure is named in
@@ -118,7 +118,7 @@ the frames name the service and the rule that refused; so does every 5xx.
 
 ## 2. Storage ↔ contract mapping
 
-`apps/api/src/common/prisma-mapping.ts` is the only place a Prisma row becomes a contract object.
+`apps/lets-park/api/src/common/prisma-mapping.ts` is the only place a Prisma row becomes a contract object.
 Three conversions are worth knowing:
 
 | Function | Rule |
@@ -151,7 +151,7 @@ The projections are equally deliberate:
 
 ## 3. `AuditLogService`
 
-`apps/api/src/audit/audit-log.service.ts`. One method:
+`apps/lets-park/api/src/audit/audit-log.service.ts`. One method:
 
 ```ts
 record(entry: AuditEntry, writer: AuditLogWriter = this.prisma.client): Promise<void>
@@ -196,7 +196,7 @@ supposed to answer "what actually changed".
 
 ## 4. Parking spots
 
-`apps/api/src/spots/`. Routes: `spot.list` (any authenticated user), `admin.spot.list`,
+`apps/lets-park/api/src/spots/`. Routes: `spot.list` (any authenticated user), `admin.spot.list`,
 `admin.spot.create`, `admin.spot.update`, `admin.spot.deactivate`.
 
 **A spot is never deleted** (`doc/decision/0027-*`): `Reservation` and `WaitlistEntry` reference it
@@ -220,7 +220,7 @@ supposed to answer "what actually changed".
 
 ## 5. Users (admin)
 
-`apps/api/src/users/`. Routes: `admin.user.list`, `admin.user.update`.
+`apps/lets-park/api/src/users/`. Routes: `admin.user.list`, `admin.user.update`.
 
 Users are never created here — they are provisioned from the Okta token on first sign-in
 (`doc/auth.md`) — and never deleted. Offboarding is `active: false`, and a deactivated user is
@@ -263,7 +263,7 @@ the real number in view.
 
 ## 6. Personal settings
 
-`apps/api/src/me/`. Routes: `me.get`, `me.updateSettings`, `me.regenerateIcsToken`.
+`apps/lets-park/api/src/me/`. Routes: `me.get`, `me.updateSettings`, `me.regenerateIcsToken`.
 
 The subject is always `context.user`. None of the inputs carries a user id.
 
@@ -286,7 +286,7 @@ look like. The old feed URL stops working immediately.
 
 ## 7. Reservation window
 
-`apps/api/src/reservation-window/`. Routes: `admin.window.get`, `admin.window.update`,
+`apps/lets-park/api/src/reservation-window/`. Routes: `admin.window.get`, `admin.window.update`,
 `admin.window.months`. Also used internally by the day overview.
 
 **Nothing in this module decides whether a month is open.** `monthLockState()` / `isMonthOpen()`
@@ -314,7 +314,7 @@ an omitted field has already been filled with its default before it arrives.
 
 ## 8. Day overview
 
-`apps/api/src/overview/`. Route: `overview.day`, any authenticated user.
+`apps/lets-park/api/src/overview/`. Route: `overview.day`, any authenticated user.
 
 One request paints the whole parking screen: the grid, the queue badges, the caller's own position
 and the reservation-window banner. A screen assembled from four round trips can render a day's grid
@@ -364,7 +364,7 @@ in `viewerReservationId`. Including it would make `canReserve` mean two things a
 
 ## 9. Reservations and the waitlist
 
-`apps/api/src/reservations/`. Routes: `reservation.create`, `reservation.cancel`, `waitlist.join`,
+`apps/lets-park/api/src/reservations/`. Routes: `reservation.create`, `reservation.cancel`, `waitlist.join`,
 `waitlist.leave`, plus the bulk pair below — all open to any authenticated user, because "may I
 cancel this?" is a fact about a row, not about a route, and lives in the service with the row.
 
@@ -412,7 +412,7 @@ has exactly one route.
 
 ## 10. Testing
 
-Unit specs sit beside each service and run against `apps/api/src/testing/prisma-double.ts` — an
+Unit specs sit beside each service and run against `apps/lets-park/api/src/testing/prisma-double.ts` — an
 in-memory stand-in for `PrismaService` that copies every row it returns (a live reference would
 make a before/after audit payload compare a row against itself), raises a **real**
 `PrismaClientKnownRequestError` with `code: 'P2002'` and a populated `meta.target` for unique
@@ -481,10 +481,10 @@ Postgres) needs `ALTER ROLE <role> CREATEDB` or the suite fails at
 `globalSetup` with a raw Postgres permission error and no further guidance.
 
 It is **excluded from `nx run-many -t test`** (`testPathIgnorePatterns` in
-`apps/api/jest.config.cts`) so that suite stays runnable without Docker, and it **refuses to skip
+`apps/lets-park/api/jest.config.cts`) so that suite stays runnable without Docker, and it **refuses to skip
 itself** when `DATABASE_URL` is missing — it fails, with a message saying how to start the
 database. A suite that skips into green is the failure mode this file exists to remove, and the
-refusal has been exercised (`DATABASE_URL= jest --config apps/api/jest.database.config.cts` exits
+refusal has been exercised (`DATABASE_URL= jest --config apps/lets-park/api/jest.database.config.cts` exits
 1, not 0).
 
 ### Still not exercised
@@ -504,7 +504,7 @@ refusal has been exercised (`DATABASE_URL= jest --config apps/api/jest.database.
 
 ## 10. The ICS feed
 
-`apps/api/src/calendar/`. Route: `GET /api/calendar/:icsToken.ics` — **not** a contract procedure,
+`apps/lets-park/api/src/calendar/`. Route: `GET /api/calendar/:icsToken.ics` — **not** a contract procedure,
 and the only route in the application that is not. Full write-up in `doc/ics.md`; what matters when
 reading the rest of this file:
 
@@ -519,7 +519,7 @@ reading the rest of this file:
   before it, and would have marked every rejection with `Content-Type: text/calendar`.
 - The rendered document is a pure function of the data (`DTSTAMP` is the reservation's `createdAt`),
   which is what lets Express `ETag` it and answer a poller with `304`: `doc/decision/0081-*`.
-- `ical-generator` is imported **only** by `libs/calendar-export`, enforced by
+- `ical-generator` is imported **only** by `libs/lets-park/calendar-export`, enforced by
   `eslint.config.mjs`'s `WRAPPED_LIBRARIES` and probed from two directions.
 
 ### `PrismaDouble` grew two query shapes for it

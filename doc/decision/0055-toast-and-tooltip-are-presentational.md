@@ -16,7 +16,7 @@
 - **A global toast queue is application state, not design-system state.** A
   primitive owning a mutable singleton queue cannot be rendered twice on a page
   or tested in isolation, and it would drag decisions into
-  `libs/design-system` (how long a toast stays up, how many stack, what happens
+  `libs/shared/design-system` (how long a toast stays up, how many stack, what happens
   on navigation) that belong to a feature. A presentational `Toast` +
   `ToastRegion` cover appearance and accessibility; the rest is a few lines of
   `useState` at the call site.
@@ -74,7 +74,7 @@
 - **The application has to write the queue itself** (and with it auto-dismiss
   and a count limit). It is a few lines, but it is extra work, and two feature
   teams may each write it differently. If it starts repeating, it belongs in
-  `libs/design-system/compounds` or in a feature lib – not here.
+  `libs/shared/design-system/compounds` or in a feature lib – not here.
 - **`Tooltip` requires exactly one child that can accept props.** A fragment or
   a text node will fail. The `ReactElement<DescribableChildProps>` type catches
   that in TypeScript, not at runtime.

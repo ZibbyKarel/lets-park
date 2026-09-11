@@ -26,7 +26,7 @@ is still about three and a half times less contrasty than the enabled one.
 
 ## How
 
-- `libs/design-system/primitives/src/lib/button/button.tsx` (`DISABLED_CLASSES`) and
+- `libs/shared/design-system/primitives/src/lib/button/button.tsx` (`DISABLED_CLASSES`) and
   `stepper.tsx` (`StepButton`). The stepper's *value* readout was already
   `text-fg-3`; only its two step buttons were not.
 - Guarded by `contrast.spec.tsx`, which holds disabled labels to a **3:1**

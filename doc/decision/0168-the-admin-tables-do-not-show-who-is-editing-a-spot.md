@@ -17,7 +17,7 @@ overview does not carry. The third is **not** implemented.
 ## Why
 
 - **The contract has no field for it.** `daySpotOverviewSchema`
-  (`libs/contract/src/api/overview.ts`) carries `spot`, `reservation` and
+  (`libs/lets-park/contract/src/api/overview.ts`) carries `spot`, `reservation` and
   `waitlistCount`. Nothing in `admin.spot.list` or `overview.day` says who has a
   spot open in front of them.
 - **That is not an oversight in the contract.** "Somebody is editing this right

@@ -2,7 +2,7 @@
 
 ## What
 
-`apps/web/src/auth.ts` builds the app's Auth.js instance from
+`apps/lets-park/web/src/auth.ts` builds the app's Auth.js instance from
 `process.env.AUTH_*` directly, with `?? ''` fallbacks, instead of calling
 `validateWebEnv()` from `./env.ts`:
 
@@ -45,7 +45,7 @@ in `instrumentation.ts` → `register()`.
 Verified both ways rather than argued:
 
 - `nx run web:build` with the environment present → exit 0.
-- `nx run web:build` with `.env` and `apps/web/.env` moved aside → exit 0.
+- `nx run web:build` with `.env` and `apps/lets-park/web/.env` moved aside → exit 0.
   (Both files restored afterwards.)
 
 ## Risk

@@ -2,7 +2,7 @@
 
 ## What
 
-`libs/database/src/scripts/reset-e2e.ts` deletes every `ParkingSpot` whose
+`libs/lets-park/database/src/scripts/reset-e2e.ts` deletes every `ParkingSpot` whose
 label is not one of the nine in `SEED_PARKING_SPOTS`, together with any
 reservation or queue entry on it, before it clears the target month.
 
@@ -13,13 +13,13 @@ seed` owns those, and `globalSetup` runs it first.
 
 ## Why
 
-`apps/web-e2e/src/admin-spots.spec.ts` exercises spot administration, and the
+`apps/lets-park/web-e2e/src/admin-spots.spec.ts` exercises spot administration, and the
 only honest way to test "an admin adds a bay and it appears on the lot" is to
 add one. The spec removes it again, but a spec's teardown is exactly the thing
 that does not run when the spec fails halfway, or when somebody presses
 Ctrl-C.
 
-Nothing else would ever remove it. `libs/database/src/scripts/seed.ts` is
+Nothing else would ever remove it. `libs/lets-park/database/src/scripts/seed.ts` is
 idempotent *by upsert on the natural key*:
 
 ```ts
@@ -71,7 +71,7 @@ un-restored reservation window already makes, and for the same reason.
 ## The order of the deletes is load-bearing
 
 `Reservation.parkingSpotId` and `WaitlistEntry.parkingSpotId` are
-`onDelete: Restrict` (`libs/database/prisma/schema.prisma`), so the spot cannot
+`onDelete: Restrict` (`libs/lets-park/database/prisma/schema.prisma`), so the spot cannot
 go first: PostgreSQL would refuse the delete rather than cascade it. Rows on
 the stray spot are removed, then the spot. The counts are reported separately,
 because "removed a spot that had reservations on it" is a different sentence

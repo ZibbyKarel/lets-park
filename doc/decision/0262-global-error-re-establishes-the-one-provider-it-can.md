@@ -2,7 +2,7 @@
 
 ## What
 
-`apps/web/src/app/global-error.tsx` renders its own `<html lang="cs">` and
+`apps/lets-park/web/src/app/global-error.tsx` renders its own `<html lang="cs">` and
 `<body>`, imports `./global.css`, wraps the page in `IntlProvider`, and shows
 `ScreenError` with `reset` as its retry.
 
@@ -19,7 +19,7 @@
 - **It replaces the root layout**, so the document, the stylesheet and the
   providers all have to be re-established by it or not exist.
 - **The copy still comes from the catalogue.** `IntlProvider` carries its own
-  locale, time zone and messages (`libs/i18n/src/lib/provider.tsx`) and asks
+  locale, time zone and messages (`libs/shared/i18n/src/lib/provider.tsx`) and asks
   nothing of a server, so it is the one provider that *can* be re-established
   here — and re-establishing it keeps the Czech-UI rule without adding a second
   hard-coded Czech string to the app. The others (session, query, socket) are
@@ -31,7 +31,7 @@
 
 ## How
 
-`apps/web/src/app/global-error.tsx` and `global-error.spec.tsx`. The spec asserts
+`apps/lets-park/web/src/app/global-error.tsx` and `global-error.spec.tsx`. The spec asserts
 the two catalogue strings appear (which is what proves the provider is really
 re-established rather than the sentences having been inlined), that neither the
 error's message nor its digest is anywhere in the body, that the retry calls

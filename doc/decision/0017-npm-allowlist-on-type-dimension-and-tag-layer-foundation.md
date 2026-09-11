@@ -1,18 +1,18 @@
-# 0017 – The npm allow-list hangs off the `type:` dimension; `libs/shared-types` gets `layer:foundation`
+# 0017 – The npm allow-list hangs off the `type:` dimension; `libs/lets-park/shared-types` gets `layer:foundation`
 
 **Date:** 2026-08-28 · **Status:** accepted · **Resolves:** the Task 3 review, findings S3 and N3
 
 ## What
 
 Two changes in `eslint.config.mjs` (plus one tag in
-`libs/shared-types/project.json`):
+`libs/lets-park/shared-types/project.json`):
 
 1. **Every `type:` tag gets an `allowedExternalImports`.** Before Task 4, only
    `type:contract` had one; the other eleven tags had none, so they
    **restricted nothing** — `ds:tokens` could import `lodash`, `type:ui` could
    import `@prisma/client`. The lists live in one map, `NPM_ALLOWLIST`, keyed
    by `app` / `feature` / `ui` / `util` / `contract` / `data` / `foundation`.
-2. **`libs/shared-types` carries a new tag, `layer:foundation`**, with
+2. **`libs/lets-park/shared-types` carries a new tag, `layer:foundation`**, with
    `onlyDependOnLibsWithTags: []` and `allowedExternalImports: []` — i.e. it
    may depend on no workspace lib and no npm package at all. `type:contract`
    now depends on `layer:foundation` instead of on `type:util`.
@@ -60,9 +60,9 @@ Finding N3: `type:util` is allowed to depend on `type:contract`, and
 `type:contract` is allowed to depend on `type:util` — a cycle at the tag
 level. Both directions are legitimate in specific projects, though:
 
-- `libs/api-client` (`type:util`) **must** see the contract — it's its
+- `libs/shared/api-client` (`type:util`) **must** see the contract — it's its
   wrapper,
-- `libs/contract` **must** see `libs/shared-types` (date helpers, enums).
+- `libs/lets-park/contract` **must** see `libs/lets-park/shared-types` (date helpers, enums).
 
 The bug isn't the direction, it's that the `type:util` tag glues together two
 different layers: wrappers **above** the contract, and `shared-types`
@@ -84,11 +84,11 @@ safeguard.
 - `NPM_ALLOWLIST` in `eslint.config.mjs`, one commented key per `type:` tag.
 - The `util` list is deliberately **coarse**: it's the union of every package
   from `WRAPPED_LIBRARIES`, because all eight wrappers carry the same
-  `type:util` tag. That `libs/form` may only use `react-hook-form` and
-  `libs/auth` only `next-auth` is enforced by per-directory
+  `type:util` tag. That `libs/shared/form` may only use `react-hook-form` and
+  `libs/lets-park/auth` only `next-auth` is enforced by per-directory
   `no-restricted-imports` overrides — the Nx dimension alone isn't fine-grained
   enough for that.
-- `libs/shared-types/project.json`:
+- `libs/lets-park/shared-types/project.json`:
   `"tags": ["type:util", "scope:shared", "layer:foundation"]`.
 - `type:contract` → `onlyDependOnLibsWithTags: ['layer:foundation']`.
 
@@ -97,12 +97,12 @@ lint passing:
 
 | probe | expected | result |
 | --- | --- | --- |
-| `import 'zod'` in `libs/shared-types` | banned | `type:util … not allowed to import "zod"` |
-| `import 'react'` in `libs/shared-types` (`react` is in the `util` list) | banned by `foundation` | `layer:foundation … not allowed to import "react"` |
-| `import '@lets-park/design-system/tokens'` in `libs/shared-types` | banned | `layer:foundation cannot depend on any libs with tags` |
-| `import 'zod'` in `libs/design-system/tokens` | banned | `type:ui … not allowed to import "zod"` |
-| `import '@orpc/client'` in `libs/contract` | banned | `type:contract … not allowed to import "@orpc/client"` |
-| `import 'react'` in `libs/design-system/tokens` | **allowed** | lint green |
+| `import 'zod'` in `libs/lets-park/shared-types` | banned | `type:util … not allowed to import "zod"` |
+| `import 'react'` in `libs/lets-park/shared-types` (`react` is in the `util` list) | banned by `foundation` | `layer:foundation … not allowed to import "react"` |
+| `import '@lets-park/design-system/tokens'` in `libs/lets-park/shared-types` | banned | `layer:foundation cannot depend on any libs with tags` |
+| `import 'zod'` in `libs/shared/design-system/tokens` | banned | `type:ui … not allowed to import "zod"` |
+| `import '@orpc/client'` in `libs/lets-park/contract` | banned | `type:contract … not allowed to import "@orpc/client"` |
+| `import 'react'` in `libs/shared/design-system/tokens` | **allowed** | lint green |
 
 ## Risk if this is wrong
 

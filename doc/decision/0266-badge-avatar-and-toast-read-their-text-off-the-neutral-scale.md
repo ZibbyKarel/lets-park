@@ -2,7 +2,7 @@
 
 ## What
 
-Four colour pairings in `libs/design-system/primitives` changed. In each, a
+Four colour pairings in `libs/shared/design-system/primitives` changed. In each, a
 saturated brand or status colour was being used as *text* on its own tint, and
 did not clear the WCAG 2.1 AA threshold for normal-size text (4.5:1):
 
@@ -54,9 +54,9 @@ Two pairings the review also flagged were deliberately **not** changed — see
 
 ## How
 
-- `libs/design-system/primitives/src/lib/badge/badge.tsx`, `avatar.tsx`, `toast.tsx`,
+- `libs/shared/design-system/primitives/src/lib/badge/badge.tsx`, `avatar.tsx`, `toast.tsx`,
   `button.tsx`.
-- Guarded by `libs/design-system/primitives/src/lib/contrast.spec.tsx`, which
+- Guarded by `libs/shared/design-system/primitives/src/lib/contrast.spec.tsx`, which
   renders every tone and variant, reads the colour classes **off the rendered
   element** rather than out of the component's source, and computes the ratio
   from `COLOR_UTILITIES` in the tokens lib. Reverting any of the four rows above

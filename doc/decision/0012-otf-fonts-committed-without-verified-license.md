@@ -5,7 +5,7 @@
 ## What
 
 8 weights of `NHaasGroteskDSPro-*.otf` are copied from `doc/design/ds/fonts/` into
-`libs/design-system/tokens/assets/fonts/` and are committed to git. `FONT_FACES` in
+`libs/shared/design-system/tokens/assets/fonts/` and are committed to git. `FONT_FACES` in
 `typography.ts` uses them for `@font-face` in the generated `tokens.css`.
 `FONT_FAMILIES.sans` has a working fallback stack behind `NHaasGroteskDS` (`Neue
 Haas Grotesk, Helvetica Neue, Inter, Arial, system-ui, sans-serif`).

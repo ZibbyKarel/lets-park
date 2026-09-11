@@ -20,7 +20,7 @@ would be contradicting its own screen — and the screen is not the enforcement,
 genuinely be bookable by anyone who posted the request directly.
 
 **Adding a code was the obvious move, and it is the wrong one.** `ERROR_CODES` is a closed enum
-shared by the contract, every backend throw site, and `libs/i18n`'s Czech catalogue. Widening it
+shared by the contract, every backend throw site, and `libs/shared/i18n`'s Czech catalogue. Widening it
 means touching three libs and Task 17's shipped copy for a case Task 13's own brief does not list
 among its rules — a large blast radius for a small fact.
 
@@ -42,7 +42,7 @@ service layer. A schema also cannot see who is calling, and two of the three rul
 
 ## How
 
-- `apps/api/src/reservations/reservation-policy.ts` — `assertBusinessDay`, called from
+- `apps/lets-park/api/src/reservations/reservation-policy.ts` — `assertBusinessDay`, called from
   `assertMayTakeDay` **before** the window check, so a Saturday in a locked month is reported as
   the Saturday. That is the fact that will still be true next month.
 - `isBusinessDay` from `@lets-park/shared-types` is the only implementation of "business day";

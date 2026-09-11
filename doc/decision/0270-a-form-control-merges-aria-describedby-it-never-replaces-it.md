@@ -38,7 +38,7 @@ helper exported from `field.tsx`.
 ## How
 
 - `mergeDescribedBy(...values)` in
-  `libs/design-system/primitives/src/lib/field/field.tsx` joins the non-empty values
+  `libs/shared/design-system/primitives/src/lib/field/field.tsx` joins the non-empty values
   and returns `undefined` when nothing is left, so React drops the attribute
   rather than emitting `aria-describedby=""` — a description that resolves to
   nothing is worse than no description.

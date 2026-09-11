@@ -3,7 +3,7 @@
 ## What
 
 A new, **deliberately separate** token module was created,
-`libs/design-system/tokens/src/lib/controls.ts`, with its own group of CSS
+`libs/shared/design-system/tokens/src/lib/controls.ts`, with its own group of CSS
 variables:
 
 - `--control-h-sm|md|lg|xl` = `36px | 40px | 48px | 56px` – a shared height scale
@@ -65,7 +65,7 @@ is noticeable immediately.
   `p-control-lg`. The primitives consume them as an arbitrary value:
   `h-[var(--control-h-lg)]`.
 - The step → padding → font-size mapping lives in a single place
-  (`libs/design-system/primitives/src/lib/control-size.ts`), so the four
+  (`libs/shared/design-system/primitives/src/lib/control-size.ts`), so the four
   components can't drift apart.
 
 ## Risk

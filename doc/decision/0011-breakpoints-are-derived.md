@@ -5,7 +5,7 @@
 ## What
 
 `doc/design/ds/colors_and_type.css` defines no `--breakpoint-*` custom properties
-at all. `libs/design-system/tokens/src/lib/layout.ts` (`BREAKPOINTS`) and
+at all. `libs/shared/design-system/tokens/src/lib/layout.ts` (`BREAKPOINTS`) and
 `assets/theme.css` (`@theme { --breakpoint-* }`) therefore use Tailwind v4's
 default values: `sm:640px, md:768px, lg:1024px, xl:1280px, 2xl:1536px`.
 

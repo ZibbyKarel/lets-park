@@ -1,11 +1,11 @@
 ---
 name: tanstack-query
 description: |
-  This repo's own conventions for TanStack Query v5 in apps/web, layered on
+  This repo's own conventions for TanStack Query v5 in apps/lets-park/web, layered on
   top of general TanStack Query knowledge (the tanstack-skills plugin's
   `tanstack-query` skill, if installed, or https://tanstack.com/query/latest).
 
-  Use when: adding a query or mutation in apps/web, wiring a new provider,
+  Use when: adding a query or mutation in apps/lets-park/web, wiring a new provider,
   deciding on retry/stale-time behavior, or writing a test against the query
   layer.
 
@@ -40,11 +40,11 @@ to this codebase.**
 
 | what                                                                  | where                                                                         |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| the oRPC ↔ TanStack Query bridge (`createApiQueryUtils`)             | `libs/api-client/src/lib/api-query.ts`, exported from `@lets-park/api-client` |
-| the app's `QueryClient` policy (`createQueryClient`)                  | `apps/web/src/shell/query/query-client.ts`                                    |
-| the retry policy (`shouldRetryQuery`, `MAX_QUERY_RETRIES`)            | `apps/web/src/shell/query/retry.ts`                                           |
-| the app's provider wiring                                             | `apps/web/src/app/providers.tsx`                                              |
-| test fixtures (`stubApi`, `rpcPayload`, `contractErrorResponse`, ...) | `apps/web/src/testing/stub-api.ts`                                            |
+| the oRPC ↔ TanStack Query bridge (`createApiQueryUtils`)             | `libs/shared/api-client/src/lib/api-query.ts`, exported from `@lets-park/api-client` |
+| the app's `QueryClient` policy (`createQueryClient`)                  | `apps/lets-park/web/src/shell/query/query-client.ts`                                    |
+| the retry policy (`shouldRetryQuery`, `MAX_QUERY_RETRIES`)            | `apps/lets-park/web/src/shell/query/retry.ts`                                           |
+| the app's provider wiring                                             | `apps/lets-park/web/src/app/providers.tsx`                                              |
+| test fixtures (`stubApi`, `rpcPayload`, `contractErrorResponse`, ...) | `apps/lets-park/web/src/testing/stub-api.ts`                                            |
 
 There is no `libs/query`. Import `useQuery`/`useMutation`/`useQueryClient`/
 `QueryClientProvider` straight from `@tanstack/react-query` — do not look for
@@ -52,7 +52,7 @@ a wrapper, and do not recreate one.
 
 ## Query keys are never written by hand
 
-`createApiQueryUtils(client)` mirrors the contract router (`libs/contract`),
+`createApiQueryUtils(client)` mirrors the contract router (`libs/lets-park/contract`),
 so every procedure gets `queryOptions`, `mutationOptions`, `call`, and every
 branch gets `key()` for partial matching:
 
@@ -115,7 +115,7 @@ three get generic "something went wrong" copy.
 
 ## Retry policy: by HTTP status, not by query vs. mutation defaults
 
-`createQueryClient`'s defaults (`apps/web/src/shell/query/query-client.ts`):
+`createQueryClient`'s defaults (`apps/lets-park/web/src/shell/query/query-client.ts`):
 
 - `staleTime`: 30 s, `gcTime`: 5 min, `refetchOnWindowFocus: false` (realtime
   invalidation arrives over Socket.io, so refocus-refetch is redundant
@@ -140,7 +140,7 @@ caller changing `queries.staleTime` doesn't silently drop `retry` or
 Every query/mutation test in this repo builds a real `RPCLink` and stubs the
 bottom-most `fetch` — never a hand-written fake client, since that would skip
 the transport layer the retry policy and error mapping actually run through.
-`apps/web/src/testing/stub-api.ts` has the fixtures:
+`apps/lets-park/web/src/testing/stub-api.ts` has the fixtures:
 
 ```tsx
 import { stubApi, rpcPayload, contractErrorResponse } from "../../testing/stub-api";
@@ -158,11 +158,11 @@ takes real wall-clock time waiting between attempts.
 
 Where a test needs both a real `QueryClient` and `createApiQueryUtils`
 together (e.g. proving a branch key invalidates its leaves), it must live in
-`apps/web`, not `libs/api-client`: only `apps/web`'s `tsconfig.json` uses
+`apps/lets-park/web`, not `libs/shared/api-client`: only `apps/lets-park/web`'s `tsconfig.json` uses
 `module: esnext`. Building both under a `commonjs`-resolving tsconfig hits the
 dual-package hazard between `@tanstack/react-query`'s CommonJS `require`
 condition and `@orpc/tanstack-query`'s ESM-only `import` condition —
-documented in `doc/decision/0038-*`. `libs/api-client`'s own
+documented in `doc/decision/0038-*`. `libs/shared/api-client`'s own
 `api-query.spec.ts` only covers key shape/stability, deliberately avoiding a
 real `QueryClient` construction.
 

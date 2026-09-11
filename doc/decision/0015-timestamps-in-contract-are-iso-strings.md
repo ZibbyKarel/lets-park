@@ -5,7 +5,7 @@
 ## What
 
 `createdAt` / `updatedAt` and every other timestamp have the schema
-`timestampSchema = z.iso.datetime()` in `libs/contract`, i.e. a **string** in
+`timestampSchema = z.iso.datetime()` in `libs/lets-park/contract`, i.e. a **string** in
 UTC (`2026-08-28T09:15:00.000Z`). Neither `z.date()` nor `z.coerce.date()` is
 used.
 
@@ -34,7 +34,7 @@ That is deliberate: a single wire format, no guessing whether it's `+02:00` or
 
 - The backend serializes timestamps via `Date.prototype.toISOString()`.
 - The frontend only builds a `Date` where it actually needs one (formatting in
-  `libs/i18n`).
+  `libs/shared/i18n`).
 - Prisma returns `Date`; mapping it to a string is mechanical and happens in
   the service layer that assembles the entity into the contract shape.
 

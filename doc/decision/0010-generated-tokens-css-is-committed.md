@@ -4,10 +4,10 @@
 
 ## What
 
-`libs/design-system/tokens/assets/tokens.css` is a **generated** file (from the TS
+`libs/shared/design-system/tokens/assets/tokens.css` is a **generated** file (from the TS
 tokens in `src/lib/*.ts`, via the `generateTokensCss` function), but it is
 **committed to git** and excluded from Prettier formatting via `.prettierignore` —
-the same treatment as `apps/web/next-env.d.ts`.
+the same treatment as `apps/lets-park/web/next-env.d.ts`.
 
 ## Why
 
@@ -19,7 +19,7 @@ the same treatment as `apps/web/next-env.d.ts`.
    (a relative path vs. some `exports` mapping) isn't resolved yet –
    `@lets-park/design-system/tokens` is only a TS `tsconfig.paths` alias for module
    resolution; a CSS `@import`/bundler doesn't know it automatically. How
-   apps/web/Storybook actually import `theme.css` is up to whichever task first
+   apps/lets-park/web/Storybook actually import `theme.css` is up to whichever task first
    consumes this lib — see `doc/design-system.md`.
 2. **Excluded from Prettier.** `generateTokensCss` deliberately reproduces the style
    of the source `doc/design/ds/colors_and_type.css` 1:1 — uppercase hex codes
@@ -34,16 +34,16 @@ the same treatment as `apps/web/next-env.d.ts`.
 
 ## How
 
-- Generator: `libs/design-system/tokens/src/lib/generate-css.ts`
+- Generator: `libs/shared/design-system/tokens/src/lib/generate-css.ts`
   (`generateTokensCss(tokens: DesignTokens): string`), a pure function with no I/O.
-- Runner: `libs/design-system/tokens/scripts/build-tokens-css.ts`, target
+- Runner: `libs/shared/design-system/tokens/scripts/build-tokens-css.ts`, target
   `nx run design-system-tokens:generate-css`.
 - Drift test: `generate-css.spec.ts` reads the committed file from disk
   (`fs.readFileSync`) and compares it with `toBe()` against the output of
   `generateTokensCss(DESIGN_TOKENS)` – no Jest inline snapshot, since that would
   silently get rewritten to match the generator's new output and would never catch
   the generator/TS source drifting from the actual file on disk.
-- `.prettierignore`: `/libs/design-system/tokens/assets/tokens.css`.
+- `.prettierignore`: `/libs/shared/design-system/tokens/assets/tokens.css`.
 - `theme.css` (the hand-written Tailwind bridge in the same folder), by contrast, **is**
   formatted by Prettier as usual – it's a structural file with `var()` references,
   not a copy of raw values.

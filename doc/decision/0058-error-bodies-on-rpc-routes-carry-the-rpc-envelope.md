@@ -26,14 +26,14 @@ output differ, byte for byte, from the handler's for no reason.
 ## Why
 
 **`doc/decision/0039-*` predicted this defect and routed it here.** Its closing section says the
-guard that would catch it "belongs in `apps/api`'s filter spec, asserting the serialised body is
-enveloped — a test that fails today". Task 12 is the first task to own `apps/api`'s filter, so
+guard that would catch it "belongs in `apps/lets-park/api`'s filter spec, asserting the serialised body is
+enveloped — a test that fails today". Task 12 is the first task to own `apps/lets-park/api`'s filter, so
 Task 12 pays it.
 
 The concrete failure: `@orpc/client` deserialises a response by reading `body.json`. Handed a
 bare `{ code: 'FORBIDDEN', status: 403, … }` it finds no `json` key, falls back to synthesising an
 error from the **HTTP status**, and the caller receives a generic error whose `code` was invented
-by the transport rather than the one the API actually sent. `libs/i18n` keys its Czech copy off
+by the transport rather than the one the API actually sent. `libs/shared/i18n` keys its Czech copy off
 `code`. So a user forbidden from an admin screen would have seen a generic failure message, and
 no amount of correctness in the filter's `code` field would have reached them.
 

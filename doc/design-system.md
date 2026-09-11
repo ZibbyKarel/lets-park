@@ -3,10 +3,10 @@
 Tasks 6, 7, 8 and 22 from `doc/implementation-plan.md`. This document describes
 all three layers of the design system:
 
-1. **tokens** (`libs/design-system/src/tokens`) – values,
-2. **primitives** (`libs/design-system/src/primitives`) – the smallest
+1. **tokens** (`libs/shared/design-system/src/tokens`) – values,
+2. **primitives** (`libs/shared/design-system/src/primitives`) – the smallest
    components, built exclusively from those values,
-3. **compounds** (`libs/design-system/src/compounds`) – compositions of
+3. **compounds** (`libs/shared/design-system/src/compounds`) – compositions of
    primitives, e.g. DataTable; documented at the end of this file.
 
 All three are directories of the single Nx project `design-system`, not
@@ -14,11 +14,11 @@ separate projects — see
 `doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
 The dependency direction `tokens → primitives → compounds` is enforced by
 path-scoped `no-restricted-imports` rules in
-`libs/design-system/eslint.config.mjs`, which catch both the alias and a
+`libs/shared/design-system/eslint.config.mjs`, which catch both the alias and a
 relative escape; **compounds may import primitives, never the other way
 around**.
 
-The design system is **domain-free**: nothing in `libs/design-system/**` may
+The design system is **domain-free**: nothing in `libs/shared/design-system/**` may
 know about `ParkingSpot`/`Reservation`/users – not in prop names, not in
 stories. Tokens are purely presentational values; primitives are purely
 presentational components.
@@ -47,7 +47,7 @@ was invented – neither the tooltip nor the toast appears in the design at all.
 ## How the tokens are put together
 
 ```
-libs/design-system/
+libs/shared/design-system/
   src/
     tokens/
       lib/
@@ -135,7 +135,7 @@ the primitives' Storybook, which imports it via a **relative path** –
 `@import '../../tokens/assets/theme.css'` in `.storybook/preview.css`. Reason:
 `@lets-park/design-system/tokens` is only a TS `tsconfig` path alias for
 module resolution in JS/TS; neither CSS `@import` nor bundlers understand it
-automatically. How `theme.css` reaches `apps/web`'s output CSS (a relative
+automatically. How `theme.css` reaches `apps/lets-park/web`'s output CSS (a relative
 path vs. an `exports` mapping in the lib's `package.json`) is decided by
 whichever task first styles the web app:
 
@@ -176,9 +176,9 @@ whichever task first styles the web app:
   that's reserved for `@container` query breakpoints, a different concept.
   Use them directly as a CSS variable, e.g. `max-w-[var(--container)]`.
 - `tailwindcss` and `@tailwindcss/vite` are already in the repo (added by
-  Task 7 for Storybook). The PostCSS/Next.js pipeline in `apps/web` is still
+  Task 7 for Storybook). The PostCSS/Next.js pipeline in `apps/lets-park/web` is still
   outside the scope of this document – it belongs to the task that touches
-  `apps/web`.
+  `apps/lets-park/web`.
 
 ## The occupied-spot car color – why it lives elsewhere
 
@@ -203,7 +203,7 @@ which is why `FONT_FAMILIES.sans` always has a working fallback (`Neue Haas Grot
 
 ---
 
-# Primitives (`libs/design-system/src/primitives`)
+# Primitives (`libs/shared/design-system/src/primitives`)
 
 The entry point `@lets-park/design-system/primitives`, in the `design-system`
 project (tags `type:ui`, `scope:web`). **Fourteen components** in two batches – nine
@@ -212,7 +212,7 @@ form controls (Task 7) and five overlay/navigation ones (Task 8) – each with a
 across 17 suites).
 
 ```
-libs/design-system/
+libs/shared/design-system/
   .storybook/           – one Storybook for all layers (see below)
   src/
     primitives/
@@ -593,7 +593,7 @@ prevent.
 
 ---
 
-# Compounds (`libs/design-system/src/compounds`)
+# Compounds (`libs/shared/design-system/src/compounds`)
 
 The entry point `@lets-park/design-system/compounds`, in the `design-system`
 project (tags `type:ui`, `scope:web`). **Three components** (Task 22), each with a story and a Jest +
@@ -602,10 +602,10 @@ Testing Library spec alongside it (47 tests across 3 suites).
 This is the third layer: it composes primitives into larger, still
 **domain-free** pieces. Compounds may import primitives; primitives must never
 import compounds. The path-scoped `no-restricted-imports` blocks in
-`libs/design-system/eslint.config.mjs` enforce the direction.
+`libs/shared/design-system/eslint.config.mjs` enforce the direction.
 
 ```
-libs/design-system/
+libs/shared/design-system/
   src/
     compounds/
       lib/
@@ -631,7 +631,7 @@ libs/design-system/
   optional with a `'Zavřít'` default (`modal.tsx:45,78`), and is the next
   candidate. These three used to default to
   `'Žádná data'` / `'Potvrdit'` / `'Zrušit'`, which put user-visible Czech
-  outside `libs/i18n` at any call site that omitted them; nothing here may
+  outside `libs/shared/i18n` at any call site that omitted them; nothing here may
   call `useTranslations`, so requiring the prop is what keeps the copy in app
   code, and the compiler asks for it.
 - **The swap-don't-layer rule from the primitives still applies.** A sorted vs.
@@ -759,5 +759,5 @@ and without addons, for the reasons in
    `npx nx run design-system:build-storybook`.
 
 If the compound needs a primitive that does not exist, that primitive belongs in
-`libs/design-system/src/primitives` — not built locally here and left. Building it
+`libs/shared/design-system/src/primitives` — not built locally here and left. Building it
 here is acceptable only as a deliberate, recorded step, with promotion flagged.

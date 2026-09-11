@@ -2,7 +2,7 @@
 
 ## What
 
-`apps/web/src/app/api/health/route.ts` answers `200` with
+`apps/lets-park/web/src/app/api/health/route.ts` answers `200` with
 
 ```json
 { "status": "ok", "checks": { "api": { "status": "up" } } }

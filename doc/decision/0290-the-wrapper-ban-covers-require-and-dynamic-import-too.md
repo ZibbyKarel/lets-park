@@ -11,7 +11,7 @@ lib's own override so that a wrapper may still reach the package it wraps.
 
 The mandatory-wrapper rule is one of `plan.md`'s non-negotiables, and
 `no-restricted-imports` was enforcing exactly one of the three ways to reach a
-package. Measured, on a throwaway `apps/web/src/__probe__.ts`:
+package. Measured, on a throwaway `apps/lets-park/web/src/__probe__.ts`:
 
 ```ts
 export const a = require('socket.io-client');
@@ -58,9 +58,9 @@ Probed, then deleted:
 
 | Probe | Result |
 | --- | --- |
-| `require`/`import()` of `socket.io-client`, `next-auth`, `@tanstack/react-query` from `apps/web` | **4 errors**, exit 1, one per call |
-| `require('socket.io-clientele')`, `import('next-authentic')` from `apps/web` | clean, exit 0 — no prefix over-match |
-| `require`/`import()` of `socket.io-client` inside `libs/realtime-client` | clean, exit 0 — the owner is still exempt |
+| `require`/`import()` of `socket.io-client`, `next-auth`, `@tanstack/react-query` from `apps/lets-park/web` | **4 errors**, exit 1, one per call |
+| `require('socket.io-clientele')`, `import('next-authentic')` from `apps/lets-park/web` | clean, exit 0 — no prefix over-match |
+| `require`/`import()` of `socket.io-client` inside `libs/lets-park/realtime-client` | clean, exit 0 — the owner is still exempt |
 
 ## Risk
 
@@ -68,7 +68,7 @@ Probed, then deleted:
   later flat-config block that sets it replaces this list outright. That is why
   the helper is exported and why the wrapper-lib overrides spread it, and it is
   the same trap the comment on `restrictWrappedLibraries` already describes.
-  The three `libs/design-system/*` configs set only `no-restricted-imports`, so
+  The three `libs/shared/design-system/*` configs set only `no-restricted-imports`, so
   they inherit this untouched — which is correct: none of them owns a wrapped
   package.
 - **`require.resolve('pkg')` is not matched**, nor is a require through a

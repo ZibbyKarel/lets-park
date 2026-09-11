@@ -1,6 +1,6 @@
 # 0062 – The cell-lock heartbeat uses Socket.io's ack timeout, so a lost acknowledgement cannot end it
 
-**Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/realtime-client`, fix round 1)
+**Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/lets-park/realtime-client`, fix round 1)
 
 ## What
 
@@ -77,7 +77,7 @@ server's TTL is what releases the hold.
 
 ## How it is verified
 
-`libs/realtime-client/src/lib/cell-lock.spec.tsx`, four new tests, all driving a real
+`libs/lets-park/realtime-client/src/lib/cell-lock.spec.tsx`, four new tests, all driving a real
 `socket.io-client` socket whose transport is replaced but whose acknowledgement registry and
 ack timer are its own. Jest fake timers are installed before the manager is constructed, so the
 `setTimeoutFn` the manager binds is the fake one and the library's real ack timer is what the

@@ -1,6 +1,6 @@
 # 0037 – `libs/query`'s tests run on Node's fetch, not jsdom's, via a custom Jest environment
 
-**Date:** 2026-09-02 · **Status:** accepted · **Task:** 19 (`libs/api-client`, `libs/query`)
+**Date:** 2026-09-02 · **Status:** accepted · **Task:** 19 (`libs/shared/api-client`, `libs/query`)
 
 ## What
 
@@ -15,8 +15,8 @@ TextEncoder, TextDecoder, structuredClone,
 AbortController, AbortSignal
 ```
 
-Scope is this one lib. `libs/i18n` and `libs/form` render components, touch no network, and
-keep plain `jsdom`. `libs/api-client` runs on `testEnvironment: 'node'` and needs none of it.
+Scope is this one lib. `libs/shared/i18n` and `libs/shared/form` render components, touch no network, and
+keep plain `jsdom`. `libs/shared/api-client` runs on `testEnvironment: 'node'` and needs none of it.
 
 ## Why
 

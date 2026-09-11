@@ -2,7 +2,7 @@
 
 ## What
 
-Storybook 10 for `libs/design-system/primitives` is set up **by hand**:
+Storybook 10 for `libs/shared/design-system/primitives` is set up **by hand**:
 
 - `.storybook/main.ts` – `@storybook/react-vite`, `viteFinal` adds
   `@tailwindcss/vite`, `addons: []`,

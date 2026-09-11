@@ -1,9 +1,9 @@
 # Wrapper layers
 
-Founded by Task 18 (`libs/form`), the first of a run of Tasks 18–22 that progressively
-establishes the rest of `WRAPPED_LIBRARIES`. Task 19 added `libs/api-client` and
-`libs/query`, Task 20 `libs/auth`, Task 21 `libs/realtime-client`, Task 14
-`libs/calendar-export` — the one backend wrapper. Each wrapper adds its own section here, not
+Founded by Task 18 (`libs/shared/form`), the first of a run of Tasks 18–22 that progressively
+establishes the rest of `WRAPPED_LIBRARIES`. Task 19 added `libs/shared/api-client` and
+`libs/query`, Task 20 `libs/lets-park/auth`, Task 21 `libs/lets-park/realtime-client`, Task 14
+`libs/lets-park/calendar-export` — the one backend wrapper. Each wrapper adds its own section here, not
 a new file. `libs/query` was later removed (`TODO.md` item 6, `doc/decision/0308-*`):
 `@tanstack/react-query` is no longer wrapped, since this workspace only ever had one
 consumer for it.
@@ -16,24 +16,24 @@ exactly one **wrapper lib** — the single place in the whole workspace allowed 
 
 | forbidden package       | wrapper lib                            | tag                      |
 | ----------------------- | -------------------------------------- | ------------------------ |
-| `react-hook-form`       | `libs/form` (done, Task 18)            | `type:util`, `scope:web` |
-| `@tanstack/react-table` | `libs/design-system/src/compounds`     | `type:ui`, `scope:web`   |
-| `@orpc/client`          | `libs/api-client` (done, Task 19)      | `type:util`, `scope:web` |
-| `socket.io-client`      | `libs/realtime-client`                 | `type:util`, `scope:web` |
-| `next-auth`             | `libs/auth`                            | `type:util`, `scope:web` |
-| `ical-generator`        | `libs/calendar-export` (done, Task 14) | `type:util`, `scope:api` |
-| `next-intl`             | `libs/i18n` (done, Task 17)            | `type:util`, `scope:web` |
+| `react-hook-form`       | `libs/shared/form` (done, Task 18)            | `type:util`, `scope:web` |
+| `@tanstack/react-table` | `libs/shared/design-system/src/compounds`     | `type:ui`, `scope:web`   |
+| `@orpc/client`          | `libs/shared/api-client` (done, Task 19)      | `type:util`, `scope:web` |
+| `socket.io-client`      | `libs/lets-park/realtime-client`                 | `type:util`, `scope:web` |
+| `next-auth`             | `libs/lets-park/auth`                            | `type:util`, `scope:web` |
+| `ical-generator`        | `libs/lets-park/calendar-export` (done, Task 14) | `type:util`, `scope:api` |
+| `next-intl`             | `libs/shared/i18n` (done, Task 17)            | `type:util`, `scope:web` |
 
 The reason for the ban isn't "save a few characters of import" but three concrete things a
 direct import anywhere else would break:
 
 1. **The third party's version and behavior stay swappable in exactly one place.** If
-   `apps/web` called `react-hook-form` directly in ten places, a major-version upgrade or a
-   swap for a different library (`libs/form` internally uses `@hookform/resolvers`) would
+   `apps/lets-park/web` called `react-hook-form` directly in ten places, a major-version upgrade or a
+   swap for a different library (`libs/shared/form` internally uses `@hookform/resolvers`) would
    mean ten places to fix instead of one.
 2. **The contract remains the single source of truth for the shape of the data.** The
-   wrapper is the bridge between the Zod schema (`libs/contract`) and the rest of the stack —
-   `libs/form` takes a Zod schema and validates against it, `libs/api-client` will take the
+   wrapper is the bridge between the Zod schema (`libs/lets-park/contract`) and the rest of the stack —
+   `libs/shared/form` takes a Zod schema and validates against it, `libs/shared/api-client` will take the
    oRPC contract. A direct import of the library would bypass that bridge and open the door
    to hand-written validation that drifts from the contract over time.
 3. **The boundary can be enforced mechanically, not just by review.** `eslint.config.mjs`
@@ -54,24 +54,34 @@ pair (forbidden package → owning directory). It generates:
 This one map is also why `doc/workspace.md` warns about "silently does nothing": both rules
 (the ban and the exception) draw from the same data, so they can't drift apart, but
 **`basePath: workspaceRoot`** is still required on both — Nx runs `eslint .` with cwd set to
-the project's directory, so a workspace-relative glob (`libs/form/**`) without `basePath`
+the project's directory, so a workspace-relative glob (`libs/shared/form/**`) without `basePath`
 compares against the wrong path and never matches.
+
+**The owner is one directory, never a namespace.** Since the workspace was namespaced to
+host two applications (`doc/decision/0310-*`), the wrapper libs are split across
+`libs/shared/` and `libs/lets-park/`. Collapsing those owner globs to `libs/shared/**` to
+"simplify" the map would hand **every** shared lib **every** package's exception — and
+`npm run lint` would still pass, because the ban and the exception would still be generated
+from the same data, just from data that is now wrong. That is the "silently does nothing"
+failure in its purest form. Each owner stays the specific directory that owns its package,
+and the way to check it is a probe, not a green lint: put an import of a package a lib does
+**not** own into that lib and confirm the error names the right wrapper.
 
 Besides banning the package import, wrapper libs also carry the Nx `type:util` dimension,
 whose `allowedExternalImports` is the union of every package in `WRAPPED_LIBRARIES` plus
 their React/Next peer dependencies (`doc/workspace.md`) — **exactly who is allowed to import
-whom** (that `libs/form` may import only `react-hook-form`, not `next-auth`) is guarded only
+whom** (that `libs/shared/form` may import only `react-hook-form`, not `next-auth`) is guarded only
 by the `no-restricted-imports` override, because the Nx dimension alone can't make that
 distinction (every wrapper lib carries the same tag at once).
 
-### `libs/form` and the design system — why this isn't another exception in the same map
+### `libs/shared/form` and the design system — why this isn't another exception in the same map
 
-`libs/form` is unusual in one respect: `FormField` has to "connect" a Zod error and a
+`libs/shared/form` is unusual in one respect: `FormField` has to "connect" a Zod error and a
 design-system primitive (`Input`/`Select`/`Checkbox`), but it **does not import the design
 system** in its production code — it does this as a generic render prop
 (`doc/decision/0030-*`). Composing it with a concrete primitive is left to the caller
-(the future `apps/web`), the same way as any other design-system composition. The only
-place where `libs/form` needs the design system at all is its own demonstration test
+(the future `apps/lets-park/web`), the same way as any other design-system composition. The only
+place where `libs/shared/form` needs the design system at all is its own demonstration test
 (`app-form.spec.tsx`) — and that has its own narrowly targeted ESLint override
 (`doc/decision/0030-*`), not an extension of `WRAPPED_LIBRARIES`.
 
@@ -148,13 +158,13 @@ function BookingForm() {
 ```
 
 The same pattern (with tests over `Checkbox` too) is verified in
-`libs/form/src/lib/app-form.spec.tsx` — this example is drawn directly from it, just with the
+`libs/shared/form/src/lib/app-form.spec.tsx` — this example is drawn directly from it, just with the
 parking domain instead of the generic demo schema.
 
 ## How to add another wrapper lib (Tasks 20–22)
 
 1. **Generate the lib** the same way as any other (`doc/workspace.md`, "How to add a new
-   lib"). Tags: `type:util`, `scope:web` (or `scope:api` for `libs/calendar-export`).
+   lib"). Tags: `type:util`, `scope:web` (or `scope:api` for `libs/lets-park/calendar-export`).
 2. **Add an entry to `WRAPPED_LIBRARIES`** in `eslint.config.mjs` — `owner` (the lib's
    directory) and `use` (the import path). The global ban and the exception for the new
    wrapper are generated automatically, nothing else needs to be written.
@@ -176,7 +186,7 @@ parking domain instead of the generic demo schema.
 6. `npm run lint && npm run typecheck && npm run test` + `npm run build`, add a section
    here.
 
-## `libs/form` tests
+## `libs/shared/form` tests
 
 | file                    | what it verifies                                                                                                                                                                                                                                                  |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -184,14 +194,14 @@ parking domain instead of the generic demo schema.
 | `app-form.spec.tsx`     | the same, on real `Input`/`Select`/`Checkbox` from `@lets-park/design-system/primitives` — three fields, three different primitives, one Zod schema; plus a test that reads its own source file and verifies there is no direct import of `react-hook-form` in it |
 
 Zod in the tests is always a local `z.object(...)` schema, not an import from
-`@lets-park/contract` — `libs/form` is domain-independent, and `@orpc/contract` (ESM-only,
+`@lets-park/contract` — `libs/shared/form` is domain-independent, and `@orpc/contract` (ESM-only,
 see `doc/decision/0020-*`) would add a transform to its Jest config that this task doesn't
 need. So there is no fourth copy of the ESM-transform block (`doc/decision/0020-*`, `0025-next-intl-esm-jest-transform`)
-in `libs/form/jest.config.cts`, nor was one needed.
+in `libs/shared/form/jest.config.cts`, nor was one needed.
 
 ---
 
-## `libs/api-client` — the oRPC client (Task 19)
+## `libs/shared/api-client` — the oRPC client (Task 19)
 
 `@lets-park/api-client` is the only place in the workspace allowed to import `@orpc/client`.
 It exports exactly two things, plus their types:
@@ -201,28 +211,28 @@ import { createApiClient, toContractError } from "@lets-park/api-client";
 
 const api = createApiClient({
   url: "https://example.test/rpc",
-  getAccessToken: () => session?.accessToken, // libs/auth, Task 20
+  getAccessToken: () => session?.accessToken, // libs/lets-park/auth, Task 20
 });
 
 const overview = await api.overview.day({ date: "2026-09-15" });
 ```
 
-`ApiClient` is `ContractClient` — **derived from `libs/contract`**, not written out. Every
+`ApiClient` is `ContractClient` — **derived from `libs/lets-park/contract`**, not written out. Every
 procedure, input, output and declared error code is regenerated from the Zod schemas on each
 build, so it cannot drift from the backend the way a hand-written client would, and no
 endpoint that the contract does not declare can be called at all.
 
-The `ContractRouterClient<Contract>` application lives in `libs/contract` rather than here, so
+The `ContractRouterClient<Contract>` application lives in `libs/lets-park/contract` rather than here, so
 that `@orpc/contract` stays allow-listed for `type:contract` alone. `NPM_ALLOWLIST` hangs off
-the `type:` tag, which is shared by every wrapper lib, so granting it to `libs/api-client`
-would have granted it to `libs/form` and `libs/i18n` too — see `doc/decision/0040-*`.
+the `type:` tag, which is shared by every wrapper lib, so granting it to `libs/shared/api-client`
+would have granted it to `libs/shared/form` and `libs/shared/i18n` too — see `doc/decision/0040-*`.
 
 ### The access token is a provider, not a string
 
 `getAccessToken` is a function (sync or async) and is called **per request**, so a token
 refreshed after the client was constructed is picked up. Returning `null`, `undefined` or
 `''` omits the `Authorization` header entirely rather than sending `Bearer undefined` —
-covered by four cases in `api-client.spec.ts`. `libs/auth` (Task 20) supplies the real
+covered by four cases in `api-client.spec.ts`. `libs/lets-park/auth` (Task 20) supplies the real
 implementation; until then any caller can inject one.
 
 ### Reading errors
@@ -234,16 +244,16 @@ if (error?.code === 'SPOT_ALREADY_RESERVED') { … }
 
 `toContractError` recognises a domain error by its **code**, parsed through the contract's
 `errorCodeSchema` — deliberately **not** by oRPC's `isDefinedError`, which narrows on the
-`defined` flag that `apps/api` sets to `false` on every domain error it serialises. Using it
+`defined` flag that `apps/lets-park/api` sets to `false` on every domain error it serialises. Using it
 would reject every real domain error this backend produces. Full reasoning:
 `doc/decision/0039-*`.
 
-> **Known, reproduced and unguarded:** `apps/api`'s filter writes its error body at the top
+> **Known, reproduced and unguarded:** `apps/lets-park/api`'s filter writes its error body at the top
 > level, but the RPC protocol reads it out of a `{ json, meta }` envelope — so a 409
 > `SPOT_ALREADY_RESERVED` currently arrives as `CONFLICT`, which is also a member of
 > `ERROR_CODES` and therefore does _not_ fail closed. **No test watches for this**; the guard
-> that would work belongs in `apps/api`'s filter spec and does not exist yet.
-> `doc/decision/0039-*` states the situation and why `libs/api-client` cannot guard it.
+> that would work belongs in `apps/lets-park/api`'s filter spec and does not exist yet.
+> `doc/decision/0039-*` states the situation and why `libs/shared/api-client` cannot guard it.
 
 `null` means "not a domain error" and covers a transport failure, an unknown code, and a plain
 thrown value alike — none of them has localized copy keyed to a code, so all three are
@@ -257,8 +267,8 @@ policy (below).
 it: this workspace only ever had one consumer, and the wrapper bought no swappability that
 consumer wasn't already getting for free. Feature code now imports
 `useQuery`/`useMutation`/`useQueryClient`/`QueryClientProvider` straight from
-`@tanstack/react-query`; the oRPC-to-TanStack-Query bridge lives in `libs/api-client`, and the
-app's `QueryClient` policy lives in `apps/web/src/shell/query/`:
+`@tanstack/react-query`; the oRPC-to-TanStack-Query bridge lives in `libs/shared/api-client`, and the
+app's `QueryClient` policy lives in `apps/lets-park/web/src/shell/query/`:
 
 ```tsx
 import { useQuery, useMutation, useQueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -275,7 +285,7 @@ function DayOverview() {
 }
 ```
 
-**Query keys are still never written by hand.** `createApiQueryUtils` (`libs/api-client`,
+**Query keys are still never written by hand.** `createApiQueryUtils` (`libs/shared/api-client`,
 built on `@orpc/tanstack-query`) mirrors the contract router, so each leaf carries `queryKey`,
 `queryOptions`, `mutationOptions` and `call`, and each branch carries `key()` for partial
 matching. Invalidating "everything about the day overview" is
@@ -321,37 +331,37 @@ error than the original.
 | file                                                  | what it verifies                                                                                                                                                                                                                                                                                                                                      |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `api-client/src/lib/api-client.spec.ts`               | the URL, method and payload a contract procedure puts on the wire; nested admin paths; the `Authorization` header across five provider cases including per-request re-reads                                                                                                                                                                           |
-| `api-client/src/lib/errors.spec.ts`                   | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; the `defined: false` case that `isDefinedError` would reject; and one test documenting oRPC's own envelope behaviour (which is _not_ a guard on `apps/api` — see the note above) |
+| `api-client/src/lib/errors.spec.ts`                   | a domain error maps onto its contract code/status/details; a sweep over all twelve `ERROR_CODES`; `null` for an unknown code, a throttled 429 and a network failure; the `defined: false` case that `isDefinedError` would reject; and one test documenting oRPC's own envelope behaviour (which is _not_ a guard on `apps/lets-park/api` — see the note above) |
 | `api-client/src/lib/api-query.spec.ts`                | key stability (same input, across two util trees) and key distinctness, without constructing a real `QueryClient` (see the note below on why)                                                                                                                                                                                                         |
-| `apps/web/src/shell/query/query-client.spec.ts`       | the shipped defaults, override merging, and the retry policy counted in **requests that reached the transport** — one attempt for each of the twelve codes and for a 429, three for a 5xx and for an unreachable server; plus the two invalidation tests proving a branch key really invalidates its leaves through the cache's own matcher           |
-| `apps/web/src/shell/query/query-integration.spec.tsx` | a real component reading, mutating and invalidating through `@tanstack/react-query` and `@lets-park/api-client` together, end to end                                                                                                                                                                                                                  |
+| `apps/lets-park/web/src/shell/query/query-client.spec.ts`       | the shipped defaults, override merging, and the retry policy counted in **requests that reached the transport** — one attempt for each of the twelve codes and for a 429, three for a 5xx and for an unreachable server; plus the two invalidation tests proving a branch key really invalidates its leaves through the cache's own matcher           |
+| `apps/lets-park/web/src/shell/query/query-integration.spec.tsx` | a real component reading, mutating and invalidating through `@tanstack/react-query` and `@lets-park/api-client` together, end to end                                                                                                                                                                                                                  |
 
 Every one of these drives a **real** `RPCLink` with only the bottom-most `fetch` stubbed. A
 hand-written fake client would skip the transport, which is precisely where the errors under
-test are produced. `apps/web/jest.config.cts` already ships the custom Jest environment this
+test are produced. `apps/lets-park/web/jest.config.cts` already ships the custom Jest environment this
 needs (jsdom + Node's fetch/stream globals; `doc/decision/0037-*`), which is also why the
 tests that construct a real `QueryClient` next to the `@orpc/tanstack-query` bridge live in
-`apps/web` rather than `libs/api-client`: only `apps/web`'s `tsconfig.json` uses `module:
+`apps/lets-park/web` rather than `libs/shared/api-client`: only `apps/lets-park/web`'s `tsconfig.json` uses `module:
 esnext`, and building both together under a `commonjs`-resolving tsconfig is the dual-package
 hazard `doc/decision/0038-*` documents. `doc/decision/0308-*` has the full split.
 
 ### One allow-list addition, and one deliberately refused
 
 `NPM_ALLOWLIST.util` in `eslint.config.mjs` carries one entry for `@orpc/tanstack-query`,
-the bridge `libs/api-client` is built on. It does not belong in `WRAPPED_LIBRARIES` for the same
+the bridge `libs/shared/api-client` is built on. It does not belong in `WRAPPED_LIBRARIES` for the same
 reason `@hookform/resolvers` doesn't — nothing could be imported _instead_ of it, it only
 makes sense paired with a package that is already wrapped. Unlike `@hookform/resolvers`, it no
 longer pairs with a wrapped package at all: `@tanstack/react-query` itself stopped being
 wrapped in the same change (`doc/decision/0308-*`), and the allow-list entry stayed because
-`libs/api-client`'s bridge (`api-query.ts`) still needs it.
+`libs/shared/api-client`'s bridge (`api-query.ts`) still needs it.
 
-`@orpc/contract` was **not** added, although `libs/api-client` needs `ContractRouterClient`.
+`@orpc/contract` was **not** added, although `libs/shared/api-client` needs `ContractRouterClient`.
 `NPM_ALLOWLIST` hangs off the `type:` tag, which every wrapper lib shares, so the entry would
-have handed the contract builder to `libs/form`, `libs/i18n` and every wrapper still to come —
+have handed the contract builder to `libs/shared/form`, `libs/shared/i18n` and every wrapper still to come —
 undoing the narrowness `NPM_ALLOWLIST.contract` is documented to have (`doc/decision/0007-*`).
-`libs/contract` applies the generic and exports `ContractClient` instead: `doc/decision/0040-*`.
+`libs/lets-park/contract` applies the generic and exports `ContractClient` instead: `doc/decision/0040-*`.
 
-## `libs/auth` — next-auth v5 / Auth.js (Task 20)
+## `libs/lets-park/auth` — next-auth v5 / Auth.js (Task 20)
 
 `@lets-park/auth` is the only place in the workspace allowed to import `next-auth` —
 including `next-auth/react`, `next-auth/jwt` and `next-auth/providers/okta`, all of which the
@@ -368,7 +378,7 @@ including `next-auth/react`, `next-auth/jwt` and `next-auth/providers/okta`, all
 | `@lets-park/auth`        | Next.js server runtime | `createAuth`, `OKTA_PROVIDER_ID`, and the types `Auth` and `AuthOptions`                                    |
 | `@lets-park/auth/client` | browser                | `AuthProvider`, `useRequireAuth`, `useAccessTokenProvider`, and `useSession`/`signIn`/`signOut` re-exported |
 
-There is exactly one way in on the server side, and it is `createAuth`: one call in `apps/web`
+There is exactly one way in on the server side, and it is `createAuth`: one call in `apps/lets-park/web`
 produces the route handlers, the universal `auth()`, server-side `signIn`/`signOut` and a
 `getAccessToken` ready to hand to `createApiClient`. `OKTA_PROVIDER_ID` sits beside it because
 the sign-in page has to name the provider it dials. Everything the lib is assembled from —
@@ -381,14 +391,14 @@ reach them through `./lib/config`, `./lib/refresh`, `./lib/revocation` and
 
 The split is the same idea as `@lets-park/contract` / `@lets-park/contract/realtime`: Auth.js's
 server half pulls in route handlers and `next/server`, which have no business in a browser
-bundle. Verified with a temporary `apps/web` page — a Server Component importing
+bundle. Verified with a temporary `apps/lets-park/web` page — a Server Component importing
 `@lets-park/auth` beside a `'use client'` component importing `@lets-park/auth/client` — built
 by `nx build web` before being deleted.
 
 ### Wiring it up (Task 23 does this for real)
 
 ```ts
-// apps/web/src/auth.ts
+// apps/lets-park/web/src/auth.ts
 import { createAuth } from "@lets-park/auth";
 import { validateWebEnv } from "./env";
 
@@ -402,21 +412,21 @@ export const { handlers, auth, signIn, signOut, getAccessToken } = createAuth({
   signInPath: "/login", // optional
 });
 
-// apps/web/src/app/api/auth/[...nextauth]/route.ts
+// apps/lets-park/web/src/app/api/auth/[...nextauth]/route.ts
 export const { GET, POST } = handlers;
 
-// apps/web/middleware.ts
+// apps/lets-park/web/middleware.ts
 export { auth as middleware } from "./src/auth";
 ```
 
 `createAuth` reads **no** environment variable of its own — Auth.js's `AUTH_SECRET` /
 `AUTH_OKTA_ID` / `AUTH_OKTA_SECRET` inference is deliberately bypassed so that
-`apps/web/src/env.ts` stays the single schema deciding which variables exist. A test
+`apps/lets-park/web/src/env.ts` stays the single schema deciding which variables exist. A test
 constructs the instance with all of them deleted from `process.env`.
 
 ### The token seam
 
-`createAuth().getAccessToken` **is** the `AccessTokenProvider` that `libs/api-client` was
+`createAuth().getAccessToken` **is** the `AccessTokenProvider` that `libs/shared/api-client` was
 built around in Task 19 — that indirection is what keeps the two libs from importing each
 other's third-party package:
 
@@ -522,7 +532,7 @@ refresher rather than module-global precisely so that no test-only reset hook wa
 deliberately not allow-listed either: every type this lib needs is re-exported by `next-auth`
 itself (`Session`, `Account`, `NextAuthConfig`) or by `next-auth/jwt` (`JWT`).
 
-## `libs/realtime-client` — Socket.io (Task 21)
+## `libs/lets-park/realtime-client` — Socket.io (Task 21)
 
 `@lets-park/realtime-client` is the only place in the workspace allowed to import
 `socket.io-client`, and within it, exactly one file does: `src/lib/socket.ts`. It is a
@@ -535,7 +545,7 @@ shape written down twice.
 
 | export                | what it is                                                                                                                                                                         |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RealtimeProvider`    | the one connection, in context. Rendered once, in `apps/web`'s provider boundary                                                                                                   |
+| `RealtimeProvider`    | the one connection, in context. Rendered once, in `apps/lets-park/web`'s provider boundary                                                                                                   |
 | `useRealtime`         | **reads** the connection — `{ status, reconnect, reportInvalidPayload }`. Throws outside a provider rather than silently doing nothing                                             |
 | `RealtimeStatus`      | `connecting \| connected \| disconnected \| rejected`. `rejected` is a refused handshake: terminal for that socket, and the one status a UI can offer an action on (`reconnect()`) |
 | `useRealtimeEvent`    | one server → client event, payload already parsed against its contract schema                                                                                                      |
@@ -553,7 +563,7 @@ provider.
 `createRealtimeSocket`, `toHandshakeAuth`, `parseServerEvent`, `parseAck`, the cell-lock
 timing constants and the two delay functions are withheld for the same reason, plus a sharper
 one: they traffic in `socket.io-client`'s `Socket`, which is the single object this whole
-wrapper exists to keep out of `apps/web`. The ESLint ban is on the **import**, and a
+wrapper exists to keep out of `apps/lets-park/web`. The ESLint ban is on the **import**, and a
 re-exported type walks straight past it — publishing the factory would have handed the app the
 banned object through the front door. The lib's own specs reach all of it through
 `./lib/socket`, `./lib/connection`, `./lib/validation` and `./lib/timing`.
@@ -561,7 +571,7 @@ banned object through the front door. The lib's own specs reach all of it throug
 `useRealtime` returns `RealtimeConnection`, which does **not** name the socket. The provider
 still puts one into context at runtime — `RealtimeInternals` is what the hooks inside this lib
 actually read — but neither that interface nor `useRealtimeInternals` leaves the barrel, so
-app code has no type to cast to and no hook to reach it with. Every consumer in `apps/web`
+app code has no type to cast to and no hook to reach it with. Every consumer in `apps/lets-park/web`
 destructures `status` and `reconnect` and nothing else, which is what the narrower type now
 says out loud.
 
@@ -597,26 +607,26 @@ cell lock's three guarantees. Only what is specific to _being a wrapper_ is repe
 
 ### The token seam is imported, not redeclared
 
-`AccessTokenProvider` is defined once, in `libs/api-client`, and both `libs/auth` (which
-produces one) and `libs/realtime-client` (which consumes one) import it from there. That is
+`AccessTokenProvider` is defined once, in `libs/shared/api-client`, and both `libs/lets-park/auth` (which
+produces one) and `libs/lets-park/realtime-client` (which consumes one) import it from there. That is
 deliberate: the HTTP client and the socket must not drift into two different ideas of what
 the seam is, because the drift that matters — "the socket takes a string, the client takes a
 function" — is exactly what would make a long-lived socket pin an expired token.
 
 It is an `import type`, so nothing from `@orpc` reaches the realtime bundle or the Jest
 runtime. It does create a workspace edge (`realtime-client → api-client`), which
-`type:util → type:util` permits and which forms no cycle: `libs/auth` also depends on
-`libs/api-client`, and `libs/realtime-client` does not depend on `libs/auth`.
+`type:util → type:util` permits and which forms no cycle: `libs/lets-park/auth` also depends on
+`libs/shared/api-client`, and `libs/lets-park/realtime-client` does not depend on `libs/lets-park/auth`.
 
 ### No allow-list change, and no `eslint.config.mjs` change at all
 
-`WRAPPED_LIBRARIES` already named `libs/realtime-client` as `socket.io-client`'s owner, so
+`WRAPPED_LIBRARIES` already named `libs/lets-park/realtime-client` as `socket.io-client`'s owner, so
 both the global ban and this lib's exemption were generated before the lib existed. Nothing
-was added to `NPM_ALLOWLIST`, and `libs/realtime-client/eslint.config.mjs` is the generator's
+was added to `NPM_ALLOWLIST`, and `libs/lets-park/realtime-client/eslint.config.mjs` is the generator's
 default — it sets **no** `no-restricted-imports` of its own, so the root's copy is not
 replaced. (That rule is a single rule: a lib-local config that sets it wins outright and
 silently switches the wrapper ban off for that lib. Every block in
-`libs/design-system/eslint.config.mjs` spreads `restrictWrappedLibraries().patterns`
+`libs/shared/design-system/eslint.config.mjs` spreads `restrictWrappedLibraries().patterns`
 back in for exactly that reason.)
 
 `socket.io-parser` was **not** allow-listed either, although the test fixture needs
@@ -632,11 +642,11 @@ probe files were written, linted, and deleted.
 
 | probe                                                                  | expected                  | result                                                                                                              |
 | ---------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `libs/realtime-client/src/probe-owner.ts` imports `socket.io-client`   | passes                    | `Successfully ran target lint for project realtime-client`                                                          |
-| `libs/query/src/lib/probe-outsider.ts` imports it                      | fails, naming the wrapper | `Do not import "socket.io-client" directly — use the wrapper lib @lets-park/realtime-client (libs/realtime-client)` |
-| `apps/web/src/probe-app.ts` imports it                                 | fails, naming the wrapper | same message                                                                                                        |
-| `libs/realtime-client/src/probe-allowlist.ts` imports `axios`          | fails                     | `A project tagged with "type:util" is not allowed to import "axios"`                                                |
-| `libs/realtime-client/src/probe-nextauth.ts` imports `next-auth/react` | fails, naming `libs/auth` | `Do not import "next-auth" directly — use the wrapper lib @lets-park/auth (libs/auth)`                              |
+| `libs/lets-park/realtime-client/src/probe-owner.ts` imports `socket.io-client`   | passes                    | `Successfully ran target lint for project realtime-client`                                                          |
+| `libs/query/src/lib/probe-outsider.ts` imports it                      | fails, naming the wrapper | `Do not import "socket.io-client" directly — use the wrapper lib @lets-park/realtime-client (libs/lets-park/realtime-client)` |
+| `apps/lets-park/web/src/probe-app.ts` imports it                                 | fails, naming the wrapper | same message                                                                                                        |
+| `libs/lets-park/realtime-client/src/probe-allowlist.ts` imports `axios`          | fails                     | `A project tagged with "type:util" is not allowed to import "axios"`                                                |
+| `libs/lets-park/realtime-client/src/probe-nextauth.ts` imports `next-auth/react` | fails, naming `libs/lets-park/auth` | `Do not import "next-auth" directly — use the wrapper lib @lets-park/auth (libs/lets-park/auth)`                              |
 
 The fourth is the one that would have caught an untagged lib — an untagged project is
 constrained by nothing. The fifth is the one that proves the per-wrapper override really is
@@ -685,18 +695,18 @@ removing the renewal timer, the release emit, and `parseServerEvent` each fail t
 The block `doc/decision/0020-*` describes was **not** copied a sixth time, because nothing on
 this lib's runtime path is ESM-only: `socket.io-client` 4.8.3 is `"type": "commonjs"` with
 both conditions, `zod` is dual, and `@lets-park/contract/realtime` is deliberately free of
-`@orpc` — which `libs/contract/src/realtime/no-orpc.spec.ts` enforces, and which this Jest
+`@orpc` — which `libs/lets-park/contract/src/realtime/no-orpc.spec.ts` enforces, and which this Jest
 config is a second, independent consequence of. `tsconfig.spec.json` does drop the
-generator's `module: commonjs`, the same way `libs/auth`'s and `libs/query`'s do
+generator's `module: commonjs`, the same way `libs/lets-park/auth`'s and `libs/query`'s do
 (`doc/decision/0038-*`): _type_ resolution reaches `@orpc/client` through
 `@lets-park/api-client`, and that package has no `require` condition.
 
 ---
 
-## `libs/calendar-export` — `ical-generator` (Task 14)
+## `libs/lets-park/calendar-export` — `ical-generator` (Task 14)
 
 The only wrapper on the **backend** side of the workspace (`scope:api`), and the only one whose
-consumer is `apps/api` rather than `apps/web`.
+consumer is `apps/lets-park/api` rather than `apps/lets-park/web`.
 
 ```ts
 import { buildReservationCalendar } from "@lets-park/calendar-export";
@@ -705,12 +715,12 @@ const ics: string = buildReservationCalendar({ entries }); // entries: IcsCalend
 ```
 
 That is the entire public surface a caller needs: contract values in, an RFC 5545 document out.
-`ical-generator` does not appear in the signature, in the types, or in `apps/api` at all — which is
+`ical-generator` does not appear in the signature, in the types, or in `apps/lets-park/api` at all — which is
 the property step 4 of the recipe above asks for, and `calendar-pipeline.spec.ts` is the running
 example of it (a real HTTP response, built through the wrapper, parsed by an independent library).
 
 The only other exports are the two pieces a caller legitimately needs to _assert_ on:
-`ICS_CALENDAR_NAME` and `icsEventUid`. `apps/api`'s calendar pipeline suite reads a rendered
+`ICS_CALENDAR_NAME` and `icsEventUid`. `apps/lets-park/api`'s calendar pipeline suite reads a rendered
 feed back and has to name what it expects to find in it; writing those two out a second time
 there is how a test starts passing against the wrong document.
 
@@ -734,7 +744,7 @@ Not "a few characters of import". Two concrete, measured things:
 
 ### Tests
 
-`libs/calendar-export/src/lib/reservation-calendar.spec.ts`, 19 tests. Every assertion reads the
+`libs/lets-park/calendar-export/src/lib/reservation-calendar.spec.ts`, 19 tests. Every assertion reads the
 output back through **`ical.js`** — Mozilla's RFC 5545 parser, a devDependency added for exactly
 this and allowed only in this lib's spec files (`calendarExportSpecDepConstraints`). A test that
 compares a generator's output to a template written by the same author proves the template equals
@@ -746,7 +756,7 @@ The three kinds the recipe asks for:
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | the wrapper can be used               | the whole suite calls `buildReservationCalendar` through `@lets-park/calendar-export`'s public API                                                                                                                     |
 | it behaves according to what it wraps | RFC 5545 conformance: mandatory `VERSION`/`PRODID`, `VALUE=DATE` bounds with an exclusive `DTEND`, `TEXT` escaping of `,` `;` `\`, 75-octet line folding under Czech diacritics, and a parse → re-serialise round trip |
-| app code needs no direct import       | `apps/api/src/calendar/` contains no `ical-generator` import; `calendar-pipeline.spec.ts` fetches the real endpoint and parses the bytes                                                                               |
+| app code needs no direct import       | `apps/lets-park/api/src/calendar/` contains no `ical-generator` import; `calendar-pipeline.spec.ts` fetches the real endpoint and parses the bytes                                                                               |
 
 Two extras that are specific to this wrapper:
 
@@ -763,40 +773,40 @@ Two extras that are specific to this wrapper:
 
 ### The boundary, probed
 
-Step 5 of the recipe, in both directions. Inside `libs/calendar-export`, `import ical from
-'ical-generator'` lints clean. From `apps/api/src/probe/` and from `libs/form/src/lib/`, the same
+Step 5 of the recipe, in both directions. Inside `libs/lets-park/calendar-export`, `import ical from
+'ical-generator'` lints clean. From `apps/lets-park/api/src/probe/` and from `libs/shared/form/src/lib/`, the same
 line produces:
 
 ```
 error  'ical-generator' import is restricted from being used by a pattern.
 Do not import "ical-generator" directly — use the wrapper lib @lets-park/calendar-export
-(libs/calendar-export). Only libs/calendar-export may import "ical-generator"
+(libs/lets-park/calendar-export). Only libs/lets-park/calendar-export may import "ical-generator"
 no-restricted-imports
 ```
 
 The scope boundary was probed too, since this is the first `scope:api` wrapper and nothing had
-exercised that direction: `libs/calendar-export` importing `@lets-park/i18n`, and `apps/web`
+exercised that direction: `libs/lets-park/calendar-export` importing `@lets-park/i18n`, and `apps/lets-park/web`
 importing `@lets-park/calendar-export`, both fail with
 `A project tagged with "scope:api" can only depend on libs tagged with "scope:api", "scope:shared"`
 and its `scope:web` mirror. All probe files were deleted.
 
 **No `eslint.config.mjs` edit was needed for the ban itself.** `WRAPPED_LIBRARIES` already named
-`ical-generator` with `owner: libs/calendar-export`, and `NPM_ALLOWLIST.util` already contained it
+`ical-generator` with `owner: libs/lets-park/calendar-export`, and `NPM_ALLOWLIST.util` already contained it
 through the `Object.keys(WRAPPED_LIBRARIES).flatMap(...)` spread.
 
 What _was_ added is the test-only reader, `ical.js` — and where it goes matters. Step 3 of the
 recipe says to put a package on the tag's allow-list, and the first draft did: one line on
 `NPM_ALLOWLIST.util`. But that list applies to **every** `type:util` project at once, so the entry
 also handed an RFC 5545 parser to the shipped source of six unrelated wrapper libs. It is now
-scoped to `libs/calendar-export/**/*.spec.ts` via `calendarExportSpecDepConstraints`, the same
-shape `libs/form` already uses for its own test-only widening. Probed in both directions:
+scoped to `libs/lets-park/calendar-export/**/*.spec.ts` via `calendarExportSpecDepConstraints`, the same
+shape `libs/shared/form` already uses for its own test-only widening. Probed in both directions:
 
 ```
-# libs/calendar-export/src/lib/reservation-calendar.ts — shipped source
+# libs/lets-park/calendar-export/src/lib/reservation-calendar.ts — shipped source
 error  A project tagged with "type:util" is not allowed to import "ical.js"
        @nx/enforce-module-boundaries
 
-# libs/calendar-export/src/lib/reservation-calendar.spec.ts — unchanged
+# libs/lets-park/calendar-export/src/lib/reservation-calendar.spec.ts — unchanged
 Successfully ran target lint for project calendar-export
 ```
 

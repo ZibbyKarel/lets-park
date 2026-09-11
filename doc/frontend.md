@@ -1,6 +1,6 @@
 # The web application
 
-`apps/web` is the Next.js 16 App Router front end. This document describes the
+`apps/lets-park/web` is the Next.js 16 App Router front end. This document describes the
 shell that Task 23 established: the route tree, the single client boundary and
 the order its providers nest in, the sign-in flow, the three screen states that
 feature screens compose and the `ScreenData<T>` union that says which of them a
@@ -12,7 +12,7 @@ User-visible copy is Czech; identifiers — including URLs — are English, alon
 with everything else: comments, this file (`doc/decision/0029-*` for the
 copy/prose split, `doc/decision/0298-*` for why a URL falls on the identifier
 side of it). No UI string is written in a component: they all come from
-`libs/i18n`.
+`libs/shared/i18n`.
 
 ## What a screen may import
 
@@ -152,7 +152,7 @@ the same code and differ only in environment values.
    `response_type=code`, `scope=openid profile email offline_access` and PKCE
    `S256`.
 4. The provider redirects back to `/api/auth/callback/okta`, handled by
-   `app/api/auth/[...nextauth]/route.ts`, which is `libs/auth`'s `handlers`
+   `app/api/auth/[...nextauth]/route.ts`, which is `libs/lets-park/auth`'s `handlers`
    and nothing else.
 5. The session cookie is set and the user lands on `/`.
 
@@ -162,7 +162,7 @@ avatar menu.
 **Tokens.** The access token lives in the encrypted session cookie. It is never
 written to `localStorage` or `sessionStorage`, never rendered, and never
 logged. The browser gets it only as a `Authorization: Bearer` header added by
-`libs/api-client`, and as `socket.handshake.auth.token` — never a query string
+`libs/shared/api-client`, and as `socket.handshake.auth.token` — never a query string
 (`doc/decision/0060-*`). `AUTH_SECRET` and the OAuth client secret are read
 from `process.env` on the server; neither carries a `NEXT_PUBLIC_` prefix,
 which would publish it to every visitor.
@@ -394,7 +394,7 @@ button. It is pure presentation — every decision it draws arrives as a prop,
 and every interaction it reports goes back out through a callback, same as
 `WindowBanner` beside it. `doc/decision/0140-*` split it into its own
 `date-nav-bar.tsx`; it was later folded back into `LotHeader`
-(`apps/web/src/lot/lot-header/lot-header.tsx`'s module comment says so), so it
+(`apps/lets-park/web/src/lot/lot-header/lot-header.tsx`'s module comment says so), so it
 no longer has a file or spec of its own — its behaviour below is covered by
 `lot-header.spec.tsx`.
 
@@ -407,7 +407,7 @@ Czech holiday calendar (`czechPublicHolidayOn`) and weekend check
 (`isWeekend`), and `DayBar` only maps `note.highlighted` to a class and
 `note.key`/`note.name` to translated copy. The uppercase rendering is CSS
 (`uppercase`), not the message text — same pattern as the section eyebrow
-above the heading — so `apps/web/messages/cs.json` stores
+above the heading — so `apps/lets-park/web/messages/cs.json` stores
 `'Státní svátek · {name}'`, not shouted text.
 
 Changing the day — the arrows, the month/year selects, or "Dnes" — moves
@@ -418,7 +418,7 @@ leaves the old day's realtime room and joins the new one. Both derive from
 the same `date` argument on purpose — there is no second place either could
 drift out of sync with the day actually on screen. `doc/decision/0141-*`
 covers where and how that "leaves the old room" guarantee is tested, on top
-of the socket-level proof already in `libs/realtime-client`'s own suite
+of the socket-level proof already in `libs/lets-park/realtime-client`'s own suite
 (`doc/realtime.md`).
 
 ## Realtime: what a broadcast is allowed to change
@@ -501,23 +501,23 @@ an `@theme inline` block), then declares the three source trees Tailwind should
 scan for class names:
 
 ```css
-@import "../../../../libs/design-system/assets/theme.css";
+@import "../../../../libs/shared/design-system/assets/theme.css";
 @source '../../src';
-@source '../../../../libs/design-system/src/primitives';
-@source '../../../../libs/design-system/src/compounds';
+@source '../../../../libs/shared/design-system/src/primitives';
+@source '../../../../libs/shared/design-system/src/compounds';
 ```
 
 The `@source` lines are required: Tailwind v4 scans the importing project by
 default, and without them every class used _inside_ a primitive or compound
 would be absent from the app's stylesheet.
 
-`apps/web/postcss.config.mjs` loads `@tailwindcss/postcss`, which is Next's
+`apps/lets-park/web/postcss.config.mjs` loads `@tailwindcss/postcss`, which is Next's
 side of the same wiring (Storybook uses `@tailwindcss/vite`).
 
 Tokens are used through their Tailwind names (`text-fg-3`, `border-border`,
 `rounded-cta`) or as CSS variables where no utility exists
 (`h-16 z-[var(--z-sticky)]`, `max-w-[var(--container)]`). No raw hex value,
-radius or spacing number is written in `apps/web`.
+radius or spacing number is written in `apps/lets-park/web`.
 
 ## Environment
 

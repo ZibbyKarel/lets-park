@@ -5,7 +5,7 @@ design system's contrast pass, and nothing in the code can close it.
 
 ## What
 
-Two colour pairings in `libs/design-system` measure below the WCAG 2.1 AA
+Two colour pairings in `libs/shared/design-system` measure below the WCAG 2.1 AA
 threshold for normal-size text (4.5:1) and have been left exactly as they are:
 
 | pairing | where it reaches a user | measured |
@@ -20,7 +20,7 @@ lands on it. That hover was left alone rather than turned neutral, because a
 destructive menu item that stops being red on hover reads as a different
 control; it is the resting pairing above that decides it.
 
-Both are pinned by `libs/design-system/primitives/src/lib/contrast.spec.tsx`
+Both are pinned by `libs/shared/design-system/primitives/src/lib/contrast.spec.tsx`
 (`KNOWN_EXEMPTIONS`), which asserts each still measures exactly the number above.
 A token edit that changes either ratio fails that test and brings whoever made
 it back here.

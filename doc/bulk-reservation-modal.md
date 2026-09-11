@@ -2,7 +2,7 @@
 
 `Hromadná rezervace` is the front end of the bulk allocator
 (`doc/bulk-reservation.md`, `doc/decision/0090-*`–`0092-*`). It lives entirely in
-`apps/web/src/lot/`:
+`apps/lets-park/web/src/lot/`:
 
 | file | what it is |
 | --- | --- |

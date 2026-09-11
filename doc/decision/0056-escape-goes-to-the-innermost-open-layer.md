@@ -2,7 +2,7 @@
 
 ## What
 
-Every overlay in `libs/design-system/primitives` that can be dismissed with
+Every overlay in `libs/shared/design-system/primitives` that can be dismissed with
 Escape registers with **one page-wide set** (`dismissable-layer.tsx`,
 `useDismissableLayer`) while it is open, and unregisters when it closes or
 unmounts. The set owns the single `keydown` listener on `document`. No overlay

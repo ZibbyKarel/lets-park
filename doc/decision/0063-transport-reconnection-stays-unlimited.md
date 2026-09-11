@@ -1,6 +1,6 @@
 # 0063 – Transport reconnection stays unlimited; only handshake refusals have a ceiling
 
-**Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/realtime-client`, fix round 1)
+**Date:** 2026-09-02 · **Status:** accepted · **Task:** 21 (`libs/lets-park/realtime-client`, fix round 1)
 
 ## What
 
@@ -43,7 +43,7 @@ retrying what has already been refused.
 **The thundering-herd cost is accepted, with its size stated.** When the API returns from a
 deploy, every open tab reconnects within the next 1–5 s window. At this company's headcount —
 an internal parking app, tens of tabs — that is tens of handshakes over a few seconds, each one
-a JWKS-cached JWT verification. `libs/api-client`'s HTTP traffic on the same page dwarfs it.
+a JWKS-cached JWT verification. `libs/shared/api-client`'s HTTP traffic on the same page dwarfs it.
 The jitter spreads even that. If the office ever grew by an order of magnitude the lever is
 `reconnectionDelayMax`, not an attempt ceiling: slowing the herd down is the fix, giving up on
 it is not.

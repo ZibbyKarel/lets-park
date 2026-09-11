@@ -90,12 +90,12 @@ actually promise.
 
 ## How
 
-- `apps/api/src/slack/slack-client.service.ts` — `DefaultSlackWebClientFactory`
+- `apps/lets-park/api/src/slack/slack-client.service.ts` — `DefaultSlackWebClientFactory`
   (`timeout: 0`, `requestInterceptor`), `SlackClient.attempt` (the race and the
   abort).
-- `apps/api/src/slack/testing/slack-test-server.ts` — `holdNextRequest`.
-- `apps/api/src/slack/slack-client.service.spec.ts` — "a timed-out attempt
+- `apps/lets-park/api/src/slack/testing/slack-test-server.ts` — `holdNextRequest`.
+- `apps/lets-park/api/src/slack/slack-client.service.spec.ts` — "a timed-out attempt
   that is still in flight when the retry fires".
-- `apps/api/src/slack/slack-web-client-factory.spec.ts` — the interceptor
+- `apps/lets-park/api/src/slack/slack-web-client-factory.spec.ts` — the interceptor
   actually attaches and clears the signal it is given.
 - `doc/slack.md` §4.

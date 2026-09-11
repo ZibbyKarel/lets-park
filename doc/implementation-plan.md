@@ -17,9 +17,9 @@ dispatchable pieces. Where they disagree, `plan.md` wins.
 > starting.
 
 > **This file predates the design-system merge.** Tasks 6, 8 and 22 built
-> `libs/design-system` as three Nx projects (`design-system-tokens`,
+> `libs/shared/design-system` as three Nx projects (`design-system-tokens`,
 > `-primitives`, `-compounds`); it is one project now, with the layers as
-> directories under `libs/design-system/src/`. Their task headings and steps
+> directories under `libs/shared/design-system/src/`. Their task headings and steps
 > below are left as written, because they record how the work was done. The
 > two places that state a **rule** rather than a task — points 5/6 of the
 > project-wide rules and Task 2's boundary list — are repointed, because a rule
@@ -43,7 +43,7 @@ Task numbers are not the order. The actual order and parallel branches:
 Apply to **every** task; the reviewer receives them with every dispatch.
 
 1. **Contract-first.** No endpoint, DTO, or realtime event may exist in code
-   before it exists in `libs/contract`. Zod schemas are the single source of
+   before it exists in `libs/lets-park/contract`. Zod schemas are the single source of
    truth; TS types are always `z.infer<...>`, never hand-duplicated on FE and
    BE.
 2. **Zod v4 only.** `class-validator` / `class-transformer` are not used in
@@ -54,18 +54,18 @@ Apply to **every** task; the reviewer receives them with every dispatch.
 4. **Date-only semantics.** The reservation day is `z.iso.date()`
    (`YYYY-MM-DD`) in the contract and `DATE` in Postgres. Never a timestamp.
    "Today" and day boundaries are always in `Europe/Prague`, with a single
-   implementation in `libs/shared-types` (see `doc/decision/0003-*`).
+   implementation in `libs/lets-park/shared-types` (see `doc/decision/0003-*`).
 5. **Design-system-first.** tokens → primitives → compounds → domain
-   composition (only in `apps/web`). The design system is domain-free: no
-   "ParkingSpot"/"Reservation" in `libs/design-system/*`. Compounds may import
+   composition (only in `apps/lets-park/web`). The design system is domain-free: no
+   "ParkingSpot"/"Reservation" in `libs/shared/design-system/*`. Compounds may import
    primitives, never the reverse. Hand-written color/spacing values outside
    the tokens are forbidden.
 6. **Wrapper layers are mandatory.** Application/feature code never imports
-   directly: `react-hook-form` (→ `libs/form`), `@tanstack/react-table`
+   directly: `react-hook-form` (→ `libs/shared/form`), `@tanstack/react-table`
    (→ `@lets-park/design-system/compounds`), `@tanstack/react-query`
-   (→ `libs/query`), `@orpc/client` (→ `libs/api-client`), `socket.io-client`
-   (→ `libs/realtime-client`), `next-auth` (→ `libs/auth`), `ical-generator`
-   (→ `libs/calendar-export`), `next-intl` (→ `libs/i18n`). Enforced by ESLint
+   (→ `libs/query`), `@orpc/client` (→ `libs/shared/api-client`), `socket.io-client`
+   (→ `libs/lets-park/realtime-client`), `next-auth` (→ `libs/lets-park/auth`), `ical-generator`
+   (→ `libs/lets-park/calendar-export`), `next-intl` (→ `libs/shared/i18n`). Enforced by ESLint
    (Nx `enforce-module-boundaries` + `no-restricted-imports`).
 7. **Operational baseline is part of the MVP** (it is not "monitoring"):
    fail-fast Zod validation of env, `nestjs-pino` (no `console.log`),
@@ -110,12 +110,12 @@ repository already contains `plan.md` (gitignored), `CLAUDE.md`, `README.md`,
 
 1. Initialize an Nx 23 workspace with npm as the package manager, `nx.json`
    with caching and `targetDefaults` for `build`, `lint`, `test`.
-2. `apps/web` – a Next.js 16 application (App Router, React 19, TypeScript).
-3. `apps/api` – a NestJS 11 application.
-4. `apps/web-e2e` – a Playwright project (scaffolding only for now + one smoke
+2. `apps/lets-park/web` – a Next.js 16 application (App Router, React 19, TypeScript).
+3. `apps/lets-park/api` – a NestJS 11 application.
+4. `apps/lets-park/web-e2e` – a Playwright project (scaffolding only for now + one smoke
    test that either passes without the stack running or is marked skipped
    with a comment explaining why).
-5. `apps/api-e2e` – a project for Jest integration tests against a real
+5. `apps/lets-park/api-e2e` – a project for Jest integration tests against a real
    Postgres (scaffolding + config only for now; tests arrive in Task 13).
 6. TypeScript **strict** across the workspace (`strict: true`,
    `noUncheckedIndexedAccess`, `noImplicitOverride`,
@@ -129,8 +129,8 @@ repository already contains `plan.md` (gitignored), `CLAUDE.md`, `README.md`,
      `scope:shared`.
      Rules: `type:app` may depend on anything; `type:ui` (the design system)
      may not depend on `type:feature` or `type:app`;
-     `libs/design-system/src/primitives` must not import
-     `libs/design-system/src/compounds` (path-scoped `no-restricted-imports`
+     `libs/shared/design-system/src/primitives` must not import
+     `libs/shared/design-system/src/compounds` (path-scoped `no-restricted-imports`
      in the lib's own config since `0301`, formerly the `ds:*` tags);
      `type:contract` must not import
      anything besides `zod` and `type:util`.
@@ -140,7 +140,7 @@ repository already contains `plan.md` (gitignored), `CLAUDE.md`, `README.md`,
      `next-auth`, `ical-generator`, `next-intl` (except from the
      corresponding wrapper lib, which is allowed to import them). The error
      message must state which wrapper lib the developer should use.
-   - Forbid `console.log` in `apps/api/**` and `libs/**` (allow `console`
+   - Forbid `console.log` in `apps/lets-park/api/**` and `libs/**` (allow `console`
      only in scripts).
 8. Prettier + `.editorconfig`, a uniform format for TS/TSX/JSON/MD.
 9. Scripts in `package.json`: `lint`, `test`, `build`, `typecheck`,
@@ -164,7 +164,7 @@ Tailwind config beyond what the Nx generator for Next creates.
 
 **Phase 0, points 2 and 3.** Follows on from Task 1 (main tree).
 
-1. `apps/api/src/env.ts` and `apps/web/src/env.ts` – a Zod v4 schema for env
+1. `apps/lets-park/api/src/env.ts` and `apps/lets-park/web/src/env.ts` – a Zod v4 schema for env
    variables, fail-fast at startup with a **readable** error (print which
    variables are missing/invalid, never print their values).
    - API (minimal schema for this phase): `NODE_ENV`, `PORT`, `DATABASE_URL`,
@@ -201,11 +201,11 @@ running** – the Docker daemon isn't running on this machine, so don't verify
 
 ---
 
-## Task 3 — `libs/shared-types` + entity schemas and the error contract in `libs/contract`
+## Task 3 — `libs/lets-park/shared-types` + entity schemas and the error contract in `libs/lets-park/contract`
 
 **Phase 1, point 1 (part) and 2–3.** Main tree, runs in parallel with Task 6.
 
-1. `libs/shared-types` (tag `type:util`, `scope:shared`, **no** dependency on
+1. `libs/lets-park/shared-types` (tag `type:util`, `scope:shared`, **no** dependency on
    Zod or next-intl):
    - a date-only type `DateOnly` (a `YYYY-MM-DD` string) + a parser/serializer,
    - `todayInPrague()`, `startOfDayInPrague()`, comparing and shifting days in
@@ -223,7 +223,7 @@ running** – the Docker daemon isn't running on this machine, so don't verify
    - Unit tests including the daylight-saving transition, the year boundary,
      and the month boundary (the day before the window, the first day of the
      window, the last day of the window, the first day of the month).
-2. `libs/contract/src/schemas` (tag `type:contract`):
+2. `libs/lets-park/contract/src/schemas` (tag `type:contract`):
    - Zod v4 entity schemas: `User`, `ParkingSpot`, `Reservation`,
      `WaitlistEntry`, `AuditLog` – exactly per the domain model in `plan.md`,
      **plus the additions from `doc/decision/0004-*`**:
@@ -239,7 +239,7 @@ running** – the Docker daemon isn't running on this machine, so don't verify
      depends on `ReservationWindowSettings` read from the DB, which a static
      Zod schema can't see. Checking "not in the past" and checking the
      window are **service-level** (Task 13), on top of `isMonthOpen` /
-     `monthLockState` from `libs/shared-types`.
+     `monthLockState` from `libs/lets-park/shared-types`.
    - The error contract: an error shape schema (`code`, `message`,
      `details?`) and a **closed enum** of domain error codes:
      `SPOT_ALREADY_RESERVED`, `RESERVATION_LIMIT_REACHED`, `PAST_DATE`,
@@ -265,11 +265,11 @@ endpoint implementation.
 
 ---
 
-## Task 4 — oRPC API contract in `libs/contract`
+## Task 4 — oRPC API contract in `libs/lets-park/contract`
 
 **Phase 1, point 1 (procedures).** Follows on from Task 3.
 
-Entry point `@lets-park/contract` (`libs/contract/src/api`). Define the oRPC
+Entry point `@lets-park/contract` (`libs/lets-park/contract/src/api`). Define the oRPC
 contract (`@orpc/contract`) with every domain procedure and typed errors:
 
 - **Day overview** – in one query: spots + reservations + waitlist counts for
@@ -315,7 +315,7 @@ Extend `doc/contract.md` with the list of procedures and their semantics.
 **Phase 1, point 4.** Follows on from Task 3 (may run after Task 4).
 
 A separate entry point, `@lets-park/contract/realtime`
-(`libs/contract/src/realtime`), which **pulls in no oRPC dependency**:
+(`libs/lets-park/contract/src/realtime`), which **pulls in no oRPC dependency**:
 
 - Zod schemas for event payloads: `cell:locked`, `cell:unlocked`,
   `reservation:created`, `reservation:cancelled`, `reservation:reassigned`,
@@ -334,7 +334,7 @@ always validates incoming client→server events".
 
 ---
 
-## Task 6 — Design tokens (`libs/design-system/tokens`)
+## Task 6 — Design tokens (`libs/shared/design-system/tokens`)
 
 **Phase 2.** Parallel branch (worktree), runs alongside Tasks 3–5.
 
@@ -368,7 +368,7 @@ Source of truth: **`doc/design/ds/colors_and_type.css`** (see
 **Phase 3, points 1–3 (part).** Follows on from Task 6 in the same parallel
 branch.
 
-1. Storybook 10 for `libs/design-system/primitives`: `@tailwindcss/vite` in
+1. Storybook 10 for `libs/shared/design-system/primitives`: `@tailwindcss/vite` in
    `viteFinal`, importing `tokens.css` in `preview.ts`, a light theme per the
    design.
 2. Primitives: **Button, Input, Select, Checkbox, Radio, Badge, Avatar,
@@ -409,7 +409,7 @@ Extend `doc/design-system.md`.
 
 ---
 
-## Task 9 — `libs/database`: Prisma 7 schema, migrations, seed
+## Task 9 — `libs/lets-park/database`: Prisma 7 schema, migrations, seed
 
 **Phase 5, point 1.** Main tree, the start of the backend branch.
 
@@ -442,7 +442,7 @@ Extend `doc/design-system.md`.
 
 ---
 
-## Task 10 — `apps/api`: operational baseline
+## Task 10 — `apps/lets-park/api`: operational baseline
 
 **Phase 5, point 2.** Follows on from Task 9.
 
@@ -513,7 +513,7 @@ Implementing the contract from Task 4 via `@orpc/nest` (`@Implement`):
 - **Reservation window (admin)** – reading/changing `openDaysBefore` and
   `lockMode`, an overview of month states; a settings change goes into the
   AuditLog. The state is computed by the `isMonthOpen` function from
-  `libs/shared-types` (Task 3), **never re-implemented**.
+  `libs/lets-park/shared-types` (Task 3), **never re-implemented**.
 - **Day overview** – one query returning spots + reservations + waitlist
   counts **+ the reservation-window state for that day**.
 - **AuditLog service** – an append-only write for every admin action and
@@ -538,7 +538,7 @@ Business rules exactly per `plan.md` §Byznys pravidla:
   following month", see `doc/decision/0004-*`): for a regular user, creating
   a reservation, joining the waitlist, and leaving the waitlist are allowed
   **only when the target day's month is open** (`isMonthOpen` from
-  `libs/shared-types`); otherwise the contract error `RESERVATIONS_LOCKED`.
+  `libs/lets-park/shared-types`); otherwise the contract error `RESERVATIONS_LOCKED`.
   **Cancelling one's own reservation is always allowed.** The admin is not
   constrained by the window at all. The check happens on the backend, not
   only in the UI.
@@ -558,7 +558,7 @@ Business rules exactly per `plan.md` §Byznys pravidla:
 - joining the waitlist only for an occupied spot; the reservation's owner
   cannot join the waitlist for their own spot.
 
-**Integration tests against a real Postgres** (`apps/api-e2e`, Docker):
+**Integration tests against a real Postgres** (`apps/lets-park/api-e2e`, Docker):
 concurrent cancellation (parallel transactions), an empty waitlist, multiple
 people waiting, someone waiting who has a colliding reservation the same day,
 promote + a unique-constraint conflict, **a reservation in a locked month
@@ -575,11 +575,11 @@ a row lock, what happens under concurrency, what happens after the commit.
 
 ---
 
-## Task 14 — ICS feed (`libs/calendar-export` + controller)
+## Task 14 — ICS feed (`libs/lets-park/calendar-export` + controller)
 
 **Phase 5, point 5.** Follows on from Task 12.
 
-- `libs/calendar-export` – a service generating ICS from domain data via
+- `libs/lets-park/calendar-export` – a service generating ICS from domain data via
   `ical-generator` (the only place `ical-generator` is imported).
 - A Nest controller **outside the oRPC contract**:
   `GET /calendar/:icsToken.ics`, per-user auth via a random token in the URL,
@@ -649,12 +649,12 @@ Documentation: `doc/slack.md`.
 
 ---
 
-## Task 17 — `libs/i18n`
+## Task 17 — `libs/shared/i18n`
 
 **Phase 4, point 6.** Parallel branch (worktree), runs alongside the backend.
 
 - A wrapper over next-intl (the only place next-intl is imported).
-- **Re-export** the date logic from `libs/shared-types` (see
+- **Re-export** the date logic from `libs/lets-park/shared-types` (see
   `doc/decision/0003-*`) under a stable API, so feature code imports only
   `@lets-park/i18n`.
 - Czech public holidays + weekends, for highlighting in the date bar.
@@ -669,7 +669,7 @@ Documentation: `doc/i18n.md`.
 
 ---
 
-## Task 18 — `libs/form`
+## Task 18 — `libs/shared/form`
 
 **Phase 4, point 1.** Follows on from Task 17 (and the primitives from
 Tasks 7–8).
@@ -687,12 +687,12 @@ Documentation: `doc/wrappers.md` (established here, extended by Tasks 19–22).
 
 ---
 
-## Task 19 — `libs/api-client` + `libs/query`
+## Task 19 — `libs/shared/api-client` + `libs/query`
 
 **Phase 4, points 2–3.** Follows on from Task 18.
 
-- `libs/api-client`: an oRPC client instance wired to `@lets-park/contract`,
-  the auth header (the access token comes from `libs/auth`, Task 20 – for now
+- `libs/shared/api-client`: an oRPC client instance wired to `@lets-park/contract`,
+  the auth header (the access token comes from `libs/lets-park/auth`, Task 20 – for now
   via an injectable provider), mapping contract errors onto typed error
   codes.
 - `libs/query`: TanStack Query v5 client configuration (retry, staleTime,
@@ -706,7 +706,7 @@ Extend `doc/wrappers.md`.
 
 ---
 
-## Task 20 — `libs/auth`
+## Task 20 — `libs/lets-park/auth`
 
 **Phase 4, point 5.** Follows on from Task 19.
 
@@ -716,7 +716,7 @@ imported):
 - an Okta OIDC provider, configured from env,
 - **refresh token rotation in the `jwt` callback** – the access token is
   refreshed before it expires,
-- exposing the access token to `libs/api-client` and `libs/realtime-client`
+- exposing the access token to `libs/shared/api-client` and `libs/lets-park/realtime-client`
   in a **server-safe way** (never localStorage),
 - hooks `useSession`, `useRequireAuth`, and server-side helpers.
 
@@ -727,13 +727,13 @@ Extend `doc/wrappers.md` and `doc/auth.md` with the frontend part.
 
 ---
 
-## Task 21 — `libs/realtime-client`
+## Task 21 — `libs/lets-park/realtime-client`
 
 **Phase 4, point 4.** Follows on from Task 20.
 
 A wrapper over `socket.io-client` with types from
 `@lets-park/contract/realtime`: `useRealtimeConnection` (the handshake auth
-token from `libs/auth`, reconnect logic), `useCellLock` (heartbeat lock
+token from `libs/lets-park/auth`, reconnect logic), `useCellLock` (heartbeat lock
 extension, releasing it on unmount/disconnect).
 
 Tests: reconnect resends the token; the heartbeat extends the lock; unmount
@@ -743,7 +743,7 @@ Extend `doc/wrappers.md` and `doc/realtime.md` with the client-side part.
 
 ---
 
-## Task 22 — `libs/design-system/compounds`
+## Task 22 — `libs/shared/design-system/compounds`
 
 **Phase 4, point 7.** Follows on from Task 8 (may run in parallel with 18–21
 in the same branch).
@@ -759,13 +759,13 @@ Extend `doc/design-system.md`.
 
 ---
 
-## Task 23 — `apps/web`: shell, routing, login, health
+## Task 23 — `apps/lets-park/web`: shell, routing, login, health
 
 **Phase 6, point 1.** Main tree, after both branches merge.
 
 - Next.js 16 App Router structure, a root layout with the DS tokens and
   fonts,
-- providers: `libs/query`, `libs/auth`, `libs/i18n`, `libs/realtime-client`,
+- providers: `libs/query`, `libs/lets-park/auth`, `libs/shared/i18n`, `libs/lets-park/realtime-client`,
 - a login page for signed-out users: a blank page with one central
   `Login přes OKTA Verify` ("Log in with OKTA Verify") button – visuals per
   `doc/design/screens/canvas-default.png`,
@@ -814,11 +814,11 @@ task.**
 - A **`Hromadná rezervace`** ("Bulk reservation") button in the header – for
   a regular user in a locked month, hidden and blocked at the action level
   too; the modal is implemented by Task 31.
-- Data via `libs/query` + `libs/api-client`; realtime via
-  `libs/realtime-client`. **Realtime events invalidate/patch the query
+- Data via `libs/query` + `libs/shared/api-client`; realtime via
+  `libs/lets-park/realtime-client`. **Realtime events invalidate/patch the query
   cache – one consistent mechanism, no ad-hoc local state.**
 - Loading / empty / error states; contract error codes → Czech messages via
-  `libs/i18n`.
+  `libs/shared/i18n`.
 
 Documentation: extend `doc/frontend.md` with the realtime strategy (when to
 invalidate, when to patch).
@@ -833,7 +833,7 @@ A fixed bottom bar per `doc/design/screens/07-lot.png`: prev/next arrows, the
 current date in the center, a month and year selector, a `Dnes` ("Today")
 button. Highlighting Czech public holidays (`STÁTNÍ SVÁTEK · DEN ČESKÉ
 STÁTNOSTI` – "PUBLIC HOLIDAY · CZECH STATEHOOD DAY", a yellow bar background)
-and weekends via `libs/i18n`.
+and weekends via `libs/shared/i18n`.
 
 Changing the day changes both the realtime room and the query key – verify
 with a test that it unsubscribes from the old room.
@@ -846,7 +846,7 @@ with a test that it unsubscribes from the old room.
 
 The `Nastavení` ("Settings") modal per `doc/design/screens/11-settings.png`:
 
-- a form via `libs/form` – license plate **and preferred parking spot** (a
+- a form via `libs/shared/form` – license plate **and preferred parking spot** (a
   select over active spots, an empty choice allowed); a label per the
   design: "SPZ se předplní při každé rezervaci místa. Preferované místo
   použijeme přednostně u hromadné rezervace." ("The license plate is
@@ -975,7 +975,7 @@ A modal per `doc/design/screens/10-modal-bulk.png`, two steps:
 1. **Day selection** – a calendar grid for the month, columns
    `PO ÚT ST ČT PÁ SO NE` (Mon Tue Wed Thu Fri Sat Sun; weekends visually set
    back on the right). Weekends and Czech public holidays are
-   **unselectable** (`libs/i18n`). Below the grid, the text
+   **unselectable** (`libs/shared/i18n`). Below the grid, the text
    "Víkendy a svátky nelze vybrat." ("Weekends and holidays cannot be
    selected.") and "Preferované místo: `<label>`" ("Preferred spot:
    `<label>`"). CTA: "Vyberte dny" ("Select days") → "Vygenerovat rozvrh (N

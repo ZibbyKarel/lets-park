@@ -2,11 +2,11 @@
 
 ## What
 
-`apps/web-e2e`'s `globalSetup` prepares the database by running two commands:
+`apps/lets-park/web-e2e`'s `globalSetup` prepares the database by running two commands:
 
 ```
 npx prisma db seed
-node --require @swc-node/register libs/database/src/scripts/reset-e2e.ts
+node --require @swc-node/register libs/lets-park/database/src/scripts/reset-e2e.ts
 ```
 
 It does not `import { PrismaClient }`, and no Playwright worker ever holds a
@@ -14,8 +14,8 @@ database connection.
 
 ## Why
 
-- **The module boundary forbids the import, and is right to.** `libs/database`
-  is tagged `scope:api`; `apps/web-e2e` is `scope:web`, which
+- **The module boundary forbids the import, and is right to.** `libs/lets-park/database`
+  is tagged `scope:api`; `apps/lets-park/web-e2e` is `scope:web`, which
   `eslint.config.mjs` restricts to `scope:web` and `scope:shared`. Retagging the
   e2e app, or widening the constraint, would let the whole web scope reach the
   Prisma client so that one test-support file could — the tail wagging the dog.
@@ -38,12 +38,12 @@ workspace root. Both callers set it.
 
 ## How
 
-- `apps/web-e2e/src/support/global-setup.ts` — `execFileSync` for both commands,
+- `apps/lets-park/web-e2e/src/support/global-setup.ts` — `execFileSync` for both commands,
   `cwd: workspaceRoot`, `stdio: 'inherit'` so their output lands in the test log.
   It fails fast with a readable message when `DATABASE_URL` is unset, rather
   than letting the first browser meet an empty screen.
-- `libs/database/src/scripts/reset-e2e.ts` — the reset itself.
-- `libs/database/project.json` — `reset-e2e` target, for running it by hand.
+- `libs/lets-park/database/src/scripts/reset-e2e.ts` — the reset itself.
+- `libs/lets-park/database/project.json` — `reset-e2e` target, for running it by hand.
 
 ## Risk
 

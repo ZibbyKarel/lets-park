@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/out-tsc",
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "types": ["jest", "node"],
+    // For ts-jest only: it refuses to transform the `.mjs` files of the
+    // ESM-only `@orpc/contract` without it (`doc/decision/0020-*`). `include`
+    // below never reaches node_modules, so `tsc --noEmit` is unaffected.
+    "allowJs": true
+  },
+  "include": [
+    "jest.config.ts",
+    "jest.config.cts",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.d.ts"
+  ]
+}

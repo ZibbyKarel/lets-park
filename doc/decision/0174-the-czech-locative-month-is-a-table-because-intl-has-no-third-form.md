@@ -1,11 +1,11 @@
 # 0174 – The Czech locative month name is a hand-written table, because `Intl` has no third form
 
-**Date:** 2026-09-03 · **Status:** accepted · **Affects:** `libs/i18n/src/lib/dates.ts`
+**Date:** 2026-09-03 · **Status:** accepted · **Affects:** `libs/shared/i18n/src/lib/dates.ts`
 **Follows on from:** `doc/decision/0003-*`
 
 ## What
 
-`libs/i18n` gains two date helpers:
+`libs/shared/i18n` gains two date helpers:
 
 - `formatWeekdayName(date)` → `čtvrtek`, asked of `Intl` like every other formatter here;
 - `formatMonthLocative(month)` → `září`, `srpnu`, `prosinci` — from a **hand-written twelve-entry
@@ -31,14 +31,14 @@ been duplicating locale data that already exists — here there is nothing to du
 grammatical because `v měsíci` takes the nominative. It is also not what the design says, and the
 design wins where it conflicts with prose.
 
-**Why in `libs/i18n` rather than in the modal.** A fact about the Czech language belongs in the lib
+**Why in `libs/shared/i18n` rather than in the modal.** A fact about the Czech language belongs in the lib
 that owns Czech language facts, next to the formatters it sits between. Putting twelve month names
-in `apps/web` would also have put UI-adjacent locale data outside the one place `doc/i18n.md` points
+in `apps/lets-park/web` would also have put UI-adjacent locale data outside the one place `doc/i18n.md` points
 readers at.
 
 ## How
 
-- `libs/i18n/src/lib/dates.ts` — `CZECH_MONTHS_LOCATIVE` and `formatMonthLocative`, with the
+- `libs/shared/i18n/src/lib/dates.ts` — `CZECH_MONTHS_LOCATIVE` and `formatMonthLocative`, with the
   reasoning above at the definition so nobody "simplifies" it into `formatMonthName`.
 - `dates.spec.ts` pins all twelve, and separately asserts that the locative **differs from the
   nominative for every month except září**. That second test is the one that matters: září is the

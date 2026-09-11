@@ -72,14 +72,14 @@ without a dead value.
 
 ## How
 
-Payloads live in `libs/contract/src/realtime/events.ts` and `commands.ts`, all
+Payloads live in `libs/lets-park/contract/src/realtime/events.ts` and `commands.ts`, all
 built on `cellRefSchema` (`date` + `parkingSpotId`). `date` is repeated in
 every payload even though the room implies it: a client is often connected to
 several day rooms, and the Socket.io handler doesn't tell it which room a
 message arrived through.
 
 `RESERVATION_REASSIGN_CAUSES` and `CELL_LOCK_RESULTS` live in
-`libs/shared-types` next to the other enums; the contract just wraps them in
+`libs/lets-park/shared-types` next to the other enums; the contract just wraps them in
 `z.enum(...)` — the same pattern as `PARKING_GROUPS`
 (`doc/decision/0016-*`).
 

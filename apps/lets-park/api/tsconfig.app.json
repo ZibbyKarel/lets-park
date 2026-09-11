@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/out-tsc",
+    "module": "commonjs",
+    "types": ["node"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "es2021",
+    "moduleResolution": "bundler",
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "jest.config.ts",
+    "jest.config.cts",
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts",
+    // Support code used only by specs (`auth/testing/oidc-test-issuer.ts`). It
+    // is not a spec file, so the patterns above do not catch it, and it must
+    // not be part of the application program — a test helper that typechecks as
+    // shipped code is a test helper that can be imported by shipped code.
+    // `tsconfig.spec.json` picks it up instead, so it is still typechecked.
+    "src/**/testing/**/*.ts"
+  ]
+}

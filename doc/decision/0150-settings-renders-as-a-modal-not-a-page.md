@@ -2,10 +2,10 @@
 
 ## What
 
-`apps/web/src/shell/settings-screen/settings-screen.tsx` renders the whole settings screen —
+`apps/lets-park/web/src/shell/settings-screen/settings-screen.tsx` renders the whole settings screen —
 licence plate, preferred spot, and the ICS section (`doc/decision/0151-*`) —
 inside the design system's `Modal` primitive
-(`libs/design-system/primitives/src/lib/modal/modal.tsx`), reached at the
+(`libs/shared/design-system/primitives/src/lib/modal/modal.tsx`), reached at the
 `/settings` route. Closing it (Cancel, Escape, or a successful save) pushes
 back to `LOT_ROUTE` (`/`), so the "page" is really an overlay on top of the
 parking overview. There is deliberately no × and no scrim-click-to-close — see

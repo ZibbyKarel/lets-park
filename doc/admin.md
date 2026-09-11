@@ -16,14 +16,14 @@ See `doc/auth.md`.
 
 Two tests hold that up, and they make different claims:
 
-- `apps/api/src/orpc/orpc-route-parity.spec.ts` reads the decorator off Nest's
+- `apps/lets-park/api/src/orpc/orpc-route-parity.spec.ts` reads the decorator off Nest's
   metadata: every `admin.*` route has `@Roles('ADMIN')`, and no other route
   does.
-- `apps/api/src/orpc/orpc-pipeline.spec.ts` drives **every admin procedure**
+- `apps/lets-park/api/src/orpc/orpc-pipeline.spec.ts` drives **every admin procedure**
   over real HTTP with a real non-admin token and requires a 403 in the RPC
   envelope, with nothing written to the database and nothing in the audit log.
   Metadata being present is not the guard running; this is the one that says
-  the guard runs. Its list of procedures is checked against `libs/contract`, so
+  the guard runs. Its list of procedures is checked against `libs/lets-park/contract`, so
   an admin procedure added later fails the suite rather than being skipped.
 
 The role gate in `AdminScreen` is a **courtesy** — it stops a non-admin who
@@ -37,7 +37,7 @@ and refuses removing the last active admin whatever the browser sends.
 ## Layout
 
 ```
-apps/web/src/
+apps/lets-park/web/src/
   app/(app)/admin/page.tsx       wiring: profile + the four connected panels
   shell/admin-screen/admin-screen.tsx  role gate, page chrome, the tab strip
   shell/admin/
@@ -129,7 +129,7 @@ and the list cannot disagree about the same moment.
 `MonthWindowOverview.windowFrom` / `windowTo` are **always** the range the AUTO
 rule would produce. When `lockMode !== 'AUTO'` an admin has overridden the
 state and those dates describe a hypothetical, not a fact
-(`libs/contract/src/schemas/reservation-window.ts`).
+(`libs/lets-park/contract/src/schemas/reservation-window.ts`).
 
 Both places that render them read `lockMode` first:
 
@@ -172,10 +172,10 @@ surface cannot silently repaint the other.
 
 ## Czech copy
 
-All of it is in the `admin` namespace of `apps/web/messages/cs.json`, and all
+All of it is in the `admin` namespace of `apps/lets-park/web/messages/cs.json`, and all
 of it is verbatim from the designs where the designs have it. English lives
 alongside it in `en.json`, kept in step by the parity guard at
-`apps/web/messages/messages.spec.ts`. Three notes:
+`apps/lets-park/web/messages/messages.spec.ts`. Three notes:
 
 - **Plurals are ICU, not a hand-written table.** Czech has three integer plural
   categories (`one` = 1, `few` = 2–4, `other` = 5+) and "1 den" / "3 dny" /
@@ -183,7 +183,7 @@ alongside it in `en.json`, kept in step by the parity guard at
 - **One correction to the design's text.** `05-admin-window.png` reads
   "upravuje je pak může jen admin"; the shipped string says "upravovat je pak
   může jen admin", which is the grammatical form of the same sentence.
-- **`dayMonthAndYear`** was added to `libs/i18n` for the month card's
+- **`dayMonthAndYear`** was added to `libs/shared/i18n` for the month card's
   "dnes je 28. srpna 2026" — day, genitive month, year, no weekday. It is a
   separate `Intl` call rather than `fullDate` with the weekday cut off. Both
   are methods on the object `createDateFormatters(locale)` /

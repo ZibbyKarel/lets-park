@@ -1,4 +1,4 @@
-# 0131 — Slack's Czech copy stays in `apps/api/src/slack/`, and there is still no backend catalog
+# 0131 — Slack's Czech copy stays in `apps/lets-park/api/src/slack/`, and there is still no backend catalog
 
 **Date:** 2026-09-03 · **Status:** accepted · **Task:** 16 ·
 **Reconsiders:** `doc/decision/0082-*`
@@ -7,8 +7,8 @@
 
 The three Slack messages — the freed-spot notice, the promotion DM and the daily
 summary — are Czech strings built by functions in
-`apps/api/src/slack/slack-messages.ts`. They are **not** entries in the
-`libs/i18n` catalog, and **no** second, backend-side message catalog was
+`apps/lets-park/api/src/slack/slack-messages.ts`. They are **not** entries in the
+`libs/shared/i18n` catalog, and **no** second, backend-side message catalog was
 created.
 
 Dates in them are formatted with `Intl.DateTimeFormat('cs', …)` directly, not
@@ -17,9 +17,9 @@ with a hand-written Czech month table.
 ## Why this needed deciding at all
 
 `doc/decision/0082-*` put the ICS feed's three Czech strings in
-`libs/calendar-export` because `libs/i18n` is tagged `scope:web`, `apps/api` is
+`libs/lets-park/calendar-export` because `libs/shared/i18n` is tagged `scope:web`, `apps/lets-park/api` is
 `scope:api`, and `@nx/enforce-module-boundaries` refuses the dependency — for
-good reason: `libs/i18n` wraps `next-intl`, a React package with no place in a
+good reason: `libs/shared/i18n` wraps `next-intl`, a React package with no place in a
 Nest process. That record closed with an explicit instruction:
 
 > If a second one appears (Slack notifications, Task 16), that is the moment to
@@ -29,7 +29,7 @@ This is that reconsideration, with the second surface now real.
 
 ## The options, weighed with two surfaces in view
 
-1. **Move `libs/i18n` to `scope:shared`.** Still rejected, and for the same
+1. **Move `libs/shared/i18n` to `scope:shared`.** Still rejected, and for the same
    reason as in 0082, only stronger: it drags `next-intl` and its React peer
    into the backend's dependency graph. The boundary is not an accident.
 2. **A backend-only catalog** (say `libs/backend-copy`, `scope:shared`, no
@@ -37,7 +37,7 @@ This is that reconsideration, with the second surface now real.
    **Rejected — after actually looking at the two sets.** They share not one
    word:
 
-   | ICS (`libs/calendar-export`) | Slack (`apps/api/src/slack`) |
+   | ICS (`libs/lets-park/calendar-export`) | Slack (`apps/lets-park/api/src/slack`) |
    | --- | --- |
    | `Parkování` (calendar name) | `Uvolnilo se parkovací místo …` |
    | `Parkování – E2.92` (event summary) | `Máte parkovací místo …` |
@@ -56,7 +56,7 @@ This is that reconsideration, with the second surface now real.
 3. **Keep each surface's copy next to its only consumer.** Chosen, consistent
    with 0082.
 
-**This is not a licence to scatter Czech through `apps/api`.** The rule stays as
+**This is not a licence to scatter Czech through `apps/lets-park/api`.** The rule stays as
 0082 put it: backend-rendered user-facing copy lives with the one surface that
 renders it, and a *third* surface is the moment to revisit again — by then the
 sets may genuinely overlap, and the argument above would flip.
@@ -65,7 +65,7 @@ sets may genuinely overlap, and the argument above would flip.
 
 The one thing the two surfaces really could drift on is dates, and Czech months
 decline: `25. srpna` (genitive, with a day) versus `srpen` (nominative, alone).
-`libs/i18n/src/lib/dates.ts` gets that from ICU via next-intl's
+`libs/shared/i18n/src/lib/dates.ts` gets that from ICU via next-intl's
 `createFormatter` — and measured it rather than assuming it.
 
 `Intl.DateTimeFormat('cs', …)` is the *same ICU data* without the React
@@ -76,13 +76,13 @@ worth avoiding, and this avoids it.
 
 A `DateOnly` is formatted as a UTC-midnight `Date` with an explicit
 `timeZone: 'UTC'` — the same construction, and the same reason, as
-`libs/i18n/src/lib/dates.ts`: the value is a calendar day, and a local `Date`
+`libs/shared/i18n/src/lib/dates.ts`: the value is a calendar day, and a local `Date`
 would render the wrong day on some hosts and on DST Sundays.
 
 ## Consequences
 
-- Czech copy now lives in three places: `libs/i18n` (the web UI),
-  `libs/calendar-export` (the ICS feed) and `apps/api/src/slack` (Slack). Each
+- Czech copy now lives in three places: `libs/shared/i18n` (the web UI),
+  `libs/lets-park/calendar-export` (the ICS feed) and `apps/lets-park/api/src/slack` (Slack). Each
   has exactly one consumer.
 - ESLint enforces nothing here — there is no rule that could distinguish "a
   Czech sentence with one backend consumer" from "a Czech sentence that should
@@ -94,6 +94,6 @@ would render the wrong day on some hosts and on DST Sundays.
 
 ## How
 
-- `apps/api/src/slack/slack-messages.ts`, `slack-messages.spec.ts`.
-- `apps/api/src/slack/slack.db.spec.ts` — the strings survive the round trip
+- `apps/lets-park/api/src/slack/slack-messages.ts`, `slack-messages.spec.ts`.
+- `apps/lets-park/api/src/slack/slack.db.spec.ts` — the strings survive the round trip
   through the real SDK's form encoding, diacritics intact.

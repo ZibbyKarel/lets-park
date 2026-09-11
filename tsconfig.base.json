@@ -19,21 +19,22 @@
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@lets-park/contract": ["./libs/contract/src/index.ts"],
-      "@lets-park/contract/realtime": ["./libs/contract/src/realtime/index.ts"],
-      "@lets-park/design-system/compounds": ["./libs/design-system/src/compounds/index.ts"],
-      "@lets-park/design-system/primitives": ["./libs/design-system/src/primitives/index.ts"],
-      "@lets-park/design-system/tokens": ["./libs/design-system/src/tokens/index.ts"],
-      "@lets-park/shared-types": ["./libs/shared-types/src/index.ts"],
-      "@lets-park/calendar-export": ["./libs/calendar-export/src/index.ts"],
-      "@lets-park/database": ["./libs/database/src/index.ts"],
-      "@lets-park/i18n": ["./libs/i18n/src/index.ts"],
-      "@lets-park/form": ["./libs/form/src/index.ts"],
-      "@lets-park/api-client": ["./libs/api-client/src/index.ts"],
-      "@lets-park/query": ["./libs/query/src/index.ts"],
-      "@lets-park/auth": ["./libs/auth/src/index.ts"],
-      "@lets-park/auth/client": ["./libs/auth/src/client/index.ts"],
-      "@lets-park/realtime-client": ["./libs/realtime-client/src/index.ts"]
+      "@lets-park/contract": ["./libs/lets-park/contract/src/index.ts"],
+      "@lets-park/contract/realtime": ["./libs/lets-park/contract/src/realtime/index.ts"],
+      "@lets-park/design-system/compounds": ["./libs/shared/design-system/src/compounds/index.ts"],
+      "@lets-park/design-system/primitives": [
+        "./libs/shared/design-system/src/primitives/index.ts"
+      ],
+      "@lets-park/design-system/tokens": ["./libs/shared/design-system/src/tokens/index.ts"],
+      "@lets-park/shared-types": ["./libs/lets-park/shared-types/src/index.ts"],
+      "@lets-park/calendar-export": ["./libs/lets-park/calendar-export/src/index.ts"],
+      "@lets-park/database": ["./libs/lets-park/database/src/index.ts"],
+      "@lets-park/i18n": ["./libs/shared/i18n/src/index.ts"],
+      "@lets-park/form": ["./libs/shared/form/src/index.ts"],
+      "@lets-park/api-client": ["./libs/shared/api-client/src/index.ts"],
+      "@lets-park/auth": ["./libs/lets-park/auth/src/index.ts"],
+      "@lets-park/auth/client": ["./libs/lets-park/auth/src/client/index.ts"],
+      "@lets-park/realtime-client": ["./libs/lets-park/realtime-client/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

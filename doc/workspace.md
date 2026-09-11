@@ -12,41 +12,65 @@ it live in `doc/decision/`.
 
 ## Repo structure
 
+**This workspace hosts more than one application**, so `apps/` and `libs/` are
+namespaced by which application owns what. `libs/shared/` is for libs with
+more than one consuming application; `libs/<app>/` is for libs only that
+application uses. The classification rule is consumer count, not code size —
+see `doc/decision/0310-the-workspace-is-namespaced-to-host-two-applications.md`,
+which also records why `auth` and `shared-types` sit where they do and what
+debt `api-client`'s placement carries.
+
 ```
 apps/
-  web/          Next.js 16 (App Router, React 19)   tags: type:app,  scope:web
-  web-e2e/      Playwright e2e for web              tags: type:app,  scope:web
-  api/          NestJS 11 (API + Socket.io gateway) tags: type:app,  scope:api
-  api-e2e/      Jest integration tests against the API tags: type:app,  scope:api
+  lets-park/
+    web/        Next.js 16 (App Router, React 19)   tags: type:app,  scope:web
+    web-e2e/    Playwright e2e for web              tags: type:app,  scope:web
+    api/        NestJS 11 (API + Socket.io gateway) tags: type:app,  scope:api
+    api-e2e/    Jest integration tests against the API tags: type:app,  scope:api
 libs/
-  shared-types/ domain constants + Europe/Prague date logic
-                                      tags: type:util,     scope:shared
-  contract/     Zod schemas + oRPC contract + realtime events
-                (two entry points: @lets-park/contract and @lets-park/contract/realtime)
-                                      tags: type:contract, scope:shared
-  database/     Prisma 7 schema, migrations, seed + generated client
-                                      tags: type:data,     scope:api
-  design-system/
+  shared/       more than one application consumes these
+    design-system/
                 one project, three layers under src/ (tokens, primitives,
                 compounds) + Storybook 10
                                       tags: type:ui,   scope:web
-  form/         react-hook-form wrapper              tags: type:util, scope:web
-  i18n/         next-intl wrapper + Czech messages   tags: type:util, scope:web
-  api-client/   oRPC client typed from the contract  tags: type:util, scope:web
-  query/        TanStack Query wrapper + query utils tags: type:util, scope:web
-  auth/         next-auth v5 (Auth.js) wrapper
+    form/       react-hook-form wrapper              tags: type:util, scope:web
+    i18n/       next-intl wrapper + Czech messages   tags: type:util, scope:web
+    api-client/ oRPC client typed from the contract  tags: type:util, scope:web
+  lets-park/    only the parking app consumes these
+    contract/   Zod schemas + oRPC contract + realtime events
+                (two entry points: @lets-park/contract and @lets-park/contract/realtime)
+                                      tags: type:contract, scope:shared
+    database/   Prisma 7 schema, migrations, seed + generated client
+                                      tags: type:data,     scope:api
+    auth/       next-auth v5 (Auth.js) wrapper
                 (two entry points: @lets-park/auth and @lets-park/auth/client)
                                       tags: type:util, scope:web
-  realtime-client/
+    realtime-client/
                 socket.io-client wrapper typed from the contract
                                       tags: type:util, scope:web
-  calendar-export/
+    calendar-export/
                 ical-generator wrapper – the personal ICS feed
                                       tags: type:util, scope:api
-  (the rest is created in later tasks – planned tags below)
+    shared-types/
+                domain constants + Europe/Prague date logic. The name predates
+                the namespacing and is now misleading — nothing outside this
+                application uses it (decision 0310).
+                                      tags: type:util,     scope:shared
 doc/            documentation, decisions, visual design export
-prisma.config.ts  Prisma CLI configuration (schema in libs/database, `.env` from the root)
+prisma.config.ts  Prisma CLI configuration (schema in libs/lets-park/database, `.env` from the root)
 ```
+
+**Nx project names are flat and unprefixed** (`web`, `api`, `contract`, …),
+so `npx nx run web:test` still addresses the parking app's web project
+regardless of where its directory sits. That is fine while there is one
+application and becomes ambiguous with two; prefixing them is a separate
+change, deliberately not bundled with the move (decision 0310).
+
+**Paths built from segments do not survive a directory move by text search.**
+`join(root, 'libs', 'database')` is invisible to a grep for `libs/database`.
+When a project moves, grep for the string literals `'apps'` and `'libs'`
+across all tracked code as well — six such sites existed at the last move,
+including `prisma.config.ts` and the e2e suite's build-identity guard.
 
 Configuration that applies to the whole workspace:
 
@@ -58,14 +82,14 @@ Configuration that applies to the whole workspace:
 | `.prettierrc`, `.editorconfig` | formatting for TS/TSX/JSON/MD |
 | `jest.preset.js`, `jest.config.ts` | shared Jest preset and project aggregation |
 
-A lib can have more than one entry point: `libs/contract` has
+A lib can have more than one entry point: `libs/lets-park/contract` has
 `@lets-park/contract/realtime` alongside `@lets-park/contract`, so the
 Socket.io half of the contract doesn't pull in `@orpc/contract`;
-`libs/auth` has `@lets-park/auth/client`, so a browser component doesn't pull
+`libs/lets-park/auth` has `@lets-park/auth/client`, so a browser component doesn't pull
 in Auth.js's server runtime. A second entry point means a second entry in
 `paths` in `tsconfig.base.json`, plus **a test that proves the isolation**
-(`libs/contract/src/realtime/no-orpc.spec.ts`,
-`libs/auth/src/lib/client-boundary.spec.ts`) — see `doc/decision/0023-*` and
+(`libs/lets-park/contract/src/realtime/no-orpc.spec.ts`,
+`libs/lets-park/auth/src/lib/client-boundary.spec.ts`) — see `doc/decision/0023-*` and
 `doc/decision/0046-*`.
 
 Packages are named `@lets-park/<lib>` (see
@@ -158,8 +182,8 @@ carries exactly one `type:` tag), which is why the npm allow-list
 | `type:feature` | domain composition | `feature`, `ui`, `util`, `contract`, `data` | `tslib` |
 | `type:ui` | the design system, domain-free | `ui`, `util` | React, `clsx`, `tailwind-merge`, `class-variance-authority`, TanStack Table, Storybook |
 | `type:util` | wrapper layers and helpers | `util`, `contract` | React/Next + the union of packages from `WRAPPED_LIBRARIES` |
-| `type:contract` | `libs/contract` – Zod + oRPC | `layer:foundation` | `zod`, `@orpc/contract`, `tslib` |
-| `type:data` | data access (`libs/database`) | `data`, `util`, `contract` | Prisma |
+| `type:contract` | `libs/lets-park/contract` – Zod + oRPC | `layer:foundation` | `zod`, `@orpc/contract`, `tslib` |
+| `type:data` | data access (`libs/lets-park/database`) | `data`, `util`, `contract` | Prisma |
 
 ### The `layer:` dimension – the bottom of the graph
 
@@ -167,7 +191,7 @@ carries exactly one `type:` tag), which is why the npm allow-list
 | --- | --- | --- |
 | `layer:foundation` | **nothing** | **nothing** |
 
-Only one project carries it, `libs/shared-types`. It separates it from the
+Only one project carries it, `libs/lets-park/shared-types`. It separates it from the
 wrappers, which share the same `type:util` tag but sit **above** the contract,
 whereas `shared-types` sits **below** it. Without this, `type:util →
 type:contract` and `type:contract → type:util` would form a cycle. The
@@ -188,8 +212,8 @@ foundation`.
 | `scope:api` | `scope:api`, `scope:shared` |
 | `scope:shared` | `scope:shared` |
 
-This dimension enforces decision `0003`: `apps/api` (`scope:api`) may depend
-on `libs/shared-types` (`scope:shared`), but **not** on `libs/i18n`
+This dimension enforces decision `0003`: `apps/lets-park/api` (`scope:api`) may depend
+on `libs/lets-park/shared-types` (`scope:shared`), but **not** on `libs/shared/i18n`
 (`scope:web`), so `next-intl` never reaches the backend.
 
 ### The `ds:` dimension – gone, and what replaced it
@@ -201,7 +225,7 @@ one project, so there is no project boundary left for the constraints to match
 and they were removed rather than left to never fire.
 
 The rule is unchanged and still machine-enforced: path-scoped
-`no-restricted-imports` groups in `libs/design-system/eslint.config.mjs`, one
+`no-restricted-imports` groups in `libs/shared/design-system/eslint.config.mjs`, one
 per layer, catching both the workspace alias and a relative escape. See
 `doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
 
@@ -222,7 +246,7 @@ The npm surface therefore stays on the `type:` dimension
 (`doc/decision/0017-*`). The design system's genuinely tighter surface – it is
 meant to be a closed layer with a near-zero runtime dependency footprint, and
 `cx.ts` exists precisely so that no class-name helper has to be installed – is
-enforced by `no-restricted-imports` in `libs/design-system/eslint.config.mjs`,
+enforced by `no-restricted-imports` in `libs/shared/design-system/eslint.config.mjs`,
 where it does fire. That one file carries the probe that proves it, and every
 block in it spreads the wrapper-ban patterns back in: `no-restricted-imports` is a single rule, so a lib-local block
 that sets it replaces the root's copy outright, and a lib adding its own bans
@@ -237,34 +261,34 @@ only allowed place is the wrapper lib that owns them:
 
 | forbidden package | use instead | only allowed directory |
 | --- | --- | --- |
-| `react-hook-form` | `@lets-park/form` | `libs/form` (done) |
-| `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/design-system/src/compounds` |
+| `react-hook-form` | `@lets-park/form` | `libs/shared/form` (done) |
+| `@tanstack/react-table` | `@lets-park/design-system/compounds` | `libs/shared/design-system/src/compounds` |
 | `@tanstack/react-query` | `@lets-park/query` | `libs/query` (done) |
-| `@orpc/client` | `@lets-park/api-client` | `libs/api-client` (done) |
-| `socket.io-client` | `@lets-park/realtime-client` | `libs/realtime-client` (done) |
-| `next-auth` | `@lets-park/auth` / `@lets-park/auth/client` | `libs/auth` (done) |
-| `ical-generator` | `@lets-park/calendar-export` | `libs/calendar-export` (done) |
-| `next-intl` | `@lets-park/i18n` | `libs/i18n` |
+| `@orpc/client` | `@lets-park/api-client` | `libs/shared/api-client` (done) |
+| `socket.io-client` | `@lets-park/realtime-client` | `libs/lets-park/realtime-client` (done) |
+| `next-auth` | `@lets-park/auth` / `@lets-park/auth/client` | `libs/lets-park/auth` (done) |
+| `ical-generator` | `@lets-park/calendar-export` | `libs/lets-park/calendar-export` (done) |
+| `next-intl` | `@lets-park/i18n` | `libs/shared/i18n` |
 
 The list lives in `eslint.config.mjs` in a single map, `WRAPPED_LIBRARIES`;
 the global ban and the per-wrapper exceptions are both generated from it, so
 they can't drift apart. The error message always states which wrapper lib the
 developer should use instead.
 
-`no-console: error` also applies in `apps/api/**` and `libs/**` – the backend
+`no-console: error` also applies in `apps/lets-park/api/**` and `libs/**` – the backend
 logs through `nestjs-pino`. Console is allowed only in `tools/**`,
 `scripts/**`, `**/scripts/**`, and in configuration files.
 
-`libs/shared-types` is handled specially: it has its own
+`libs/lets-park/shared-types` is handled specially: it has its own
 `no-restricted-imports` block that additionally bans **`zod`** there. The Nx
 `type:util` dimension can't express this – the wrapper libs, which must
 depend on third parties, share the same tag. Without this block, nothing
-would stop `apps/api` from pulling in Zod through `shared-types` (see
+would stop `apps/lets-park/api` from pulling in Zod through `shared-types` (see
 `doc/decision/0003-*`).
 
 > **Trap when editing `eslint.config.mjs`:** Nx runs `eslint .` with **cwd set
 > to the project's directory**, not the repo root. A config object whose
-> `files` are root-relative paths (`apps/**`, `libs/form/**`) must therefore
+> `files` are root-relative paths (`apps/**`, `libs/shared/form/**`) must therefore
 > set `basePath: workspaceRoot` – otherwise the glob is matched against a
 > project-relative path, never matches, and the rule **silently does
 > nothing**. After every change to a path-scoped rule, verify it with a
@@ -279,18 +303,18 @@ would stop `apps/api` from pulling in Zod through `shared-types` (see
 
    ```bash
    # a pure TypeScript lib (contract, util, backend service)
-   npx nx g @nx/js:lib libs/shared-types --name=shared-types \
+   npx nx g @nx/js:lib libs/lets-park/shared-types --name=shared-types \
      --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
 
    # a React lib (design system, frontend wrappers)
-   npx nx g @nx/react:lib libs/design-system/primitives --name=design-system-primitives \
+   npx nx g @nx/react:lib libs/shared/design-system/primitives --name=design-system-primitives \
      --unitTestRunner=jest --bundler=none --linter=eslint --useProjectJson
    ```
 
    The design-system command above is **history**, kept because it records how
    the workspace was scaffolded. The three design-system libs it produced were
    later merged into one project, `design-system`, with the layers as
-   directories under `libs/design-system/src/` and the `ds:*` tags removed —
+   directories under `libs/shared/design-system/src/` and the `ds:*` tags removed —
    `doc/decision/0301-the-design-system-is-one-package-and-the-layer-rule-moved-to-lint-paths.md`.
    Generating a new design-system layer is not a thing you do any more; you add
    a directory.
@@ -299,12 +323,12 @@ would stop `apps/api` from pulling in Zod through `shared-types` (see
 
    | lib | tags |
    | --- | --- |
-   | `libs/contract` | `type:contract`, `scope:shared` |
-   | `libs/shared-types` | `type:util`, `scope:shared`, `layer:foundation` |
-   | `libs/design-system` | `type:ui`, `scope:web` |
-   | `libs/form`, `libs/query`, `libs/api-client`, `libs/realtime-client`, `libs/auth`, `libs/i18n` | `type:util`, `scope:web` |
-   | `libs/calendar-export` | `type:util`, `scope:api` |
-   | `libs/database` | `type:data`, `scope:api` |
+   | `libs/lets-park/contract` | `type:contract`, `scope:shared` |
+   | `libs/lets-park/shared-types` | `type:util`, `scope:shared`, `layer:foundation` |
+   | `libs/shared/design-system` | `type:ui`, `scope:web` |
+   | `libs/shared/form`, `libs/query`, `libs/shared/api-client`, `libs/lets-park/realtime-client`, `libs/lets-park/auth`, `libs/shared/i18n` | `type:util`, `scope:web` |
+   | `libs/lets-park/calendar-export` | `type:util`, `scope:api` |
+   | `libs/lets-park/database` | `type:data`, `scope:api` |
 
    A project with no tags is restricted by nothing – **an untagged lib is a
    hole in the boundaries.** When a lib needs an npm package that isn't in the

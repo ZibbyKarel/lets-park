@@ -6,7 +6,7 @@
 
 The design from the Claude Design link in `plan.md` was opened and **fully downloaded**
 into `doc/design/` (the source `.dc.html`, `ds/colors_and_type.css`, fonts, 16
-screenshots). `libs/design-system/tokens` is derived **from
+screenshots). `libs/shared/design-system/tokens` is derived **from
 `doc/design/ds/colors_and_type.css`**, not from the textual fallback in `plan.md`.
 
 ## Why
@@ -34,5 +34,5 @@ screenshots). `libs/design-system/tokens` is derived **from
 
 If `colors_and_type.css` turned out not to be the current version of the company DS, the
 tokens would need regenerating – the change is localized to a single lib
-(`libs/design-system/tokens`), since everything else reads only the tokens, never the raw
+(`libs/shared/design-system/tokens`), since everything else reads only the tokens, never the raw
 values.

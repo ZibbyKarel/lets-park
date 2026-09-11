@@ -24,9 +24,9 @@ names the table, which is the thing being read. The caption is the one that has
 to stay: it is what makes `getByRole('table', { name })` resolve, and it is
 attached to the element a screen reader is actually navigating.
 
-Checked before removing: nothing in `apps/web`, `apps/web-e2e` or any spec
+Checked before removing: nothing in `apps/lets-park/web`, `apps/lets-park/web-e2e` or any spec
 queries a `region` by a DataTable title. The three `getByRole('region', { name:
-'Skupina IT' })` assertions in `apps/web-e2e/src/login.spec.ts` resolve to
+'Skupina IT' })` assertions in `apps/lets-park/web-e2e/src/login.spec.ts` resolve to
 `lot-grid.tsx`'s own `<section aria-label>`, which is untouched.
 
 **Dropdown.** `openAt` falls back to `enabledIndexes[0] ?? 0`, and the focus
@@ -40,12 +40,12 @@ working, and returns focus to the trigger on close like every other path.
 
 ## How
 
-- `libs/design-system/compounds/src/lib/data-table/data-table.tsx`: `aria-label` removed,
+- `libs/shared/design-system/compounds/src/lib/data-table/data-table.tsx`: `aria-label` removed,
   and the comment that used to justify it now says why the section is
   deliberately unnamed. `data-table.spec.tsx` asserts
   `queryByRole('region')` finds nothing while `getByRole('table', { name })`
   still resolves. Re-adding the attribute fails it.
-- `libs/design-system/primitives/src/lib/dropdown/dropdown.tsx`: the focus effect checks
+- `libs/shared/design-system/primitives/src/lib/dropdown/dropdown.tsx`: the focus effect checks
   `item && !item.disabled` before focusing it and falls through to
   `menuRef.current?.focus()`. `tabIndex={-1}` keeps the panel out of the tab
   order, so the menu is still one stop. Three tests in `dropdown.spec.tsx`

@@ -2,7 +2,7 @@
 
 ## What
 
-Two named tests were added to `apps/web/src/lot/lot-screen/use-lot-realtime.spec.tsx`:
+Two named tests were added to `apps/lets-park/web/src/lot/lot-screen/use-lot-realtime.spec.tsx`:
 
 - `unsubscribes from the old room when the day changes` — rerenders the
   harness from `DATE` to `OTHER_DATE` and asserts the room events are exactly
@@ -19,7 +19,7 @@ Getting there required changing the file's `@lets-park/realtime-client` mock:
 now `roomEvents`, a `useEffect` keyed on `date` that joins on mount/every date
 change and leaves whatever date it is leaving behind through the effect's own
 cleanup, mirroring the real `useDayRoom`
-(`libs/realtime-client/src/lib/connection.tsx`). `setup()` now returns the
+(`libs/lets-park/realtime-client/src/lib/connection.tsx`). `setup()` now returns the
 render result (so tests can `rerender`) alongside its existing `client` /
 `invalidate` / `date`.
 
@@ -28,7 +28,7 @@ render result (so tests can `rerender`) alongside its existing `client` /
 Task 25's brief calls this out explicitly: "changing the day changes both the
 realtime room and the query key — verify with a test that it unsubscribes
 from the old room." A test for that already existed —
-`libs/realtime-client/src/lib/connection.spec.tsx`'s `useDayRoom › leaves the
+`libs/lets-park/realtime-client/src/lib/connection.spec.tsx`'s `useDayRoom › leaves the
 old room when the day changes` — and it is the right place to prove the
 *socket-level* mechanism: it renders `useDayRoom` for real, against an
 offline-socket fixture, and asserts the literal `day:unsubscribe` emission.
@@ -84,14 +84,14 @@ was never at fault.
 
 Code review found that this file's `useAccessTokenProvider` mock —
 `() => async () => 'irrelevant'`, a **new** closure on every call — is the
-exact double used at `apps/web/src/lot/lot-screen/lot-screen.spec.tsx:44`, unchanged by
+exact double used at `apps/lets-park/web/src/lot/lot-screen/lot-screen.spec.tsx:44`, unchanged by
 this task, and proved live that dropping `date` from `invalidateDay`'s
 `useCallback` deps in `lot-screen.tsx` survived all 18 tests there. That
 mock instability is what let mutation #2 above survive in *this* file too,
 so the fix belongs at the mock's definition, not as a per-spec patch.
 
 Both files now use the same stable-reference pattern already established in
-`apps/web/src/shell/api-provider/api-provider.spec.tsx`:
+`apps/lets-park/web/src/shell/api-provider/api-provider.spec.tsx`:
 
 ```ts
 jest.mock('@lets-park/auth/client', () => ({
@@ -134,11 +134,11 @@ mock would have churned `api`'s identity.
 
 ### Verified by (fix round 1)
 
-- `apps/web/src/lot/lot-screen/use-lot-realtime.spec.tsx` — mock fixed; re-ran mutation
+- `apps/lets-park/web/src/lot/lot-screen/use-lot-realtime.spec.tsx` — mock fixed; re-ran mutation
   #2 above (`[api, date] → [api]`, no `useState` workaround) and confirmed
   `patches the new day's cache entry after the day changes, not the old one`
   now fails directly; reverted, suite green (15/15).
-- `apps/web/src/lot/lot-screen/lot-screen.spec.tsx` — mock fixed; new test
+- `apps/lets-park/web/src/lot/lot-screen/lot-screen.spec.tsx` — mock fixed; new test
   `invalidates the day now on screen, not the one it left, after a day
   change` added (19 tests total). Re-applied the reviewer's mutation
   (`invalidateDay`'s deps dropping `date`) and confirmed that named test
