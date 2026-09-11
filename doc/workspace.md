@@ -101,17 +101,30 @@ automatically.
 
 ## Scripts
 
-Everything runs from the repo root via npm:
+Everything runs from the repo root via npm. **An unsuffixed script is
+workspace-wide** — it covers every project of every application, which is what
+CI's `verify` job needs and what "is the tree green" means here. A `:<app>`
+suffix scopes a script to one application.
 
 | command | what it does |
 | --- | --- |
+| `npm run dev:lets-park` | `serve` + `dev` for that app's `api` and `web` – continuous |
 | `npm run lint` | ESLint across every project (`nx run-many -t lint`), **`--max-warnings=0`** |
 | `npm run typecheck` | `tsc --noEmit` against every project's tsconfigs |
 | `npm run test` | Jest unit tests (`nx run-many -t test`) |
-| `npm run build` | production build of both `web` and `api` |
+| `npm run build` | production build of every app, plus Storybook |
 | `npm run affected` | `nx affected -t lint,test,build` – only what changed (for CI) |
 | `npm run format` | Prettier write |
 | `npm run format:check` | Prettier check (fails if anything is unformatted) |
+
+`dev:lets-park` is the only script that needs scoping today, because serving
+two applications' `api` and `web` at once is never what you want. It selects
+`-p tag:app:lets-park`, **not** `-p api,web`: Nx project names are globally
+unique, so a second application cannot own a project called `api` and
+scaffolding it forces a rename of these. A list of project names breaks then;
+the `app:` tag does not. Every project carries one — `app:lets-park` or
+`app:shared` — and `nx show projects -p tag:app:lets-park` is how you ask what
+it covers. Adding `dev:<second-app>` is then one line.
 
 E2e tests aren't part of `npm run test`; they run on demand:
 

@@ -21,7 +21,7 @@ cp .env.example apps/lets-park/web/.env         # Next.js reads env files from i
 docker compose --profile dev up -d    # PostgreSQL 17, mock OIDC issuer, adminer
 npx prisma migrate deploy
 npx prisma db seed                    # development fixture: 9 spots, 4 users
-npm run dev                           # api on :3000, web on :4200
+npm run dev:lets-park                 # api on :3000, web on :4200
 ```
 
 Then open <http://localhost:4200> and sign in — see **How to log in on dev**,
@@ -62,11 +62,11 @@ land in another tab.
 ## Everyday commands
 
 ```bash
-npm run dev            # serve both apps (continuous)
-npm run lint
+npm run dev:lets-park  # serve this app's api and web (continuous)
+npm run lint           # every project in the workspace, both applications
 npm run typecheck
 npm test               # unit suites; excludes *.db.spec.ts, which need Postgres
-npm run build          # both apps plus Storybook
+npm run build          # every app plus Storybook
 npm run format:check   # add --all to check the whole tree, as CI does
 
 npx nx run api:test-db                     # the database suites (needs Postgres)

@@ -31,7 +31,16 @@ contract exists).
 
 **Nx project names are flat**: `web`, `api`, `contract` and the rest are
 unprefixed, so `npx nx run web:test` still works from anywhere and the
-commands below are unaffected by the directory layout.
+commands below are unaffected by the directory layout. They will not stay
+that way — project names are globally unique, so a second application cannot
+own a project called `api` either, and scaffolding it forces the rename.
+
+Every project therefore also carries an **`app:` tag** — `app:lets-park` or
+`app:shared` — and that is what a per-application command selects on:
+`nx run-many -t lint -p tag:app:lets-park`, never `-p api,web`. The tag
+survives the rename; a list of project names does not. In `package.json`,
+an unsuffixed script is workspace-wide and a `:<app>` suffix scopes it
+(`npm run dev:lets-park`).
 
 The parking app is scaffolded and all of Fáze 0–7 is written:
 `apps/lets-park/api` (NestJS 11), `apps/lets-park/web` (Next.js 16),
@@ -65,7 +74,7 @@ absent one, because a reader trusts it.
 ```bash
 npm ci                 # always, in a fresh worktree, before anything else
 
-npm run dev            # nx run-many -t serve,dev -p api,web — continuous
+npm run dev:lets-park  # serve,dev for this app's api and web — continuous
 npm run lint           # nx run-many -t lint
 npm run typecheck      # nx run-many -t typecheck
 npm test               # nx run-many -t test

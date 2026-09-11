@@ -6,8 +6,9 @@
   "engines": {
     "node": ">=24"
   },
+  "// scripts": "Two kinds live here and the naming says which. Unsuffixed scripts are workspace-wide — they run every project of every application, which is what CI's `verify` job needs and what a reviewer means by \"is the tree green\". A `:<app>` suffix scopes a script to one application, and the only one that needs it today is `dev`, because serving a second application's api and web alongside this one's is never what you want. Per-app scripts select by the `app:` tag, never by project name: Nx project names are globally unique, so the second application cannot also own a project called `api`, and the rename that forces would break `-p api,web` while leaving `-p tag:app:lets-park` correct. Adding `dev:<second-app>` is then one line.",
   "scripts": {
-    "dev": "nx run-many -t serve,dev -p api,web --parallel=2",
+    "dev:lets-park": "nx run-many -t serve,dev -p tag:app:lets-park --parallel=2",
     "build": "nx run-many -t build,build-storybook",
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",

@@ -113,6 +113,15 @@ and that is not yet known:
 Resolve it when the second application's first `@lets-park/i18n` import is
 written, not before, and not after.
 
+Every project now carries an `app:` tag (`app:lets-park` or `app:shared`),
+added so that per-application commands select on something that survives the
+project rename below. That tag is also the mechanism that would catch this: an
+`@nx/enforce-module-boundaries` constraint forbidding `app:shared` from
+depending on `app:lets-park`. It is deliberately **not** configured, because
+it fails on exactly this one edge today and turning it on would force the
+resolution this section just argued against making speculatively. Add the
+constraint as part of resolving the re-export, not before it.
+
 ### `libs/shared/api-client` is bound to this application's contract
 
 `libs/shared/api-client` sits in the shared namespace but is still bound to

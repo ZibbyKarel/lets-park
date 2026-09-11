@@ -3,7 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/lets-park/shared-types/src",
   "projectType": "library",
-  "tags": ["type:util", "scope:shared", "layer:foundation"],
+  "tags": ["type:util", "scope:shared", "layer:foundation", "app:lets-park"],
   "// targets": "to see all targets run: nx show project shared-types --web",
   "targets": {
     "typecheck": {

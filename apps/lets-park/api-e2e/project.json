@@ -20,5 +20,5 @@
       }
     }
   },
-  "tags": ["type:app", "scope:api"]
+  "tags": ["type:app", "scope:api", "app:lets-park"]
 }
