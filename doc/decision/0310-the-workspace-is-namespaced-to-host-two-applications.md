@@ -149,6 +149,21 @@ is the one place in the workspace where it applies.
   and should be prefixed — but that cascades into CI, `package.json` scripts,
   `README.md`, `CLAUDE.md` and every documented command, so it is a separate,
   separately verifiable change.
+
+  **Amended when the second application was scaffolded.** That app's projects
+  took prefixed names (`wishlist-web`) while this one's stayed flat (`web`),
+  so the workspace now reads inconsistently. It was tempting to treat the
+  scaffold as forcing the rename; it does not. Nx requires only that names be
+  globally **unique**, so `wishlist-web` alongside `web` is legal and nothing
+  breaks. What the second app forces is naming *its own* projects, and a
+  hello world is not the occasion to rename fourteen existing ones.
+
+  The ambiguity that actually mattered is already gone: nothing selects an
+  application by project name any more. `package.json`'s per-app scripts
+  select `-p tag:app:<app>`, which is why the `app:` tag exists. The
+  asymmetry is cosmetic until someone types `nx run web:test` and has to
+  remember which app that is — resolve it in its own commit, renaming this
+  application's projects to match, not the new one's to match these.
 - **Package names are unchanged.** `@lets-park/design-system` is the wrong
   scope for a package a second application depends on, but renaming the scope
   touches every import in the workspace. It is a pure find-replace that can be
