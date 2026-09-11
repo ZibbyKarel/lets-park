@@ -1,8 +1,4 @@
 # TODO
 
-1. [x] hromadná rezervace pro admin uživatele musí dát adminovi možnost rezervovat místa pro jiného uživatele tak jak je to při single reservation flow. (main@ef03272)
-2. [x] admin user - detail rezervace místa - pridání uživatele do fronty musí vyfiltrovat uživatele, kteří již mají na místo rezervaci nebo čekají ve frontě (main@4390124)
-3. [x] chybové hlášky - některé chybové hlášky se zobrazují v domu místo toho aby vyskočily jako toast/alert nahoře v pravém rohu aplikace. Příkladem jsou chybové hlášky v detailu rezervace při přidávání uživatele do fronty. Najdi i podobné případy v aplikaci a uprav to aby se chyby zobrazovaly jako alerty v pravém horním rohu (main@e0d44b0)
-4. [x] nezobrazovat "SPZ neuvedena" u rezervací, kde uživatelé nemají vyplněnou SPZ (main@0978607)
-5. [x] stejný případ jako pro bod 3. akorát pro úspěšné hlášky. Například při vytvoření hromadné rezervace zobrazit success alert v pravém horním rohu (main@8794c0c)
-6. [x] šipky v datumové navigaci v headeru by měly přeskakovat výkendy tedy z pátku skočit rovnou na pondělí. Stejně tak bych neměl být schopen v celé aplikaci vybrat víkendový den. Projdi kalendáře a disabluj víkendy. (main@8b3e2cf)
+1. [ ] v testech se používá await screen.findByText(PŘEKLAD) to ale znamená, že se testy rozbijí pokud někdo změní překlad. V testech se musí používat překladové klíče místo jejich hodnot. Překladová funkce se musí mocknout globálně aby místo přeloženého textu, vracela překladový klíč
+2. [ ] v libs/i18n je MONTH_LOCATIVE_CS - tohle se musí vyřešit překlady.
